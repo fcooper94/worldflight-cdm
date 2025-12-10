@@ -9,7 +9,7 @@ import dashboard from './dashboard.js';
 const app = express();
 const port = process.env.PORT || 3000;
 
-// Session middleware (MUST be before routes)
+// Session middleware
 app.use(session({
   name: 'worldflight.sid',
   secret: process.env.SESSION_SECRET,
@@ -21,10 +21,8 @@ app.use(session({
   }
 }));
 
-// Static assets
 app.use(express.static('public'));
 
-// Routes
 app.get('/auth/login', vatsimLogin);
 app.get('/auth/callback', vatsimCallback);
 app.get('/dashboard', dashboard);
@@ -33,7 +31,10 @@ app.get('/logout', (req, res) => {
   req.session.destroy(() => res.redirect('/'));
 });
 
-// Start server
 app.listen(port, () => {
   console.log(`WorldFlight CDM running on http://localhost:${port}`);
+  console.log('ENV check:', {
+    VATSIM_CLIENT_ID: process.env.VATSIM_CLIENT_ID,
+    VATSIM_REDIRECT_URI: process.env.VATSIM_REDIRECT_URI
+  });
 });
