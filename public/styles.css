@@ -209,6 +209,33 @@ footer a:hover {
   min-width: 1100px; /* forces scroll instead of squeeze */
 }
 
+/* Upcoming TSAT table should fit inside the left half */
+#tsatQueueTable {
+  min-width: 0 !important;   /* override the 1000px rule */
+  width: 100%;
+  table-layout: fixed;        /* forces columns to scale inside container */
+}
+#tsatQueueTable th:nth-child(1),
+#tsatQueueTable td:nth-child(1) {
+  width: 28%;   /* Callsign */
+}
+
+#tsatQueueTable th:nth-child(2),
+#tsatQueueTable td:nth-child(2) {
+  width: 28%;   /* Dest */
+}
+
+#tsatQueueTable th:nth-child(3),
+#tsatQueueTable td:nth-child(3) {
+  width: 24%;   /* TSAT */
+}
+
+#tsatQueueTable th:nth-child(4),
+#tsatQueueTable td:nth-child(4) {
+  width: 20%;   /* Started checkbox */
+}
+
+
 .departures-table th,
 .departures-table td {
   padding: 12px;
@@ -551,4 +578,95 @@ footer a:hover {
   width: 20px;
   height: 20px;
   border-radius: 5px;
+}
+/* ============================
+   Upcoming TSATs layout
+   ============================ */
+
+/* =========================================
+   FORCE UPCOMING TSAT INTO TOP-LEFT QUADRANT
+   ========================================= */
+
+.tsat-layout-card {
+  display: block;
+}
+
+/* Only the TSAT section becomes a 2-column grid */
+.tsat-top-row {
+  display: grid;
+  grid-template-columns: 50% 50%;
+  gap: 24px;
+  align-items: start;
+  margin-bottom: 24px;
+}
+
+/* Lock TSAT table to its half */
+.tsat-top-left {
+  width: 100%;
+  max-width: 100%;
+}
+
+/* Right half intentionally blank */
+.tsat-top-right {
+  width: 100%;
+  min-height: 180px;
+}
+
+/* Force main departures table to full width below */
+#mainDeparturesTable {
+  width: 100%;
+}
+
+/* Mobile safety */
+@media (max-width: 900px) {
+  .tsat-top-row {
+    grid-template-columns: 1fr;
+  }
+
+  .tsat-top-right {
+    display: none;
+  }
+}
+/* ============================
+   Upcoming TSAT table sizing
+   ============================ */
+
+/* Override the global departures-table min-width just for TSAT queue */
+#tsatQueueTable {
+  min-width: 0 !important;   /* cancel 1100px rule */
+  width: 100%;
+  table-layout: fixed;       /* keep columns inside container */
+}
+
+/* Make columns compact so they don’t force extra width */
+#tsatQueueTable th:nth-child(1),
+#tsatQueueTable td:nth-child(1) {
+  width: 30%;   /* Callsign */
+}
+
+#tsatQueueTable th:nth-child(2),
+#tsatQueueTable td:nth-child(2) {
+  width: 30%;   /* Dest */
+}
+
+#tsatQueueTable th:nth-child(3),
+#tsatQueueTable td:nth-child(3) {
+  width: 22%;   /* TSAT */
+}
+
+#tsatQueueTable th:nth-child(4),
+#tsatQueueTable td:nth-child(4) {
+  width: 18%;   /* Started checkbox */
+}
+
+/* Slightly tighter padding so it feels less “stretched” */
+#tsatQueueTable th,
+#tsatQueueTable td {
+  padding-left: 8px;
+  padding-right: 8px;
+}
+
+/* For the TSAT section specifically, there is no need for horizontal scroll */
+.tsat-top-left .table-scroll {
+  overflow-x: hidden;
 }

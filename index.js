@@ -712,21 +712,28 @@ const upcomingTSATs = buildUpcomingTSATsForICAO(icao, pilots);
 
 <h3 style="margin-bottom:10px;">Upcoming TSATs</h3>
 
-<div class="table-scroll" style="margin-bottom:20px;">
-<table class="departures-table" id="tsatQueueTable">
-<thead>
-<tr>
-  <th>Callsign</th>
-  <th>Dest</th>
-  <th>TSAT</th>
-  <th>Started</th>
-</tr>
-</thead>
-<tbody>
-<tr><td colspan="4"><em>No TSATs scheduled</em></td></tr>
-</tbody>
-</table>
+<div class="tsat-top-row">
+  <div class="tsat-top-left">
+    <div class="table-scroll">
+      <table class="departures-table" id="tsatQueueTable">
+        <thead>
+        <tr>
+          <th>Callsign</th>
+          <th>TSAT</th>
+          <th>Started</th>
+        </tr>
+        </thead>
+        <tbody>
+        <tr><td colspan="4"><em>No TSATs scheduled</em></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div class="tsat-top-right">
+    <!-- empty for now – space reserved for future content -->
+  </div>
 </div>
+
 
 
 <input id="callsignSearch" placeholder="Search by callsign..." />
@@ -841,8 +848,7 @@ function renderUpcomingTSATTable(data) {
     const tr = document.createElement('tr');
     tr.innerHTML =
       '<td>' + item.callsign + '</td>' +
-      '<td>' + item.dest + '</td>' +
-      '<td>' + item.tsat + '</td>' +
+      '<td>' + (item.tsat || '\u2014') + '</td>' +
       '<td>' +
         '<input type="checkbox" class="tsat-started-check" data-callsign="' +
         item.callsign +
@@ -858,7 +864,6 @@ function renderUpcomingTSATTable(data) {
   for (let i = 0; i < missing; i++) {
     const tr = document.createElement('tr');
     tr.innerHTML =
-      '<td>&nbsp;</td>' +
       '<td>&nbsp;</td>' +
       '<td>&nbsp;</td>' +
       '<td>&nbsp;</td>';
