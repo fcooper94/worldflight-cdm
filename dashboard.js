@@ -3,7 +3,7 @@ export default (req, res) => {
 
   const details = req.session.user?.data;
 
-  const isAdmin = [10000010, 1303570].includes(Number(details?.cid));
+  const isAdmin = [10000010, 1303570, 10000005].includes(Number(details?.cid));
 
 
   res.send(`
