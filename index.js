@@ -1,14 +1,36 @@
-const express = require("express");
+import 'dotenv/config';
+import express from 'express';
+import session from 'express-session';
+
+import authLogin from './auth/login.js';
+import authCallback from './auth/callback.js';
+import dashboard from './dashboard.js';
+
 const app = express();
+const port = process.env.PORT || 3000;
 
-const PORT = 3000;
+app.use(session({
+  name: 'worldflight.sid',
+  secret: process.env.SESSION_SECRET,
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    httpOnly: true
+  }
+}));
 
-// Simple test route
-app.get("/", (req, res) => {
-  res.send("WorldFlight-CDM is running");
+// Serve static files
+app.use(express.static('public'));
+
+// Routes
+app.get('/auth/login', authLogin);
+app.get('/auth/callback', authCallback);
+app.get('/dashboard', dashboard);
+
+app.get('/logout', (req, res) => {
+  req.session.destroy(() => res.redirect('/'));
 });
 
-// IMPORTANT: bind to 0.0.0.0 for Docker
-app.listen(PORT, "0.0.0.0", () => {
-  console.log(`Server running on http://localhost:${PORT}`);
+app.listen(port, () => {
+  console.log(`WorldFlight CDM running on port ${port}`);
 });

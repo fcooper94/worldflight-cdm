@@ -1,26 +1,14 @@
 {
   "name": "worldflight-cdm",
   "version": "1.0.0",
-  "description": "Basic scaffold for backend and frontend.",
-  "main": "index.js",
+  "type": "module",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "node index.js",
-"start": "node index.js"
+    "dev": "node index.js"
   },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/fcooper94/worldflight-cdm.git"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "commonjs",
-  "bugs": {
-    "url": "https://github.com/fcooper94/worldflight-cdm/issues"
-  },
-  "homepage": "https://github.com/fcooper94/worldflight-cdm#readme",
   "dependencies": {
-    "express": "^5.2.1"
+    "express": "^4.19.2",
+    "axios": "^1.6.7",
+    "express-session": "^1.17.3",
+    "dotenv": "^16.4.5"
   }
 }
