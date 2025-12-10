@@ -444,3 +444,111 @@ footer a:hover {
   color: #60a5fa;
   line-height: 1.6;
 }
+.tsat-refresh {
+  margin-left: 10px;
+  border: none;
+  cursor: pointer;
+  font-size: 16px;
+  background: linear-gradient(145deg, #1f9f62, #18c77e);
+  color: white;
+  border-radius: 6px;
+  padding: 6px 10px;
+  box-shadow: 0 0 8px rgba(24, 199, 126, 0.5);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.tsat-refresh:hover {
+  transform: rotate(90deg) scale(1.05);
+  box-shadow: 0 0 14px rgba(24, 199, 126, 0.9);
+}
+
+.tsat-refresh:active {
+  transform: scale(0.95);
+}
+
+.tsat-refresh.hidden {
+  display: none;
+}
+/* ===============================
+   STARTED CHECKBOX (UPCOMING TSAT)
+   =============================== */
+
+.tsat-started-check {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  background: linear-gradient(145deg, #0b0f1a, #070a14);
+  cursor: pointer;
+  position: relative;
+  transition: all 0.18s ease;
+  box-shadow:
+    inset 0 0 0 rgba(0,0,0,0),
+    0 0 0 rgba(0,0,0,0);
+}
+
+/* Hover glow */
+.tsat-started-check:hover {
+  border-color: #3ba4ff;
+  box-shadow: 0 0 6px rgba(59, 164, 255, 0.45);
+}
+
+/* Checked (Started) state */
+.tsat-started-check:checked {
+  background: linear-gradient(145deg, #2cff88, #18b96a);
+  border-color: #2cff88;
+  box-shadow:
+    0 0 10px rgba(44, 255, 136, 0.6),
+    inset 0 0 4px rgba(0, 0, 0, 0.35);
+}
+
+/* Checkmark */
+.tsat-started-check:checked::after {
+  content: '✔';
+  color: #04150c;
+  font-size: 14px;
+  font-weight: 900;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -52%);
+}
+
+/* Disabled (optional future-proofing) */
+.tsat-started-check:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+/* Focus accessibility */
+.tsat-started-check:focus-visible {
+  outline: 2px solid #3ba4ff;
+  outline-offset: 2px;
+}
+/* =========================================
+   LOCK UPCOMING TSAT ROW HEIGHT (NO RESIZE)
+   ========================================= */
+
+#tsatQueueTable tbody tr {
+  height: 44px;              /* This matches your checkbox height */
+  min-height: 44px;
+  max-height: 44px;
+}
+
+#tsatQueueTable tbody td {
+  vertical-align: middle;
+  padding-top: 6px;
+  padding-bottom: 6px;
+}
+#tsatQueueTable tbody tr td:empty::after {
+  content: '—';
+  color: rgba(255, 255, 255, 0.12);
+}
+.tsat-started-check {
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+}
