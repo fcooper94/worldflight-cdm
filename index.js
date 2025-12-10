@@ -103,6 +103,18 @@ function requireAdmin(req, res, next) {
   next();
 }
 
+function isWorldFlightDeparture(pilot) {
+  if (!pilot.flight_plan) return false;
+
+  const from = pilot.flight_plan.departure;
+  const to = pilot.flight_plan.arrival;
+
+  return adminSheetCache.some(wf =>
+    wf.from === from && wf.to === to
+  );
+}
+
+
 app.use(express.static('public'));
 
 app.get('/auth/login', vatsimLogin);
@@ -266,6 +278,8 @@ app.get('/departures', async (req, res) => {
   <title>${icao} Departures</title>
   <link rel="stylesheet" href="/styles.css" />
 </head>
+
+
 <body>
 
 <header class="topbar">
@@ -289,22 +303,39 @@ app.get('/departures', async (req, res) => {
   <table class="departures-table">
     <thead>
       <tr>
-        <th class="col-callsign">Callsign</th>
-        <th class="col-aircraft">Aircraft</th>
-        <th class="col-destination">Destination</th>
-        <th class="col-route">ATC Route</th>
-      </tr>
+  <th class="col-wf">WF</th>
+  <th class="col-callsign">Callsign</th>
+  <th class="col-aircraft">Aircraft</th>
+  <th class="col-destination">Destination</th>
+  <th class="col-route">ATC Route</th>
+</tr>
+
     </thead>
     <tbody>
 
-      ${departures.map(p => `
-        <tr>
-          <td class="col-callsign">${p.callsign}</td>
-          <td class="col-aircraft">${p.flight_plan.aircraft_faa || 'N/A'}</td>
-          <td class="col-destination">${p.flight_plan.arrival || 'N/A'}</td>
-          <td class="col-route">${p.flight_plan.route || 'N/A'}</td>
-        </tr>
-      `).join('')}
+      ${departures.map(p => {
+  const isWF = isWorldFlightDeparture(p);
+
+  return `
+    <tr>
+      <td class="col-wf">
+        ${isWF ? '✅' : ''}
+      </td>
+      <td class="col-callsign">${p.callsign}</td>
+      <td class="col-aircraft">${p.flight_plan.aircraft_faa || 'N/A'}</td>
+      <td class="col-destination">${p.flight_plan.arrival || 'N/A'}</td>
+      <td class="col-route">
+  ${p.flight_plan.route ? `
+    <span class="route-collapsed">Click to expand</span>
+    <span class="route-expanded">${p.flight_plan.route}</span>
+  ` : 'N/A'}
+</td>
+
+
+    </tr>
+  `;
+}).join('')}
+
 
     </tbody>
   </table>
@@ -316,7 +347,17 @@ app.get('/departures', async (req, res) => {
   </section>
 
 </main>
+<script>
+document.querySelectorAll('.route-collapsed').forEach(el => {
+  el.addEventListener('click', () => {
+    const expanded = el.nextElementSibling;
+    const isOpen = expanded.style.display === 'block';
 
+    expanded.style.display = isOpen ? 'none' : 'block';
+    el.innerText = isOpen ? 'Click to expand' : 'Hide route';
+  });
+});
+</script>
 </body>
 </html>
     `);

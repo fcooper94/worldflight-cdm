@@ -268,3 +268,43 @@ footer a:hover {
   padding-right: 20px;       /* spacing from table edge */
 }
 
+/* ===== TABLE HEADER VISIBILITY BOOST ===== */
+
+.departures-table thead th {
+  font-size: 14px;
+  font-weight: 700;
+  color: #e5e7eb;
+  letter-spacing: 0.4px;
+}
+
+/* Make ATC Route header slightly stronger */
+.departures-table thead th.col-route {
+  font-size: 15px;
+  color: #ffffff;
+}
+
+/* ===== WORLD FLIGHT STATUS COLUMN ===== */
+
+.col-wf {
+  width: 50px;
+  text-align: center;
+  font-size: 16px;
+}
+/* ===== COLLAPSIBLE ATC ROUTE ON DEPARTURES ===== */
+
+.route-collapsed {
+  color: #60a5fa;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  user-select: none;
+}
+
+.route-collapsed:hover {
+  text-decoration: underline;
+}
+
+.route-expanded {
+  display: none;
+  margin-top: 6px;
+}
