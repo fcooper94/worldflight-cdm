@@ -1,0 +1,12 @@
+{
+  "name": "worldflight-devcontainer",
+  "dockerComposeFile": "../docker-compose.yml",
+  "service": "app",
+  "workspaceFolder": "/app",
+
+  "postCreateCommand": "npm install",
+  "postStartCommand": "npm run dev",
+
+  "forwardPorts": [3000],
+  "remoteUser": "node"
+}
