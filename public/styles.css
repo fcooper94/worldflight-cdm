@@ -1,0 +1,270 @@
+/* ===== RESET ===== */
+
+* {
+  box-sizing: border-box;
+  font-family: "Segoe UI", Arial, sans-serif;
+}
+
+body {
+  margin: 0;
+  background: radial-gradient(circle at top, #0f172a, #020617);
+  color: #e5e7eb;
+}
+
+/* ===== HEADER LAYOUT ===== */
+
+.topbar {
+  height: 120px;
+  background: radial-gradient(circle at top, #020617, #020617);
+  display: grid;
+  grid-template-columns: 140px 1fr 200px;
+  align-items: center;
+  padding: 0 32px;
+  border-bottom: 1px solid #1e293b;
+}
+
+/* Left (Logo) */
+.header-left {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+.logo-large {
+  height: 78px;
+  width: auto;
+  filter: drop-shadow(0 0 14px rgba(56,189,248,.45));
+}
+
+/* Center (Title) */
+.header-center {
+  text-align: center;
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: .6px;
+  color: #38bdf8;
+  text-shadow: 0 0 12px rgba(56,189,248,.45);
+}
+
+/* Right (User) */
+.header-right {
+  text-align: right;
+  font-size: 14px;
+  color: #cbd5f5;
+}
+
+/* ===== DASHBOARD GRID ===== */
+
+.dashboard {
+  padding: 48px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+  gap: 40px;
+}
+
+/* ===== CARDS ===== */
+
+.card {
+  background: linear-gradient(160deg, #020617, #020617);
+  border: 1px solid #1e293b;
+  border-radius: 16px;
+  padding: 32px;
+  box-shadow: 0 20px 40px rgba(0,0,0,.5);
+}
+
+.card h2 {
+  margin: 0 0 24px 0;
+  font-size: 18px;
+  color: #93c5fd;
+}
+
+/* ===== STATS ===== */
+
+.stat {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 18px;
+  font-size: 16px;
+}
+
+.stat span {
+  color: #94a3b8;
+}
+
+.stat strong {
+  color: #ffffff;
+}
+
+/* ===== STATUS PILL ===== */
+
+.status {
+  margin-top: 20px;
+  padding: 18px;
+  border-radius: 14px;
+  font-weight: 700;
+  font-size: 20px;
+  text-align: center;
+  letter-spacing: .5px;
+}
+
+.status.online {
+  background: linear-gradient(160deg, #064e3b, #022c22);
+  color: #6ee7b7;
+  box-shadow: 0 0 20px rgba(16,185,129,.45);
+}
+
+.status.offline {
+  background: linear-gradient(160deg, #450a0a, #1f0505);
+  color: #fca5a5;
+  box-shadow: 0 0 20px rgba(239,68,68,.35);
+}
+
+/* ===== FOOTER ===== */
+
+footer {
+  text-align: center;
+  padding: 36px;
+}
+
+footer a {
+  color: #60a5fa;
+  text-decoration: none;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+footer a:hover {
+  text-decoration: underline;
+}
+
+/* ===== ICAO SEARCH ===== */
+
+.icao-search {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.icao-search input {
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 1px solid #1e293b;
+  background: #020617;
+  color: white;
+  font-size: 14px;
+  width: 200px;
+  text-transform: uppercase;
+}
+
+.icao-search button {
+  padding: 10px 16px;
+  border-radius: 8px;
+  border: none;
+  background: #2563eb;
+  color: white;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.icao-search button:hover {
+  background: #1d4ed8;
+}
+
+/* ===== BACK BUTTON ===== */
+
+.back-btn {
+  display: inline-block;
+  padding: 10px 18px;
+  border-radius: 10px;
+  background: linear-gradient(160deg, #1d4ed8, #2563eb);
+  color: white;
+  text-decoration: none;
+  font-weight: 700;
+  font-size: 14px;
+  letter-spacing: .4px;
+  box-shadow: 0 0 16px rgba(37,99,235,.45);
+  transition: all .2s ease;
+}
+
+.back-btn:hover {
+  background: linear-gradient(160deg, #1e40af, #1d4ed8);
+  box-shadow: 0 0 22px rgba(37,99,235,.7);
+  transform: translateY(-1px);
+}
+
+/* ===== RESPONSIVE TABLE WRAPPER ===== */
+
+.table-scroll {
+  width: 100%;
+  overflow-x: auto;
+}
+
+/* ===== TABLE LAYOUT CONTROL ===== */
+
+.departures-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  min-width: 1100px; /* forces scroll instead of squeeze */
+}
+
+.departures-table th,
+.departures-table td {
+  padding: 12px;
+  text-align: left;
+  vertical-align: top;
+  border-top: 1px solid #1e293b;
+}
+
+.departures-table tr {
+  height: auto;
+}
+
+
+/* ===== NARROW COLUMN CONTROLS ===== */
+
+.col-wf-sector {
+  width: 90px;
+}
+
+.col-from,
+.col-to {
+  width: 90px;
+}
+
+.col-date {
+  width: 130px;
+}
+
+.col-time {
+  width: 120px;
+}
+
+.col-wf-sector,
+.col-from,
+.col-to,
+.col-date,
+.col-time {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+
+/* ===== EXTRA-WIDE ATC ROUTE ===== */
+
+/* ===== ATC ROUTE – FULL WIDTH, MULTI-LINE, NO OVERLAP ===== */
+
+.col-route {
+  width: auto;
+  min-width: 700px;           /* guarantees dominance */
+  max-width: 100%;
+  white-space: normal;       /* allow wrapping */
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  line-height: 1.65;         /* fixes vertical overlap */
+  font-size: 12px;
+  padding-right: 20px;       /* spacing from table edge */
+}
+
