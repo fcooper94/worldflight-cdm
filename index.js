@@ -1212,8 +1212,10 @@ function renderRecentlyStartedTable(data) {
   '<td>' + item.callsign + '</td>' +
   '<td>' + item.startedAt + '</td>' +
   '<td>' +
-    '<button class="send-back-btn" data-callsign="' + item.callsign + '">Send Back</button>' +
-    '<button class="delete-started-btn" data-callsign="' + item.callsign + '" title="Delete entry">' +
+    '<button class="send-back-btn action-btn" data-callsign="' + item.callsign + '">' +
+      'Send Back' +
+    '</button>' +
+    '<button class="delete-started-btn action-btn" data-callsign="' + item.callsign + '" title="Delete entry">' +
       '<svg class="trash-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
         '<polyline points="3 6 5 6 21 6"></polyline>' +
         '<path d="M19 6l-1 14H6L5 6"></path>' +

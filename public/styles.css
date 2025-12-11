@@ -738,30 +738,108 @@ footer a:hover {
     padding-bottom: 6px;
 }
 /* Unified button look for Send Back + Trash */
+/* =========================================
+   SUBTLE, TSAT-REFRESH-THEMED ACTION BUTTONS
+   ========================================= */
+
+/* Shared base style */
 .action-btn {
-  background-color: #0b0f1a;       /* dark base like TSAT refresh */
-  border: 1px solid #1a2333;
-  border-radius: 10px;
-  padding: 4px 8px;
-  cursor: pointer;
-  color: #e0e0e0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 0.9rem;
-  line-height: 1;
-  transition: all 0.15s ease;
-  box-shadow: 0 0 6px rgba(0, 255, 180, 0.15);  /* subtle glow, similar to START */
+    background: #0b0f1a;
+    height: 28px;
+    border: 1px solid #1a2333;
+    border-radius: 8px;
+    padding: 2px 10px;
+    cursor: pointer;
+    color: #cbd5e1;
+    font-size: 0.85rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    transition: all 0.15s ease;
+    box-shadow: 0 0 4px rgba(0, 255, 180, 0.08);
 }
 
-/* Hover: brighter glow + slight scale */
+/* Glow on hover */
 .action-btn:hover {
-  box-shadow: 0 0 10px rgba(0, 255, 180, 0.35);
-  transform: scale(1.06);
-  color: #00ffbf;
+    transform: scale(1.05);
 }
 
-/* Trash icon inherits stroke color */
-.action-btn .trash-icon {
-  stroke: currentColor;
+/* ------------------------------
+   SEND BACK — green accent hover
+   ------------------------------ */
+.send-back-btn {
+    composes: action-btn;
+}
+
+.send-back-btn:hover {
+    border-color: #18c77e;
+    color: #ffffff;
+    box-shadow: 0 0 10px rgba(24, 199, 126, 0.45);
+}
+
+/* ------------------------------
+   TRASH — subtle until hover
+   ------------------------------ */
+.delete-started-btn {
+    composes: action-btn;
+    padding: 2px;  
+    height: 28px;         /* icon-sized */
+    border-radius: 4px;
+}
+
+.delete-started-btn:hover {
+    border-color: #ff6b6b;
+    color: #ff6b6b;
+    box-shadow: 0 0 10px rgba(255, 107, 107, 0.45);
+}
+
+/* Trash icon inherits color */
+.delete-started-btn .trash-icon {
+    stroke: currentColor;
+}
+/* UNIFY HEIGHT + VERTICAL ALIGNMENT FOR BOTH BUTTONS */
+.action-btn {
+    background: #0b0f1a;
+    border: 1px solid #1a2333;
+    border-radius: 8px;
+    height: 32px;               /* identical height */
+    padding: 0 12px;             /* equal top/bottom */
+    cursor: pointer;
+    color: #cbd5e1;
+    font-size: 0.85rem;
+    display: inline-flex;
+    align-items: center;         /* vertical centering */
+    justify-content: center;
+    gap: 6px;
+    line-height: 1;              /* prevents vertical drift */
+    transition: all 0.15s ease;
+}
+
+/* SEND BACK — green glow */
+.send-back-btn {
+    border-radius: 8px;
+}
+.send-back-btn:hover {
+    border-color: #18c77e;
+    color: #ffffff;
+    box-shadow: 0 0 10px rgba(24, 199, 126, 0.45);
+}
+
+/* TRASH BUTTON — same height, centered icon */
+.delete-started-btn {
+    padding: 0 8px !important;   /* equal padding */
+    height: 32px !important;     /* perfectly matched height */
+    border-radius: 6px;
+}
+
+.delete-started-btn:hover {
+    border-color: #ff6b6b;
+    color: #ff6b6b;
+    box-shadow: 0 0 10px rgba(255, 107, 107, 0.45);
+}
+
+/* Ensures icon sits dead-center */
+.delete-started-btn .trash-icon {
+    stroke: currentColor;
+    display: block;
 }
