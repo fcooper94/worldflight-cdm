@@ -708,4 +708,60 @@ footer a:hover {
   background-color: #4A1515 !important;   /* deep dark red */
   color: #F6C6C6 !important;              /* soft pink-tint readable text */
 }
+.delete-started-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  margin-left: 6px;
+  padding: 2px;
+  color: #cccccc;      /* icon color */
+  transition: 0.2s ease;
+}
 
+.delete-started-btn:hover {
+  color: #ff6b6b;      /* subtle red hover */
+  transform: scale(1.15);
+}
+
+.trash-icon {
+  pointer-events: none; /* prevents click weirdness on SVG element */
+}
+/* Ensure Upcoming TSATs and Recently Started rows match height */
+#tsatQueueTable tbody tr,
+#recentlyStartedTable tbody tr {
+    height: 40px;              /* adjust to taste */
+}
+
+#tsatQueueTable td,
+#recentlyStartedTable td {
+    padding-top: 6px;
+    padding-bottom: 6px;
+}
+/* Unified button look for Send Back + Trash */
+.action-btn {
+  background-color: #0b0f1a;       /* dark base like TSAT refresh */
+  border: 1px solid #1a2333;
+  border-radius: 10px;
+  padding: 4px 8px;
+  cursor: pointer;
+  color: #e0e0e0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.9rem;
+  line-height: 1;
+  transition: all 0.15s ease;
+  box-shadow: 0 0 6px rgba(0, 255, 180, 0.15);  /* subtle glow, similar to START */
+}
+
+/* Hover: brighter glow + slight scale */
+.action-btn:hover {
+  box-shadow: 0 0 10px rgba(0, 255, 180, 0.35);
+  transform: scale(1.06);
+  color: #00ffbf;
+}
+
+/* Trash icon inherits stroke color */
+.action-btn .trash-icon {
+  stroke: currentColor;
+}

@@ -273,6 +273,17 @@ socket.on('sendBackToUpcoming', ({ callsign }) => {
   io.emit('upcomingTSATUpdate', buildUpcomingTSATsForICAO(icao));
   io.emit('recentlyStartedUpdate', buildRecentlyStartedForICAO(icao));
 });
+/* ===== DELETE from Recently Started ===== */
+socket.on('deleteStartedEntry', ({ callsign }) => {
+  if (!callsign) return;
+
+  // Remove entry completely
+  delete recentlyStarted[callsign];
+  delete startedAircraft[callsign];
+
+  // Rebuild UI for ANY ICAO still safe, so update all tables
+  io.emit('recentlyStartedUpdate', buildRecentlyStartedForICAO(Object.values(recentlyStarted)[0]?.icao || null));
+});
 
 
 
@@ -908,12 +919,19 @@ searchInput.addEventListener('input', function () {
 /* ----------------------------------------------------
    ROUTE EXPAND/COLLAPSE
 ---------------------------------------------------- */
-document.querySelectorAll('.route-collapsed').forEach(el => {
-  el.onclick = () => {
-    const exp = el.nextElementSibling;
-    exp.style.display = exp.style.display === 'block' ? 'none' : 'block';
-  };
-});
+function bindRouteExpanders() {
+  document.querySelectorAll('.route-collapsed').forEach(el => {
+    el.onclick = () => {
+      const exp = el.nextElementSibling;
+      if (!exp) return;
+      exp.style.display = exp.style.display === 'block' ? 'none' : 'block';
+    };
+  });
+}
+
+// Initial bind on page load
+bindRouteExpanders();
+
 
 /* ----------------------------------------------------
    REFRESH TIMER + SMART REFRESH
@@ -1187,17 +1205,24 @@ function renderRecentlyStartedTable(data) {
 
   const MAX_ROWS = 5;
 
-  data.slice(0, MAX_ROWS).forEach(function(item) {
+  data.slice(0, MAX_ROWS).forEach(item => {
     const tr = document.createElement('tr');
 
     tr.innerHTML =
-      '<td>' + item.callsign + '</td>' +
-      '<td>' + item.startedAt + '</td>' +
-      '<td>' +
-        '<button class="send-back-btn" data-callsign="' + item.callsign + '">' +
-          'Send Back' +
-        '</button>' +
-      '</td>';
+  '<td>' + item.callsign + '</td>' +
+  '<td>' + item.startedAt + '</td>' +
+  '<td>' +
+    '<button class="send-back-btn" data-callsign="' + item.callsign + '">Send Back</button>' +
+    '<button class="delete-started-btn" data-callsign="' + item.callsign + '" title="Delete entry">' +
+      '<svg class="trash-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+        '<polyline points="3 6 5 6 21 6"></polyline>' +
+        '<path d="M19 6l-1 14H6L5 6"></path>' +
+        '<path d="M10 11v6"></path>' +
+        '<path d="M14 11v6"></path>' +
+        '<path d="M9 6V4h6v2"></path>' +
+      '</svg>' +
+    '</button>' +
+  '</td>';
 
     tbody.appendChild(tr);
   });
@@ -1223,6 +1248,19 @@ document.addEventListener('click', e => {
 
   socket.emit('sendBackToUpcoming', { callsign, icao });
 });
+/* Handle DELETE button for Recently Started */
+document.addEventListener('click', e => {
+  if (!e.target.classList.contains('delete-started-btn')) return;
+
+  const callsign = e.target.dataset.callsign;
+  if (!callsign) return;
+
+  const ok = confirm("Are you sure you want to permanently delete " + callsign + " from Recently Started?");
+  if (!ok) return;
+
+  socket.emit('deleteStartedEntry', { callsign });
+});
+
 </script>
 <script>
 async function refreshDeparturesTable() {
@@ -1243,6 +1281,11 @@ async function refreshDeparturesTable() {
   const saved = localStorage.getItem('callsignFilter') || '';
   applyFilter(saved);
 
+  // Re-bind "Click to expand" handlers on the new rows
+  if (typeof bindRouteExpanders === 'function') {
+    bindRouteExpanders();
+  }
+
   // Allow DOM to finish updating BEFORE syncing toggle state
   setTimeout(() => {
     // Re-apply CLR / START states
@@ -1255,6 +1298,7 @@ async function refreshDeparturesTable() {
     socket.emit('requestStartedStateSync');
   }, 150);
 }
+
 
 /* ============================================================
    PERIODIC ROW COLOUR REFRESH (1 min)
