@@ -19,9 +19,24 @@ const io = new Server(httpServer);
 const sharedToggles = {};      // { callsign: { clearance: bool, start: bool, sector?: "EGCC-EGLL" } }
 const sharedDepFlows = {};     // { "EGCC-EGLL": 3, ... }  (per sector: FROM-TO)
 const connectedUsers = {};     // { socketId: { cid, position } }
-const sharedTSAT = {};         // { "BAW123": "14:32", ... }
-const startedAircraft = {}; // { "BAW123": true }
 
+/**
+ * sharedTSAT is the authoritative TSAT store:
+ * {
+ *   "BAW123": { tsat: "14:32", icao?: "EGCC" }
+ * }
+ */
+const sharedTSAT = {};
+
+/**
+ * recentlyStarted:
+ * {
+ *   "BAW123": { tsat: "14:32", icao: "EGCC", startedAt: "14:35" }
+ * }
+ */
+let recentlyStarted = {};
+
+const startedAircraft = {}; // { "BAW123": true }
 
 /**
  * TSAT queues per sector:
@@ -34,46 +49,49 @@ const startedAircraft = {}; // { "BAW123": true }
  */
 const tsatQueues = {};
 
+/* ===== RECENTLY STARTED HELPER ===== */
+function buildRecentlyStartedForICAO(icao) {
+  return Object.entries(recentlyStarted)
+    .filter(([cs, e]) => e.icao === icao)
+    .map(([callsign, entry]) => ({
+      callsign,
+      startedAt: entry.startedAt
+    }))
+    .sort((a, b) => a.startedAt.localeCompare(b.startedAt));
+}
+
+/* ===== UPCOMING TSAT HELPER ===== */
 function buildUpcomingTSATsForICAO(icao, vatsimPilots = []) {
   const list = [];
 
-  for (const [callsign, tsat] of Object.entries(sharedTSAT)) {
-    if (startedAircraft[callsign]) continue;
+  for (const [callsign, tsatObj] of Object.entries(sharedTSAT)) {
 
-    // Try optional VATSIM enrichment BUT DO NOT FILTER BY IT
-    let dest = '----';
-    const pilot = vatsimPilots.find(p => p.callsign === callsign);
+  // Skip aircraft that have already started
+  if (startedAircraft[callsign]) continue;
 
-    if (pilot && pilot.flight_plan) {
-      dest = pilot.flight_plan.arrival || '----';
-    }
-
-    // Only requirement: the callsign must belong to this airport
-    // Use sector stored in toggles instead of VATSIM
-    // Determine origin based on VATSIM flight plan if available
-let fromICAO = null;
-
-if (pilot && pilot.flight_plan) {
-  fromICAO = pilot.flight_plan.departure?.toUpperCase() || null;
-} else {
-  // If VATSIM data missing, fall back to stored sector if available
+  // Authoritative: determine FROM airport from stored sector
   const sector = sharedToggles[callsign]?.sector || null;
-  if (sector) fromICAO = sector.split('-')[0];
-}
+  if (!sector) continue;
 
-if (fromICAO !== icao) continue;
+  const fromICAO = sector.split('-')[0];
+  if (fromICAO !== icao) continue;
 
-
-    list.push({ callsign, dest, tsat });
+  // Optional: enrich dest from VATSIM if available
+  let dest = '----';
+  const pilot = vatsimPilots.find(p => p.callsign === callsign);
+  if (pilot && pilot.flight_plan) {
+    dest = pilot.flight_plan.arrival || dest;
   }
 
-  return list
-    .sort((a, b) => a.tsat.localeCompare(b.tsat))
-    .slice(0, 5);
+  const tsatStr = tsatObj?.tsat || '----';
+  list.push({ callsign, dest, tsat: tsatStr });
 }
 
+return list
+  .sort((a, b) => a.tsat.localeCompare(b.tsat))
+  .slice(0, 5);
 
-
+}
 
 /* ===== ADMIN CID WHITELIST ===== */
 const ADMIN_CIDS = [10000010, 1303570, 10000005];
@@ -174,7 +192,8 @@ function assignTSAT(sectorKey, callsign) {
     ':' +
     candidate.getMinutes().toString().padStart(2, '0');
 
-  sharedTSAT[callsign] = tsatStr;
+  // Store TSAT as an object
+  sharedTSAT[callsign] = { tsat: tsatStr };
 
   return tsatStr;
 }
@@ -198,36 +217,84 @@ function clearTSAT(sectorKey, callsign) {
 
 /* ================= SOCKET.IO ================= */
 io.on('connection', socket => {
-
-  
-
-socket.on('requestUpcomingTSAT', async ({ icao } = {}) => {
-  try {
-    if (!icao) {
-      socket.emit('upcomingTSATUpdate', []);
-      return;
-    }
-
-    const response = await axios.get('https://data.vatsim.net/v3/vatsim-data.json');
-    const pilots = response.data.pilots;
-
-    const upcoming = buildUpcomingTSATsForICAO(icao, pilots);
-    socket.emit('upcomingTSATUpdate', upcoming);
-  } catch (err) {
-    console.error('Failed to build Upcoming TSAT list:', err.message);
-    socket.emit('upcomingTSATUpdate', []);
-  }
-});
-
-
-
   console.log('Client connected:', socket.id);
 
   // Initial sync to client
   socket.emit('syncState', sharedToggles);
   socket.emit('syncDepFlows', sharedDepFlows);
-  socket.emit('syncTSAT', sharedTSAT);
+
+  // Flatten sharedTSAT internal structure to { callsign: "HH:MM" }
+  const tsatPayload = {};
+  Object.entries(sharedTSAT).forEach(([cs, entry]) => {
+    tsatPayload[cs] = entry.tsat;
+  });
+  socket.emit('syncTSAT', tsatPayload);
+
   socket.emit('connectedUsersUpdate', Object.values(connectedUsers));
+
+  /* ===== INITIAL STATE REQUEST (AFTER PAGE REFRESH) ===== */
+  socket.on('requestInitialTSATState', ({ icao }) => {
+  socket.emit('syncState', sharedToggles);
+  socket.emit('syncTSAT', Object.fromEntries(
+    Object.entries(sharedTSAT).map(([cs, obj]) => [cs, obj.tsat])
+  ));
+  socket.emit('tsatStartedUpdated', startedAircraft);
+
+  socket.emit('upcomingTSATUpdate', buildUpcomingTSATsForICAO(icao));
+  socket.emit('recentlyStartedUpdate', buildRecentlyStartedForICAO(icao));
+});
+
+  /* ===== SEND-BACK FROM RECENTLY STARTED TO UPCOMING ===== */
+  /* ===== SEND-BACK FROM RECENTLY STARTED TO UPCOMING ===== */
+socket.on('sendBackToUpcoming', ({ callsign }) => {
+  if (!callsign) return;
+
+  // The correct ICAO is stored inside recentlyStarted
+  const entry = recentlyStarted[callsign];
+  if (!entry) return;
+
+  const icao = entry.icao;  // authoritative
+
+  // Restore TSAT back into sharedTSAT
+  if (entry.tsat) {
+    sharedTSAT[callsign] = { tsat: entry.tsat };
+  }
+
+  // Remove from Recently Started
+  delete recentlyStarted[callsign];
+
+  // Clear STARTED flag
+  delete startedAircraft[callsign];
+
+  // Update Started UI
+  io.emit('tsatStartedUpdated', startedAircraft);
+
+  // Rebuild TSAT tables for the correct ICAO
+  io.emit('upcomingTSATUpdate', buildUpcomingTSATsForICAO(icao));
+  io.emit('recentlyStartedUpdate', buildRecentlyStartedForICAO(icao));
+});
+
+
+
+
+  /* ===== OPTIONAL: MANUAL UPCOMING TSAT REQUEST (PER ICAO) ===== */
+  socket.on('requestUpcomingTSAT', async ({ icao } = {}) => {
+    try {
+      if (!icao) {
+        socket.emit('upcomingTSATUpdate', []);
+        return;
+      }
+
+      const response = await axios.get('https://data.vatsim.net/v3/vatsim-data.json');
+      const pilots = response.data.pilots;
+
+      const upcoming = buildUpcomingTSATsForICAO(icao, pilots);
+      socket.emit('upcomingTSATUpdate', upcoming);
+    } catch (err) {
+      console.error('Failed to build Upcoming TSAT list:', err.message);
+      socket.emit('upcomingTSATUpdate', []);
+    }
+  });
 
   /* ===== SHARED CLR/START TOGGLE STATE ===== */
   socket.on('updateToggle', ({ callsign, type, value, sector }) => {
@@ -254,10 +321,6 @@ socket.on('requestUpcomingTSAT', async ({ icao } = {}) => {
       }
     }
 
-    /* ===== TSAT STARTED FLAG ===== */
-
-
-
     io.emit('toggleUpdated', { callsign, type, value });
   });
 
@@ -280,20 +343,18 @@ socket.on('requestUpcomingTSAT', async ({ icao } = {}) => {
 
   /* ===== TSAT REQUEST / CANCEL / REFRESH ===== */
   socket.on('requestTSAT', async ({ callsign, sector }) => {
-  if (!callsign || !sector) return;
+    if (!callsign || !sector) return;
 
-  const tsat = assignTSAT(sector, callsign);
-  io.emit('tsatUpdated', { callsign, tsat });
+    const tsat = assignTSAT(sector, callsign);
+    io.emit('tsatUpdated', { callsign, tsat });
 
-  const icao = sector.split('-')[0];
+    const icao = sector.split('-')[0];
 
-  const response = await axios.get('https://data.vatsim.net/v3/vatsim-data.json');
-  const upcoming = buildUpcomingTSATsForICAO(icao, response.data.pilots);
+    const response = await axios.get('https://data.vatsim.net/v3/vatsim-data.json');
+    const upcoming = buildUpcomingTSATsForICAO(icao, response.data.pilots);
 
-  io.emit('upcomingTSATUpdate', upcoming);
-});
-
-
+    io.emit('upcomingTSATUpdate', upcoming);
+  });
 
   socket.on('recalculateTSAT', ({ callsign, sector }) => {
     // Alias to requestTSAT behaviour, but kept as a distinct event.
@@ -305,42 +366,79 @@ socket.on('requestUpcomingTSAT', async ({ icao } = {}) => {
 
   // Backwards-compatible: direct TSAT update from client (not recommended, but kept)
   socket.on('updateTSAT', ({ callsign, tsat }) => {
-    sharedTSAT[callsign] = tsat;
+    if (!callsign) return;
+    sharedTSAT[callsign] = { tsat };
     io.emit('tsatUpdated', { callsign, tsat });
   });
 
   socket.on('cancelTSAT', async ({ callsign, sector }) => {
-  if (!callsign || !sector) return;
+    if (!callsign || !sector) return;
 
-  clearTSAT(sector, callsign);
-  io.emit('tsatUpdated', { callsign, tsat: '' });
+    clearTSAT(sector, callsign);
+    io.emit('tsatUpdated', { callsign, tsat: '' });
 
-  const icao = sector.split('-')[0];
+    const icao = sector.split('-')[0];
 
-  const response = await axios.get('https://data.vatsim.net/v3/vatsim-data.json');
-  const upcoming = buildUpcomingTSATsForICAO(icao, response.data.pilots);
+    const response = await axios.get('https://data.vatsim.net/v3/vatsim-data.json');
+    const upcoming = buildUpcomingTSATsForICAO(icao, response.data.pilots);
 
-  io.emit('upcomingTSATUpdate', upcoming);
-});
+    io.emit('upcomingTSATUpdate', upcoming);
+  });
 
-
+  /* ===== MARK / UNMARK TSAT STARTED (UPCOMING → RECENTLY STARTED) ===== */
   socket.on('markTSATStarted', ({ callsign }) => {
-  startedAircraft[callsign] = true;
-  delete sharedTSAT[callsign];
-  io.emit('tsatStartedUpdated', startedAircraft);
-});
+    if (!callsign) return;
 
-socket.on('unmarkTSATStarted', ({ callsign }) => {
-  delete startedAircraft[callsign];
-  io.emit('tsatStartedUpdated', startedAircraft);
-});
+    const sector = sharedToggles[callsign]?.sector || null;
+    if (!sector) return;
 
+    const icao = sector.split('-')[0];
+
+    const entry = sharedTSAT[callsign];
+    if (!entry) return;
+
+    // Flag as started
+    startedAircraft[callsign] = true;
+    io.emit('tsatStartedUpdated', startedAircraft);
+
+    // Move into recentlyStarted list
+    recentlyStarted[callsign] = {
+      tsat: entry.tsat,
+      icao,
+      startedAt: new Date().toISOString().slice(11, 16)
+    };
+
+    // Rebuild both tables for this ICAO
+    io.emit('upcomingTSATUpdate', buildUpcomingTSATsForICAO(icao));
+    io.emit('recentlyStartedUpdate', buildRecentlyStartedForICAO(icao));
+  });
+
+  socket.on('unmarkTSATStarted', ({ callsign }) => {
+    // Only clear the started flag; we do not automatically remove from Recently Started
+    delete startedAircraft[callsign];
+    io.emit('tsatStartedUpdated', startedAircraft);
+  });
 
   socket.on('disconnect', () => {
     delete connectedUsers[socket.id];
     io.emit('connectedUsersUpdate', Object.values(connectedUsers));
     console.log('Client disconnected:', socket.id);
   });
+
+  socket.on('requestToggleStateSync', () => {
+  socket.emit('syncState', sharedToggles);
+});
+
+socket.on('requestTSATSync', () => {
+  socket.emit('syncTSAT', Object.fromEntries(
+    Object.entries(sharedTSAT).map(([cs, obj]) => [cs, obj.tsat])
+  ));
+});
+
+socket.on('requestStartedStateSync', () => {
+  socket.emit('tsatStartedUpdated', startedAircraft);
+});
+
 });
 
 /* ===== ADMIN SHEET REFRESH ===== */
@@ -623,13 +721,9 @@ app.get('/departures', async (req, res) => {
   const pilots = response.data.pilots;
 
   const departures = pilots.filter(
-    
     p => p.flight_plan && p.flight_plan.departure === icao && p.groundspeed < 5
   );
 
-const upcomingTSATs = buildUpcomingTSATsForICAO(icao, pilots);
-
-  
   const rowsHtml = departures.map(p => {
     const wf = getWorldFlightStatus(p);
     const sectorKey = `${p.flight_plan.departure}-${p.flight_plan.arrival}`;
@@ -678,9 +772,6 @@ const upcomingTSATs = buildUpcomingTSATsForICAO(icao, pilots);
 </tr>`;
   }).join('');
 
-
-
-
   res.send(`<!DOCTYPE html>
 <html>
 <head>
@@ -708,58 +799,87 @@ const upcomingTSATs = buildUpcomingTSATsForICAO(icao, pilots);
 </header>
 
 <main class="dashboard">
-<section class="card">
+  <section class="card">
 
-<h3 style="margin-bottom:10px;">Upcoming TSATs</h3>
+    <!-- TOP ROW HEADERS (aligned horizontally) -->
+    <div class="tsat-top-row">
 
-<div class="tsat-top-row">
-  <div class="tsat-top-left">
+      <!-- LEFT COLUMN -->
+      <div class="tsat-top-left">
+        <h3 class="tsat-header">Upcoming TSATs</h3>
+        <div class="table-scroll">
+          <table class="departures-table" id="tsatQueueTable">
+            <thead>
+              <tr>
+                <th>Callsign</th>
+                <th>TSAT</th>
+                <th>Started</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td colspan="3"><em>No TSATs scheduled</em></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- RIGHT COLUMN -->
+      <div class="tsat-top-right">
+        <h3 class="tsat-header">Recently Started</h3>
+        <div class="table-scroll">
+          <table class="departures-table" id="recentlyStartedTable">
+            <thead>
+              <tr>
+                <th>Callsign</th>
+                <th>Started At</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr>
+              <tr><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr>
+              <tr><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr>
+              <tr><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr>
+              <tr><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+    <!-- END TSAT TOP ROW -->
+
+
+    <!-- SEARCH + TIMER + MAIN TABLE -->
+    <input id="callsignSearch" placeholder="Search by callsign..." />
+    <div id="refreshTimer">Next auto-refresh in: 20s</div>
+
     <div class="table-scroll">
-      <table class="departures-table" id="tsatQueueTable">
+      <table class="departures-table" id="mainDeparturesTable">
         <thead>
-        <tr>
-          <th>Callsign</th>
-          <th>TSAT</th>
-          <th>Started</th>
-        </tr>
+          <tr>
+            <th>WF</th>
+            <th>Callsign</th>
+            <th>Aircraft</th>
+            <th>Dest</th>
+            <th class="col-toggle">CLR</th>
+            <th class="col-toggle">START</th>
+            <th>TSAT</th>
+            <th class="col-route">ATC Route</th>
+          </tr>
         </thead>
         <tbody>
-        <tr><td colspan="4"><em>No TSATs scheduled</em></td></tr>
+          ${rowsHtml}
         </tbody>
       </table>
     </div>
-  </div>
-  <div class="tsat-top-right">
-    <!-- empty for now – space reserved for future content -->
-  </div>
-</div>
 
-
-
-<input id="callsignSearch" placeholder="Search by callsign..." />
-<div id="refreshTimer">Next auto-refresh in: 20s</div>
-
-<div class="table-scroll">
-<table class="departures-table" id="mainDeparturesTable">
-
-<thead>
-<tr>
-  <th>WF</th>
-  <th>Callsign</th>
-  <th>Aircraft</th>
-  <th>Dest</th>
-  <th class="col-toggle">CLR</th>
-  <th class="col-toggle">START</th>
-  <th>TSAT</th>
-  <th class="col-route">ATC Route</th>
-</tr>
-</thead>
-<tbody>${rowsHtml}</tbody>
-</table>
-</div>
-
-</section>
+  </section>
 </main>
+
+
 
 <script>
 /* ----------------------------------------------------
@@ -810,10 +930,15 @@ setInterval(() => {
 setInterval(async () => {
   const res = await fetch('/departures/check-changes?icao=' + icao);
   const data = await res.json();
-  if (data.changed) location.reload();
+  if (data.changed) {
+  refreshDeparturesTable();
+}
 }, 20000);
 
-setInterval(() => location.reload(), 120000);
+setInterval(() => {
+  refreshDeparturesTable();
+}, 120000);
+
 </script>
 
 <script src="/socket.io/socket.io.js"></script>
@@ -824,13 +949,12 @@ setInterval(() => location.reload(), 120000);
 ---------------------------------------------------- */
 const socket = io();
 
-// Re-use the ICAO already defined earlier on the page
 socket.on('connect', () => {
-  socket.emit('requestUpcomingTSAT', { icao });
+  // After page refresh → request ALL server TSAT state
+  setTimeout(() => {
+  socket.emit('requestInitialTSATState', { icao });
+}, 50);
 });
-
-
-
 
 /* ----------------------------------------------------
    UPCOMING TSAT TABLE RENDERER
@@ -848,7 +972,7 @@ function renderUpcomingTSATTable(data) {
     const tr = document.createElement('tr');
     tr.innerHTML =
       '<td>' + item.callsign + '</td>' +
-      '<td>' + (item.tsat || '\u2014') + '</td>' +
+      '<td>' + (item.tsat || '\\u2014') + '</td>' +
       '<td>' +
         '<input type="checkbox" class="tsat-started-check" data-callsign="' +
         item.callsign +
@@ -871,12 +995,15 @@ function renderUpcomingTSATTable(data) {
   }
 }
 
-
 /* ----------------------------------------------------
    UPCOMING TSAT EVENTS
 ---------------------------------------------------- */
 socket.on('upcomingTSATUpdate', data => {
   renderUpcomingTSATTable(data);
+});
+
+socket.on('recentlyStartedUpdate', data => {
+  renderRecentlyStartedTable(data);
 });
 
 socket.on('tsatStartedUpdated', started => {
@@ -898,7 +1025,7 @@ document.addEventListener('change', function (e) {
     socket.emit('unmarkTSATStarted', { callsign });
   }
 });
- 
+
 /* ----------------------------------------------------
    RESTORE TOGGLES
 ---------------------------------------------------- */
@@ -992,7 +1119,6 @@ document.addEventListener('click', function (e) {
   }
 });
 
-
 /* ----------------------------------------------------
    TSAT REFRESH BUTTON
 ---------------------------------------------------- */
@@ -1015,6 +1141,84 @@ document.addEventListener('click', function (e) {
 });
 </script>
 
+<script>
+function renderRecentlyStartedTable(data) {
+  const tbody = document.querySelector('#recentlyStartedTable tbody');
+  tbody.innerHTML = '';
+
+  const MAX_ROWS = 5;
+
+  data.slice(0, MAX_ROWS).forEach(function(item) {
+    const tr = document.createElement('tr');
+
+    tr.innerHTML =
+      '<td>' + item.callsign + '</td>' +
+      '<td>' + item.startedAt + '</td>' +
+      '<td>' +
+        '<button class="send-back-btn" data-callsign="' + item.callsign + '">' +
+          'Send Back' +
+        '</button>' +
+      '</td>';
+
+    tbody.appendChild(tr);
+  });
+
+  // Pad empty rows
+  const missing = MAX_ROWS - data.length;
+
+  for (let i = 0; i < missing; i++) {
+    const tr = document.createElement('tr');
+    tr.innerHTML =
+      '<td>&nbsp;</td>' +
+      '<td>&nbsp;</td>' +
+      '<td>&nbsp;</td>';
+    tbody.appendChild(tr);
+  }
+}
+
+/* Handle Send Back button in Recently Started */
+document.addEventListener('click', e => {
+  if (!e.target.classList.contains('send-back-btn')) return;
+  const callsign = e.target.dataset.callsign;
+  if (!callsign) return;
+
+  socket.emit('sendBackToUpcoming', { callsign, icao });
+});
+</script>
+<script>
+async function refreshDeparturesTable() {
+  const res = await fetch(window.location.href);
+  const html = await res.text();
+
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(html, 'text/html');
+
+  const newMain = doc.querySelector('#mainDeparturesTable tbody');
+  const oldMain = document.querySelector('#mainDeparturesTable tbody');
+
+  if (newMain && oldMain) {
+    oldMain.innerHTML = newMain.innerHTML;
+  }
+
+  // Restore search filter
+  const saved = localStorage.getItem('callsignFilter') || '';
+  applyFilter(saved);
+
+  // Allow DOM to finish updating BEFORE syncing toggle state
+  setTimeout(() => {
+    // Re-apply CLR / START states
+    socket.emit('requestToggleStateSync');
+
+    // Re-apply TSAT values in bottom table
+    socket.emit('requestTSATSync');
+
+    // Re-sync STARTED checkbox state in bottom table
+    socket.emit('requestStartedStateSync');
+  }, 150);
+}
+
+
+</script>
 
 </body>
 </html>`);

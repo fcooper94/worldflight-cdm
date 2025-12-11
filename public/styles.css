@@ -209,31 +209,6 @@ footer a:hover {
   min-width: 1100px; /* forces scroll instead of squeeze */
 }
 
-/* Upcoming TSAT table should fit inside the left half */
-#tsatQueueTable {
-  min-width: 0 !important;   /* override the 1000px rule */
-  width: 100%;
-  table-layout: fixed;        /* forces columns to scale inside container */
-}
-#tsatQueueTable th:nth-child(1),
-#tsatQueueTable td:nth-child(1) {
-  width: 28%;   /* Callsign */
-}
-
-#tsatQueueTable th:nth-child(2),
-#tsatQueueTable td:nth-child(2) {
-  width: 28%;   /* Dest */
-}
-
-#tsatQueueTable th:nth-child(3),
-#tsatQueueTable td:nth-child(3) {
-  width: 24%;   /* TSAT */
-}
-
-#tsatQueueTable th:nth-child(4),
-#tsatQueueTable td:nth-child(4) {
-  width: 20%;   /* Started checkbox */
-}
 
 
 .departures-table th,
@@ -641,23 +616,19 @@ footer a:hover {
 /* Make columns compact so they don’t force extra width */
 #tsatQueueTable th:nth-child(1),
 #tsatQueueTable td:nth-child(1) {
-  width: 30%;   /* Callsign */
+  width: 40%;   /* Callsign */
 }
 
 #tsatQueueTable th:nth-child(2),
 #tsatQueueTable td:nth-child(2) {
-  width: 30%;   /* Dest */
+  width: 35%;   /* TSAT */
 }
 
 #tsatQueueTable th:nth-child(3),
 #tsatQueueTable td:nth-child(3) {
-  width: 22%;   /* TSAT */
+  width: 25%;   /* Started checkbox */
 }
 
-#tsatQueueTable th:nth-child(4),
-#tsatQueueTable td:nth-child(4) {
-  width: 18%;   /* Started checkbox */
-}
 
 /* Slightly tighter padding so it feels less “stretched” */
 #tsatQueueTable th,
@@ -669,4 +640,46 @@ footer a:hover {
 /* For the TSAT section specifically, there is no need for horizontal scroll */
 .tsat-top-left .table-scroll {
   overflow-x: hidden;
+}
+/* Allow both sides of the TSAT grid to shrink properly inside CSS grid */
+.tsat-top-row > div {
+  min-width: 0;
+}
+/* Remove the global 1100px min-width for TSAT tables */
+#tsatQueueTable,
+#recentlyStartedTable {
+  min-width: 0 !important;
+  width: 100% !important;
+  table-layout: fixed;
+}
+/* Clean, balanced column widths for Recently Started */
+#recentlyStartedTable th:nth-child(1),
+#recentlyStartedTable td:nth-child(1) {
+  width: 35%;
+}
+
+#recentlyStartedTable th:nth-child(2),
+#recentlyStartedTable td:nth-child(2) {
+  width: 35%;
+}
+
+#recentlyStartedTable th:nth-child(3),
+#recentlyStartedTable td:nth-child(3) {
+  width: 30%;
+}
+.send-back-btn {
+  background: #7c2d12;
+  border: 1px solid #9a3412;
+  color: #fef3c7;
+}
+
+.send-back-btn:hover {
+  background: #9a3412;
+  border-color: #ea580c;
+  color: #fff7e6;
+}
+
+.send-back-btn:active {
+  background: #5a1d0e;
+  border-color: #c2410c;
 }
