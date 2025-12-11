@@ -683,3 +683,29 @@ footer a:hover {
   background: #5a1d0e;
   border-color: #c2410c;
 }
+
+/* TSAT colour coding */
+/* ===== SOFT A-CDM STYLE ROW COLOURS ===== */
+
+/* ===== TSAT COLOUR CODING ===== */
+/* ===== FULL-ROW COLOURING ===== */
+/* ===== PROFESSIONAL DARK CDM COLOURS ===== */
+
+/* On-time (±5 min) */
+.row-green {
+  background-color: #0F3D2E !important;   /* deep operational green */
+  color: #C6F6D5 !important;              /* soft mint text */
+}
+
+/* Caution (±6–10 min) */
+.row-amber {
+  background-color: #4A3A12 !important;   /* dark muted amber */
+  color: #F3E7B3 !important;              /* warm light-gold text */
+}
+
+/* Non-compliant (>10 min early/late) */
+.row-red {
+  background-color: #4A1515 !important;   /* deep dark red */
+  color: #F6C6C6 !important;              /* soft pink-tint readable text */
+}
+

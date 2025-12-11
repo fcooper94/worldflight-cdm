@@ -944,6 +944,39 @@ setInterval(() => {
 <script src="/socket.io/socket.io.js"></script>
 
 <script>
+/* ============================================================
+   TSAT → FULL ROW COLOURING HELPER
+============================================================ */
+/* ============================================================
+   TSAT → FULL ROW COLOURING (CDM –10 / –5 / +5 / +10 LOGIC)
+============================================================ */
+function getRowColorClass(tsatStr) {
+    if (!tsatStr || tsatStr === '—' || tsatStr === '----') return '';
+
+    const now = new Date();
+    now.setSeconds(0, 0);
+
+    const [hh, mm] = tsatStr.split(':').map(Number);
+    if (isNaN(hh) || isNaN(mm)) return '';
+
+    const tsatDate = new Date(now);
+    tsatDate.setHours(hh, mm, 0, 0);
+
+    const diffMin = (tsatDate - now) / 60000;  // positive = TSAT in future
+
+    // GREEN → TSAT ±5 minutes
+    if (diffMin >= -5 && diffMin <= 5) return 'row-green';
+
+    // AMBER → TSAT –10 to –6 OR +6 to +10
+    if ((diffMin >= -10 && diffMin <= -6) || (diffMin >= 6 && diffMin <= 10)) {
+        return 'row-amber';
+    }
+
+    // RED → anything earlier/later than these
+    return 'row-red';
+}
+
+
 /* ----------------------------------------------------
    SOCKET INIT
 ---------------------------------------------------- */
@@ -970,16 +1003,22 @@ function renderUpcomingTSATTable(data) {
   // Render real TSAT rows first
   data.slice(0, MAX_ROWS).forEach(function (item) {
     const tr = document.createElement('tr');
-    tr.innerHTML =
-      '<td>' + item.callsign + '</td>' +
-      '<td>' + (item.tsat || '\\u2014') + '</td>' +
-      '<td>' +
-        '<input type="checkbox" class="tsat-started-check" data-callsign="' +
-        item.callsign +
-        '">' +
-      '</td>';
 
-    tbody.appendChild(tr);
+const tsatValue = item.tsat || '—';
+const rowClass = getRowColorClass(tsatValue);
+if (rowClass) tr.classList.add(rowClass);
+
+tr.innerHTML =
+  '<td>' + item.callsign + '</td>' +
+  '<td>' + tsatValue + '</td>' +
+  '<td>' +
+    '<input type="checkbox" class="tsat-started-check" data-callsign="' +
+    item.callsign +
+    '">' +
+  '</td>';
+
+tbody.appendChild(tr);
+
   });
 
   // Pad remaining empty rows to force consistent height
@@ -1217,6 +1256,21 @@ async function refreshDeparturesTable() {
   }, 150);
 }
 
+/* ============================================================
+   PERIODIC ROW COLOUR REFRESH (1 min)
+============================================================ */
+setInterval(() => {
+  document.querySelectorAll('#tsatQueueTable tbody tr').forEach(row => {
+    const tsatCell = row.children[1];
+    if (!tsatCell) return;
+
+    const tsat = tsatCell.innerText.trim();
+    const rowClass = getRowColorClass(tsat);
+
+    row.classList.remove('row-green', 'row-amber', 'row-red');
+    if (rowClass) row.classList.add(rowClass);
+  });
+}, 60000);
 
 </script>
 
