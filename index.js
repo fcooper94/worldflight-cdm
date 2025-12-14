@@ -575,6 +575,9 @@ app.get('/admin', requireAdmin, (req, res) => {
 </head>
 <body>
 
+
+
+
 <header class="topbar">
   <div class="header-left"><img src="/logo.png" class="logo-large"/></div>
   <div class="header-center">Admin Control Panel</div>
@@ -717,7 +720,69 @@ socket.on('connectedUsersUpdate', users => {
     .join('<br>');
 });
 </script>
+<script>
+/* ===============================
+   USER CONTEXT
+================================ */
 
+// These values already exist server-side
+const USER_CONTEXT = {
+  cid: ${req.session.user?.data?.cid || 'null'},
+  isAdmin: ${ADMIN_CIDS.includes(Number(req.session.user?.data?.cid))},
+  isATC: ${!!req.session.user?.data?.controller},
+};
+
+/* ===============================
+   ROLE VISIBILITY
+================================ */
+
+document.querySelectorAll('.admin-only').forEach(el => {
+  if (!USER_CONTEXT.isAdmin) el.remove();
+});
+
+document.querySelectorAll('.atc-only').forEach(el => {
+  if (!USER_CONTEXT.isATC) el.remove();
+});
+
+document.querySelectorAll('.pilot-only').forEach(el => {
+  if (USER_CONTEXT.isATC) el.remove();
+});
+
+/* ===============================
+   ACTIVE PAGE HIGHLIGHT
+================================ */
+
+const path = window.location.pathname;
+document.querySelectorAll('.nav-item').forEach(link => {
+  if (path.startsWith(link.dataset.path)) {
+    link.classList.add('active');
+  }
+});
+
+/* ===============================
+   SIDEBAR TOGGLE (PERSISTENT)
+================================ */
+
+const sidebar = document.getElementById('sidebar');
+const toggleBtn = document.getElementById('sidebarToggle');
+
+const collapsed = localStorage.getItem('sidebarCollapsed') === 'true';
+
+if (collapsed) {
+  sidebar.classList.add('collapsed');
+  document.body.classList.add('sidebar-collapsed');
+}
+
+toggleBtn.onclick = () => {
+  sidebar.classList.toggle('collapsed');
+  document.body.classList.toggle('sidebar-collapsed');
+
+  localStorage.setItem(
+    'sidebarCollapsed',
+    sidebar.classList.contains('collapsed')
+  );
+};
+</script>
 </body>
 </html>
 `);
