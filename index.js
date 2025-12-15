@@ -6,6 +6,7 @@ import vatsimLogin from './auth/login.js';
 import vatsimCallback from './auth/callback.js';
 import dashboard from './dashboard.js';
 import cron from 'node-cron';
+import renderLayout from './layout.js';
 
 import { createServer } from 'http';
 import { Server } from 'socket.io';
@@ -14,6 +15,9 @@ import { Server } from 'socket.io';
 const app = express();
 const httpServer = createServer(app);
 const io = new Server(httpServer);
+
+
+
 
 /* ===== SHARED STATE (GLOBAL) ===== */
 const sharedToggles = {};      // { callsign: { clearance: bool, start: bool, sector?: "EGCC-EGLL" } }
@@ -566,26 +570,20 @@ app.get('/departures/check-changes', async (req, res) => {
 
 /* ===== ADMIN PAGE ===== */
 app.get('/admin', requireAdmin, (req, res) => {
-  res.send(`
-<!DOCTYPE html>
-<html>
-<head>
-  <title>Admin</title>
-  <link rel="stylesheet" href="/styles.css"/>
-</head>
-<body>
+if (!req.session.user || !req.session.user.data) {
+  return res.redirect('/');
+}
 
+const user = req.session.user.data;
+const isAdmin = ADMIN_CIDS.includes(Number(user.cid));
 
+if (!isAdmin) {
+  return res.status(403).send('You do not have Admin access');
+}
 
-
-<header class="topbar">
-  <div class="header-left"><img src="/logo.png" class="logo-large"/></div>
-  <div class="header-center">Admin Control Panel</div>
-  <div class="header-right"><a href="/dashboard" class="back-btn">← Back</a></div>
-</header>
-
-<main class="dashboard">
-<section class="card">
+const content = `
+ <main class="dashboard-full">
+<section class="card dashboard-full">
 
 <h2>WorldFlight Admin Schedule</h2>
 <button id="refreshScheduleBtn" style="margin-bottom:16px;">⟳ Force Refresh Schedule</button>
@@ -633,14 +631,19 @@ ${adminSheetCache.map(r => {
 </div>
 
 </section>
-</main>
+</main> 
 
-<footer class="connected-users-footer">
+<footer>
+<section class="card">
+    <!-- EVERYTHING that was inside <main> goes here -->
+    <footer class="connected-users-footer">
   <strong>Connected Users:</strong>
   <div id="connectedUsersList">Loading...</div>
 </footer>
+  </section>
 
-<script>
+  <!-- KEEP ALL EXISTING <script> TAGS EXACTLY AS THEY ARE -->
+  <script>
 document.getElementById('refreshScheduleBtn').onclick = async () => {
   await fetch('/admin/refresh-schedule', { method: 'POST' });
   location.reload();
@@ -783,23 +786,54 @@ toggleBtn.onclick = () => {
   );
 };
 </script>
-</body>
-</html>
-`);
+`;
+res.send(
+  renderLayout({
+    title: 'Admin',
+    user,
+    isAdmin,
+    layoutClass: 'dashboard-full',
+    content
+  })
+);
+
 });
 
 /* ===== DEPARTURES PAGE ===== */
 app.get('/departures', async (req, res) => {
-  const icao = req.query.icao?.toUpperCase();
-  if (!icao || icao.length !== 4) return res.send('Invalid ICAO code.');
 
+  // 1️⃣ Auth guard
+  if (!req.session.user || !req.session.user.data) {
+    return res.redirect('/');
+  }
+
+  const user = req.session.user.data;
+  const isAdmin = ADMIN_CIDS.includes(Number(user.cid));
+
+  // 2️⃣ ICAO — DEFINE ONCE
+  const pageIcao = req.query.icao?.toUpperCase();
+  if (!pageIcao || pageIcao.length !== 4) {
+    return res.redirect('/atc');
+  }
+
+  // 3️⃣ Controller connection check
+  const controllerCallsign = user.callsign; // THIS is correct
+  const isConnectedToIcao =
+    controllerCallsign &&
+    controllerCallsign.startsWith(pageIcao + '_');
+
+  // 4️⃣ Fetch VATSIM data
   const response = await axios.get('https://data.vatsim.net/v3/vatsim-data.json');
   const pilots = response.data.pilots;
 
+  // 5️⃣ Use pageIcao everywhere
   const departures = pilots.filter(
-    p => p.flight_plan && p.flight_plan.departure === icao && p.groundspeed < 5
+    p =>
+      p.flight_plan &&
+      p.flight_plan.departure === pageIcao &&
+      p.groundspeed < 5
   );
-
+  
   const rowsHtml = departures.map(p => {
     const wf = getWorldFlightStatus(p);
     const sectorKey = `${p.flight_plan.departure}-${p.flight_plan.arrival}`;
@@ -848,38 +882,21 @@ app.get('/departures', async (req, res) => {
 </tr>`;
   }).join('');
 
-  res.send(`<!DOCTYPE html>
-<html>
-<head>
-  <link rel="stylesheet" href="/styles.css"/>
-  <style>
-    .tsat-refresh {
-      margin-left: 4px;
-      border: none;
-      background: none;
-      cursor: pointer;
-      color: #2ecc71; /* nice green */
-      font-size: 0.9rem;
-    }
-    .tsat-refresh:hover {
-      transform: scale(1.1);
-    }
-  </style>
-</head>
-<body>
+ const content = `
+  <section class="card dashboard-wide">
 
-<header class="topbar">
-  <div class="header-left"><img src="/logo.png" class="logo-large"/></div>
-  <div class="header-center">${icao} Ground Departures</div>
-  <div class="header-right"><a href="/dashboard" class="back-btn">← Back</a></div>
-</header>
-
-<main class="dashboard">
-  <section class="card">
+    <section class="card">
 
     <!-- TOP ROW HEADERS (aligned horizontally) -->
-    <div class="tsat-top-row">
+<div class="tsat-wrapper">    
 
+${!isConnectedToIcao ? `
+  <div class="icao-warning">
+    You are not connected as an ${pageIcao}_ position and therefore the following information is read-only.
+  </div>
+` : ``}
+
+<div class="tsat-top-row">
       <!-- LEFT COLUMN -->
       <div class="tsat-top-left">
         <h3 class="tsat-header">Upcoming TSATs</h3>
@@ -923,7 +940,7 @@ app.get('/departures', async (req, res) => {
           </table>
         </div>
       </div>
-
+</div>
     </div>
     <!-- END TSAT TOP ROW -->
 
@@ -953,11 +970,11 @@ app.get('/departures', async (req, res) => {
     </div>
 
   </section>
-</main>
+</section>
 
 
-
-<script>
+  <!-- ALL scripts stay exactly the same -->
+  <script>
 /* ----------------------------------------------------
    SEARCH FILTER
 ---------------------------------------------------- */
@@ -1384,10 +1401,60 @@ setInterval(() => {
 }, 60000);
 
 </script>
+`;
 
-</body>
-</html>`);
+res.send(
+  renderLayout({
+    title: 'ATC Slot Management',
+    user,
+    isAdmin,
+    layoutClass: 'dashboard-full',
+    content
+  })
+);
+
+
+
 });
+
+app.get('/atc', (req, res) => {
+  if (!req.session.user || !req.session.user.data) {
+    return res.redirect('/');
+  }
+
+  const user = req.session.user.data;
+  const isAdmin = ADMIN_CIDS.includes(Number(user.cid));
+
+  const content = `
+    <section class="card">
+      <h2>ATC Slot Management</h2>
+      <p>Select an airport to manage ground departures.</p>
+
+      <form action="/departures" method="GET" class="icao-search">
+        <input
+          type="text"
+          name="icao"
+          placeholder="Enter ICAO (e.g. EGLL)"
+          maxlength="4"
+          required
+        />
+        <button type="submit">Load Departures</button>
+      </form>
+    </section>
+  `;
+
+  res.send(
+    renderLayout({
+      title: 'ATC Slot Management',
+      user,
+      isAdmin,
+      layoutClass: 'dashboard-full',
+      content
+    })
+  );
+});
+
+
 
 /* ===== LOGOUT ===== */
 app.get('/logout', (req, res) => {

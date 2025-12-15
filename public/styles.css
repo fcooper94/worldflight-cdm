@@ -1079,3 +1079,108 @@ body.sidebar-collapsed .topbar {
   max-height: 40px;
   opacity: 0.85;
 }
+.dashboard-footer {
+  grid-column: 1 / -1;
+  text-align: center;
+  margin-top: 40px;
+}
+/* =====================================
+   DASHBOARD ACTIONS — CENTERED UNDER CARDS
+   ===================================== */
+
+.dashboard-actions {
+  grid-column: 1 / -1;              /* span full grid */
+  display: flex;
+  flex-direction: column;
+  align-items: center;              /* center contents */
+  justify-content: center;
+
+  max-width: 920px;                 /* matches 2-card width */
+  margin: 20px auto 0 auto;         /* centers the block itself */
+
+  gap: 18px;
+}
+
+.logout-link {
+  color: #60a5fa;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.logout-link:hover {
+  text-decoration: underline;
+}
+/* ===============================
+   DASHBOARD — FORCE 2-COLUMN LAYOUT
+   =============================== */
+
+.dashboard {
+  max-width: 960px;                  /* 2 × 420 + gap */
+  margin: 0 auto;                    /* center whole grid */
+  grid-template-columns: repeat(2, minmax(420px, 1fr));
+}
+/* ===============================
+   WIDE DASHBOARD (DEPARTURES, TABLES)
+   =============================== */
+
+.dashboard-wide {
+  grid-template-columns: minmax(900px, 1200px);
+  justify-content: center;
+}
+.dashboard-wide .card {
+  max-width: 1200px;
+  width: 100%;
+}
+/* ===============================
+   FULL-WIDTH DASHBOARD (OPERATIONS)
+   =============================== */
+
+.dashboard-full {
+  max-width: none;              /* remove all width limits */
+  width: 100%;
+  margin: 0;                    /* no centering */
+  grid-template-columns: 1fr;   /* single column, full width */
+}
+/* ===============================
+   FULL-WIDTH OVERRIDES
+   =============================== */
+
+.dashboard-full .card {
+  max-width: none;
+  width: 100%;
+}
+/* ===============================
+   ICAO CONNECTION WARNING
+   =============================== */
+
+/* ================================
+   ICAO READ-ONLY WARNING BANNER
+   ================================ */
+
+.tsat-wrapper {
+  position: relative;
+  padding-top: 56px; /* reserves space for banner */
+}
+
+.icao-warning {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+
+  height: 40px;
+  line-height: 40px;
+
+  background: linear-gradient(160deg, #450a0a, #1f0505);
+  border: 1px solid #7f1d1d;
+  border-radius: 10px;
+
+  color: #fecaca;
+  font-weight: 600;
+  font-size: 14px;
+  text-align: center;
+
+  box-shadow: 0 0 18px rgba(239,68,68,.35);
+  z-index: 5;
+}
+
