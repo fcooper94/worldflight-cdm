@@ -970,7 +970,7 @@ select{ cursor:pointer; }
   color: #fff;
   text-decoration: none;
   transition: all 0.25s ease;
-  box-shadow: 0 10px 30px rgba(56,189,248,0.4);
+  box-shadow: 0 10px 20px rgba(56,189,248,0.4);
 }
 
 .login-btn:hover {

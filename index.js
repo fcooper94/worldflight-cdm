@@ -481,21 +481,31 @@ if (icaoFromQuery) {
   });
 
   socket.on('sendBackToUpcoming', ({ callsign }) => {
-    const entry = recentlyStarted[callsign];
-    if (!entry) return;
-    if (!canEditIcao(user, entry.icao)) return;
+  const entry = recentlyStarted[callsign];
+  if (!entry) return;
+  if (!canEditIcao(user, entry.icao)) return;
 
-    if (entry.tsat) {
-      sharedTSAT[callsign] = { tsat: entry.tsat };
-    }
+  if (entry.tsat) {
+    sharedTSAT[callsign] = {
+      tsat: entry.tsat,
+      icao: entry.icao   // 🔑 REQUIRED
+    };
+  }
 
-    delete recentlyStarted[callsign];
-    delete startedAircraft[callsign];
+  delete recentlyStarted[callsign];
+  delete startedAircraft[callsign];
 
-    io.emit('tsatStartedUpdated', startedAircraft);
-    io.emit('upcomingTSATUpdate', buildUpcomingTSATsForICAO(entry.icao, cachedPilots));
-    io.emit('recentlyStartedUpdate', buildRecentlyStartedForICAO(entry.icao, cachedPilots));
-  });
+  io.emit('tsatStartedUpdated', startedAircraft);
+  io.emit(
+    'upcomingTSATUpdate',
+    buildUpcomingTSATsForICAO(entry.icao, cachedPilots)
+  );
+  io.emit(
+    'recentlyStartedUpdate',
+    buildRecentlyStartedForICAO(entry.icao)
+  );
+});
+
 
   socket.on('deleteStartedEntry', ({ callsign }) => {
     const entry = recentlyStarted[callsign];
