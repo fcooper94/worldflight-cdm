@@ -144,6 +144,35 @@ return list
 
 }
 
+function buildUnassignedTobtsForICAO(icao) {
+  const results = [];
+
+  for (const [slotKey, booking] of Object.entries(tobtBookingsBySlot)) {
+    const [sector, dateUtc, depTimeUtc, tobtTimeUtc] = slotKey.split('|');
+    const [from, to] = sector.split('-');
+
+    if (from !== icao) continue;
+
+    // Check if this TOBT is already associated with a started / TSAT aircraft
+    const isAssigned = Object.values(sharedTSAT).some(
+      tsat => tsat.icao === icao && tsat.tsat === tobtTimeUtc
+    );
+
+    if (isAssigned) continue;
+
+    results.push({
+      sector,
+      to,
+      dateUtc,
+      depTimeUtc,
+      tobt: tobtTimeUtc
+    });
+  }
+
+  return results.sort((a, b) => a.tobt.localeCompare(b.tobt));
+}
+
+
 /* ===== ADMIN CID WHITELIST ===== */
 const ADMIN_CIDS = [10000010, 1303570, 10000005];
 
@@ -308,6 +337,11 @@ if (icaoFromQuery) rebuildTSATStateForICAO(icaoFromQuery);
 // ✅ These can stay as-is
 socket.emit('syncState', sharedToggles);
 socket.emit('syncDepFlows', sharedDepFlows);
+socket.emit(
+  'unassignedTobtUpdate',
+  buildUnassignedTobtsForICAO(icaoFromQuery)
+);
+
 
 // ✅ IMPORTANT: emit a string map, not objects (fixes [object Object])
 socket.emit('syncTSAT', extractTSATMap());
@@ -753,6 +787,12 @@ app.get('/api/tobt/slots', (req, res) => {
     };
   });
 
+io.emit(
+  'unassignedTobtUpdate',
+  buildUnassignedTobtsForICAO(from)
+);
+
+
   res.json({ slots: result });
 });
 
@@ -788,6 +828,12 @@ app.post('/api/tobt/book', (req, res) => {
       return res.status(409).json({ error: 'You already have a TOBT for this departure' });
     }
   }
+
+  io.emit(
+  'unassignedTobtUpdate',
+  buildUnassignedTobtsForICAO(from)
+);
+
 
   tobtBookingsBySlot[slotKey] = { cid, createdAtISO: new Date().toISOString() };
   mySlots.add(slotKey);
@@ -1230,50 +1276,65 @@ ${!isAerodromeController ? `
     `}
   </div>
 ` : ``}
-<div class="tsat-top-row">
-      <!-- LEFT COLUMN -->
-      <div class="tsat-top-left">
-        <h3 class="tsat-header">Upcoming TSATs</h3>
-        <div class="table-scroll">
-          <table class="departures-table" id="tsatQueueTable">
-            <thead>
-              <tr>
-                <th>Callsign</th>
-                <th>TSAT</th>
-                <th>Started</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td colspan="3"><em>No TSATs scheduled</em></td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
+<div class="tsat-top-row three-cols">
 
-      <!-- RIGHT COLUMN -->
-      <div class="tsat-top-right">
-        <h3 class="tsat-header">Recently Started</h3>
-        <div class="table-scroll">
-          <table class="departures-table" id="recentlyStartedTable">
-            <thead>
-              <tr>
-                <th>Callsign</th>
-                <th>Started At</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr>
-              <tr><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr>
-              <tr><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr>
-              <tr><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr>
-              <tr><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
+  <!-- UPCOMING TSATs -->
+  <div class="tsat-col">
+    <h3 class="tsat-header">Upcoming TSATs</h3>
+    <div class="table-scroll">
+      <table class="departures-table" id="tsatQueueTable">
+        <thead>
+          <tr>
+            <th>Callsign</th>
+            <th>TSAT</th>
+            <th>Started</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- RECENTLY STARTED -->
+  <div class="tsat-col">
+    <h3 class="tsat-header">Recently Started</h3>
+    <div class="table-scroll">
+      <table class="departures-table" id="recentlyStartedTable">
+        <thead>
+          <tr>
+            <th>Callsign</th>
+            <th>Started At</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- UNASSIGNED TOBTs -->
+  <div class="tsat-col">
+    <h3 class="tsat-header">Unassigned TOBTs</h3>
+    <div class="table-scroll">
+      <table class="departures-table" id="unassignedTobtTable">
+        <thead>
+          <tr>
+            <th>TOBT</th>
+            <th>Dest</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td colspan="2"><em>No unassigned TOBTs</em></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+
 </div>
     </div>
     <!-- END TSAT TOP ROW -->
@@ -1438,6 +1499,29 @@ const socket = io({
 
 
 
+function renderUnassignedTobtTable(data) {
+  const tbody = document.querySelector('#unassignedTobtTable tbody');
+  if (!tbody) return;
+
+  tbody.innerHTML = '';
+
+  if (!data.length) {
+    tbody.innerHTML =
+      '<tr><td colspan="3"><em>No unassigned TOBTs</em></td></tr>';
+    return;
+  }
+
+  data.slice(0, 5).forEach(item => {
+    const tr = document.createElement('tr');
+    tr.innerHTML =
+      '<td>' + item.tobt + '</td>' +
+      '<td>' + item.to + '</td>' +
+      '<td>' + item.depTimeUtc + '</td>';
+    tbody.appendChild(tr);
+  });
+}
+
+
 /* ----------------------------------------------------
    UPCOMING TSAT TABLE RENDERER
 ---------------------------------------------------- */
@@ -1494,6 +1578,11 @@ socket.on('upcomingTSATUpdate', data => {
 socket.on('recentlyStartedUpdate', data => {
   renderRecentlyStartedTable(data);
 });
+
+socket.on('unassignedTobtUpdate', data => {
+  renderUnassignedTobtTable(data);
+});
+
 
 socket.on('tsatStartedUpdated', started => {
   document.querySelectorAll('.tsat-started-check').forEach(cb => {

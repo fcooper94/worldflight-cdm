@@ -433,10 +433,18 @@ select{ cursor:pointer; }
 /* =========================
    Tables
    ========================= */
-.table-scroll{
-  width:100%;
-  overflow-x:auto;
+.tsat-col .table-scroll {
+  flex: 1;               /* 🔑 fills column */
+  overflow-y: auto;
+  overflow-x: hidden;
 }
+#recentlyStartedTable th:last-child,
+#recentlyStartedTable td:last-child {
+  width: 130px;
+  max-width: 130px;
+  text-align: center;
+}
+
 
 /* Main operations table */
 .departures-table{
@@ -669,12 +677,19 @@ select{ cursor:pointer; }
 }
 
 /* TSAT tables should not inherit large min-width */
-#tsatQueueTable, #recentlyStartedTable{
+#tsatQueueTable, #recentlyStartedTable, #unassignedTobtTable{
   min-width:0 !important;
   width:100% !important;
   table-layout:fixed;
 }
 
+
+/* Compact TSAT tables: slightly looser padding for readability */
+#tsatQueueTable th, #tsatQueueTable td,
+#recentlyStartedTable th, #recentlyStartedTable td,
+#unassignedTobtTable th, #unassignedTobtTable td{
+  padding: 0px 8px;
+}
 /* Action buttons */
 .action-btn{
   background:#0b0f1a;
@@ -696,9 +711,8 @@ select{ cursor:pointer; }
 
 /* Actions column alignment */
 #recentlyStartedTable td:last-child {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  text-align: center;
+  white-space: nowrap;
 }
 .send-back-btn,
 .delete-started-btn {
@@ -709,6 +723,44 @@ select{ cursor:pointer; }
   justify-content: center;
 }
 
+/* Ensure Callsign column absorbs remaining width */
+#recentlyStartedTable th:nth-child(1),
+#recentlyStartedTable td:nth-child(1) {
+  width: auto;
+}
+
+
+#recentlyStartedTable th:nth-child(2),
+#recentlyStartedTable td:nth-child(2) {
+  width: 72px;              /* Started At (HH:MM) */
+  text-align: center;
+  white-space: nowrap;
+}
+
+/* Actions column must remain a table cell */
+#recentlyStartedTable th:nth-child(3),
+#recentlyStartedTable td:nth-child(3) {
+  width: 130px;
+  white-space: nowrap;
+  text-align: center;
+  display: table-cell;   /* ✅ critical */
+}
+/* Flex layout INSIDE the actions cell */
+#recentlyStartedTable td:nth-child(3) .action-btn,
+#recentlyStartedTable td:nth-child(3) .send-back-btn,
+#recentlyStartedTable td:nth-child(3) .delete-started-btn {
+  display: inline-flex;
+}
+
+#recentlyStartedTable td:nth-child(3) {
+  padding-left: 6px;
+  padding-right: 6px;
+}
+
+/* Ensure TSAT tables fill available vertical space */
+.tsat-col .table-scroll table {
+  height: 100%;
+}
 
 .send-back-btn:hover{
   border-color:#18c77e;
@@ -737,6 +789,25 @@ select{ cursor:pointer; }
 .row-red{ background-color:#4A1515 !important; color:#F6C6C6 !important; }
 
 /* ICAO warning banner */
+.tsat-wrapper {
+  width: 100%;
+  overflow: visible;   /* 🔑 critical */
+}
+.tsat-top-row.three-cols {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+
+  align-items: stretch;   /* 🔑 */
+}
+.tsat-col {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;   /* 🔑 allow shrink/grow */
+}
+
+
+
 .tsat-wrapper{ position:relative; padding-top:56px; }
 .icao-warning{
   position:absolute;
@@ -973,6 +1044,26 @@ select{ cursor:pointer; }
   box-shadow: 0 10px 20px rgba(56,189,248,0.4);
 }
 
+.tsat-top-row.three-cols {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+  align-items: stretch;
+}
+
+.tsat-col {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;   /* 🔑 allow shrink/grow */
+}
+
+
+.tsat-col .table-scroll {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  max-height: none;
+}
 .login-btn:hover {
   transform: translateY(-2px);
   box-shadow: 0 14px 40px rgba(56,189,248,0.55);
@@ -1113,19 +1204,25 @@ select{ cursor:pointer; }
    Compact TSAT tables (Upcoming / Recently Started)
    Targets the actual table IDs used in ATC Slot Management
    ========================================================= */
+/* Compact TSAT tables – allow content to define height */
 #tsatQueueTable th,
 #tsatQueueTable td,
 #recentlyStartedTable th,
 #recentlyStartedTable td {
-  padding: 0px 10px;  /* slightly tighter than 8px */
+  padding: 0px 10px;
   vertical-align: middle;
-  height: 36px;
-  max-height: 36px;
-  overflow: hidden;
   white-space: nowrap;
   box-sizing: border-box;
-  
 }
+
+/* Do NOT hard-limit row height */
+#recentlyStartedTable td,
+#recentlyStartedTable tr {
+  height: auto;
+  max-height: none;
+  overflow: visible;
+}
+
 
 
 #tsatQueueTable thead th,
@@ -1212,5 +1309,146 @@ select{ cursor:pointer; }
 /* Hover effect for ALL rows, including coloured ones */
 #tsatQueueTable tbody tr:hover {
   box-shadow: inset 0 0 0 9999px rgba(255,255,255,0.04);
+}
+
+
+
+/* Unassigned TOBTs table column sizing */
+#unassignedTobtTable th:first-child,
+#unassignedTobtTable td:first-child{ width: 90px; white-space: nowrap; }
+
+/* =========================================================
+   FINAL TSAT TABLE OVERRIDES (AUTHORITATIVE)
+   Do not place rules after this block.
+   ========================================================= */
+
+/* --- Top row layout: remove visual gaps --- */
+.tsat-top-row.three-cols {
+  gap: 16px;                 /* tighter, consistent spacing */
+  margin-bottom: 20px;
+}
+
+/* --- Columns must size to content, not force height --- */
+.tsat-col {
+  min-height: unset !important;
+  height: auto;
+}
+
+/* --- Scroll container defines height, not the table --- */
+
+
+/* --- TSAT tables must NEVER inherit large-table constraints --- */
+#tsatQueueTable,
+#recentlyStartedTable,
+#unassignedTobtTable {
+  min-width: 0 !important;
+  width: 100% !important;
+  table-layout: fixed;
+}
+
+/* --- Row density: compact but visible --- */
+#tsatQueueTable tr,
+#recentlyStartedTable tr,
+#unassignedTobtTable tr {
+  height: 34px;
+}
+
+/* --- Cell padding: removes “air gaps” --- */
+#tsatQueueTable td,
+#recentlyStartedTable td,
+#unassignedTobtTable td {
+  padding: 0px 8px;
+}
+
+/* --- Recently Started column sizing (final) --- */
+#recentlyStartedTable th:nth-child(1),
+#recentlyStartedTable td:nth-child(1) {
+  width: auto;
+}
+
+#recentlyStartedTable th:nth-child(2),
+#recentlyStartedTable td:nth-child(2) {
+  width: 72px;               /* HH:MM only */
+  text-align: center;
+  white-space: nowrap;
+}
+
+#recentlyStartedTable th:nth-child(3),
+#recentlyStartedTable td:nth-child(3) {
+  width: 130px;
+  white-space: nowrap;
+}
+
+/* --- Actions buttons: aligned, no layout side-effects --- */
+#recentlyStartedTable td:nth-child(3) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+/* --- Unassigned TOBTs compact columns --- */
+#unassignedTobtTable th:first-child,
+#unassignedTobtTable td:first-child {
+  width: 80px;
+  white-space: nowrap;
+}
+
+/* --- Prevent empty filler rows from looking like gaps --- */
+#tsatQueueTable tbody tr:empty,
+#recentlyStartedTable tbody tr:empty,
+#unassignedTobtTable tbody tr:empty {
+  display: none;
+}
+/* Center empty states vertically */
+#recentlyStartedTable tbody:empty::after,
+#unassignedTobtTable tbody:empty::after {
+  content: "—";
+  display: block;
+  height: 100%;
+  text-align: center;
+  opacity: 0.15;
+}
+/* Prevent TSAT scrollbars from overlapping adjacent columns */
+.tsat-col .table-scroll {
+  scrollbar-gutter: stable both-edges;
+}
+
+#recentlyStartedTable th:nth-child(3),
+#recentlyStartedTable td:nth-child(3) {
+  display: table-cell !important;
+  width: 130px;
+  text-align: center;
+  white-space: nowrap;
+}
+/* Actions cell inner alignment */
+#recentlyStartedTable td:nth-child(3) .actions {
+  display: flex;
+  align-items: center;     /* 🔑 vertical alignment */
+  justify-content: center; /* horizontal centering */
+  gap: 6px;                /* small, clean spacing */
+}
+
+.delete-started-btn {
+  width: 28px;
+  padding: 0;
+}
+/* Optical alignment fix for trash icon */
+.delete-started-btn .trash-icon {
+  position: relative;
+}
+.delete-started-btn .trash-icon {
+  width: 14px;
+  height: 14px;
+  margin-top: -1px;
+}
+/* Normalize action button box model */
+#recentlyStartedTable .send-back-btn,
+#recentlyStartedTable .delete-started-btn {
+  height: 28px;
+  line-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
