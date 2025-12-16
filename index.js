@@ -418,11 +418,12 @@ if (icaoFromQuery) {
      ========================================================= */
 
   socket.on('updateToggle', ({ callsign, type, value, sector }) => {
-    if (!callsign || !type) return;
+  if (!callsign || type !== 'start') return;
+
     if (!canEditSector(sector)) return;
 
     if (!sharedToggles[callsign]) sharedToggles[callsign] = {};
-    sharedToggles[callsign][type] = value;
+    sharedToggles[callsign].start = value;
 
     if (sector) {
       sharedToggles[callsign].sector = normalizeSectorKey(sector);
@@ -1231,17 +1232,6 @@ const departuresHtml = `
   <td class="col-toggle">
     <button
   class="toggle-btn"
-  data-type="clearance"
-  data-callsign="${p.callsign}"
-  ${disabledAttr}
->
-  ⬜
-</button>
-
-  </td>
-  <td class="col-toggle">
-    <button
-  class="toggle-btn"
   data-type="start"
   data-callsign="${p.callsign}"
   data-sector="${sectorKey}"
@@ -1366,7 +1356,6 @@ ${!isAerodromeController ? `
             <th>Callsign</th>
             <th>Aircraft</th>
             <th>Dest</th>
-            <th class="col-toggle">CLR</th>
             <th class="col-toggle">START</th>
             <th>TSAT</th>
             <th class="col-route">ATC Route</th>
@@ -1661,22 +1650,23 @@ document.addEventListener('change', function (e) {
 ---------------------------------------------------- */
 socket.on('syncState', state => {
   Object.entries(state).forEach(([callsign, toggles]) => {
-    Object.entries(toggles).forEach(([type, value]) => {
-      if (type !== 'clearance' && type !== 'start') return;
-      const btn = document.querySelector(
-        '.toggle-btn[data-callsign="' + callsign + '"][data-type="' + type + '"]'
-      );
-      if (btn) {
-        btn.innerText = value ? '✅' : '⬜';
-        btn.classList.toggle('active', value);
-      }
-    });
+    if (!toggles.start) return;
+
+    const btn = document.querySelector(
+      '.toggle-btn[data-callsign="' + callsign + '"][data-type="start"]'
+    );
+    if (!btn) return;
+
+    btn.innerText = '✅';
+    btn.classList.add('active');
   });
 });
 
 
+
 socket.on('toggleUpdated', ({ callsign, type, value }) => {
-  if (type !== 'clearance' && type !== 'start') return;
+  if (type !== 'start') return;
+
   const btn = document.querySelector(
     '.toggle-btn[data-callsign="' + callsign + '"][data-type="' + type + '"]'
   );
