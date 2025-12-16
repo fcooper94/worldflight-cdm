@@ -488,13 +488,15 @@ select{ cursor:pointer; }
 /* Route column */
 .col-route{
   width:auto;
-  min-width:700px;
+  min-width:500px;     /* ↓ was 700px */
+  max-width:520px;     /* 🔑 hard cap */
   white-space:normal;
   overflow-wrap:anywhere;
   line-height:1.65;
   font-size:12px;
-  padding-right:20px;
+  padding-right:36px; /* ↑ stronger separation */
 }
+
 .departures-table thead th.col-route{
   font-size:15px;
   color:#fff;
@@ -1514,3 +1516,103 @@ select{ cursor:pointer; }
   color: #c9f2de; /* brighter, still green-tinted */
 }
 
+.tobt-primary {
+  font-size: 1.15rem;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+
+  color: #bff5dc;               /* lighter, readable green */
+  text-shadow: 0 0 8px rgba(47, 191, 113, 0.25);
+}
+
+
+.wf-sector {
+  font-weight: 700;
+}
+
+.simbrief-link {
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.simbrief-link:hover {
+  text-decoration: underline;
+  filter: brightness(1.1);
+}
+.departures-table tbody tr:hover .tobt-primary {
+  color: #d6fff0;
+}
+.departures-table td.atc-route-col {
+  padding: 6px 40px 6px 6px;
+  max-width: 520px;
+  white-space: normal;
+  word-break: break-word;
+}
+
+
+
+.departures-table td.simbrief-col {
+  min-width: 220px;
+}
+
+.departures-table th.simbrief-col,
+.departures-table td.simbrief-col {
+  text-align: left;
+}
+
+
+.hidden {
+  display: none !important;
+}
+
+/* Shared */
+.booking-banner {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 18px 22px;
+  border-radius: 14px;
+  margin-bottom: 24px;
+  font-weight: 600;
+}
+
+/* Success */
+.booking-banner.success {
+  background: linear-gradient(
+    90deg,
+    rgba(15, 61, 46, 0.8),
+    rgba(15, 61, 46, 0.4)
+  );
+  border: 1px solid var(--wf-green-dark);
+  color: #c6f6d5;
+}
+
+/* Cancel */
+.booking-banner.cancel {
+  background: linear-gradient(
+    90deg,
+    rgba(127, 29, 29, 0.75),
+    rgba(127, 29, 29, 0.4)
+  );
+  border: 1px solid var(--danger);
+  color: #fecaca;
+}
+
+.banner-action {
+  margin-left: auto;
+  border: none;
+  padding: 10px 18px;
+  border-radius: 999px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.banner-action.success {
+  background: linear-gradient(160deg, var(--wf-green-dark), #0f766e);
+  color: #04150c;
+}
+
+.banner-action.cancel {
+  background: linear-gradient(160deg, #dc2626, #b91c1c);
+  color: #fff;
+}

@@ -828,6 +828,7 @@ app.post('/api/tobt/book', (req, res) => {
       return res.status(409).json({ error: 'You already have a TOBT for this departure' });
     }
   }
+  
 
   io.emit(
   'unassignedTobtUpdate',
@@ -1937,16 +1938,21 @@ app.get('/book', (req, res) => {
   const isAdmin = ADMIN_CIDS.includes(Number(user.cid));
 
   const content = `
-  <div id="bookingSuccessBanner" class="success-banner hidden">
-  <div class="success-text">
+  <script type="text/javascript" src="simbrief.apiv1.js"></script>
+  <div id="bookingSuccessBanner" class="booking-banner success hidden">
   <span id="successMessage"></span>
-</div>
-
-
-  <button class="success-action" id="viewBookingsBtn">
+  <button id="viewBookingsBtn" class="banner-action success">
     View my booked slots →
   </button>
 </div>
+
+<div id="bookingCancelBanner" class="booking-banner cancel hidden">
+  <span id="cancelMessage"></span>
+  <button id="viewBookingsBtnCancel" class="banner-action cancel">
+    View my booked slots →
+  </button>
+</div>
+
 
 
   <section class="card card-full tobt-card">
@@ -2046,37 +2052,48 @@ const rightCol = slots.slice(half);
       });
 
       body.addEventListener('click', async e => {
-        if (e.target.tagName !== 'BUTTON') return;
+  if (e.target.tagName !== 'BUTTON') return;
 
-        const td = e.target.closest('td');
-        const tobt = td.previousElementSibling.textContent;
-        const opt = select.selectedOptions[0];
+  const action = e.target.dataset.action;
+  if (!action) return;
 
-        const res = await fetch('/api/tobt/' + e.target.dataset.action, {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({
-    from: opt.dataset.from,
-    to: opt.dataset.to,
-    dateUtc: opt.dataset.date,
-    depTimeUtc: opt.dataset.dep,
-    tobtTimeUtc: tobt
-  })
-});
+  const td = e.target.closest('td');
+  const tobt = td.previousElementSibling.textContent;
+  const opt = select.selectedOptions[0];
 
-if (res.ok && e.target.dataset.action === 'book') {
-  showBookingSuccess({
-    from: opt.dataset.from,
-    to: opt.dataset.to,
-    tobt
+  const res = await fetch('/api/tobt/' + action, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      from: opt.dataset.from,
+      to: opt.dataset.to,
+      dateUtc: opt.dataset.date,
+      depTimeUtc: opt.dataset.dep,
+      tobtTimeUtc: tobt
+    })
   });
-}
 
-select.dispatchEvent(new Event('change'));
+  if (!res.ok) return;
 
+  if (action === 'book') {
+    showBookingSuccess({
+      from: opt.dataset.from,
+      to: opt.dataset.to,
+      tobt: tobt
+    });
+  }
 
+  if (action === 'cancel') {
+    showBookingCancelled({
+      from: opt.dataset.from,
+      to: opt.dataset.to,
+      tobt: tobt
+    });
+  }
 
-      });
+  // Refresh slot list
+  select.dispatchEvent(new Event('change'));
+});
 
       function showBookingSuccess(data) {
   const banner = document.getElementById('bookingSuccessBanner');
@@ -2091,7 +2108,53 @@ select.dispatchEvent(new Event('change'));
   banner.classList.remove('hidden');
 }
 
+const viewBtn = document.getElementById('viewBookingsBtn');
+  if (viewBtn) {
+    viewBtn.onclick = function () {
+      window.location.href = '/my-slots';
+    };
+  }
+
+
     </script>
+    <script>
+    function hideBookingBanners() {
+  var s = document.getElementById('bookingSuccessBanner');
+  var c = document.getElementById('bookingCancelBanner');
+  if (s) s.classList.add('hidden');
+  if (c) c.classList.add('hidden');
+}
+
+function showBookingSuccess(data) {
+  hideBookingBanners();
+
+  var banner = document.getElementById('bookingSuccessBanner');
+  var msg = document.getElementById('successMessage');
+  if (!banner || !msg) return;
+
+  msg.textContent =
+    'You have successfully booked a slot for ' +
+    data.from + ' \u2192 ' + data.to +
+    ' at ' + data.tobt + ' UTC.';
+
+  banner.classList.remove('hidden');
+}
+
+function showBookingCancelled(data) {
+  hideBookingBanners();
+
+  var banner = document.getElementById('bookingCancelBanner');
+  var msg = document.getElementById('cancelMessage');
+  if (!banner || !msg) return;
+
+  msg.textContent =
+    'Your slot for ' +
+    data.from + ' \u2192 ' + data.to +
+    ' at ' + data.tobt + ' UTC has been cancelled.';
+
+  banner.classList.remove('hidden');
+}
+</script>
   `;
 
   res.send(
@@ -2105,6 +2168,139 @@ select.dispatchEvent(new Event('change'));
   );
 });
 
+app.get('/my-slots', (req, res) => {
+  if (!req.session.user || !req.session.user.data) {
+    return res.redirect('/auth/login');
+  }
+
+  const user = req.session.user.data;
+  const cid = user.cid;
+  const isAdmin = ADMIN_CIDS.includes(Number(cid));
+
+  const mySlots = Array.from(tobtBookingsByCid[cid] || []);
+
+  const rows = mySlots.map(slotKey => {
+  const [sectorKey, dateUtc, depTimeUtc, tobtTimeUtc] = slotKey.split('|');
+  const [from, to] = sectorKey.split('-');
+
+  // Find WF schedule row
+  const wfRow = adminSheetCache.find(
+    r =>
+      r.from === from &&
+      r.to === to &&
+      r.date_utc === dateUtc &&
+      r.dep_time_utc === depTimeUtc
+  );
+
+  const wfSector = wfRow?.number || '—';
+  const atcRoute = wfRow?.atc_route || '—';
+
+  // Connect by = TOBT - 30 minutes
+  const [hh, mm] = tobtTimeUtc.split(':').map(Number);
+  const connectDate = new Date(Date.UTC(2000, 0, 1, hh, mm - 30));
+  const connectBy =
+    connectDate.getUTCHours().toString().padStart(2, '0') +
+    ':' +
+    connectDate.getUTCMinutes().toString().padStart(2, '0');
+// TOBT → hour / minute
+const [deph, depm] = tobtTimeUtc.split(':');
+
+// Build SimBrief URL
+const simbriefUrl =
+  'https://dispatch.simbrief.com/options/custom' +
+  '?orig=' + from +
+  '&dest=' + to +
+  '&deph=' + deph +
+  '&depm=' + depm +
+  '&route=' + encodeURIComponent(atcRoute || '') +
+  '&manualrmk=' + encodeURIComponent(
+    'Planned using www.WorldFlight.center'
+  );
+
+  return {
+  wfSector,
+  from,
+  to,
+  tobt: tobtTimeUtc,
+  connectBy,
+  atcRoute,
+  simbriefUrl   // 👈 ADD THIS
+};
+
+});
+
+
+  const content = `
+    <section class="card card-full">
+      <h2>My Slots</h2>
+
+      ${rows.length === 0 ? `
+        <p><em>You have no booked slots.</em></p>
+      ` : `
+        <div class="table-scroll">
+          <table class="departures-table">
+            <thead>
+              <tr>
+                <th>WF Sector</th>
+                <th>Departure</th>
+                <th>Destination</th>
+                <th>TOBT</th>
+                <th>Connect by</th>
+                <th>ATC Route</th>
+                <th>Plan with SimBrief</th>
+              </tr>
+            </thead>
+            <tbody>
+  ${rows.map(r => `
+    <tr>
+  <td class="wf-sector">${r.wfSector}</td>
+  <td>${r.from}</td>
+  <td>${r.to}</td>
+
+  <td class="tobt-primary">
+    ${r.tobt}Z
+  </td>
+
+  <td>${r.connectBy}Z</td>
+
+  <!-- ATC Route: constrained + padded -->
+  <td class="atc-route-col col-route">
+    ${r.atcRoute}
+  </td>
+
+  <!-- SimBrief: reserved space -->
+  <td class="simbrief-col">
+  <a
+    href="${r.simbriefUrl}"
+    class="simbrief-link"
+    target="_blank"
+    rel="noopener noreferrer"
+  >
+    Plan with SimBrief
+  </a>
+</td>
+
+</tr>
+
+  `).join('')}
+</tbody>
+
+          </table>
+        </div>
+      `}
+    </section>
+  `;
+
+  res.send(
+    renderLayout({
+      title: 'My Slots',
+      user,
+      isAdmin,
+      layoutClass: 'dashboard-full',
+      content
+    })
+  );
+});
 
 
 
