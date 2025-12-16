@@ -804,6 +804,7 @@ select{ cursor:pointer; }
 }
 .tsat-col {
   display: flex;
+  height: 320px; /* pick the height that matches the other panels */
   flex-direction: column;
   min-height: 0;   /* 🔑 allow shrink/grow */
 }
@@ -1331,10 +1332,6 @@ select{ cursor:pointer; }
 }
 
 /* --- Columns must size to content, not force height --- */
-.tsat-col {
-  min-height: unset !important;
-  height: auto;
-}
 
 /* --- Scroll container defines height, not the table --- */
 

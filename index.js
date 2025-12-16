@@ -16,6 +16,8 @@ import { Server } from 'socket.io';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const allTobtSlots = {}; // slotKey -> { from, to, dateUtc, depTimeUtc, tobt }
+
 
 
 let cachedPilots = [];
@@ -145,32 +147,26 @@ return list
 }
 
 function buildUnassignedTobtsForICAO(icao) {
-  const results = [];
+  if (!icao) return [];
 
-  for (const [slotKey, booking] of Object.entries(tobtBookingsBySlot)) {
-    const [sector, dateUtc, depTimeUtc, tobtTimeUtc] = slotKey.split('|');
-    const [from, to] = sector.split('-');
+  const normalizedIcao = icao.toUpperCase();
 
-    if (from !== icao) continue;
-
-    // Check if this TOBT is already associated with a started / TSAT aircraft
-    const isAssigned = Object.values(sharedTSAT).some(
-      tsat => tsat.icao === icao && tsat.tsat === tobtTimeUtc
-    );
-
-    if (isAssigned) continue;
-
-    results.push({
-      sector,
-      to,
-      dateUtc,
-      depTimeUtc,
-      tobt: tobtTimeUtc
-    });
-  }
-
-  return results.sort((a, b) => a.tobt.localeCompare(b.tobt));
+  return Object.entries(allTobtSlots)
+    .filter(([key, slot]) => {
+      return (
+        slot.from === normalizedIcao &&
+        !tobtBookingsBySlot[key]   // ✅ NOT BOOKED
+      );
+    })
+    .map(([key, slot]) => ({
+      tobt: slot.tobt,
+      to: slot.to
+    }))
+    .sort((a, b) => a.tobt.localeCompare(b.tobt));
 }
+
+
+
 
 
 /* ===== ADMIN CID WHITELIST ===== */
@@ -769,6 +765,21 @@ app.get('/api/tobt/slots', (req, res) => {
 
   const slots = generateTobtSlots({ from, to, dateUtc, depTimeUtc });
 
+slots.forEach(tobt => {
+  const key = makeTobtSlotKey({ from, to, dateUtc, depTimeUtc, tobtTimeUtc: tobt });
+
+  if (!allTobtSlots[key]) {
+    allTobtSlots[key] = {
+      from,
+      to,
+      dateUtc,
+      depTimeUtc,
+      tobt
+    };
+  }
+});
+
+
   if (slots === null) {
     return res.json({
       noFlow: true,
@@ -1315,15 +1326,18 @@ ${!isAerodromeController ? `
 
   <!-- UNASSIGNED TOBTs -->
   <div class="tsat-col">
-    <h3 class="tsat-header">Unassigned TOBTs</h3>
+    <h3 class="tsat-header">Available TOBT's</h3>
     <div class="table-scroll">
       <table class="departures-table" id="unassignedTobtTable">
-        <thead>
-          <tr>
-            <th>TOBT</th>
-            <th>Dest</th>
-          </tr>
-        </thead>
+  <thead>
+    <tr>
+      <th>TOBT</th>
+      <th>Dest</th>
+      <th>TOBT</th>
+      <th>Dest</th>
+    </tr>
+  </thead>
+
         <tbody>
           <tr>
             <td colspan="2"><em>No unassigned TOBTs</em></td>
@@ -1506,21 +1520,52 @@ function renderUnassignedTobtTable(data) {
 
   tbody.innerHTML = '';
 
-  if (!data.length) {
+  const MAX_ROWS = 6;
+  const MAX_ITEMS = MAX_ROWS * 2;
+
+  const visible = data.slice(0, MAX_ITEMS);
+
+  if (!visible.length) {
     tbody.innerHTML =
-      '<tr><td colspan="3"><em>No unassigned TOBTs</em></td></tr>';
+      '<tr><td colspan="4"><em>None Available</em></td></tr>';
     return;
   }
 
-  data.slice(0, 5).forEach(item => {
+  const half = Math.ceil(visible.length / 2);
+  const left = visible.slice(0, half);
+  const right = visible.slice(half);
+
+  for (let i = 0; i < MAX_ROWS; i++) {
     const tr = document.createElement('tr');
-    tr.innerHTML =
-      '<td>' + item.tobt + '</td>' +
-      '<td>' + item.to + '</td>' +
-      '<td>' + item.depTimeUtc + '</td>';
+
+    const leftItem = left[i];
+    const rightItem = right[i];
+
+    // Left column
+    if (leftItem) {
+      tr.innerHTML +=
+        '<td>' + leftItem.tobt + '</td>' +
+        '<td>' + leftItem.to + '</td>';
+    } else {
+      tr.innerHTML += '<td></td><td></td>';
+    }
+
+    // Right column
+    if (rightItem) {
+      tr.innerHTML +=
+        '<td>' + rightItem.tobt + '</td>' +
+        '<td>' + rightItem.to + '</td>';
+    } else {
+      tr.innerHTML += '<td></td><td></td>';
+    }
+
     tbody.appendChild(tr);
-  });
+  }
+  
 }
+
+
+
 
 
 /* ----------------------------------------------------
