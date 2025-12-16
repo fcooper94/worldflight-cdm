@@ -973,15 +973,15 @@ select{ cursor:pointer; }
 }
 /* ===== LOGIN PAGE ===== */
 
-.login-page {
-  min-height: 100vh;
-  background: url('/background.jpg') center center / cover no-repeat fixed;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  position: relative;
-  font-family: 'Inter', system-ui, sans-serif;
-}
+.login-page { 
+  min-height: 100vh; 
+  background: url('/background.jpg') center center / cover no-repeat fixed; 
+  display: flex; 
+  align-items: center; 
+  justify-content: center; 
+  position: relative; 
+  font-family: 'Inter', system-ui, sans-serif; }
+
 
 /* Dark overlay for readability */
 .login-overlay {
@@ -1615,4 +1615,13 @@ select{ cursor:pointer; }
 .banner-action.cancel {
   background: linear-gradient(160deg, #dc2626, #b91c1c);
   color: #fff;
+}
+.no-layout .sidebar,
+.no-layout .content-wrapper {
+  display: none;
+}
+
+.no-layout {
+  margin: 0;
+  padding: 0;
 }
