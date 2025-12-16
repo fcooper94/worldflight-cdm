@@ -1113,7 +1113,27 @@ app.get('/departures', async (req, res) => {
   console.log('Can Edit:', canEdit);
   console.log('-----------------------------');
 
+  
+  const CAN_EDIT = canEdit;
+
+
+  
+  const tsatRefreshHtml = CAN_EDIT
+  ? `
+    <button
+      class="tsat-refresh"
+      data-callsign=""
+      style="display:none;"
+    >
+      ⟳
+    </button>
+  `
+  : '';
+
+  
   const rowsHtml = departures.map(p => {
+    const disabledAttr = CAN_EDIT ? '' : 'disabled';
+
     const wf = getWorldFlightStatus(p);
     const sectorKey = `${p.flight_plan.departure}-${p.flight_plan.arrival}`;
 
@@ -1164,15 +1184,21 @@ const departuresHtml = `
 
   </td>
   <td class="tsat-cell" data-callsign="${p.callsign}">
-    <span class="tsat-time">—</span>
-    <button
-      class="tsat-refresh"
-      data-callsign="${p.callsign}"
-      style="display:none;"
-    >
-      ⟳
-    </button>
-  </td>
+  <span class="tsat-time">—</span>
+  ${CAN_EDIT
+    ? `
+      <button
+        class="tsat-refresh"
+        data-callsign="${p.callsign}"
+        style="display:none;"
+      >
+        ⟳
+      </button>
+    `
+    : ''
+  }
+</td>
+
   <td class="col-route">${routeHtml}</td>
 </tr>`;
   }).join('');
@@ -1308,10 +1334,20 @@ function bindRouteExpanders() {
     el.onclick = () => {
       const exp = el.nextElementSibling;
       if (!exp) return;
-      exp.style.display = exp.style.display === 'block' ? 'none' : 'block';
+
+      const isExpanded = exp.style.display === 'block';
+
+      if (isExpanded) {
+        exp.style.display = 'none';
+        el.textContent = 'Click to expand';
+      } else {
+        exp.style.display = 'block';
+        el.textContent = 'Click to collapse';
+      }
     };
   });
 }
+
 
 // Initial bind on page load
 bindRouteExpanders();
@@ -1598,6 +1634,8 @@ document.addEventListener('click', function (e) {
 function renderRecentlyStartedTable(data) {
   const tbody = document.querySelector('#recentlyStartedTable tbody');
   tbody.innerHTML = '';
+    const disabledAttr = CAN_EDIT ? '' : ' disabled';
+
 
   const MAX_ROWS = 5;
 
@@ -1608,19 +1646,20 @@ function renderRecentlyStartedTable(data) {
   '<td>' + item.callsign + '</td>' +
   '<td>' + item.startedAt + '</td>' +
   '<td>' +
-    '<button class="send-back-btn action-btn" data-callsign="' + item.callsign + '">' +
-      'Send Back' +
-    '</button>' +
-    '<button class="delete-started-btn action-btn" data-callsign="' + item.callsign + '" title="Delete entry">' +
-      '<svg class="trash-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
-        '<polyline points="3 6 5 6 21 6"></polyline>' +
-        '<path d="M19 6l-1 14H6L5 6"></path>' +
-        '<path d="M10 11v6"></path>' +
-        '<path d="M14 11v6"></path>' +
-        '<path d="M9 6V4h6v2"></path>' +
-      '</svg>' +
-    '</button>' +
-  '</td>';
+  '<button class="send-back-btn action-btn" data-callsign="' + item.callsign + '"' + disabledAttr + '>' +
+    'Send Back' +
+  '</button>' +
+  '<button class="delete-started-btn action-btn" data-callsign="' + item.callsign + '" title="Delete entry"' + disabledAttr + '>' +
+    '<svg class="trash-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+      '<polyline points="3 6 5 6 21 6"></polyline>' +
+      '<path d="M19 6l-1 14H6L5 6"></path>' +
+      '<path d="M10 11v6"></path>' +
+      '<path d="M14 11v6"></path>' +
+      '<path d="M9 6V4h6v2"></path>' +
+    '</svg>' +
+  '</button>' +
+'</td>';
+
 
     tbody.appendChild(tr);
   });
@@ -1640,17 +1679,22 @@ function renderRecentlyStartedTable(data) {
 
 /* Handle Send Back button in Recently Started */
 document.addEventListener('click', e => {
-  if (!e.target.classList.contains('send-back-btn')) return;
-  const callsign = e.target.dataset.callsign;
+  const btn = e.target.closest('.send-back-btn');
+  if (!btn) return;
+  if (btn.disabled || !CAN_EDIT) return;
+
+  const callsign = btn.dataset.callsign;
   if (!callsign) return;
 
   socket.emit('sendBackToUpcoming', { callsign, icao });
 });
-/* Handle DELETE button for Recently Started */
-document.addEventListener('click', e => {
-  if (!e.target.classList.contains('delete-started-btn')) return;
 
-  const callsign = e.target.dataset.callsign;
+document.addEventListener('click', e => {
+  const btn = e.target.closest('.delete-started-btn');
+  if (!btn) return;
+  if (btn.disabled || !CAN_EDIT) return;
+
+  const callsign = btn.dataset.callsign;
   if (!callsign) return;
 
   const ok = confirm("Are you sure you want to permanently delete " + callsign + " from Recently Started?");
@@ -1658,6 +1702,7 @@ document.addEventListener('click', e => {
 
   socket.emit('deleteStartedEntry', { callsign });
 });
+
 
 </script>
 <script>

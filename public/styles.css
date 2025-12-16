@@ -33,6 +33,10 @@
   --sidebar-collapsed:72px;
 
   --topbar-h:120px;
+
+  --wf-green: #0F3D2E;
+  --wf-green-dark: #13a86a;
+  --wf-green-glow: rgba(24,199,126,0.5);
 }
 
 /* ===== Reset / base ===== */
@@ -543,9 +547,9 @@ select{ cursor:pointer; }
   font-size:14px;
 }
 .toggle-btn.active{
-  background: #16a34a;
-  border-color:#16a34a;
-  box-shadow: 0 0 10px rgba(34,197,94,.45);
+  background: var(--wf-green);
+  border-color:var(--wf-green);
+   box-shadow: 0 0 5px var(--wf-green-glow);
 }
 
 /* Dep flow input */
@@ -601,11 +605,15 @@ select{ cursor:pointer; }
   border:none;
   cursor:pointer;
   font-size:16px;
-  background: linear-gradient(145deg, #1f9f62, #18c77e);
+  background: linear-gradient(
+    180deg,
+    var(--wf-green),
+    var(--wf-green-dark)
+  );
   color:#fff;
   border-radius:8px;
   padding:6px 10px;
-  box-shadow: 0 0 8px rgba(24,199,126,0.5);
+  box-shadow: 0 0 8px var(--wf-green-glow);
   transition: transform .15s ease, box-shadow .15s ease;
 }
 .tsat-refresh:hover{
@@ -1193,5 +1201,16 @@ select{ cursor:pointer; }
 /* Main departures table hover (correct ID) */
 #mainDeparturesTable tbody tr:hover > td{
   background-color: rgba(255, 255, 255, 0.035);
+}
+
+.action-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* Hover effect for ALL rows, including coloured ones */
+#tsatQueueTable tbody tr:hover {
+  box-shadow: inset 0 0 0 9999px rgba(255,255,255,0.04);
 }
 
