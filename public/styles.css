@@ -1451,4 +1451,66 @@ select{ cursor:pointer; }
   align-items: center;
   justify-content: center;
 }
+.success-banner {
+  background: rgba(47, 191, 113, 0.08); /* MUCH lighter tint */
+  border: 1px solid rgba(47, 191, 113, 0.35);
+  color: #9fe3c2; /* readable green on dark bg */
+
+  padding: 16px 18px;
+  border-radius: 10px;
+  margin-bottom: 20px;
+
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  animation: slideDown 220ms ease-out;
+}
+
+
+.success-banner.hidden {
+  display: none;
+}
+
+.success-action {
+  background: var(--wf-green);
+  color: #a1b9ad;
+  font-weight: 800;
+
+  padding: 10px 22px;
+  border-radius: 999px;
+  border: none;
+  cursor: pointer;
+
+  box-shadow:
+    0 0 0 1px rgba(47, 191, 113, 0.55),
+    0 6px 16px rgba(47, 191, 113, 0.25);
+}
+
+.success-action:hover {
+  filter: brightness(1.15);
+}
+
+
+.success-action:hover {
+  filter: brightness(1.1);
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.success-label {
+  color: var(--wf-green);
+  font-weight: 800;
+  letter-spacing: 0.2px;
+}
+.success-text {
+  color: #c9f2de; /* brighter, still green-tinted */
+}
 

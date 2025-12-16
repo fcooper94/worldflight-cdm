@@ -1937,6 +1937,18 @@ app.get('/book', (req, res) => {
   const isAdmin = ADMIN_CIDS.includes(Number(user.cid));
 
   const content = `
+  <div id="bookingSuccessBanner" class="success-banner hidden">
+  <div class="success-text">
+  <span id="successMessage"></span>
+</div>
+
+
+  <button class="success-action" id="viewBookingsBtn">
+    View my booked slots →
+  </button>
+</div>
+
+
   <section class="card card-full tobt-card">
 
       <h2>Make a Booking</h2>
@@ -2003,28 +2015,34 @@ if (data.noFlow) {
 }
 
 const slots = data.slots;
+const half = Math.ceil(slots.length / 2);
+const leftCol = slots.slice(0, half);
+const rightCol = slots.slice(half);
 
 
-        for (let i = 0; i < slots.length; i += 2) {
-          const tr = document.createElement('tr');
-          [slots[i], slots[i + 1]].forEach(slot => {
-            if (!slot) {
-              tr.innerHTML += '<td></td><td></td>';
-              return;
-            }
+        for (let i = 0; i < half; i++) {
+  const tr = document.createElement('tr');
 
-            const btn = slot.byMe
-  ? '<button class="tobt-btn cancel" data-action="cancel">Cancel</button>'
-  : slot.booked
-    ? '<button class="tobt-btn booked" disabled>Booked</button>'
-    : '<button class="tobt-btn book" data-action="book">Book</button>';
+  [leftCol[i], rightCol[i]].forEach(slot => {
+    if (!slot) {
+      tr.innerHTML += '<td></td><td></td>';
+      return;
+    }
 
+    const btn = slot.byMe
+      ? '<button class="tobt-btn cancel" data-action="cancel">Cancel</button>'
+      : slot.booked
+        ? '<button class="tobt-btn booked" disabled>Booked</button>'
+        : '<button class="tobt-btn book" data-action="book">Book</button>';
 
+    tr.innerHTML +=
+      '<td>' + slot.tobt + '</td>' +
+      '<td>' + btn + '</td>';
+  });
 
-            tr.innerHTML += '<td>' + slot.tobt + '</td><td>' + btn + '</td>';
-          });
-          body.appendChild(tr);
-        }
+  body.appendChild(tr);
+}
+
       });
 
       body.addEventListener('click', async e => {
@@ -2034,20 +2052,45 @@ const slots = data.slots;
         const tobt = td.previousElementSibling.textContent;
         const opt = select.selectedOptions[0];
 
-        await fetch('/api/tobt/' + e.target.dataset.action, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            from: opt.dataset.from,
-            to: opt.dataset.to,
-            dateUtc: opt.dataset.date,
-            depTimeUtc: opt.dataset.dep,
-            tobtTimeUtc: tobt
-          })
-        });
+        const res = await fetch('/api/tobt/' + e.target.dataset.action, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    from: opt.dataset.from,
+    to: opt.dataset.to,
+    dateUtc: opt.dataset.date,
+    depTimeUtc: opt.dataset.dep,
+    tobtTimeUtc: tobt
+  })
+});
 
-        select.dispatchEvent(new Event('change'));
+if (res.ok && e.target.dataset.action === 'book') {
+  showBookingSuccess({
+    from: opt.dataset.from,
+    to: opt.dataset.to,
+    tobt
+  });
+}
+
+select.dispatchEvent(new Event('change'));
+
+
+
       });
+
+      function showBookingSuccess(data) {
+  const banner = document.getElementById('bookingSuccessBanner');
+  const message = document.getElementById('successMessage');
+
+  message.textContent =
+  'You have successfully booked a slot for ' +
+  data.from + ' → ' + data.to +
+  ' at ' + data.tobt + ' UTC.';
+
+
+  banner.classList.remove('hidden');
+}
+
     </script>
   `;
 
