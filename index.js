@@ -1326,7 +1326,7 @@ ${!isAerodromeController ? `
 
   <!-- UNASSIGNED TOBTs -->
   <div class="tsat-col">
-    <h3 class="tsat-header">Available TOBT's</h3>
+    <h3 class="tsat-header">Available WF TOBT's</h3>
     <div class="table-scroll">
       <table class="departures-table" id="unassignedTobtTable">
   <thead>
@@ -1340,7 +1340,7 @@ ${!isAerodromeController ? `
 
         <tbody>
           <tr>
-            <td colspan="2"><em>No unassigned TOBTs</em></td>
+            <td colspan="4"><em>None Available</em></td>
           </tr>
         </tbody>
       </table>
