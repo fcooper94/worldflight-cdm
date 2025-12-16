@@ -1,3 +1,6 @@
+import path from 'path';
+import { fileURLToPath } from 'url';
+
 import 'dotenv/config';
 import express from 'express';
 import session from 'express-session';
@@ -10,6 +13,10 @@ import renderLayout from './layout.js';
 
 import { createServer } from 'http';
 import { Server } from 'socket.io';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 
 let cachedPilots = [];
 
@@ -27,8 +34,17 @@ async function refreshPilots() {
 }
 
 
+
+
+
 /* ===== EXPRESS + HTTP SERVER ===== */
 const app = express();
+
+app.set('view engine', 'ejs');
+app.set('views', path.join(__dirname, 'views'));
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
 const httpServer = createServer(app);
 const io = new Server(httpServer);
 
@@ -42,6 +58,10 @@ io.use((socket, next) => {
 const sharedToggles = {};      // { callsign: { clearance: bool, start: bool, sector?: "EGCC-EGLL" } }
 const sharedDepFlows = {};     // { "EGCC-EGLL": 3, ... }  (per sector: FROM-TO)
 const connectedUsers = {};     // { socketId: { cid, position } }
+
+const tobtBookingsBySlot = {}; // { slotKey: { cid, createdAtISO } }
+const tobtBookingsByCid = {};  // { cid: Set(slotKey) }
+
 
 /**
  * sharedTSAT is the authoritative TSAT store:
@@ -569,6 +589,16 @@ const sessionMiddleware = session({
 
 app.use(sessionMiddleware);
 
+// HOME: logged in → dashboard, logged out → login page
+app.get('/', (req, res) => {
+  if (req.session?.user?.data) {
+    return res.redirect('/dashboard');
+  }
+
+  return res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+
 /* ===== ADMIN AUTH ===== */
 function requireAdmin(req, res, next) {
   const cid = req.session?.user?.data?.cid;
@@ -601,17 +631,180 @@ function getWorldFlightStatus(pilot) {
   return { isWF: true, routeMatch: adminRoute === liveRoute };
 }
 
+
 app.use(express.static('public'));
+function parseUtcDateTime(dateUtc, timeUtc) {
+  let year = new Date().getUTCFullYear();
+
+  // Handle ISO format: YYYY-MM-DD
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateUtc)) {
+    const [y, m, d] = dateUtc.split('-').map(Number);
+    const [hh, mm] = timeUtc.split(':').map(Number);
+    return new Date(Date.UTC(y, m - 1, d, hh, mm, 0));
+  }
+
+  // Handle "Sat 1st Nov", "Mon 22nd Jan", etc.
+  // 1️⃣ Remove weekday
+  let cleaned = dateUtc.replace(/^(Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+/i, '');
+
+  // 2️⃣ Remove ordinal suffixes (st, nd, rd, th)
+  cleaned = cleaned.replace(/(\d+)(st|nd|rd|th)/i, '$1');
+
+  // cleaned now looks like "1 Nov"
+  const parsed = Date.parse(`${cleaned} ${year} UTC`);
+  if (isNaN(parsed)) {
+    throw new Error('Invalid date format: ' + dateUtc);
+  }
+
+  const date = new Date(parsed);
+
+  const [hh, mm] = timeUtc.split(':').map(Number);
+  date.setUTCHours(hh, mm, 0, 0);
+
+  return date;
+}
+
+
+
+function formatUtcHHMM(date) {
+  return date.toISOString().substring(11, 16);
+}
+
+function generateTobtSlots({ from, to, dateUtc, depTimeUtc }) {
+  const dep = parseUtcDateTime(dateUtc, depTimeUtc);
+
+  // Inclusive window
+  const windowStart = new Date(dep.getTime() - 60 * 60 * 1000);
+  const windowEnd   = new Date(dep.getTime() + 60 * 60 * 1000);
+
+  const flowKey = `${from}-${to}`;
+  const flow = Number(sharedDepFlows[flowKey]);
+
+if (!flow || flow <= 0) {
+  return null; // Explicitly signal "no flow defined"
+}
+
+  const intervalMinutes = Math.max(1, Math.floor(60 / flow));
+
+  const slots = [];
+
+  // Use a fresh cursor and NEVER mutate windowStart
+  let cursor = new Date(windowStart);
+
+  while (cursor <= windowEnd) {
+    slots.push(formatUtcHHMM(cursor));
+    cursor = new Date(cursor.getTime() + intervalMinutes * 60000);
+  }
+
+  return slots;
+}
+
+
+function makeTobtSlotKey({ from, to, dateUtc, depTimeUtc, tobtTimeUtc }) {
+  return `${from}-${to}|${dateUtc}|${depTimeUtc}|${tobtTimeUtc}`;
+}
+app.get('/', (req, res) => {
+  return res.redirect('/auth/login');
+});
+
+
+
 
 app.get('/auth/login', vatsimLogin);
 app.get('/auth/callback', vatsimCallback);
 app.get('/dashboard', dashboard);
+
+app.get('/api/tobt/slots', (req, res) => {
+  const cid = req.session.user?.data?.cid;
+  if (!cid) return res.status(401).json({ error: 'Not logged in' });
+
+  const { from, to, dateUtc, depTimeUtc } = req.query;
+  if (!from || !to || !dateUtc || !depTimeUtc) {
+    return res.status(400).json({ error: 'Missing parameters' });
+  }
+
+  const slots = generateTobtSlots({ from, to, dateUtc, depTimeUtc });
+
+  if (slots === null) {
+    return res.json({
+      noFlow: true,
+      message: 'No flow rate has been defined for this sector.'
+    });
+  }
+
+  const result = slots.map(tobt => {
+    const key = makeTobtSlotKey({ from, to, dateUtc, depTimeUtc, tobtTimeUtc: tobt });
+    const booking = tobtBookingsBySlot[key];
+
+    return {
+      tobt,
+      booked: !!booking,
+      byMe: booking?.cid === cid
+    };
+  });
+
+  res.json({ slots: result });
+});
+
+
 
 /* ===== ADMIN MANUAL REFRESH ===== */
 app.post('/admin/refresh-schedule', requireAdmin, async (req, res) => {
   await refreshAdminSheet();
   res.json({ success: true });
 });
+
+app.post('/api/tobt/book', (req, res) => {
+  const cid = req.session.user.data.cid;
+
+  if (!cid) return res.status(401).json({ error: 'Not logged in' });
+
+  const { from, to, dateUtc, depTimeUtc, tobtTimeUtc } = req.body;
+  if (!from || !to || !dateUtc || !depTimeUtc || !tobtTimeUtc) {
+    return res.status(400).json({ error: 'Missing parameters' });
+  }
+
+  const slotKey = makeTobtSlotKey({ from, to, dateUtc, depTimeUtc, tobtTimeUtc });
+
+  if (tobtBookingsBySlot[slotKey]) {
+    return res.status(409).json({ error: 'Slot already booked' });
+  }
+
+  // Enforce one TOBT per departure per CID
+  const depPrefix = `${from}-${to}|${dateUtc}|${depTimeUtc}`;
+  const mySlots = tobtBookingsByCid[cid] || new Set();
+  for (const s of mySlots) {
+    if (s.startsWith(depPrefix)) {
+      return res.status(409).json({ error: 'You already have a TOBT for this departure' });
+    }
+  }
+
+  tobtBookingsBySlot[slotKey] = { cid, createdAtISO: new Date().toISOString() };
+  mySlots.add(slotKey);
+  tobtBookingsByCid[cid] = mySlots;
+
+  res.json({ success: true });
+});
+
+app.post('/api/tobt/cancel', (req, res) => {
+  const cid = req.session.user.data.cid;
+
+  if (!cid) return res.status(401).json({ error: 'Not logged in' });
+
+  const { from, to, dateUtc, depTimeUtc, tobtTimeUtc } = req.body;
+  const slotKey = makeTobtSlotKey({ from, to, dateUtc, depTimeUtc, tobtTimeUtc });
+
+  const booking = tobtBookingsBySlot[slotKey];
+  if (!booking || booking.cid !== cid) {
+    return res.status(403).json({ error: 'Not your booking' });
+  }
+
+  delete tobtBookingsBySlot[slotKey];
+  tobtBookingsByCid[cid]?.delete(slotKey);
+
+  res.json({ success: true });
+});
+
 
 /* ===== CHANGE CHECK ===== */
 app.get('/departures/check-changes', async (req, res) => {
@@ -1052,8 +1245,7 @@ ${!isAerodromeController ? `
 
     <!-- SEARCH + TIMER + MAIN TABLE -->
     <input id="callsignSearch" placeholder="Search by callsign..." />
-    <div id="refreshTimer">Next auto-refresh in: 20s</div>
-
+    
     <div class="table-scroll">
       <table class="departures-table" id="mainDeparturesTable">
         <thead>
@@ -1592,12 +1784,160 @@ app.get('/atc', (req, res) => {
   );
 });
 
+app.get('/book', (req, res) => {
+  if (!req.session.user || !req.session.user.data) {
+    return res.redirect('/auth/login');
+  }
+
+  const user = req.session.user.data;
+  const isAdmin = ADMIN_CIDS.includes(Number(user.cid));
+
+  const content = `
+  <section class="card card-full tobt-card">
+
+      <h2>Make a Booking</h2>
+<div class="tobt-controls">
+  <label for="depSelect">Departure</label>
+  <select id="depSelect" class="tobt-select">
+        <option value="">Select a departure</option>
+        ${adminSheetCache.map(s => `
+          <option
+  value="${s.from}-${s.to}-${s.date_utc}-${s.dep_time_utc}"
+  data-from="${s.from}"
+  data-to="${s.to}"
+  data-date="${s.date_utc}"
+  data-dep="${s.dep_time_utc}"
+>
+
+            ${s.from} → ${s.to} | ${s.dep_time_utc}Z
+          </option>
+        `).join('')}
+      </select>
+</div>
+      <table class="tobt-table">
+        <thead>
+          <tr>
+            <th>Off-Blocks Time</th><th>Book</th>
+            <th>Off-Blocks Time</th><th>Book</th>
+          </tr>
+        </thead>
+        <tbody id="tobtBody"></tbody>
+      </table>
+    </section>
+    <script>
+      const select = document.getElementById('depSelect');
+      const body = document.getElementById('tobtBody');
+
+      select.addEventListener('change', async () => {
+        body.innerHTML = '';
+        if (!select.value) return;
+
+        const opt = select.selectedOptions[0];
+        const params = new URLSearchParams({
+          from: opt.dataset.from,
+          to: opt.dataset.to,
+          dateUtc: opt.dataset.date,
+          depTimeUtc: opt.dataset.dep
+        });
+
+        const res = await fetch('/api/tobt/slots?' + params);
+const data = await res.json();
+
+body.innerHTML = '';
+
+if (data.noFlow) {
+  const tr = document.createElement('tr');
+  const td = document.createElement('td');
+
+  td.colSpan = 4;
+  td.className = 'tobt-message';
+  td.textContent = data.message;
+
+  tr.appendChild(td);
+  body.appendChild(tr);
+  return;
+}
+
+const slots = data.slots;
+
+
+        for (let i = 0; i < slots.length; i += 2) {
+          const tr = document.createElement('tr');
+          [slots[i], slots[i + 1]].forEach(slot => {
+            if (!slot) {
+              tr.innerHTML += '<td></td><td></td>';
+              return;
+            }
+
+            const btn = slot.byMe
+  ? '<button class="tobt-btn cancel" data-action="cancel">Cancel</button>'
+  : slot.booked
+    ? '<button class="tobt-btn booked" disabled>Booked</button>'
+    : '<button class="tobt-btn book" data-action="book">Book</button>';
+
+
+
+            tr.innerHTML += '<td>' + slot.tobt + '</td><td>' + btn + '</td>';
+          });
+          body.appendChild(tr);
+        }
+      });
+
+      body.addEventListener('click', async e => {
+        if (e.target.tagName !== 'BUTTON') return;
+
+        const td = e.target.closest('td');
+        const tobt = td.previousElementSibling.textContent;
+        const opt = select.selectedOptions[0];
+
+        await fetch('/api/tobt/' + e.target.dataset.action, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            from: opt.dataset.from,
+            to: opt.dataset.to,
+            dateUtc: opt.dataset.date,
+            depTimeUtc: opt.dataset.dep,
+            tobtTimeUtc: tobt
+          })
+        });
+
+        select.dispatchEvent(new Event('change'));
+      });
+    </script>
+  `;
+
+  res.send(
+    renderLayout({
+      title: 'Book a Slot',
+      user,
+      isAdmin,
+      layoutClass: 'dashboard-full', // ✅ ADD THIS
+      content
+    })
+  );
+});
+
+
 
 
 /* ===== LOGOUT ===== */
 app.get('/logout', (req, res) => {
-  req.session.destroy(() => res.redirect('/'));
+  req.session.destroy(err => {
+    if (err) {
+      console.error('Logout error:', err);
+      return res.status(500).send('Logout failed');
+    }
+
+    // IMPORTANT: must match session name
+    res.clearCookie('worldflight.sid', {
+      path: '/'
+    });
+
+    return res.redirect('/');
+  });
 });
+
 
 /* ===== SERVER START ===== */
 httpServer.listen(port, () => {

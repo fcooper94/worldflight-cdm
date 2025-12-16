@@ -1,1191 +1,1197 @@
-/* ===== RESET ===== */
-
-* {
-  box-sizing: border-box;
-  font-family: "Segoe UI", Arial, sans-serif;
-}
-
-body {
-  margin: 0;
-  background: radial-gradient(circle at top, #0f172a, #020617);
-  color: #e5e7eb;
-}
-
-/* ===== HEADER LAYOUT ===== */
-
 /* =========================================================
-   TOPBAR — PRIMARY DEFINITION
+   WorldFlight CDM — Consolidated Styles
+   Replaces legacy 1000+ line stylesheet with a clean baseline.
    ========================================================= */
 
+/* =========================
+   Design tokens / variables
+   ========================= */
+:root{
+  --bg0:#020617;
+  --bg1:#0f172a;
+  --panel:#020617;
+  --panel2:#0b1220;
+
+  --text:#e5e7eb;
+  --muted:#94a3b8;
+  --muted2:#64748b;
+
+  --border:#1e293b;
+
+  --accent:#38bdf8;
+  --accent2:#2563eb;
+
+  --danger:#ef4444;
+  --warning:#f59e0b;
+  --success:#22c55e;
+
+  --shadow:0 20px 40px rgba(0,0,0,.5);
+
+  --radius:16px;
+
+  --sidebar-expanded:260px;
+  --sidebar-collapsed:72px;
+
+  --topbar-h:120px;
+}
+
+/* ===== Reset / base ===== */
+*{ box-sizing:border-box; }
+html,body{ height:100%; }
+body{
+  margin:0;
+  font-family: "Segoe UI", Arial, sans-serif;
+  background: radial-gradient(circle at top, var(--bg1), var(--bg0));
+  color: var(--text);
+}
+
+/* Simple accessibility */
+:focus-visible{ outline:2px solid rgba(56,189,248,.85); outline-offset:2px; }
+
+/* Links */
+a{ color: var(--accent); text-decoration:none; }
+a:hover{ text-decoration:underline; }
+
+/* Disabled */
+button:disabled, input:disabled, select:disabled{
+  opacity:.55;
+  cursor:not-allowed;
+}
+
+/* =========================
+   Layout: sidebar + content
+   ========================= */
+
+/* Sidebar container (you toggle .collapsed on .sidebar, and body.sidebar-collapsed) */
+.sidebar{
+  position:fixed;
+  top:0; left:0;
+  z-index:60;
+  width:var(--sidebar-expanded);
+  height:100vh;
+  padding:16px;
+  background: linear-gradient(180deg, var(--panel), var(--panel));
+  border-right:1px solid var(--border);
+  overflow:hidden;
+  transition: width .25s ease;
+}
+.sidebar.collapsed{ width: var(--sidebar-collapsed); }
+
+/* Brand row (logo area). Kept compatible with existing markup */
+.sidebar-brand{
+  height: var(--topbar-h);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:12px;
+  box-shadow:
+    inset -1px 0 0 rgba(255,255,255,0.06),
+    inset 0 -1px 0 rgba(255,255,255,0.08);
+}
+.sidebar-logo{
+  max-width:72px;
+  max-height:72px;
+  object-fit:contain;
+  transition: transform .25s ease, opacity .25s ease, max-width .25s ease, max-height .25s ease;
+}
+.sidebar.collapsed .sidebar-logo{
+  max-width:40px;
+  max-height:40px;
+  opacity:.85;
+}
+
+/* Optional header row if you use it (toggle button etc.) */
+.sidebar-header{
+  display:flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 12px;
+  margin: 0 0 16px;
+}
+.sidebar-toggle { margin: 0 auto 12px; }
+.sidebar.collapsed .sidebar-header{
+  gap: 10px;
+}
+
+#sidebarToggle, .sidebar-toggle{
+  background:none;
+  border:none;
+  color: var(--muted);
+  font-size:18px;
+  cursor:pointer;
+  padding:8px 10px;
+  border-radius:10px;
+}
+#sidebarToggle:hover, .sidebar-toggle:hover{
+  background: rgba(255,255,255,0.06);
+  color: var(--text);
+}
+
+/* Section titles (Pilots / Controllers / Admin) */
+.sidebar-section-title,
+.nav-title{
+  font-size:11px;
+  font-weight:700;
+  text-transform:uppercase;
+  letter-spacing:.08em;
+  color: var(--muted2);
+  margin: 18px 10px 8px;
+  white-space:nowrap;
+}
+.sidebar.collapsed .sidebar-section-title,
+.sidebar.collapsed .nav-title{
+  display:none;
+}
+
+/* Nav items */
+.sidebar-nav{
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+}
+.nav-item{
+  display:flex;
+  align-items:center;
+  gap:12px;
+  padding:10px 14px;
+  border-radius:12px;
+  font-size:14px;
+  font-weight:500;
+  color: #cbd5f5;
+  text-decoration:none;
+  transition: background .2s ease, color .2s ease, transform .15s ease;
+}
+.nav-item:hover{
+  background: rgba(255,255,255,0.06);
+  color: var(--text);
+  transform: translateX(2px);
+}
+.nav-item.active{
+  background: linear-gradient(135deg, rgba(56,189,248,0.22), rgba(37,99,235,0.30));
+  color: var(--text);
+  box-shadow:
+    inset 0 0 0 1px rgba(255,255,255,0.10),
+    0 6px 16px rgba(37,99,235,0.30);
+}
+.icon{
+  width:20px;
+  text-align:center;
+  font-size:16px;
+  flex-shrink:0;
+}
+.label, .nav-label{
+  white-space:nowrap;
+}
+
+/* Collapsed: icon-only */
+.sidebar.collapsed .nav-item{
+  justify-content:center;
+  padding: 12px 0;
+}
+.sidebar.collapsed .label,
+.sidebar.collapsed .nav-label{
+  display:none;
+}
+
+/* Body offset (your JS toggles body.sidebar-collapsed) */
+body{ padding-left: var(--sidebar-expanded); transition: padding-left .25s ease; }
+body.sidebar-collapsed{ padding-left: var(--sidebar-collapsed); }
+
+/* Mobile default collapsed */
+@media (max-width: 900px){
+  .sidebar{ width: var(--sidebar-collapsed); }
+  body{ padding-left: var(--sidebar-collapsed); }
+}
+
+/* =========================
+   Topbar
+   ========================= */
 .topbar {
   position: relative;
-  height: 120px;
+  height: var(--topbar-h);
   padding-left: var(--sidebar-expanded);
+  padding-right: 24px;
   z-index: 50;
 
   background:
-    linear-gradient(
-      180deg,
-      rgba(255,255,255,0.03),
-      rgba(0,0,0,0.15)
-    ),
-    #020617;
+    linear-gradient(180deg, rgba(255,255,255,0.03), rgba(0,0,0,0.15)),
+    var(--panel);
 
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: center; /* keep center for title */
 
   box-shadow:
     inset 0 -1px 0 rgba(255,255,255,0.06),
     0 6px 18px rgba(0,0,0,0.45);
 
-  transition: margin-left 0.25s ease;
+  transition: padding-left .25s ease;
 }
 
 
+body.sidebar-collapsed .topbar{ padding-left: var(--sidebar-collapsed); }
 
-/* Left (Logo) */
-.header-left {
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-}
-
-.logo-large {
-  height: 78px;
-  width: auto;
+.header-left{ display:flex; align-items:center; justify-content:flex-start; }
+.logo-large{
+  height:78px; width:auto;
   filter: drop-shadow(0 0 14px rgba(56,189,248,.45));
 }
-
-/* Center (Title) */
-.header-center {
-  position: absolute;
-  left: 50%;
+.header-center{
+  position:absolute;
+  left:50%;
   transform: translateX(-50%);
-
-  font-size: 28px;
-  font-weight: 700;
-  letter-spacing: 0.6px;
-  color: #38bdf8;
+  font-size:28px;
+  font-weight:700;
+  letter-spacing:.6px;
+  color: var(--accent);
   text-shadow: 0 0 12px rgba(56,189,248,0.45);
-  pointer-events: none;
+  pointer-events:none;
 }
-
-
-/* Right (User) */
 .header-right {
   position: absolute;
-  right: 32px;
-  font-size: 14px;
-  color: #cbd5f5;
-  white-space: nowrap;
-}
-
-
-
-/* ===== DASHBOARD GRID ===== */
-
-.dashboard {
-  padding: 48px;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
-  gap: 40px;
-}
-
-/* ===== CARDS ===== */
-
-.card {
-  background: linear-gradient(160deg, #020617, #020617);
-  border: 1px solid #1e293b;
-  border-radius: 16px;
-  padding: 32px;
-  box-shadow: 0 20px 40px rgba(0,0,0,.5);
-}
-
-.card h2 {
-  margin: 0 0 24px 0;
-  font-size: 18px;
-  color: #93c5fd;
-}
-
-/* ===== STATS ===== */
-
-.stat {
+  right: 24px;
+  top: 50%;
+  transform: translateY(-50%);
   display: flex;
-  justify-content: space-between;
-  margin-bottom: 18px;
-  font-size: 16px;
+  align-items: center;
 }
 
-.stat span {
-  color: #94a3b8;
+.user-dropdown {
+  right: 0;
+  left: auto;
+  top: 100%;
+  backdrop-filter: blur(10px);
 }
 
-.stat strong {
-  color: #ffffff;
+
+/* =========================
+   Dashboard layouts
+   ========================= */
+.dashboard{
+  padding:48px;
+  display:grid;
+  grid-template-columns: repeat(2, minmax(420px, 1fr));
+  gap:40px;
+
+  max-width:960px;
+  margin:0 auto;
+}
+@media (max-width: 980px){
+  .dashboard{
+    grid-template-columns: 1fr;
+    max-width: 720px;
+  }
 }
 
-/* ===== STATUS PILL ===== */
+.dashboard-wide{
+  grid-template-columns: minmax(900px, 1200px);
+  justify-content:center;
+  max-width:none;
+}
+.dashboard-wide .card{ max-width:1200px; width:100%; }
 
-.status {
-  margin-top: 20px;
-  padding: 18px;
-  border-radius: 14px;
-  font-weight: 700;
-  font-size: 20px;
-  text-align: center;
-  letter-spacing: .5px;
+.dashboard-full{
+  max-width:none;
+  width:100%;
+  margin:0;
+  grid-template-columns: 1fr;
+}
+.dashboard-full .card{ max-width:none; width:100%; }
+
+.dashboard-actions{
+  grid-column: 1 / -1;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  max-width:920px;
+  margin:20px auto 0;
+  gap:18px;
+}
+.dashboard-footer{
+  grid-column: 1 / -1;
+  text-align:center;
+  margin-top:40px;
 }
 
-.status.online {
+/* =========================
+   Cards
+   ========================= */
+.card{
+  background: linear-gradient(160deg, var(--panel), var(--panel));
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 32px;
+  box-shadow: var(--shadow);
+}
+.card h2{
+  margin:0 0 24px 0;
+  font-size:18px;
+  color:#93c5fd;
+}
+.card-full{ width:100%; max-width:100%; }
+
+/* Session stats */
+.stat{
+  display:flex;
+  justify-content:space-between;
+  margin-bottom:18px;
+  font-size:16px;
+}
+.stat span{ color: var(--muted); }
+.stat strong{ color:#fff; }
+
+/* Status pill */
+.status{
+  margin-top:20px;
+  padding:18px;
+  border-radius:14px;
+  font-weight:600;
+  font-size:20px;
+  text-align:center;
+  letter-spacing:.5px;
+}
+.status.online{
   background: linear-gradient(160deg, #064e3b, #022c22);
-  color: #6ee7b7;
+  color:#6ee7b7;
   box-shadow: 0 0 20px rgba(16,185,129,.45);
 }
-
-.status.offline {
+.status.offline{
   background: linear-gradient(160deg, #450a0a, #1f0505);
-  color: #fca5a5;
+  color:#fca5a5;
   box-shadow: 0 0 20px rgba(239,68,68,.35);
 }
 
-/* ===== FOOTER ===== */
+/* Footer */
+footer{ text-align:center; padding:36px; }
+footer a{ color:#60a5fa; font-weight:600; text-decoration:none; }
+footer a:hover{ text-decoration:underline; }
 
-footer {
-  text-align: center;
-  padding: 36px;
-}
-
-footer a {
-  color: #60a5fa;
-  text-decoration: none;
-  font-size: 16px;
-  font-weight: 600;
-}
-
-footer a:hover {
-  text-decoration: underline;
-}
-
-/* ===== ICAO SEARCH ===== */
-
-.icao-search {
-  display: flex;
-  justify-content: center;
-  gap: 12px;
-  margin-bottom: 20px;
-}
-
-.icao-search input {
-  padding: 10px 14px;
-  border-radius: 8px;
-  border: 1px solid #1e293b;
-  background: #020617;
-  color: white;
-  font-size: 14px;
-  width: 200px;
-  text-transform: uppercase;
-}
-
-.icao-search button {
-  padding: 10px 16px;
-  border-radius: 8px;
-  border: none;
-  background: #2563eb;
-  color: white;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.icao-search button:hover {
-  background: #1d4ed8;
-}
-
-/* ===== BACK BUTTON ===== */
-
-.back-btn {
-  display: inline-block;
-  padding: 10px 18px;
+/* =========================
+   Forms / inputs
+   ========================= */
+input, select{
+  background: var(--panel2);
+  color: var(--text);
+  border:1px solid var(--border);
   border-radius: 10px;
+  padding:10px 12px;
+  font-size:14px;
+}
+input::placeholder{ color: rgba(148,163,184,.85); }
+select{ cursor:pointer; }
+
+/* ICAO search */
+.icao-search{
+  display:flex;
+  justify-content:center;
+  gap:12px;
+  margin-bottom:20px;
+}
+.icao-search input{
+  width:200px;
+  text-transform:uppercase;
+}
+.icao-search button{
+  padding:10px 16px;
+  border-radius:10px;
+  border:none;
+  background: linear-gradient(160deg, var(--accent2), #1d4ed8);
+  color:#fff;
+  font-weight:700;
+  cursor:pointer;
+  box-shadow: 0 0 16px rgba(37,99,235,.35);
+}
+.icao-search button:hover{
+  background: linear-gradient(160deg, #1e40af, #1d4ed8);
+  box-shadow: 0 0 22px rgba(37,99,235,.55);
+}
+
+/* Back button */
+.back-btn{
+  display:inline-block;
+  padding:10px 18px;
+  border-radius:10px;
   background: linear-gradient(160deg, #1d4ed8, #2563eb);
-  color: white;
-  text-decoration: none;
-  font-weight: 700;
-  font-size: 14px;
-  letter-spacing: .4px;
+  color:#fff;
+  font-weight:800;
+  font-size:14px;
+  letter-spacing:.4px;
   box-shadow: 0 0 16px rgba(37,99,235,.45);
   transition: all .2s ease;
 }
-
-.back-btn:hover {
-  background: linear-gradient(160deg, #1e40af, #1d4ed8);
-  box-shadow: 0 0 22px rgba(37,99,235,.7);
+.back-btn:hover{
   transform: translateY(-1px);
+  box-shadow: 0 0 22px rgba(37,99,235,.7);
 }
 
-/* ===== RESPONSIVE TABLE WRAPPER ===== */
-
-.table-scroll {
-  width: 100%;
-  overflow-x: auto;
+/* =========================
+   Tables
+   ========================= */
+.table-scroll{
+  width:100%;
+  overflow-x:auto;
 }
 
-/* ===== TABLE LAYOUT CONTROL ===== */
-
-.departures-table {
-  width: 100%;
-  border-collapse: collapse;
-  table-layout: fixed;
-  min-width: 1100px; /* forces scroll instead of squeeze */
+/* Main operations table */
+.departures-table{
+  width:100%;
+  border-collapse:collapse;
+  table-layout:fixed;
+  min-width:1100px; /* forces scroll instead of squeeze */
 }
-
-
-
 .departures-table th,
-.departures-table td {
-  padding: 12px;
-  text-align: left;
-  vertical-align: top;
-  border-top: 1px solid #1e293b;
+.departures-table td{
+  padding:2px;
+  text-align:left;
+  border-top:1px solid var(--border);
+}
+.departures-table thead th{
+  font-size:14px;
+  font-weight:600;
+  color: var(--text);
+  letter-spacing:.4px;
 }
 
-.departures-table tr {
-  height: auto;
-}
-
-
-/* ===== NARROW COLUMN CONTROLS ===== */
-
-.col-wf-sector {
-  width: 90px;
-}
-
-.col-from,
-.col-to {
-  width: 90px;
-}
-
-.col-date {
-  width: 130px;
-}
-
-.col-time {
-  width: 120px;
-}
-
-.col-wf-sector,
-.col-from,
-.col-to,
-.col-date,
-.col-time {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-
-/* ===== EXTRA-WIDE ATC ROUTE ===== */
-
-/* ===== ATC ROUTE – FULL WIDTH, MULTI-LINE, NO OVERLAP ===== */
-
-.col-route {
-  width: auto;
-  min-width: 700px;           /* guarantees dominance */
-  max-width: 100%;
-  white-space: normal;       /* allow wrapping */
-  word-wrap: break-word;
-  overflow-wrap: break-word;
-  line-height: 1.65;         /* fixes vertical overlap */
-  font-size: 12px;
-  padding-right: 20px;       /* spacing from table edge */
-}
-
-/* ===== TABLE HEADER VISIBILITY BOOST ===== */
-
-.departures-table thead th {
-  font-size: 14px;
-  font-weight: 700;
-  color: #e5e7eb;
+#mainDeparturesTable tbody td:nth-child(2) {
+  font-weight: 600;
+  color: var(--accent); /* or your cyan/blue variable */
   letter-spacing: 0.4px;
 }
 
-/* Make ATC Route header slightly stronger */
-.departures-table thead th.col-route {
-  font-size: 15px;
-  color: #ffffff;
+
+/* Column sizing helpers (used in Admin/Departures) */
+.col-wf-sector{ width:90px; }
+.col-from,.col-to{ width:90px; }
+.col-date{ width:130px; }
+.col-time{ width:120px; }
+
+.col-wf-sector,.col-from,.col-to,.col-date,.col-time{
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
 }
 
-/* ===== WORLD FLIGHT STATUS COLUMN ===== */
-
-.col-wf {
-  width: 50px;
-  text-align: center;
-  font-size: 16px;
+/* Route column */
+.col-route{
+  width:auto;
+  min-width:700px;
+  white-space:normal;
+  overflow-wrap:anywhere;
+  line-height:1.65;
+  font-size:12px;
+  padding-right:20px;
 }
-/* ===== COLLAPSIBLE ATC ROUTE ON DEPARTURES ===== */
-
-.route-collapsed {
-  color: #60a5fa;
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 600;
-  user-select: none;
+.departures-table thead th.col-route{
+  font-size:15px;
+  color:#fff;
 }
 
-.route-collapsed:hover {
-  text-decoration: underline;
+/* WF column */
+.col-wf{
+  width:70px;
+  min-width:70px;
+  text-align:center;
+  vertical-align:middle;
+  white-space:nowrap;
+  font-size:16px;
 }
-
-.route-expanded {
-  display: none;
-  margin-top: 6px;
+.departures-table td.col-wf{
+  display:flex;
+  align-items:center;
+  justify-content:center;
 }
-/* ===== CALLSIGN SEARCH ===== */
-
-#callsignSearch {
-  margin-bottom: 16px;
-  padding: 10px 14px;
-  width: 260px;
-  border-radius: 8px;
-  border: 1px solid #1e293b;
-  background: #020617;
-  color: white;
-  font-size: 14px;
+.wf-icons{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  line-height:1;
 }
-.col-wf {
-  width: 60px;
-  text-align: center;
-  font-size: 16px;
-}
-
-.col-wf-warning {
-  color: #facc15;
+.col-wf-warning{
+  color:#facc15;
   text-shadow: 0 0 8px rgba(250,204,21,.6);
-  cursor: help;
-}
-/* ===== WF ICON INLINE FIX ===== */
-
-.wf-icons {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;           /* spacing between ✅ and ⚠️ */
-  line-height: 1;
-}
-/* ===== WF COLUMN FINAL ALIGNMENT FIX ===== */
-
-.col-wf {
-  width: 70px;
-  min-width: 70px;
-  text-align: center;
-  vertical-align: middle;
-  white-space: nowrap;
-  font-size: 16px;
+  cursor:help;
 }
 
-/* Force WF cell content to be perfectly centered */
-.departures-table td.col-wf {
+/* Collapsible route text */
+.route-collapsed{
+  color:#60a5fa;
+  cursor:pointer;
+  font-size:13px;
+  font-weight:700;
+  user-select:none;
+}
+.route-collapsed:hover{ text-decoration:underline; }
+.route-expanded{ display:none; margin-top:6px; }
+
+/* Callsign search */
+#callsignSearch{
+  margin-bottom:16px;
+  width:260px;
+}
+
+/* User toggle buttons */
+.col-toggle{ width:70px; text-align:center; }
+.toggle-btn{
+  background:transparent;
+  border:1px solid var(--border);
+  color: var(--text);
+  border-radius:10px;
+  padding:6px 10px;
+  cursor:pointer;
+  font-size:14px;
+}
+.toggle-btn.active{
+  background: #16a34a;
+  border-color:#16a34a;
+  box-shadow: 0 0 10px rgba(34,197,94,.45);
+}
+
+/* Dep flow input */
+.dep-flow-input{
+  width:70px;
+  padding:6px 8px;
+  border-radius:10px;
+  border:1px solid var(--border);
+  background: var(--panel2);
+  color:#fff;
+  font-weight:700;
+  text-align:center;
+  transition: all .25s ease;
+}
+.dep-flow-low{
+  background: linear-gradient(160deg, #450a0a, #1f0505);
+  border-color: var(--danger);
+  color:#fecaca;
+  box-shadow: 0 0 12px rgba(239,68,68,.35);
+}
+.dep-flow-mid{
+  background: linear-gradient(160deg, #7c2d12, #431407);
+  border-color:#f97316;
+  color:#fed7aa;
+  box-shadow: 0 0 12px rgba(249,115,22,.35);
+}
+.dep-flow-high{
+  background: linear-gradient(160deg, #064e3b, #022c22);
+  border-color: var(--success);
+  color:#bbf7d0;
+  box-shadow: 0 0 12px rgba(34,197,94,.35);
+}
+
+/* Connected users footer */
+.connected-users-footer{
+  margin-top:40px;
+  padding-top:20px;
+  border-top:1px solid var(--border);
+  font-size:14px;
+  color:#cbd5f5;
+}
+#connectedUsersList{
+  margin-top:8px;
+  color:#60a5fa;
+  line-height:1.6;
+}
+
+/* =========================
+   TSAT controls / tables
+   ========================= */
+.tsat-refresh{
+  margin-left:10px;
+  border:none;
+  cursor:pointer;
+  font-size:16px;
+  background: linear-gradient(145deg, #1f9f62, #18c77e);
+  color:#fff;
+  border-radius:8px;
+  padding:6px 10px;
+  box-shadow: 0 0 8px rgba(24,199,126,0.5);
+  transition: transform .15s ease, box-shadow .15s ease;
+}
+.tsat-refresh:hover{
+  transform: rotate(90deg) scale(1.05);
+  box-shadow: 0 0 14px rgba(24,199,126,0.9);
+}
+.tsat-refresh:active{ transform: scale(.95); }
+.tsat-refresh.hidden{ display:none; }
+
+/* Started checkbox */
+.tsat-started-check{
+  appearance:none;
+  width:22px; height:22px;
+  border-radius:6px;
+  border:2px solid rgba(255,255,255,0.25);
+  background: linear-gradient(145deg, #0b0f1a, #070a14);
+  cursor:pointer;
+  position:relative;
+  transition: all .18s ease;
+}
+.tsat-started-check:hover{
+  border-color:#3ba4ff;
+  box-shadow: 0 0 6px rgba(59,164,255,0.45);
+}
+.tsat-started-check:checked{
+  background: linear-gradient(145deg, #2cff88, #18b96a);
+  border-color:#2cff88;
+  box-shadow: 0 0 10px rgba(44,255,136,0.6);
+}
+.tsat-started-check:checked::after{
+  content:'✔';
+  color:#04150c;
+  font-size:14px;
+  font-weight:900;
+  position:absolute;
+  top:50%; left:50%;
+  transform: translate(-50%,-52%);
+}
+
+/* TSAT layout */
+.tsat-layout-card{ display:block; }
+.tsat-top-row{
+  display:grid;
+  grid-template-columns: 1fr 1fr;
+  gap:24px;
+  align-items:start;
+  margin-bottom:24px;
+}
+.tsat-top-row > div{ min-width:0; }
+@media (max-width:900px){
+  .tsat-top-row{ grid-template-columns: 1fr; }
+  .tsat-top-right{ display:none; }
+}
+
+/* TSAT tables should not inherit large min-width */
+#tsatQueueTable, #recentlyStartedTable{
+  min-width:0 !important;
+  width:100% !important;
+  table-layout:fixed;
+}
+
+/* Action buttons */
+.action-btn{
+  background:#0b0f1a;
+  border:1px solid #1a2333;
+  border-radius:10px;
+  height:32px;
+  padding:0 12px;
+  cursor:pointer;
+  color:#cbd5e1;
+  font-size:.85rem;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:6px;
+  line-height:1;
+  transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease, color .15s ease;
+}
+.action-btn:hover{ transform: scale(1.05); }
+
+/* Actions column alignment */
+#recentlyStartedTable td:last-child {
   display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.send-back-btn,
+.delete-started-btn {
+  height: 28px;
+  padding: 0 10px;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
 }
 
-/* Icons always inline */
-.wf-icons {
+
+.send-back-btn:hover{
+  border-color:#18c77e;
+  color:#fff;
+  box-shadow: 0 0 10px rgba(24,199,126,0.45);
+}
+.delete-started-btn{
+  padding:0 8px !important;
+  height:28px !important;
+  border-radius:8px;
+}
+.delete-started-btn:hover{
+  border-color:#ff6b6b;
+  color:#ff6b6b;
+  box-shadow: 0 0 10px rgba(255,107,107,0.45);
+}
+.delete-started-btn .trash-icon{
+  stroke: currentColor;
+  display:block;
+  pointer-events:none;
+}
+
+/* TSAT row colouring */
+.row-green{ background-color:#0F3D2E !important; color:#C6F6D5 !important; }
+.row-amber{ background-color:#4A3A12 !important; color:#F3E7B3 !important; }
+.row-red{ background-color:#4A1515 !important; color:#F6C6C6 !important; }
+
+/* ICAO warning banner */
+.tsat-wrapper{ position:relative; padding-top:56px; }
+.icao-warning{
+  position:absolute;
+  top:0; left:0; right:0;
+  height:40px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+
+  background: linear-gradient(160deg, #450a0a, #1f0505);
+  border:1px solid #7f1d1d;
+  border-radius:12px;
+
+  color:#fecaca;
+  font-weight:700;
+  font-size:14px;
+
+  box-shadow: 0 0 18px rgba(239,68,68,.35);
+  z-index:5;
+}
+
+/* =========================
+   TOBT booking table
+   ========================= */
+.tobt-card{ display:flex; flex-direction:column; gap:1.2rem; }
+
+.tobt-controls{
+  display:flex;
+  flex-direction:column;
+  max-width:520px;
+  gap:.4rem;
+}
+.tobt-controls label{
+  font-size:.85rem;
+  color:#9fb4cc;
+}
+.tobt-select{
+  width:100%;
+  background: var(--panel2);
+  color:#fff;
+  border:1px solid #1f2b3c;
+  border-radius:12px;
+  padding:12px 14px;
+  font-size:15px;
+}
+.tobt-select:focus{ border-color:#4aa3ff; outline:none; }
+
+.tobt-table{
+  width:100%;
+  border-collapse:collapse;
+  margin-top: 4px;
+}
+.tobt-table th{
+  font-size:.85rem;
+  font-weight:600;
+  color:#9fb4cc;
+  padding:10px 10px;
+  border-bottom:1px solid #1f2b3c;
+}
+.tobt-table td{
+  padding:10px 10px;
+  border-bottom:1px solid #141f2e;
+  font-size: .98rem;
+}
+
+/* TOBT time columns left; action columns centered */
+.tobt-table td:nth-child(1),
+.tobt-table td:nth-child(3),
+.tobt-table th:nth-child(1),
+.tobt-table th:nth-child(3){
+  text-align:left;
+  font-weight:700;
+  color:#fff;
+  width:20%;
+}
+.tobt-table td:nth-child(2),
+.tobt-table td:nth-child(4),
+.tobt-table th:nth-child(2),
+.tobt-table th:nth-child(4){
+  text-align:center;
+  width:30%;
+}
+
+/* TOBT buttons */
+.tobt-btn{
+  min-width:90px;
+  padding:6px 14px;
+  border-radius:10px;
+  font-weight:600;
+  font-size:14px;
+  cursor:pointer;
+  border:none;
+  transition: transform .15s ease, box-shadow .15s ease, filter .15s ease;
+}
+.tobt-btn.book{
+  background: linear-gradient(160deg, #2563eb, #1d4ed8);
+  color:#fff;
+  box-shadow: 0 0 10px rgba(37,99,235,.45);
+}
+.tobt-btn.book:hover{ filter: brightness(1.05); transform: translateY(-1px); }
+
+.tobt-btn.cancel{
+  background: linear-gradient(160deg, #7f1d1d, #991b1b);
+  color:#fee2e2;
+  box-shadow: 0 0 10px rgba(239,68,68,.35);
+}
+.tobt-btn.cancel:hover{ filter: brightness(1.06); transform: translateY(-1px); }
+
+.tobt-table button:disabled{
+  background:#2a3547 !important;
+  color:#7f8fa4 !important;
+  box-shadow:none !important;
+}
+
+/* No-flow message row */
+.tobt-message{
+  text-align:center;
+  padding:18px;
+  color:#9fb4cc;
+  font-style:italic;
+  background: rgba(255,255,255,0.02);
+  border-radius: 12px;
+}
+/* === Sidebar toggle visibility === */
+
+.sidebar-toggle {
+  margin: 12px auto 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  border: 1px solid rgba(56,189,248,.5);
+  color: #38bdf8;
+  font-size: 20px;
+  background: rgba(2,6,23,.6);
+  cursor: pointer;
+  transition: all .2s ease;
+}
+
+.sidebar-toggle:hover {
+  background: rgba(56,189,248,.15);
+  box-shadow: 0 0 14px rgba(56,189,248,.45);
+}
+
+/* Center toggle when collapsed */
+.sidebar.collapsed .sidebar-toggle {
+  margin: 16px auto;
+}
+
+/* Optional: slightly pulse when collapsed so users notice it */
+@keyframes pulse {
+  0% { box-shadow: 0 0 0 rgba(56,189,248,0); }
+  50% { box-shadow: 0 0 14px rgba(56,189,248,.45); }
+  100% { box-shadow: 0 0 0 rgba(56,189,248,0); }
+}
+
+.sidebar.collapsed .sidebar-toggle {
+  animation: pulse 2.5s infinite;
+}
+/* ===== LOGIN PAGE ===== */
+
+.login-page {
+  min-height: 100vh;
+  background: url('/background.jpg') center center / cover no-repeat fixed;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  font-family: 'Inter', system-ui, sans-serif;
+}
+
+/* Dark overlay for readability */
+.login-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(2, 6, 23, 0.75);
+  backdrop-filter: blur(4px);
+}
+
+/* Card */
+.login-container {
+  position: relative;
+  z-index: 1;
+  background: rgba(3, 7, 18, 0.75);
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  border-radius: 18px;
+  padding: 48px 56px;
+  text-align: center;
+  box-shadow: 0 30px 80px rgba(0,0,0,0.6);
+  max-width: 420px;
+  width: 100%;
+}
+
+/* Logo */
+.login-logo {
+  width: 96px;
+  height: auto;
+  margin-bottom: 20px;
+}
+
+/* Headings */
+.login-container h1 {
+  color: #38bdf8;
+  font-size: 28px;
+  margin: 0;
+}
+
+.login-container h2 {
+  color: #e5e7eb;
+  font-size: 18px;
+  font-weight: 500;
+  margin: 6px 0 18px;
+}
+
+.login-subtitle {
+  color: #94a3b8;
+  font-size: 14px;
+  margin-bottom: 28px;
+}
+
+/* Button */
+.login-btn {
+  display: inline-block;
+  padding: 14px 28px;
+  font-size: 16px;
+  font-weight: 600;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #2563eb, #38bdf8);
+  color: #fff;
+  text-decoration: none;
+  transition: all 0.25s ease;
+  box-shadow: 0 10px 30px rgba(56,189,248,0.4);
+}
+
+.login-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 14px 40px rgba(56,189,248,0.55);
+}
+/* ===== LOGOUT BUTTON ===== */
+.logout-btn {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
+
+  margin-top: 0;
+  padding: 10px 18px;
+
+  color: #7fd3ff;
+  font-weight: 500;
+  text-decoration: none;
+
+  border-radius: 10px;
+  border: 1px solid rgba(127, 211, 255, 0.25);
+  background: rgba(15, 30, 55, 0.55);
+  backdrop-filter: blur(6px);
+
+  transition: all 0.2s ease;
+}
+.user-trigger {
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
   line-height: 1;
 }
-
-/* Warning glow */
-.col-wf-warning {
-  color: #facc15;
-  text-shadow: 0 0 8px rgba(250,204,21,.6);
+.user-trigger .caret {
+  font-size: 0.75em;
 }
-/* ===== USER STATUS TOGGLES ===== */
-
-.col-toggle {
-  width: 70px;
-  text-align: center;
-}
-
-.toggle-btn {
-  background: transparent;
-  border: 1px solid #1e293b;
-  color: white;
-  border-radius: 8px;
-  padding: 6px 10px;
-  cursor: pointer;
-  font-size: 14px;
-}
-
-.toggle-btn.active {
-  background: #16a34a;
-  border-color: #16a34a;
-  box-shadow: 0 0 10px rgba(34,197,94,.45);
-}
-/* ===== DEP FLOW STYLING ===== */
-
-.dep-flow-input {
-  width: 70px;
-  padding: 6px 8px;
-  border-radius: 8px;
-  border: 1px solid #1e293b;
-  background: #020617;
-  color: white;
+/* Headers only */
+.tobt-table th {
   font-weight: 700;
-  text-align: center;
-  transition: all 0.25s ease;
 }
 
-/* 🔴 RED: UNDER 20 */
-.dep-flow-low {
-  background: linear-gradient(160deg, #450a0a, #1f0505);
-  border-color: #ef4444;
-  color: #fecaca;
-  box-shadow: 0 0 12px rgba(239,68,68,.45);
+/* Table body text normal */
+.tobt-table td {
+  font-weight: 400;
+}
+.tobt-table td:nth-child(1),
+.tobt-table td:nth-child(3) {
+  font-weight: 600;
 }
 
-/* 🟠 ORANGE: 21–40 */
-.dep-flow-mid {
-  background: linear-gradient(160deg, #7c2d12, #431407);
-  border-color: #f97316;
-  color: #fed7aa;
-  box-shadow: 0 0 12px rgba(249,115,22,.45);
+
+.logout-btn:hover {
+  color: #ffffff;
+  background: rgba(255, 80, 80, 0.15);
+  border-color: rgba(255, 80, 80, 0.45);
+  box-shadow: 0 0 18px rgba(255, 80, 80, 0.25);
 }
 
-/* 🟢 GREEN: 41+ */
-.dep-flow-high {
-  background: linear-gradient(160deg, #064e3b, #022c22);
-  border-color: #22c55e;
-  color: #bbf7d0;
-  box-shadow: 0 0 12px rgba(34,197,94,.45);
-}
-/* ===== CONNECTED USERS FOOTER ===== */
-
-.connected-users-footer {
-  margin-top: 40px;
-  padding-top: 20px;
-  border-top: 1px solid #1e293b;
-  font-size: 14px;
-  color: #cbd5f5;
+.logout-btn:active {
+  transform: scale(0.97);
 }
 
-#connectedUsersList {
-  margin-top: 8px;
-  color: #60a5fa;
-  line-height: 1.6;
+.logout-icon {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+
+  stroke: currentColor;
+  opacity: 0.9;
+
+  transition: transform 0.25s ease, opacity 0.25s ease;
 }
-.tsat-refresh {
-  margin-left: 10px;
-  border: none;
+
+.logout-btn:hover .logout-icon {
+  opacity: 1;
+  transform: rotate(-12deg);
+}
+
+/* ===== USER MENU (TOPBAR) ===== */
+
+.user-menu {
+  position: relative;
+}
+
+.user-trigger {
+  background: transparent;
+  border: 1px solid rgba(0,180,255,0.35);
+  color: #7fd3ff;
+  padding: 8px 14px;
+  border-radius: 10px;
   cursor: pointer;
-  font-size: 16px;
-  background: linear-gradient(145deg, #1f9f62, #18c77e);
-  color: white;
-  border-radius: 6px;
-  padding: 6px 10px;
-  box-shadow: 0 0 8px rgba(24, 199, 126, 0.5);
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
 }
 
-.tsat-refresh:hover {
-  transform: rotate(90deg) scale(1.05);
-  box-shadow: 0 0 14px rgba(24, 199, 126, 0.9);
+.user-trigger:hover {
+  background: rgba(0,180,255,0.08);
 }
 
-.tsat-refresh:active {
-  transform: scale(0.95);
+.user-dropdown {
+  position: absolute;
+  right: 0;
+  top: 100%;
+  min-width: 180px;
+
+  background: linear-gradient(
+    180deg,
+    rgba(255,255,255,0.05),
+    rgba(0,0,0,0.4)
+  );
+
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 14px;
+  padding: 10px;
+
+  box-shadow: 0 20px 40px rgba(0,0,0,0.6);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-6px);
+  transition: all 0.2s ease;
+  z-index: 200;
 }
 
-.tsat-refresh.hidden {
-  display: none;
-}
-/* ===============================
-   STARTED CHECKBOX (UPCOMING TSAT)
-   =============================== */
 
+.user-dropdown.open {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
+/* Compact version of your existing logout button */
+.logout-btn.compact {
+  width: 100%;
+  justify-content: center;
+  padding: 10px 14px;
+}
+
+/* =========================================================
+   Compact TSAT tables (Upcoming / Recently Started)
+   Targets the actual table IDs used in ATC Slot Management
+   ========================================================= */
+#tsatQueueTable th,
+#tsatQueueTable td,
+#recentlyStartedTable th,
+#recentlyStartedTable td {
+  padding: 0px 10px;  /* slightly tighter than 8px */
+  vertical-align: middle;
+  height: 36px;
+  max-height: 36px;
+  overflow: hidden;
+  white-space: nowrap;
+  box-sizing: border-box;
+  
+}
+
+
+#tsatQueueTable thead th,
+#recentlyStartedTable thead th{
+  padding: 8px 10px;
+  font-weight: 600;
+}
+
+/* Keep row-colour blocks crisp but not tall */
+#tsatQueueTable tr,
+#recentlyStartedTable tr{
+  max-height: 36px;
+  height: 36px;
+  border-top: 1px solid transparent;
+  border-bottom: 1px solid transparent;
+}
+
+/* TSAT started checkbox (smaller, aligned) */
 .tsat-started-check {
   appearance: none;
-  -webkit-appearance: none;
-  width: 22px;
-  height: 22px;
-  border-radius: 6px;
-  border: 2px solid rgba(255, 255, 255, 0.25);
-  background: linear-gradient(145deg, #0b0f1a, #070a14);
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  border: 1px solid rgba(255,255,255,0.35);
+  background: #0b0f1a;
   cursor: pointer;
   position: relative;
-  transition: all 0.18s ease;
-  box-shadow:
-    inset 0 0 0 rgba(0,0,0,0),
-    0 0 0 rgba(0,0,0,0);
 }
 
-/* Hover glow */
-.tsat-started-check:hover {
-  border-color: #3ba4ff;
-  box-shadow: 0 0 6px rgba(59, 164, 255, 0.45);
-}
-
-/* Checked (Started) state */
 .tsat-started-check:checked {
-  background: linear-gradient(145deg, #2cff88, #18b96a);
-  border-color: #2cff88;
-  box-shadow:
-    0 0 10px rgba(44, 255, 136, 0.6),
-    inset 0 0 4px rgba(0, 0, 0, 0.35);
-}
-
-/* Checkmark */
-.tsat-started-check:checked::after {
-  content: '✔';
-  color: #04150c;
-  font-size: 14px;
-  font-weight: 900;
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -52%);
-}
-
-/* Disabled (optional future-proofing) */
-.tsat-started-check:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
+  background: #22c55e;
+  border-color: #22c55e;
   box-shadow: none;
 }
 
-/* Focus accessibility */
-.tsat-started-check:focus-visible {
-  outline: 2px solid #3ba4ff;
-  outline-offset: 2px;
-}
-/* =========================================
-   LOCK UPCOMING TSAT ROW HEIGHT (NO RESIZE)
-   ========================================= */
-
-#tsatQueueTable tbody tr {
-  height: 44px;              /* This matches your checkbox height */
-  min-height: 44px;
-  max-height: 44px;
-}
-
-#tsatQueueTable tbody td {
-  vertical-align: middle;
-  padding-top: 6px;
-  padding-bottom: 6px;
-}
-#tsatQueueTable tbody tr td:empty::after {
-  content: '—';
-  color: rgba(255, 255, 255, 0.12);
-}
-.tsat-started-check {
-  width: 20px;
-  height: 20px;
-  border-radius: 5px;
-}
-/* ============================
-   Upcoming TSATs layout
-   ============================ */
-
-/* =========================================
-   FORCE UPCOMING TSAT INTO TOP-LEFT QUADRANT
-   ========================================= */
-
-.tsat-layout-card {
-  display: block;
-}
-
-/* Only the TSAT section becomes a 2-column grid */
-.tsat-top-row {
-  display: grid;
-  grid-template-columns: 50% 50%;
-  gap: 24px;
-  align-items: start;
-  margin-bottom: 24px;
-}
-
-/* Lock TSAT table to its half */
-.tsat-top-left {
-  width: 100%;
-  max-width: 100%;
-}
-
-/* Right half intentionally blank */
-.tsat-top-right {
-  width: 100%;
-  min-height: 180px;
-}
-
-/* Force main departures table to full width below */
-#mainDeparturesTable {
-  width: 100%;
-}
-
-/* Mobile safety */
-@media (max-width: 900px) {
-  .tsat-top-row {
-    grid-template-columns: 1fr;
-  }
-
-  .tsat-top-right {
-    display: none;
-  }
-
-  .topbar {
-    margin-left: 0;
-    width:100%;
-    padding-left: var(--sidebar-expanded);
-  transition: padding-left 0.25s ease;
-  }
-}
-/* ============================
-   Upcoming TSAT table sizing
-   ============================ */
-
-/* Override the global departures-table min-width just for TSAT queue */
-#tsatQueueTable {
-  min-width: 0 !important;   /* cancel 1100px rule */
-  width: 100%;
-  table-layout: fixed;       /* keep columns inside container */
-}
-
-/* Make columns compact so they don’t force extra width */
-#tsatQueueTable th:nth-child(1),
-#tsatQueueTable td:nth-child(1) {
-  width: 40%;   /* Callsign */
-}
-
-#tsatQueueTable th:nth-child(2),
-#tsatQueueTable td:nth-child(2) {
-  width: 35%;   /* TSAT */
-}
-
-#tsatQueueTable th:nth-child(3),
-#tsatQueueTable td:nth-child(3) {
-  width: 25%;   /* Started checkbox */
-}
-
-
-/* Slightly tighter padding so it feels less “stretched” */
-#tsatQueueTable th,
-#tsatQueueTable td {
-  padding-left: 8px;
-  padding-right: 8px;
-}
-
-/* For the TSAT section specifically, there is no need for horizontal scroll */
-.tsat-top-left .table-scroll {
-  overflow-x: hidden;
-}
-/* Allow both sides of the TSAT grid to shrink properly inside CSS grid */
-.tsat-top-row > div {
-  min-width: 0;
-}
-/* Remove the global 1100px min-width for TSAT tables */
-#tsatQueueTable,
-#recentlyStartedTable {
-  min-width: 0 !important;
-  width: 100% !important;
-  table-layout: fixed;
-}
-/* Clean, balanced column widths for Recently Started */
-#recentlyStartedTable th:nth-child(1),
-#recentlyStartedTable td:nth-child(1) {
-  width: 35%;
-}
-
-#recentlyStartedTable th:nth-child(2),
-#recentlyStartedTable td:nth-child(2) {
-  width: 35%;
-}
-
-#recentlyStartedTable th:nth-child(3),
-#recentlyStartedTable td:nth-child(3) {
-  width: 30%;
-}
-.send-back-btn {
-  background: #7c2d12;
-  border: 1px solid #9a3412;
-  color: #fef3c7;
-}
-
-.send-back-btn:hover {
-  background: #9a3412;
-  border-color: #ea580c;
-  color: #fff7e6;
-}
-
-.send-back-btn:active {
-  background: #5a1d0e;
-  border-color: #c2410c;
-}
-
-/* TSAT colour coding */
-/* ===== SOFT A-CDM STYLE ROW COLOURS ===== */
-
-/* ===== TSAT COLOUR CODING ===== */
-/* ===== FULL-ROW COLOURING ===== */
-/* ===== PROFESSIONAL DARK CDM COLOURS ===== */
-
-/* On-time (±5 min) */
-.row-green {
-  background-color: #0F3D2E !important;   /* deep operational green */
-  color: #C6F6D5 !important;              /* soft mint text */
-}
-
-/* Caution (±6–10 min) */
-.row-amber {
-  background-color: #4A3A12 !important;   /* dark muted amber */
-  color: #F3E7B3 !important;              /* warm light-gold text */
-}
-
-/* Non-compliant (>10 min early/late) */
-.row-red {
-  background-color: #4A1515 !important;   /* deep dark red */
-  color: #F6C6C6 !important;              /* soft pink-tint readable text */
-}
-.delete-started-btn {
-  background: none;
-  border: none;
-  cursor: pointer;
-  margin-left: 6px;
-  padding: 2px;
-  color: #cccccc;      /* icon color */
-  transition: 0.2s ease;
-}
-
-.delete-started-btn:hover {
-  color: #ff6b6b;      /* subtle red hover */
-  transform: scale(1.15);
-}
-
-.trash-icon {
-  pointer-events: none; /* prevents click weirdness on SVG element */
-}
-/* Ensure Upcoming TSATs and Recently Started rows match height */
-#tsatQueueTable tbody tr,
-#recentlyStartedTable tbody tr {
-    height: 40px;              /* adjust to taste */
-}
-
-#tsatQueueTable td,
-#recentlyStartedTable td {
-    padding-top: 6px;
-    padding-bottom: 6px;
-}
-/* Unified button look for Send Back + Trash */
-/* =========================================
-   SUBTLE, TSAT-REFRESH-THEMED ACTION BUTTONS
-   ========================================= */
-
-/* Shared base style */
-.action-btn {
-    background: #0b0f1a;
-    height: 28px;
-    border: 1px solid #1a2333;
-    border-radius: 8px;
-    padding: 2px 10px;
-    cursor: pointer;
-    color: #cbd5e1;
-    font-size: 0.85rem;
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    transition: all 0.15s ease;
-    box-shadow: 0 0 4px rgba(0, 255, 180, 0.08);
-}
-
-/* Glow on hover */
-.action-btn:hover {
-    transform: scale(1.05);
-}
-
-/* ------------------------------
-   SEND BACK — green accent hover
-   ------------------------------ */
-.send-back-btn {
-
-}
-
-.send-back-btn:hover {
-    border-color: #18c77e;
-    color: #ffffff;
-    box-shadow: 0 0 10px rgba(24, 199, 126, 0.45);
-}
-
-/* ------------------------------
-   TRASH — subtle until hover
-   ------------------------------ */
-.delete-started-btn {
-
-    padding: 2px;  
-    height: 28px;         /* icon-sized */
-    border-radius: 4px;
-}
-
-.delete-started-btn:hover {
-    border-color: #ff6b6b;
-    color: #ff6b6b;
-    box-shadow: 0 0 10px rgba(255, 107, 107, 0.45);
-}
-
-/* Trash icon inherits color */
-.delete-started-btn .trash-icon {
-    stroke: currentColor;
-}
-/* UNIFY HEIGHT + VERTICAL ALIGNMENT FOR BOTH BUTTONS */
-.action-btn {
-    background: #0b0f1a;
-    border: 1px solid #1a2333;
-    border-radius: 8px;
-    height: 32px;               /* identical height */
-    padding: 0 12px;             /* equal top/bottom */
-    cursor: pointer;
-    color: #cbd5e1;
-    font-size: 0.85rem;
-    display: inline-flex;
-    align-items: center;         /* vertical centering */
-    justify-content: center;
-    gap: 6px;
-    line-height: 1;              /* prevents vertical drift */
-    transition: all 0.15s ease;
-}
-
-/* SEND BACK — green glow */
-.send-back-btn {
-    border-radius: 8px;
-}
-.send-back-btn:hover {
-    border-color: #18c77e;
-    color: #ffffff;
-    box-shadow: 0 0 10px rgba(24, 199, 126, 0.45);
-}
-
-/* TRASH BUTTON — same height, centered icon */
-.delete-started-btn {
-    padding: 0 8px !important;   /* equal padding */
-    height: 32px !important;     /* perfectly matched height */
-    border-radius: 6px;
-}
-
-.delete-started-btn:hover {
-    border-color: #ff6b6b;
-    color: #ff6b6b;
-    box-shadow: 0 0 10px rgba(255, 107, 107, 0.45);
-}
-
-/* Ensures icon sits dead-center */
-.delete-started-btn .trash-icon {
-    stroke: currentColor;
-    display: block;
-}
-/* ===============================
-   SIDEBAR LAYOUT
-================================ */
-
-/* =========================================================
-   SIDEBAR — FULL RESET & CLEAN IMPLEMENTATION
-   ========================================================= */
-
-/* -------- VARIABLES -------- */
-:root {
-  --sidebar-expanded: 240px;
-  --sidebar-collapsed: 72px;
-  --sidebar-bg: #020617;
-  --sidebar-border: #1e293b;
-  --sidebar-text: #cbd5f5;
-  --sidebar-accent: #38bdf8;
-}
-
-/* -------- SIDEBAR CONTAINER -------- */
-.sidebar {
-  position: fixed;
-  top: 0;
-  left: 0;
-  z-index: 60;
-  height: 100vh;
-  width: var(--sidebar-expanded);
-  background: linear-gradient(180deg, var(--sidebar-bg), var(--sidebar-bg));
-  border-right: 1px solid var(--sidebar-border);
-  padding: 16px;
-  z-index: 60;
-  transition: width 0.25s ease;
-  overflow: hidden;
-}
-
-/* -------- COLLAPSED STATE -------- */
-.sidebar.collapsed {
-  width: var(--sidebar-collapsed);
-}
-
-/* -------- SIDEBAR HEADER -------- */
-.sidebar-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 24px;
-}
-
-.sidebar-title {
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--sidebar-accent);
-  white-space: nowrap;
-}
-
-.sidebar.collapsed .sidebar-title {
-  display: none;
-}
-
-#sidebarToggle {
-  background: none;
-  border: none;
-  color: var(--sidebar-text);
-  font-size: 18px;
-  cursor: pointer;
-}
-
-/* -------- NAV CONTAINER -------- */
-.sidebar-nav {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-/* -------- NAV ITEMS -------- */
-.nav-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-
-  padding: 10px 14px;
-  border-radius: 12px;
-
-  text-decoration: none;
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--sidebar-text);
-
-  transition:
-    background 0.2s ease,
-    color 0.2s ease,
-    transform 0.15s ease;
-}
-
-.nav-item:hover {
-  background: rgba(255,255,255,0.06);
-  color: #ffffff;
-  transform: translateX(2px);
-}
-
-
-/* -------- ACTIVE PAGE -------- */
-.nav-item.active {
-  background:
-    linear-gradient(
-      135deg,
-      rgba(56,189,248,0.25),
-      rgba(37,99,235,0.35)
-    );
-
-  color: #ffffff;
-
-  box-shadow:
-    inset 0 0 0 1px rgba(255,255,255,0.12),
-    0 6px 16px rgba(37,99,235,0.35);
-}
-/* -------- ICONS -------- */
-.icon {
-  width: 20px;
-  text-align: center;
-  font-size: 16px;
-  flex-shrink: 0;
-}
-
-/* -------- ICON-ONLY COLLAPSED MODE -------- */
-.sidebar.collapsed .nav-item {
-  justify-content: center;
-  padding: 12px 0;
-}
-
-.sidebar.collapsed .nav-item span:not(.icon) {
-  display: none;
-}
-
-/* -------- BODY OFFSET -------- */
-body {
-  padding-left: var(--sidebar-expanded);
-  transition: padding-left 0.25s ease;
-}
-
-body.sidebar-collapsed {
-  padding-left: var(--sidebar-collapsed);
-}
-
-/* -------- TOPBAR OFFSET -------- */
-
-
-body.sidebar-collapsed .topbar {
-  padding-left: var(--sidebar-collapsed);
-}
-
-/* -------- MOBILE DEFAULT -------- */
-@media (max-width: 900px) {
-  .sidebar {
-    width: var(--sidebar-collapsed);
-  }
-
-  body {
-    padding-left: var(--sidebar-collapsed);
-  }
-
-  
-}
-/* ICON ONLY WHEN COLLAPSED */
-.sidebar.collapsed .label {
-  display: none;
-}
-
-.sidebar.collapsed .nav-item {
-  justify-content: center;
-}
-/* =========================================================
-   SIDEBAR BRAND / LOGO
-   ========================================================= */
-
-.sidebar-brand {
-  height: 120px; /* MATCHES TOPBAR HEIGHT */
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 12px;
-
-  background: transparent;
-
-  box-shadow:
-    inset -1px 0 0 rgba(255,255,255,0.06),
-    inset 0 -1px 0 rgba(255,255,255,0.08);
-}
-
-.sidebar-logo {
-  max-width: 72px;
-  max-height: 72px;
-  object-fit: contain;
-  transition: transform 0.25s ease, opacity 0.25s ease;
-}
-.sidebar.collapsed .sidebar-logo {
-  max-width: 40px;
-  max-height: 40px;
-  opacity: 0.85;
-}
-.dashboard-footer {
-  grid-column: 1 / -1;
-  text-align: center;
-  margin-top: 40px;
-}
-/* =====================================
-   DASHBOARD ACTIONS — CENTERED UNDER CARDS
-   ===================================== */
-
-.dashboard-actions {
-  grid-column: 1 / -1;              /* span full grid */
-  display: flex;
-  flex-direction: column;
-  align-items: center;              /* center contents */
-  justify-content: center;
-
-  max-width: 920px;                 /* matches 2-card width */
-  margin: 20px auto 0 auto;         /* centers the block itself */
-
-  gap: 18px;
-}
-
-.logout-link {
-  color: #60a5fa;
-  font-weight: 600;
-  text-decoration: none;
-}
-
-.logout-link:hover {
-  text-decoration: underline;
-}
-/* ===============================
-   DASHBOARD — FORCE 2-COLUMN LAYOUT
-   =============================== */
-
-.dashboard {
-  max-width: 960px;                  /* 2 × 420 + gap */
-  margin: 0 auto;                    /* center whole grid */
-  grid-template-columns: repeat(2, minmax(420px, 1fr));
-}
-/* ===============================
-   WIDE DASHBOARD (DEPARTURES, TABLES)
-   =============================== */
-
-.dashboard-wide {
-  grid-template-columns: minmax(900px, 1200px);
-  justify-content: center;
-}
-.dashboard-wide .card {
-  max-width: 1200px;
-  width: 100%;
-}
-/* ===============================
-   FULL-WIDTH DASHBOARD (OPERATIONS)
-   =============================== */
-
-.dashboard-full {
-  max-width: none;              /* remove all width limits */
-  width: 100%;
-  margin: 0;                    /* no centering */
-  grid-template-columns: 1fr;   /* single column, full width */
-}
-/* ===============================
-   FULL-WIDTH OVERRIDES
-   =============================== */
-
-.dashboard-full .card {
-  max-width: none;
-  width: 100%;
-}
-/* ===============================
-   ICAO CONNECTION WARNING
-   =============================== */
-
-/* ================================
-   ICAO READ-ONLY WARNING BANNER
-   ================================ */
-
-.tsat-wrapper {
-  position: relative;
-  padding-top: 56px; /* reserves space for banner */
-}
-
-.icao-warning {
+.tsat-started-check:checked::after {
+  content: '';
+  width: 6px;
+  height: 3px;
+  border-left: 2px solid #022c22;
+  border-bottom: 2px solid #022c22;
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-
-  height: 40px;
-  line-height: 40px;
-
-  background: linear-gradient(160deg, #450a0a, #1f0505);
-  border: 1px solid #7f1d1d;
-  border-radius: 10px;
-
-  color: #fecaca;
-  font-weight: 600;
-  font-size: 14px;
-  text-align: center;
-
-  box-shadow: 0 0 18px rgba(239,68,68,.35);
-  z-index: 5;
+  top: 4px;
+  left: 3px;
+  transform: rotate(-45deg);
 }
 
-button:disabled,
-input:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+
+/* Ensure row-colour does not force bold */
+.row-green, .row-amber, .row-red{
+  font-weight: 400 !important;
 }
+
+/* Hover overlay for coloured rows */
+#tsatQueueTable tbody tr.row-green:hover {
+  background-color: rgba(34, 197, 94, 0.15);
+}
+
+#tsatQueueTable tbody tr.row-amber:hover {
+  background-color: rgba(245, 158, 11, 0.18);
+}
+
+#tsatQueueTable tbody tr.row-red:hover {
+  background-color: rgba(239, 68, 68, 0.18);
+}
+
+
+/* Subtle row hover highlight (no layout shift) */
+#tsatQueueTable tbody tr:hover,
+#recentlyStartedTable tbody tr:hover {
+  background-color: rgba(255, 255, 255, 0.035);
+}
+/* Main departures table hover (correct ID) */
+#mainDeparturesTable tbody tr:hover > td{
+  background-color: rgba(255, 255, 255, 0.035);
+}
+

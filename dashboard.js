@@ -41,7 +41,8 @@ export default (req, res) => {
   </section>
 
 
-  <a href="/logout" class="logout-link">Logout</a>
+
+
 </div>
 
 `;
