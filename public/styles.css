@@ -1748,3 +1748,113 @@ select{ cursor:pointer; }
   color: #fff;
   font-weight: 700;
 }
+.delete-slot-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+}
+
+.delete-slot-btn .trash-icon {
+  width: 18px;
+  height: 18px;
+  stroke: #c0392b;
+}
+
+.delete-slot-btn:hover .trash-icon {
+  stroke: #e74c3c;
+}
+.btn-danger {
+  background: #c0392b;
+  color: #fff;
+}
+
+.btn-danger:hover {
+  background: #e74c3c;
+}
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(3, 8, 20, 0.75);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal-card {
+  background: radial-gradient(
+    120% 120% at top,
+    #0e1630 0%,
+    #050915 100%
+  );
+  border-radius: 16px;
+  padding: 28px 32px;
+  width: 420px;
+  max-width: 90%;
+  box-shadow:
+    0 0 0 1px rgba(255,255,255,0.08),
+    0 20px 60px rgba(0,0,0,0.6);
+}
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 24px;
+}
+
+.modal-btn {
+  padding: 8px 18px;
+  border-radius: 10px;
+  font-weight: 500;
+}
+
+.modal-btn.secondary {
+  background: rgba(255,255,255,0.08);
+  color: #fff;
+}
+
+.modal-btn.primary {
+  background: #3b82f6;
+  color: #fff;
+}
+
+.modal-btn.danger {
+  background: #b91c1c;
+  color: #fff;
+}
+.tobt-btn.simbrief {
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+  color: #fff;
+  border: none;
+  font-weight: 500;
+  padding: 6px 14px;
+  border-radius: 10px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.tobt-btn.simbrief:hover {
+  filter: brightness(1.1);
+}
+/* Actions column must never collapse */
+.actions-cell {
+  min-width: 220px;
+  text-align: right;       /* 🔑 */
+  padding-right: 16px;     /* visual breathing room */
+}
+
+.actions-wrap {
+  display: inline-flex;    /* 🔑 prevents full-width flex */
+  align-items: center;
+  gap: 10px;
+}
+
+
+/* Ensure buttons have predictable size */
+.actions-wrap .tobt-btn {
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+

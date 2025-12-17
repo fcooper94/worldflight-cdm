@@ -790,6 +790,14 @@ function formatUtcHHMM(date) {
   return date.toISOString().substring(11, 16);
 }
 
+function subtractMinutes(timeStr, minutes) {
+  const [hh, mm] = timeStr.split(':').map(Number);
+  const date = new Date(Date.UTC(2000, 0, 1, hh, mm));
+  date.setUTCMinutes(date.getUTCMinutes() - minutes);
+  return date.toISOString().substring(11, 16);
+}
+
+
 function generateTobtSlots({ from, to, dateUtc, depTimeUtc }) {
   const dep = parseUtcDateTime(dateUtc, depTimeUtc);
 
@@ -2472,6 +2480,7 @@ const simbriefUrl =
                 <th>Connect by</th>
                 <th>ATC Route</th>
                 <th>Plan with SimBrief</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -2511,6 +2520,19 @@ const simbriefUrl =
     Plan with SimBrief
   </a>
 </td>
+<td class="actions-cell">
+  <div class="actions-wrap">
+    <button
+      type="button"
+      class="tobt-btn cancel cancel-slot-btn"
+      data-slot-key="${r.slotKey}"
+      data-callsign="${r.callsign}"
+    >
+      Cancel Slot
+    </button>
+  </div>
+</td>
+
 
 </tr>
 
@@ -2556,6 +2578,43 @@ const simbriefUrl =
     e.target.blur();
   });
 </script>
+<script>
+  document.addEventListener('click', async e => {
+    const btn = e.target.closest('.cancel-slot-btn');
+    if (!btn) return;
+
+    const slotKey = btn.dataset.slotKey;
+    const callsign = btn.dataset.callsign || 'this booking';
+
+    const confirmed = await openConfirmModal({
+      title: 'Cancel Slot',
+      message: 'Cancel TOBT booking for ' + callsign + '? This cannot be undone.'
+
+    });
+
+    if (!confirmed) return;
+
+    const res = await fetch('/api/tobt/cancel', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slotKey })
+    });
+
+    if (!res.ok) {
+      let errText = 'Failed to cancel slot';
+      try {
+        const err = await res.json();
+        if (err?.error) errText = err.error;
+      } catch {}
+      alert(errText);
+      return;
+    }
+
+    location.reload();
+  });
+</script>
+
+
 
   `;
 
@@ -2569,6 +2628,7 @@ const simbriefUrl =
     })
   );
 });
+
 
 app.get('/official-teams', requireAdmin, async (req, res) => {
   const officialTeams = await prisma.officialTeam.findMany({

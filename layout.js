@@ -142,8 +142,8 @@ export default function renderLayout({
   <div id="callsignModal" class="modal hidden">
     <div class="modal-backdrop"></div>
     <div class="modal-card card">
-      <h3>Enter Callsign</h3>
-      <p class="modal-help">
+      <h3 id="modalTitle">Enter Callsign</h3>
+<p id="modalHelp" class="modal-help">
         This callsign will be used for your TOBT and SimBrief planning.
       </p>
 
@@ -204,6 +204,88 @@ export default function renderLayout({
       });
     }
   </script>
+
+  <script>
+function openConfirmModal({ title, message }) {
+  return new Promise(resolve => {
+    const modal = document.getElementById('callsignModal');
+    const titleEl = document.getElementById('modalTitle');
+    const helpEl = document.getElementById('modalHelp');
+    const input = document.getElementById('callsignModalInput');
+    const confirm = document.getElementById('callsignConfirm');
+    const cancel = document.getElementById('callsignCancel');
+
+    titleEl.textContent = title;
+    helpEl.textContent = message;
+
+    input.style.display = 'none'; // no input for confirm
+    modal.classList.remove('hidden');
+
+    function close(result) {
+      modal.classList.add('hidden');
+      input.style.display = '';
+      confirm.removeEventListener('click', onConfirm);
+      cancel.removeEventListener('click', onCancel);
+      resolve(result);
+    }
+
+    function onConfirm() { close(true); }
+    function onCancel() { close(false); }
+
+    confirm.addEventListener('click', onConfirm);
+    cancel.addEventListener('click', onCancel);
+  });
+}
+</script>
+
+<script>
+  function openConfirmModal({ title, message }) {
+    return new Promise(resolve => {
+      const modal = document.getElementById('callsignModal');
+      const card = modal.querySelector('.modal-card');
+
+      // Reuse existing elements
+      const h3 = card.querySelector('h3');
+      const help = card.querySelector('.modal-help');
+      const input = document.getElementById('callsignModalInput');
+      const confirm = document.getElementById('callsignConfirm');
+      const cancel = document.getElementById('callsignCancel');
+
+      // Set confirm content
+      if (h3) h3.textContent = title || 'Confirm';
+      if (help) help.textContent = message || '';
+
+      // Hide input for confirmations
+      input.style.display = 'none';
+
+      modal.classList.remove('hidden');
+      cancel.focus();
+
+      function close(result) {
+        modal.classList.add('hidden');
+        input.style.display = ''; // restore
+        confirm.removeEventListener('click', onConfirm);
+        cancel.removeEventListener('click', onCancel);
+        document.removeEventListener('keydown', onKey);
+        resolve(result);
+      }
+
+      function onConfirm() { close(true); }
+      function onCancel() { close(false); }
+
+      function onKey(e) {
+        if (e.key === 'Enter') onConfirm();
+        if (e.key === 'Escape') onCancel();
+      }
+
+      confirm.addEventListener('click', onConfirm);
+      cancel.addEventListener('click', onCancel);
+      document.addEventListener('keydown', onKey);
+    });
+  }
+</script>
+
+
 
   <!-- existing scripts follow -->
   <script>
