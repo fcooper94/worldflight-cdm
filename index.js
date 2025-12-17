@@ -125,6 +125,14 @@ app.use(express.urlencoded({ extended: true }));
 const httpServer = createServer(app);
 const io = new Server(httpServer);
 
+/* ================= ICAO-SCOPED EMIT HELPER ================= */
+
+function emitToIcao(icao, event, payload) {
+  if (!icao) return;
+  io.to(`icao:${icao.toUpperCase()}`).emit(event, payload);
+}
+
+
 io.use((socket, next) => {
   sessionMiddleware(socket.request, {}, next);
 });
@@ -551,6 +559,11 @@ io.on('connection', async socket => {
 
   const user = socket.request.session?.user?.data || null;
 const icaoFromQuery = socket.handshake.query?.icao || null;
+if (icaoFromQuery) {
+  const room = `icao:${icaoFromQuery.toUpperCase()}`;
+  socket.join(room);
+}
+
 
 // ✅ Rebuild TSATs for late joiners (keep this)
 if (icaoFromQuery) rebuildTSATStateForICAO(icaoFromQuery);
@@ -652,13 +665,21 @@ if (icaoFromQuery) {
     if (type === 'start' && value === true && activeSector) {
       const tsat = assignTSAT(activeSector, callsign);
       io.emit('tsatUpdated', { callsign, tsat });
-      io.emit('upcomingTSATUpdate', buildUpcomingTSATsForICAO(icao, cachedPilots));
+      io.to(`icao:${icao}`).emit(
+  'upcomingTSATUpdate',
+  buildUpcomingTSATsForICAO(icao, cachedPilots)
+);
+
     }
 
     if (type === 'start' && value === false && activeSector) {
       clearTSAT(activeSector, callsign);
       io.emit('tsatUpdated', { callsign, tsat: '' });
-      io.emit('upcomingTSATUpdate', buildUpcomingTSATsForICAO(icao, cachedPilots));
+      io.to(`icao:${icao}`).emit(
+  'upcomingTSATUpdate',
+  buildUpcomingTSATsForICAO(icao, cachedPilots)
+);
+
     }
 
     io.emit('toggleUpdated', { callsign, type, value });
@@ -720,7 +741,11 @@ if (icaoFromQuery) {
     };
 
     io.emit('tsatStartedUpdated', startedAircraft);
-    io.emit('upcomingTSATUpdate', buildUpcomingTSATsForICAO(icao, cachedPilots));
+    io.to(`icao:${icao}`).emit(
+  'upcomingTSATUpdate',
+  buildUpcomingTSATsForICAO(icao, cachedPilots)
+);
+
     io.emit(
   'recentlyStartedUpdate',
   buildRecentlyStartedForICAO(icao)
@@ -1173,6 +1198,16 @@ if (booking.cid === null && !isAdmin) {
 
   delete tobtBookingsBySlot[slotKey];
 
+  // 🔑 Maintain CID index (remove from My Slots)
+if (booking.cid !== null && tobtBookingsByCid[booking.cid]) {
+  tobtBookingsByCid[booking.cid].delete(slotKey);
+
+  if (tobtBookingsByCid[booking.cid].size === 0) {
+    delete tobtBookingsByCid[booking.cid];
+  }
+}
+
+
   if (tobtBookingsByCid[cid]) {
     tobtBookingsByCid[cid].delete(slotKey);
     if (tobtBookingsByCid[cid].size === 0) {
@@ -1180,28 +1215,35 @@ if (booking.cid === null && !isAdmin) {
     }
   }
 
+emitToIcao(
+  booking.from,
+  'unassignedTobtUpdate',
+  buildUnassignedTobtsForICAO(booking.from)
+);
+
+
+
   res.json({ success: true });
 });
 
 
 app.post('/api/tobt/book', async (req, res) => {
-  
-const isAtcAssignment =
-  !!req.session.user?.data?.controller ||
-  ADMIN_CIDS.includes(Number(req.session.user?.data?.cid));
 
-const cid = isAtcAssignment
-  ? null
-  : Number(req.session.user?.data?.cid);
+  const cid = Number(req.session.user?.data?.cid);
 
-// ❗ Only reject if NOT ATC AND no CID
-if (!isAtcAssignment && !cid) {
-  return res.status(401).json({ error: 'Not logged in' });
-}
+  const controllerCallsign =
+    req.session.user?.data?.controller?.callsign || '';
 
+  const isAtcAssignment =
+    ADMIN_CIDS.includes(cid) ||
+    /_(DEL|RMP|GND|TWR|APP|CTR)$/.test(controllerCallsign);
+
+  // Pilots MUST have a CID
+  if (!isAtcAssignment && !cid) {
+    return res.status(401).json({ error: 'Not logged in' });
+  }
 
   const { slotKey, callsign } = req.body;
-
 
   if (!slotKey || !callsign) {
     return res.status(400).json({ error: 'Missing parameters' });
@@ -1212,37 +1254,36 @@ if (!isAtcAssignment && !cid) {
     return res.status(409).json({ error: 'Slot already booked' });
   }
 
-  // 🔒 Enforce unique callsign per sector
-// sector = FROM-TO|date|depTime
-const sectorKey = slotKey.split('|').slice(0, 3).join('|');
-const normalizedCallsign = callsign.trim().toUpperCase();
+  // sector = FROM-TO|date|depTime
+  const sectorKey = slotKey.split('|').slice(0, 3).join('|');
+  const normalizedCallsign = callsign.trim().toUpperCase();
 
-// 🔒 Reserved Official Team callsign enforcement
-const teamCheck = await isReservedTeamCallsign(normalizedCallsign, cid);
+  // 🔒 Reserved Official Team callsign enforcement
+  const teamCheck = await isReservedTeamCallsign(normalizedCallsign, cid);
 
-if (teamCheck.reserved && !teamCheck.allowed) {
-  return res.status(403).json({
-    error: `Callsign ${normalizedCallsign} is reserved for an official team.`
-  });
-}
-
-for (const existingSlotKey in tobtBookingsBySlot) {
-  const existingSectorKey = existingSlotKey
-    .split('|')
-    .slice(0, 3)
-    .join('|');
-
-  const existing = tobtBookingsBySlot[existingSlotKey];
-
-  if (
-    existingSectorKey === sectorKey &&
-    existing.callsign === normalizedCallsign
-  ) {
-    return res.status(409).json({
-      error:
-        'A booking has already been made with this callsign on ' +
-        sectorKey.split('|')[0]
+  if (teamCheck.reserved && !teamCheck.allowed) {
+    return res.status(403).json({
+      error: `Callsign ${normalizedCallsign} is reserved for an official team.`
     });
+  }
+
+  for (const existingSlotKey in tobtBookingsBySlot) {
+    const existingSectorKey = existingSlotKey
+      .split('|')
+      .slice(0, 3)
+      .join('|');
+
+    const existing = tobtBookingsBySlot[existingSlotKey];
+
+    if (
+      existingSectorKey === sectorKey &&
+      existing.callsign === normalizedCallsign
+    ) {
+      return res.status(409).json({
+        error:
+          'A booking has already been made with this callsign on ' +
+          sectorKey.split('|')[0]
+      });
   }
 }
 
@@ -1257,19 +1298,14 @@ if (slotParts.length === 4) {
   const sectorKey = slotParts.slice(0, 3).join('|');
 
   // 🔒 Enforce 1 booking per sector per user (PILOTS ONLY)
-if (!isAtcAssignment && cid !== null) {
-  const existingSlots = tobtBookingsByCid[cid];
-  if (existingSlots) {
-    for (const existingKey of existingSlots) {
-      const existingSector = existingKey.split('|').slice(0, 3).join('|');
-      if (existingSector === sectorKey) {
-        return res.status(409).json({
-          error: 'You already have a booking in this sector'
-        });
-      }
-    }
+// 🔑 Maintain CID index for ALL pilot-owned bookings (including admins)
+if (cid !== null) {
+  if (!tobtBookingsByCid[cid]) {
+    tobtBookingsByCid[cid] = new Set();
   }
+  tobtBookingsByCid[cid].add(slotKey);
 }
+
 
 }
 
@@ -1307,8 +1343,8 @@ if (!isAtcAssignment && cid !== null) {
   }
 
   // ✅ Update in-memory slot index
-  tobtBookingsBySlot[slotKey] = {
-  slotKey,                 // 🔑 REQUIRED
+tobtBookingsBySlot[slotKey] = {
+  slotKey,
   cid,
   callsign: normalizedCallsign,
   from,
@@ -1318,13 +1354,7 @@ if (!isAtcAssignment && cid !== null) {
   tobtTimeUtc
 };
 
-
-  // ✅ Update in-memory CID index (THIS FIXES "My Slots")
-  if (!isAtcAssignment && cid !== null) {
-  if (!tobtBookingsByCid[cid]) {
-    tobtBookingsByCid[cid] = new Set();
-  }
-  // ONLY track pilot bookings
+// 🔑 Maintain CID index (PILOTS ONLY)
 if (!isAtcAssignment && cid !== null) {
   if (!tobtBookingsByCid[cid]) {
     tobtBookingsByCid[cid] = new Set();
@@ -1332,10 +1362,17 @@ if (!isAtcAssignment && cid !== null) {
   tobtBookingsByCid[cid].add(slotKey);
 }
 
-}
 
+// 🔄 NOW notify clients to refresh
+emitToIcao(from, 'departures:update');
 
-  res.json({ success: true });
+emitToIcao(
+  from,
+  'unassignedTobtUpdate',
+  buildUnassignedTobtsForICAO(from)
+);
+
+res.json({ success: true });
 });
 
 
@@ -3233,6 +3270,9 @@ app.post('/api/tobt/remove', async (req, res) => {
 
   delete tobtBookingsBySlot[slotKey];
 
+  emitToIcao(booking.from, 'departures:update');
+
+
   res.json({ success: true });
 });
 
@@ -3613,7 +3653,8 @@ app.get('/my-slots', (req, res) => {
   }
 
   const user = req.session.user.data;
-  const cid = user.cid;
+  const cid = Number(user.cid);
+
   const isAdmin = ADMIN_CIDS.includes(Number(cid));
 
   const mySlots = Array.from(tobtBookingsByCid[cid] || []);
