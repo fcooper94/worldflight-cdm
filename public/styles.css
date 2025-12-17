@@ -1908,8 +1908,16 @@ select{ cursor:pointer; }
   border: 2px solid rgba(255,255,255,.25);
   background: linear-gradient(145deg, #0b0f1a, #070a14);
   cursor: pointer;
+
+  /* 🔑 critical */
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
   transition: all .18s ease;
 }
+
 
 .wf-check:hover {
   border-color: var(--accent);
@@ -1924,22 +1932,18 @@ select{ cursor:pointer; }
 
 .wf-check:checked::after {
   content: '✔';
+  position: absolute;
+
+  /* 🔑 dead-center */
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -52%);
+
   color: #04150c;
   font-size: 13px;
   font-weight: 900;
-  position: relative;
-  top: -1px;
-  left: 4px;
-}
-/* Column semantics */
-.col-callsign {
-  text-transform: uppercase;
-  font-weight: 600;
-}
-
-.col-country {
-  text-transform: uppercase;
-  font-weight: 600;
+  line-height: 1;
+  pointer-events: none;
 }
 
 .col-cid {
@@ -1977,4 +1981,154 @@ tr:hover .row-actions {
 .section-title {
   margin-top: 22px;
 }
+/* WF26 column */
+.col-wf26 {
+  width: 70px;
+  text-align: center;
+}
+
+.departures-table td.col-wf26 {
+  display: table-cell;
+}
+.departures-table .tobt-btn.cancel {
+  opacity: 0.65;
+  transform: none;
+}
+
+.departures-table tr:hover .tobt-btn.cancel {
+  opacity: 1;
+}
+.col-callsign,
+.col-country {
+  letter-spacing: .05em;
+}
+.card h3 {
+  margin: 24px 0 12px;
+  font-size: 16px;
+  font-weight: 700;
+  color: #93c5fd;
+}
+.col-country {
+  text-transform: uppercase;
+  font-weight: 600;
+  color: #e5e7eb;
+}
+.departures-table td.col-wf26,
+.departures-table th.col-wf26 {
+  text-align: center;
+  vertical-align: middle;
+}
+.departures-table td.col-wf26 input {
+  margin: 0;
+}
+.departures-table th.col-actions,
+.departures-table td.col-actions {
+  width: 110px;            /* 👈 pulls it left */
+  padding-right: 12px;
+  text-align: right;
+}
+.departures-table .tobt-btn.cancel {
+  min-width: auto;
+  padding: 6px 12px;
+}
+.departures-table tr:hover .wf-check {
+  box-shadow: 0 0 8px rgba(24,199,126,0.6);
+}
+/* WF26 column – force true table-cell centering */
+.departures-table th.col-wf26,
+.departures-table td.col-wf26 {
+  display: table-cell;
+  vertical-align: middle;
+  text-align: center;
+}
+.wf-check {
+  vertical-align: middle;
+}
+.section-divider {
+  height: 1px;
+  margin: 26px 0 18px;
+  background: linear-gradient(
+    to right,
+    transparent,
+    rgba(255,255,255,0.18),
+    transparent
+  );
+}
+
+.section-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #93c5fd;
+  margin: 0 0 10px;
+}
+.sub-card {
+  margin-top: 32px;
+  padding-top: 18px;
+  border-top: 1px solid rgba(255,255,255,0.14);
+}
+/* WF26 column – consistent across admin tables */
+.departures-table .col-wf26 {
+  width: 72px;
+  min-width: 72px;
+  max-width: 72px;
+  text-align: center;
+  vertical-align: middle;
+}
+.departures-table td.col-wf26 {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+/* Actions column */
+.col-actions {
+  width: 110px;
+  min-width: 110px;
+  max-width: 110px;
+  text-align: center;
+  vertical-align: middle;
+}
+/* Sub-section container inside cards */
+.sub-card {
+  margin-top: 32px;
+  padding: 24px;
+  border-radius: 14px;
+
+  background: linear-gradient(
+    160deg,
+    rgba(255,255,255,0.02),
+    rgba(0,0,0,0.15)
+  );
+
+  border: 1px solid rgba(255,255,255,0.08);
+}
+.sub-card .section-title {
+  margin: 0 0 12px;
+  font-size: 15px;
+  color: var(--accent);
+}
+.sub-card::before {
+  content: '';
+  display: block;
+  height: 1px;
+  margin-bottom: 20px;
+
+  background: linear-gradient(
+    to right,
+    transparent,
+    rgba(255,255,255,0.18),
+    transparent
+  );
+}
+/* Uppercase DATA only (not headers) */
+.departures-table.official-teams tbody td,
+.departures-table.affiliates tbody td {
+  text-transform: uppercase;
+}
+.departures-table tbody td {
+  letter-spacing: 0.04em;
+}
+.departures-table thead th {
+  letter-spacing: 0.02em;
+}
+
 

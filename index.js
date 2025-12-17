@@ -1170,8 +1170,8 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
         <button class="action-btn" id="addAffiliateBtn">Add WF Affiliate</button>
       </div>
     </div>
-
-    <h3 style="margin-top:18px;">Official Teams</h3>
+<div class="sub-card">
+     <h3 class="section-title">Official Teams</h3>
     <div class="table-scroll">
       <table class="departures-table official-teams">
         <thead>
@@ -1181,7 +1181,7 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
             <th>Main CID</th>
             <th>A/C Type</th>
             <th>Country</th>
-            <th>WF26</th>
+            <th class="col-wf26 col-center">WF26</th>
             <th></th>
           </tr>
         </thead>
@@ -1193,16 +1193,15 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
               <td>${t.mainCid}</td>
               <td>${escapeHtml(t.aircraftType)}</td>
               <td>${escapeHtml(t.country)}</td>
-              <td style="text-align:center;">
-                <input
-  type="checkbox"
-  class="wf26-toggle wf-check"
-  data-entity="team"
-  data-id="${t.id}"
-  ${t.participatingWf26 ? 'checked' : ''}
-/>
-
-              </td>
+              <td class="col-wf26 col-center">
+  <input
+    type="checkbox"
+    class="wf26-toggle wf-check"
+    data-entity="team"
+    data-id="${t.id}"
+    ${t.participatingWf26 ? 'checked' : ''}
+  />
+</td>
               <td style="text-align:right;">
                 <button class="tobt-btn cancel" data-action="delete-team" data-id="${t.id}">Delete</button>
               </td>
@@ -1211,10 +1210,11 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
         </tbody>
       </table>
     </div>
-
-    <h3 style="margin-top:22px;">WF Affiliates</h3>
+</div>
+    <div class="sub-card">
+  <h3 class="section-title">WF Affiliates</h3>
     <div class="table-scroll">
-      <table class="departures-table affiliates">
+    <table class="departures-table affiliates">
   <thead>
     <tr>
       <th class="col-callsign">Callsign</th>
@@ -1252,6 +1252,7 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
   </tbody>
 </table>
 
+    </div>
     </div>
   </section>
 
