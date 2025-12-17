@@ -6,6 +6,37 @@ import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
+/* ===========================
+   OFFICIAL TEAM CALLSIGN RULES
+   =========================== */
+
+async function isReservedTeamCallsign(callsign, cid) {
+  const normalized = callsign.trim().toUpperCase();
+
+  const team = await prisma.officialTeam.findFirst({
+    where: {
+      callsign: normalized,
+      participatingWf26: true
+    }
+  });
+
+  if (!team) {
+    return { reserved: false };
+  }
+
+  if (Number(team.mainCid) !== Number(cid)) {
+    return {
+      reserved: true,
+      allowed: false,
+      teamName: team.teamName
+    };
+  }
+
+  return {
+    reserved: true,
+    allowed: true
+  };
+}
 
 
 import path from 'path';
@@ -905,6 +936,7 @@ app.post('/wf-schedule/refresh-schedule', requireAdmin, async (req, res) => {
 });
 
 app.post('/api/tobt/book', async (req, res) => {
+  
   const cid = Number(req.session?.user?.data?.cid);
   if (!cid) {
     return res.status(401).json({ error: 'Not logged in' });
@@ -927,6 +959,15 @@ app.post('/api/tobt/book', async (req, res) => {
 const sectorKey = slotKey.split('|').slice(0, 3).join('|');
 const normalizedCallsign = callsign.trim().toUpperCase();
 
+// 🔒 Reserved Official Team callsign enforcement
+const teamCheck = await isReservedTeamCallsign(normalizedCallsign, cid);
+
+if (teamCheck.reserved && !teamCheck.allowed) {
+  return res.status(403).json({
+    error: `Callsign ${normalizedCallsign} is reserved for an official team.`
+  });
+}
+
 for (const existingSlotKey in tobtBookingsBySlot) {
   const existingSectorKey = existingSlotKey
     .split('|')
@@ -946,6 +987,9 @@ for (const existingSlotKey in tobtBookingsBySlot) {
     });
   }
 }
+
+
+
 
 
   // 🔒 Enforce 1 booking per sector per user
@@ -1084,7 +1128,18 @@ app.post('/api/tobt/update-callsign', async (req, res) => {
   }
 
 // 🔒 Enforce unique callsign per sector on UPDATE
+// 🔒 Enforce unique callsign per sector on UPDATE
 const normalizedCallsign = callsign.trim().toUpperCase();
+
+// 🔒 Reserved Official Team callsign enforcement (UPDATE)
+const teamCheck = await isReservedTeamCallsign(normalizedCallsign, cid);
+
+if (teamCheck.reserved && !teamCheck.allowed) {
+  return res.status(403).json({
+    error: `Callsign ${normalizedCallsign} is reserved for an official team.`
+  });
+}
+
 
 // sector = FROM-TO|date|depTime
 const sectorKey = slotKey.split('|').slice(0, 3).join('|');
@@ -1132,8 +1187,13 @@ for (const existingSlotKey in tobtBookingsBySlot) {
   // ✅ Update in-memory cache
   booking.callsign = normalizedCallsign;
 
+
   res.json({ success: true });
 });
+
+
+// 🔒 Reserved Official Team callsign enforcement (UPDATE)
+
 
 
 app.get('/admin', (req, res) => {
@@ -2838,7 +2898,36 @@ app.get('/book', (req, res) => {
   /* =========================
      LOAD TOBT SLOTS
      ========================= */
-  async function loadTobtSlots() {
+  async function isReservedTeamCallsign(callsign, cid) {
+  const normalized = callsign.trim().toUpperCase();
+
+  const team = await prisma.officialTeam.findFirst({
+    where: {
+      callsign: normalized,
+      participatingWf26: true
+    }
+  });
+
+  if (!team) {
+    return { reserved: false };
+  }
+
+  if (Number(team.mainCid) !== Number(cid)) {
+    return {
+      reserved: true,
+      allowed: false,
+      teamName: team.teamName
+    };
+  }
+
+  return {
+    reserved: true,
+    allowed: true
+  };
+}
+
+  
+     async function loadTobtSlots() {
     body.innerHTML = '';
     if (!select.value) return;
 
