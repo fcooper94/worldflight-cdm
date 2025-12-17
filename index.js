@@ -86,15 +86,17 @@ async function loadTobtBookingsFromDb() {
 
   bookings.forEach(b => {
     tobtBookingsBySlot[b.slotKey] = {
-      cid: b.cid,                      // may be null (ATC)
-      callsign: b.callsign,
-      from: b.from,
-      to: b.to,
-      dateUtc: b.dateUtc,
-      depTimeUtc: b.depTimeUtc,
-      tobtTimeUtc: b.tobtTimeUtc,
-      createdAtISO: b.createdAt.toISOString()
-    };
+  slotKey: b.slotKey,   // ← REQUIRED
+  cid: b.cid,
+  callsign: b.callsign,
+  from: b.from,
+  to: b.to,
+  dateUtc: b.dateUtc,
+  depTimeUtc: b.depTimeUtc,
+  tobtTimeUtc: b.tobtTimeUtc,
+  createdAtISO: b.createdAt.toISOString()
+};
+
 
     // ONLY index by CID if CID exists (pilot booking)
     if (b.cid !== null) {
@@ -1057,6 +1059,55 @@ app.post('/wf-schedule/refresh-schedule', requireAdmin, async (req, res) => {
   res.json({ success: true });
 });
 
+app.post('/api/tobt/cancel', async (req, res) => {
+  const cid = Number(req.session?.user?.data?.cid);
+  if (!cid) {
+    return res.status(401).json({ error: 'Not logged in' });
+  }
+
+  const { slotKey } = req.body;
+  if (!slotKey) {
+    return res.status(400).json({ error: 'Missing slotKey' });
+  }
+
+  const booking = tobtBookingsBySlot[slotKey];
+
+  if (!booking) {
+    return res.status(404).json({ error: 'Booking not found' });
+  }
+
+  const isAdmin =
+  ADMIN_CIDS.includes(cid) ||
+  !!req.session?.user?.data?.controller;
+
+// Pilot can cancel own booking
+if (booking.cid !== null && booking.cid !== cid) {
+  return res.status(403).json({ error: 'Forbidden' });
+}
+
+// ATC/Admin can cancel ATC-assigned bookings
+if (booking.cid === null && !isAdmin) {
+  return res.status(403).json({ error: 'Forbidden' });
+}
+
+
+  await prisma.tobtBooking.delete({
+    where: { slotKey }
+  });
+
+  delete tobtBookingsBySlot[slotKey];
+
+  if (tobtBookingsByCid[cid]) {
+    tobtBookingsByCid[cid].delete(slotKey);
+    if (tobtBookingsByCid[cid].size === 0) {
+      delete tobtBookingsByCid[cid];
+    }
+  }
+
+  res.json({ success: true });
+});
+
+
 app.post('/api/tobt/book', async (req, res) => {
   
 const isAtcAssignment =
@@ -1181,14 +1232,16 @@ if (!isAtcAssignment && cid !== null) {
 
   // ✅ Update in-memory slot index
   tobtBookingsBySlot[slotKey] = {
-    cid,
-    callsign: normalizedCallsign,
-    from,
-    to,
-    dateUtc,
-    depTimeUtc,
-    tobtTimeUtc
-  };
+  slotKey,                 // 🔑 REQUIRED
+  cid,
+  callsign: normalizedCallsign,
+  from,
+  to,
+  dateUtc,
+  depTimeUtc,
+  tobtTimeUtc
+};
+
 
   // ✅ Update in-memory CID index (THIS FIXES "My Slots")
   if (!isAtcAssignment && cid !== null) {
@@ -1214,42 +1267,6 @@ if (!isAtcAssignment && cid !== null) {
 
 
 
-app.post('/api/tobt/cancel', async (req, res) => {
-  const cid = Number(req.session?.user?.data?.cid);
-  if (!cid) {
-    return res.status(401).json({ error: 'Not logged in' });
-  }
-
-  const { slotKey } = req.body;
-  if (!slotKey) {
-    return res.status(400).json({ error: 'Missing slotKey' });
-  }
-
-  const booking = tobtBookingsBySlot[slotKey];
-
-  if (!booking) {
-    return res.status(404).json({ error: 'Booking not found' });
-  }
-
-  if (booking.cid !== cid) {
-    return res.status(403).json({ error: 'Forbidden' });
-  }
-
-  await prisma.tobtBooking.delete({
-    where: { slotKey }
-  });
-
-  delete tobtBookingsBySlot[slotKey];
-
-  if (tobtBookingsByCid[cid]) {
-    tobtBookingsByCid[cid].delete(slotKey);
-    if (tobtBookingsByCid[cid].size === 0) {
-      delete tobtBookingsByCid[cid];
-    }
-  }
-
-  res.json({ success: true });
-});
 
 
 
@@ -2216,23 +2233,35 @@ let tobtCellHtml = '';
 
 if (isEventFlight) {
   if (tobtBooking) {
-    // Pilot already has a TOBT → display it
-    tobtCellHtml = `<strong>${tobtBooking.tobtTimeUtc}</strong>`;
+    // 🔴 ATC-assigned TOBT → removable
+    if (CAN_EDIT && tobtBooking.cid === null) {
+      tobtCellHtml = `
+        <div class="tobt-assigned">
+          <strong>${tobtBooking.tobtTimeUtc}</strong>
+          <button
+            class="tobt-remove-btn"
+            data-slotkey="${tobtBooking.slotKey}"
+            data-callsign="${p.callsign}"
+            title="Remove TOBT"
+          >✖</button>
+        </div>
+      `;
+    } else {
+      // 🟢 Pilot-booked → read-only
+      tobtCellHtml = `<strong>${tobtBooking.tobtTimeUtc}</strong>`;
+    }
   } else {
-    // Pilot has no TOBT → ATC can assign one
+    // No TOBT → dropdown
     const availableTobts = getNextAvailableTobts(
       pageIcao,
       p.flight_plan.arrival
     );
 
-    if (availableTobts.length === 0) {
+    if (!availableTobts.length) {
       tobtCellHtml = `<em>None</em>`;
     } else {
       tobtCellHtml = `
-        <select
-          class="tobt-select"
-          data-callsign="${p.callsign}"
-        >
+        <select class="tobt-select" data-callsign="${p.callsign}">
           <option value="">Select TOBT</option>
           ${availableTobts.map(s =>
             `<option value="${s.slotKey}">${s.tobt}</option>`
@@ -2242,6 +2271,7 @@ if (isEventFlight) {
     }
   }
 }
+
 
 
 
@@ -2715,6 +2745,8 @@ document.addEventListener('change', function (e) {
   }
 });
 
+
+
 document.addEventListener('keydown', async e => {
   if (!e.target.classList.contains('callsign-input')) return;
 
@@ -2725,6 +2757,34 @@ document.addEventListener('keydown', async e => {
   }
 });
 
+document.addEventListener('click', async e => {
+  const btn = e.target.closest('.tobt-remove-btn');
+  if (!btn) return;
+  if (!CAN_EDIT) return;
+
+  const slotKey = btn.dataset.slotkey;
+  const callsign = btn.dataset.callsign;
+
+  const ok = confirm(
+    'Remove TOBT for ' + callsign + ' and release slot back to pool?'
+  );
+  if (!ok) return;
+
+  const res = await fetch('/api/tobt/remove', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin',
+    body: JSON.stringify({ slotKey })
+  });
+
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    alert(data.error || 'Failed to remove TOBT');
+    return;
+  }
+
+  location.reload();
+});
 
 
   document.addEventListener('change', async e => {
@@ -3029,6 +3089,48 @@ res.send(
 
 
 });
+
+app.post('/api/tobt/remove', async (req, res) => {
+  const user = req.session?.user?.data;
+  const isAdmin = ADMIN_CIDS.includes(Number(user?.cid));
+  const isATC = !!user?.controller;
+
+  if (!isAdmin && !isATC) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+
+  const { slotKey } = req.body;
+  if (!slotKey) {
+    return res.status(400).json({ error: 'Missing slotKey' });
+  }
+
+  // ✅ DB is source of truth
+  const booking = await prisma.tobtBooking.findUnique({
+    where: { slotKey }
+  });
+
+  if (!booking) {
+    return res.status(404).json({ error: 'Booking not found' });
+  }
+
+  // 🔒 Only ATC-assigned TOBTs (cid === null)
+  if (booking.cid !== null) {
+    return res.status(403).json({
+      error: 'Pilot-booked TOBTs cannot be removed by ATC'
+    });
+  }
+
+  await prisma.tobtBooking.delete({
+    where: { slotKey }
+  });
+
+  delete tobtBookingsBySlot[slotKey];
+
+  res.json({ success: true });
+});
+
+
+
 
 app.get('/atc', (req, res) => {
   if (!req.session.user || !req.session.user.data) {
