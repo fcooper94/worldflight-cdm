@@ -6,11 +6,15 @@
     "dev": "node index.js"
   },
   "dependencies": {
+    "@libsql/client": "^0.15.15",
+    "@prisma/adapter-libsql": "^7.1.0",
+    "@prisma/client": "6.12.0",
     "axios": "^1.13.2",
-    "dotenv": "^16.4.5",
+    "dotenv": "^16.6.1",
     "express": "^4.19.2",
     "express-session": "^1.17.3",
     "node-cron": "^4.2.1",
+    "prisma": "6.12.0",
     "socket.io": "^4.8.1"
   }
 }

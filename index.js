@@ -1,8 +1,17 @@
+import dotenv from 'dotenv';
+dotenv.config();
+
+import express from 'express';
+import { PrismaClient } from '@prisma/client';
+
+const prisma = new PrismaClient();
+
+
+
 import path from 'path';
 import { fileURLToPath } from 'url';
 
 import 'dotenv/config';
-import express from 'express';
 import session from 'express-session';
 import axios from 'axios';
 import vatsimLogin from './auth/login.js';
@@ -13,6 +22,12 @@ import renderLayout from './layout.js';
 
 import { createServer } from 'http';
 import { Server } from 'socket.io';
+
+
+
+
+
+
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -2445,6 +2460,182 @@ const simbriefUrl =
     })
   );
 });
+
+app.get('/official-teams', requireAdmin, async (req, res) => {
+  const officialTeams = await prisma.officialTeam.findMany({
+    orderBy: { teamName: 'asc' }
+  });
+
+  const affiliates = await prisma.affiliate.findMany({
+    orderBy: { callsign: 'asc' }
+  });
+
+  const content = `
+  <section class="card dashboard-full">
+
+    <h2>Official Teams</h2>
+
+    <form method="POST" action="/official-teams/add" class="form-row">
+      <input name="teamName" placeholder="Team Name" required />
+      <input name="callsign" placeholder="Callsign" required />
+      <input name="mainCid" placeholder="Main CID" required />
+      <input name="aircraftType" placeholder="A/C Type" />
+      <input name="country" placeholder="Country" />
+      <label>
+        <input type="checkbox" name="participatingWf26" /> WF26
+      </label>
+      <button>Add</button>
+    </form>
+
+    <table class="departures-table">
+      <thead>
+        <tr>
+          <th>Team</th>
+          <th>Callsign</th>
+          <th>Main CID</th>
+          <th>A/C</th>
+          <th>Country</th>
+          <th>WF26</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        ${officialTeams.map(t => `
+          <tr>
+            <td>${t.teamName}</td>
+            <td>${t.callsign}</td>
+            <td>${t.mainCid}</td>
+            <td>${t.aircraftType || ''}</td>
+            <td>${t.country || ''}</td>
+            <td>${t.participatingWf26 ? '✅' : ''}</td>
+            <td>
+              <form method="POST" action="/official-teams/${t.id}/delete">
+                <button class="action-btn delete-started-btn">🗑</button>
+              </form>
+            </td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+
+    <hr style="margin:40px 0;">
+
+    <h2>Affiliates</h2>
+
+    <form method="POST" action="/affiliates/add" class="form-row">
+      <input name="callsign" placeholder="Callsign" required />
+      <select name="simType">
+        <option value="Full Sim">Full Sim</option>
+        <option value="Home Cockpit">Home Cockpit</option>
+      </select>
+      <input name="cid" placeholder="CID" required />
+      <label>
+        <input type="checkbox" name="participatingWf26" /> WF26
+      </label>
+      <button>Add</button>
+    </form>
+
+    <table class="departures-table">
+      <thead>
+        <tr>
+          <th>Callsign</th>
+          <th>Sim</th>
+          <th>CID</th>
+          <th>WF26</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        ${affiliates.map(a => `
+          <tr>
+            <td>${a.callsign}</td>
+            <td>${a.simType}</td>
+            <td>${a.cid}</td>
+            <td>${a.participatingWf26 ? '✅' : ''}</td>
+            <td>
+              <form method="POST" action="/affiliates/${a.id}/delete">
+                <button class="action-btn delete-started-btn">🗑</button>
+              </form>
+            </td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+
+  </section>
+  `;
+
+  res.send(
+    renderLayout({
+      title: 'Official Teams / Affiliates',
+      user: req.session.user.data,
+      isAdmin: true,
+      layoutClass: 'dashboard-full',
+      content
+    })
+  );
+});
+
+app.post('/official-teams/add', requireAdmin, async (req, res) => {
+  const {
+    teamName,
+    callsign,
+    mainCid,
+    aircraftType,
+    country,
+    participatingWf26
+  } = req.body;
+
+  await prisma.officialTeam.create({
+    data: {
+      teamName,
+      callsign,
+      mainCid: Number(mainCid),
+      aircraftType,
+      country,
+      participatingWf26: !!participatingWf26
+    }
+  });
+
+  res.redirect('/official-teams');
+});
+
+app.post('/affiliates/add', requireAdmin, async (req, res) => {
+  const {
+    callsign,
+    simType,
+    cid,
+    participatingWf26
+  } = req.body;
+
+  await prisma.affiliate.create({
+    data: {
+      callsign,
+      simType,
+      cid: Number(cid),
+      participatingWf26: !!participatingWf26
+    }
+  });
+
+  res.redirect('/official-teams');
+});
+
+app.post('/official-teams/:id/delete', requireAdmin, async (req, res) => {
+  await prisma.officialTeam.delete({
+    where: { id: Number(req.params.id) }
+  });
+
+  res.redirect('/official-teams');
+});
+
+app.post('/affiliates/:id/delete', requireAdmin, async (req, res) => {
+  await prisma.affiliate.delete({
+    where: { id: Number(req.params.id) }
+  });
+
+  res.redirect('/official-teams');
+});
+
 
 
 

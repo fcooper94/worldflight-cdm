@@ -58,6 +58,10 @@ export default function renderLayout({
         <span class="icon">🛠️</span>
         <span class="label">WF Schedule / Flow</span>
       </a>
+      <a href="/official-teams" class="nav-item">
+        <span class="icon">👥</span>
+        <span class="label">Official Teams / Affiliates</span>
+      </a>
     </div>
     ` : ''}
   </nav>
