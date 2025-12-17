@@ -189,6 +189,48 @@ function escapeHtml(value) {
     .replace(/'/g, '&#39;');
 }
 
+function rebuildAllTobtSlots() {
+  // Clear existing slots
+  Object.keys(allTobtSlots).forEach(k => delete allTobtSlots[k]);
+
+  for (const row of adminSheetCache) {
+    const { from, to, date_utc, dep_time_utc } = row;
+
+    // Only generate TOBTs if a dep flow exists
+    const slots = generateTobtSlots({
+      from,
+      to,
+      dateUtc: date_utc,
+      depTimeUtc: dep_time_utc
+    });
+
+    if (!slots) continue; // no flow defined → no TOBTs
+
+    for (const tobt of slots) {
+      const slotKey = makeTobtSlotKey({
+        from,
+        to,
+        dateUtc: date_utc,
+        depTimeUtc: dep_time_utc,
+        tobtTimeUtc: tobt
+      });
+
+      allTobtSlots[slotKey] = {
+        from,
+        to,
+        dateUtc: date_utc,
+        depTimeUtc: dep_time_utc,
+        tobt
+      };
+    }
+  }
+
+  console.log(
+    `[TOBT] Rebuilt allTobtSlots: ${Object.keys(allTobtSlots).length} slots`
+  );
+}
+
+
 
 
 /* ===== RECENTLY STARTED HELPER ===== */
@@ -387,8 +429,12 @@ async function bootstrap() {
   await loadDepFlowsFromDb();
   await loadTobtBookingsFromDb();
 
+  await refreshAdminSheet();   // 🔑 REQUIRED
+  rebuildAllTobtSlots();       // 🔑 NOW WORKS
+
   setInterval(refreshPilots, 60000);
 }
+
 
 bootstrap().catch(err => {
   console.error('Startup failed:', err);
@@ -932,6 +978,7 @@ app.get('/api/tobt/slots', (req, res) => {
 /* ===== ADMIN MANUAL REFRESH ===== */
 app.post('/wf-schedule/refresh-schedule', requireAdmin, async (req, res) => {
   await refreshAdminSheet();
+  rebuildAllTobtSlots();
   res.json({ success: true });
 });
 
