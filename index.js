@@ -1228,7 +1228,11 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
     ${affiliates.map(a => `
       <tr data-affiliate-id="${a.id}">
         <td class="col-callsign">${escapeHtml(a.callsign)}</td>
-        <td class="col-simtype">${escapeHtml(a.simType)}</td>
+        <td class="col-simtype">
+  ${escapeHtml(a.simType)}
+</td>
+
+
         <td class="col-cid col-right">${a.cid}</td>
         <td class="col-wf26 col-center">
           <input
@@ -1265,59 +1269,101 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
       <p id="adminEntryModalHelp" class="modal-help" style="text-align:center;">Fill in the details below.</p>
 
       <form id="adminEntryForm">
-        <input type="hidden" id="adminEntryType" name="type" value="team" />
+  <input type="hidden" id="adminEntryType" name="type" value="team" />
 
-        <div id="teamFields">
-          <label style="display:block; margin:10px 0 6px;">Team Name</label>
-          <input name="teamName" type="text" placeholder="e.g. Virtual Airline XYZ" required />
+  <!-- ================= TEAM FIELDS ================= -->
+  <div id="teamFields">
+    <label style="display:block; margin:10px 0 6px;">Team Name</label>
+    <input name="teamName" type="text" placeholder="e.g. Virtual Airline XYZ" required />
 
-          <label style="display:block; margin:10px 0 6px;">Callsign</label>
-          <input name="callsign" type="text" placeholder="e.g. BAW" maxlength="10" required />
+    <label style="display:block; margin:10px 0 6px;">Callsign</label>
+    <input name="callsign" type="text" placeholder="e.g. BAW" maxlength="10" required />
 
-          <label style="display:block; margin:10px 0 6px;">Main CID</label>
-          <input name="mainCid" type="number" inputmode="numeric" placeholder="e.g. 123456" required />
+    <label style="display:block; margin:10px 0 6px;">Main CID</label>
+    <input name="mainCid" type="number" inputmode="numeric" placeholder="e.g. 1303570" required />
 
-          <label style="display:block; margin:10px 0 6px;">A/C Type</label>
-          <input name="aircraftType" type="text" placeholder="e.g. B738" required />
+    <label style="display:block; margin:10px 0 6px;">A/C Type</label>
+    <input name="aircraftType" type="text" placeholder="e.g. B738" required />
 
-          <label style="display:block; margin:10px 0 6px;">Country</label>
-          <input name="country" type="text" placeholder="e.g. United Kingdom" required />
-        </div>
+    <label style="display:block; margin:10px 0 6px;">Country</label>
+    <input name="country" type="text" placeholder="e.g. UK" required />
+  </div>
 
-        <div id="affiliateFields" class="hidden">
-          <label style="display:block; margin:10px 0 6px;">Callsign</label>
-          <input name="affiliateCallsign" type="text" placeholder="e.g. N123AB" maxlength="10" />
+  <!-- ================= AFFILIATE FIELDS ================= -->
+  
+  <!-- ================= AFFILIATE FIELDS ================= -->
+<div id="affiliateFields" class="hidden">
 
-          <label style="display:block; margin:10px 0 6px;">Full Sim / Home Cockpit</label>
-          <input name="simType" type="text" placeholder="e.g. Full Sim" />
+  <label style="display:block; margin:10px 0 6px;">Callsign</label>
+  <input
+    name="affiliateCallsign"
+    type="text"
+    placeholder="e.g. TOM1VB"
+    maxlength="10"
+    style="text-transform:uppercase;"
+  />
 
-          <label style="display:block; margin:10px 0 6px;">CID</label>
-          <input name="cid" type="number" inputmode="numeric" placeholder="e.g. 123456" />
-        </div>
+  <label style="display:block; margin:10px 0 6px;">Full Sim / Home Cockpit</label>
+  <select name="simType">
+    <option value="" disabled selected>SELECT SIM TYPE</option>
+    <option value="FULL SIM">FULL SIM</option>
+    <option value="HOME COCKPIT">HOME COCKPIT</option>
+  </select>
 
-        <label style="display:flex; align-items:center; gap:10px; margin:14px 0 0; user-select:none;">
-          <input type="checkbox" name="participatingWf26" />
-          Participating in WF26
-        </label>
+  <label style="display:block; margin:10px 0 6px;">CID</label>
+  <input
+    name="cid"
+    type="number"
+    inputmode="numeric"
+    placeholder="E.G. 1303570"
+  />
 
-        <div class="modal-actions" style="margin-top:16px;">
-          <button type="button" class="action-btn" id="adminEntryCancel">Cancel</button>
-          <button type="submit" class="action-btn primary" id="adminEntrySave">Save</button>
-        </div>
-      </form>
+</div>
+
+
+
+  <!-- ================= WF26 ================= -->
+  <label style="display:flex; align-items:center; gap:10px; margin:14px 0 0; user-select:none;">
+    <input type="checkbox" name="participatingWf26" />
+    Participating in WF26
+  </label>
+
+  <div class="modal-actions" style="margin-top:16px;">
+    <button type="button" class="action-btn" id="adminEntryCancel">Cancel</button>
+    <button type="submit" class="action-btn primary" id="adminEntrySave">Save</button>
+  </div>
+</form>
+
     </div>
   </div>
 
   <script>
+  document.addEventListener('DOMContentLoaded', () => {
     const modal = document.getElementById('adminEntryModal');
     const form = document.getElementById('adminEntryForm');
     const typeInput = document.getElementById('adminEntryType');
+
     const teamFields = document.getElementById('teamFields');
     const affiliateFields = document.getElementById('affiliateFields');
+
     const titleEl = document.getElementById('adminEntryModalTitle');
     const cancelBtn = document.getElementById('adminEntryCancel');
     const addTeamBtn = document.getElementById('addTeamBtn');
     const addAffiliateBtn = document.getElementById('addAffiliateBtn');
+
+    if (!modal || !form || !typeInput || !teamFields || !affiliateFields || !titleEl || !cancelBtn || !addTeamBtn || !addAffiliateBtn) {
+      console.error('[Admin modal] Missing required DOM elements:', {
+        modal, form, typeInput, teamFields, affiliateFields, titleEl, cancelBtn, addTeamBtn, addAffiliateBtn
+      });
+      return;
+    }
+
+    function setSectionEnabled(container, enabled) {
+      // Disable inputs in the hidden section to prevent validation blocking and unwanted FormData values
+      container.querySelectorAll('input, select, textarea, button').forEach(el => {
+        el.disabled = !enabled;
+      });
+    }
 
     function openEntryModal(type) {
       typeInput.value = type;
@@ -1325,44 +1371,87 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
 
       if (type === 'team') {
         titleEl.textContent = 'Add Official Team';
+
         teamFields.classList.remove('hidden');
         affiliateFields.classList.add('hidden');
-        // ensure required constraints match
+
+        setSectionEnabled(teamFields, true);
+        setSectionEnabled(affiliateFields, false);
+
+        // Required only for TEAM
         form.querySelector('input[name="teamName"]').required = true;
         form.querySelector('input[name="callsign"]').required = true;
         form.querySelector('input[name="mainCid"]').required = true;
         form.querySelector('input[name="aircraftType"]').required = true;
         form.querySelector('input[name="country"]').required = true;
-        form.querySelector('input[name="affiliateCallsign"]').required = false;
-        form.querySelector('input[name="simType"]').required = false;
-        form.querySelector('input[name="cid"]').required = false;
+
+        // Optional / not required for TEAM
+        const affiliateCallsign = form.querySelector('input[name="affiliateCallsign"]');
+        const simType = form.querySelector('select[name="simType"], input[name="simType"]');
+        const cid = form.querySelector('input[name="cid"]');
+
+        if (affiliateCallsign) affiliateCallsign.required = false;
+        if (simType) simType.required = false;
+        if (cid) cid.required = false;
+
       } else {
         titleEl.textContent = 'Add WF Affiliate';
+
         teamFields.classList.add('hidden');
         affiliateFields.classList.remove('hidden');
+
+        setSectionEnabled(teamFields, false);
+        setSectionEnabled(affiliateFields, true);
+
+        // Required for AFFILIATE
+        const affiliateCallsign = form.querySelector('input[name="affiliateCallsign"]');
+        const simType = form.querySelector('select[name="simType"], input[name="simType"]');
+        const cid = form.querySelector('input[name="cid"]');
+
+        if (affiliateCallsign) affiliateCallsign.required = true;
+        if (simType) simType.required = true;
+        if (cid) cid.required = true;
+
+        // Not required for AFFILIATE
         form.querySelector('input[name="teamName"]').required = false;
         form.querySelector('input[name="callsign"]').required = false;
         form.querySelector('input[name="mainCid"]').required = false;
         form.querySelector('input[name="aircraftType"]').required = false;
         form.querySelector('input[name="country"]').required = false;
-        form.querySelector('input[name="affiliateCallsign"]').required = true;
-        form.querySelector('input[name="simType"]').required = true;
-        form.querySelector('input[name="cid"]').required = true;
       }
 
       modal.classList.remove('hidden');
-      const firstInput = modal.querySelector('input:not([type="hidden"]):not([type="checkbox"])');
-      if (firstInput) firstInput.focus();
+
+      // Focus first enabled input/select (not hidden/disabled)
+      const firstFocusable = modal.querySelector('input:not([type="hidden"]):not([type="checkbox"]):not(:disabled), select:not(:disabled), textarea:not(:disabled)');
+      if (firstFocusable) firstFocusable.focus();
     }
 
     function closeEntryModal() {
       modal.classList.add('hidden');
     }
 
-    addTeamBtn.addEventListener('click', () => openEntryModal('team'));
-    addAffiliateBtn.addEventListener('click', () => openEntryModal('affiliate'));
-    cancelBtn.addEventListener('click', closeEntryModal);
-    modal.querySelector('.modal-backdrop').addEventListener('click', closeEntryModal);
+    addTeamBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      openEntryModal('team');
+    });
+
+    addAffiliateBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      openEntryModal('affiliate');
+    });
+
+    cancelBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      closeEntryModal();
+    });
+
+    const backdrop = modal.querySelector('.modal-backdrop');
+    if (backdrop) backdrop.addEventListener('click', closeEntryModal);
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && !modal.classList.contains('hidden')) closeEntryModal();
+    });
 
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -1371,7 +1460,6 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
       const fd = new FormData(form);
       const payload = {};
 
-      // checkbox
       payload.participatingWf26 = fd.get('participatingWf26') === 'on';
 
       if (type === 'team') {
@@ -1382,7 +1470,7 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
         payload.country = (fd.get('country') || '').toString().trim();
       } else {
         payload.callsign = (fd.get('affiliateCallsign') || '').toString().trim().toUpperCase();
-        payload.simType = (fd.get('simType') || '').toString().trim();
+        payload.simType = (fd.get('simType') || '').toString().trim().toUpperCase();
         payload.cid = Number(fd.get('cid'));
       }
 
@@ -1391,6 +1479,7 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
       const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
         body: JSON.stringify(payload)
       });
 
@@ -1404,14 +1493,13 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
       location.reload();
     });
 
-    // Delete handlers
+    // Delete handlers (event delegation)
     document.addEventListener('click', async (e) => {
       const btn = e.target.closest('button');
       if (!btn) return;
 
       const action = btn.dataset.action;
       const id = btn.dataset.id;
-
       if (!action || !id) return;
 
       if (action === 'delete-team') {
@@ -1421,7 +1509,11 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
         });
         if (!ok) return;
 
-        const res = await fetch('/api/admin/official-teams/' + id, { method: 'DELETE' });
+        const res = await fetch('/api/admin/official-teams/' + id, {
+          method: 'DELETE',
+          credentials: 'same-origin'
+        });
+
         if (!res.ok) alert('Failed to delete');
         else location.reload();
       }
@@ -1433,7 +1525,11 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
         });
         if (!ok) return;
 
-        const res = await fetch('/api/admin/affiliates/' + id, { method: 'DELETE' });
+        const res = await fetch('/api/admin/affiliates/' + id, {
+          method: 'DELETE',
+          credentials: 'same-origin'
+        });
+
         if (!res.ok) alert('Failed to delete');
         else location.reload();
       }
@@ -1453,6 +1549,7 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
         const res = await fetch(url, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
           body: JSON.stringify({ participatingWf26 })
         });
 
@@ -1463,11 +1560,14 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
       });
     });
 
-    // ESC close
-    document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape' && !modal.classList.contains('hidden')) closeEntryModal();
-    });
-  </script>
+    // Affiliate sim type dropdown persistence
+    
+    
+  });
+</script>
+
+ 
+
   `;
 
   return res.send(renderLayout({

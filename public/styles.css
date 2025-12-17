@@ -2130,5 +2130,45 @@ tr:hover .row-actions {
 .departures-table thead th {
   letter-spacing: 0.02em;
 }
+/* Affiliate sim type dropdown */
+.affiliate-simtype {
+  width: 100%;
+  max-width: 220px;
 
+  background: var(--panel2);
+  color: var(--text);
 
+  border: 1px solid var(--border);
+  border-radius: 10px;
+
+  padding: 6px 10px;
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+
+  cursor: pointer;
+}
+
+.affiliate-simtype:hover {
+  border-color: var(--accent);
+}
+
+.affiliate-simtype:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(56,189,248,0.25);
+}
+.modal-card select {
+  width: 100%;
+  padding: 10px 12px;
+  background: var(--panel2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.hidden {
+  display: none !important;
+}
