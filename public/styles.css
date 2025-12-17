@@ -2204,3 +2204,4 @@ tr:hover .row-actions {
   color: #9ca3af;
   box-shadow: 0 0 6px rgba(156,163,175,.25);
 }
+.col-tobt { width: 110px; text-align: center; }

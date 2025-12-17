@@ -41,7 +41,7 @@ model DepFlow {
 model TobtBooking {
   id            Int      @id @default(autoincrement())
   slotKey       String   @unique
-  cid           Int
+  cid           Int?
   callsign      String
   from          String
   to            String

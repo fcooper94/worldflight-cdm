@@ -183,6 +183,23 @@ function getTobtBookingForCallsign(callsign, icao) {
   return null;
 }
 
+function getNextAvailableTobts(from, to, limit = 5) {
+  return Object.entries(allTobtSlots)
+    .filter(([slotKey, slot]) =>
+      slot.from === from &&
+      slot.to === to &&
+      !tobtBookingsBySlot[slotKey]
+    )
+    .map(([slotKey, slot]) => ({
+      slotKey,
+      tobt: slot.tobt
+    }))
+    .sort((a, b) => a.tobt.localeCompare(b.tobt))
+    .slice(0, limit);
+}
+
+
+
 
 function canEditIcao(user, pageIcao) {
   if (!user) return false;
@@ -533,21 +550,13 @@ if (icaoFromQuery) {
   socket.on('requestSyncAllState', ({ icao }) => {
   if (!icao) return;
 
-  // 🔑 Ensure TSATs exist for already-started aircraft
   rebuildTSATStateForICAO(icao);
 
-  // ICAO-scoped tables
-  socket.emit(
-    'upcomingTSATUpdate',
-    buildUpcomingTSATsForICAO(icao, cachedPilots)
-  );
+  socket.emit('upcomingTSATUpdate', buildUpcomingTSATsForICAO(icao, cachedPilots));
+  socket.emit('recentlyStartedUpdate', buildRecentlyStartedForICAO(icao));
 
-  socket.emit(
-    'recentlyStartedUpdate',
-    buildRecentlyStartedForICAO(icao)
-  );
+  socket.emit('unassignedTobtUpdate', buildUnassignedTobtsForICAO(icao));
 
-  // Global state
   socket.emit('syncState', sharedToggles);
   socket.emit('syncDepFlows', sharedDepFlows);
   socket.emit('syncTSAT', extractTSATMap());
@@ -997,10 +1006,19 @@ app.post('/wf-schedule/refresh-schedule', requireAdmin, async (req, res) => {
 
 app.post('/api/tobt/book', async (req, res) => {
   
-  const cid = Number(req.session?.user?.data?.cid);
-  if (!cid) {
-    return res.status(401).json({ error: 'Not logged in' });
-  }
+const isAtcAssignment =
+  !!req.session.user?.data?.controller ||
+  ADMIN_CIDS.includes(Number(req.session.user?.data?.cid));
+
+const cid = isAtcAssignment
+  ? null
+  : Number(req.session.user?.data?.cid);
+
+// ❗ Only reject if NOT ATC AND no CID
+if (!isAtcAssignment && !cid) {
+  return res.status(401).json({ error: 'Not logged in' });
+}
+
 
   const { slotKey, callsign } = req.body;
 
@@ -1058,12 +1076,12 @@ const slotParts = slotKey.split('|');
 if (slotParts.length === 4) {
   const sectorKey = slotParts.slice(0, 3).join('|');
 
+  // 🔒 Enforce 1 booking per sector per user (PILOTS ONLY)
+if (!isAtcAssignment && cid !== null) {
   const existingSlots = tobtBookingsByCid[cid];
   if (existingSlots) {
     for (const existingKey of existingSlots) {
-      const existingParts = existingKey.split('|');
-      const existingSector = existingParts.slice(0, 3).join('|');
-
+      const existingSector = existingKey.split('|').slice(0, 3).join('|');
       if (existingSector === sectorKey) {
         return res.status(409).json({
           error: 'You already have a booking in this sector'
@@ -1071,6 +1089,8 @@ if (slotParts.length === 4) {
       }
     }
   }
+}
+
 }
 
 
@@ -1118,10 +1138,20 @@ if (slotParts.length === 4) {
   };
 
   // ✅ Update in-memory CID index (THIS FIXES "My Slots")
+  if (!isAtcAssignment && cid !== null) {
+  if (!tobtBookingsByCid[cid]) {
+    tobtBookingsByCid[cid] = new Set();
+  }
+  // ONLY track pilot bookings
+if (!isAtcAssignment && cid !== null) {
   if (!tobtBookingsByCid[cid]) {
     tobtBookingsByCid[cid] = new Set();
   }
   tobtBookingsByCid[cid].add(slotKey);
+}
+
+}
+
 
   res.json({ success: true });
 });
@@ -2122,11 +2152,46 @@ app.get('/departures', async (req, res) => {
 
   // ✅ define wfStatus BEFORE using it
   const wfStatus = getWorldFlightStatus(p);
+const isEventFlight = wfStatus.isWF;
 
-  const isEventFlight = wfStatus.isWF;
+// Look up booking BY PILOT CALLSIGN
+const tobtBooking = getTobtBookingForCallsign(p.callsign, pageIcao);
+const isBooked = !!tobtBooking;
 
-  const tobtBooking = getTobtBookingForCallsign(p.callsign, pageIcao);
-  const isBooked = !!tobtBooking;
+
+let tobtCellHtml = '';
+
+if (isEventFlight) {
+  if (tobtBooking) {
+    // Pilot already has a TOBT → display it
+    tobtCellHtml = `<strong>${tobtBooking.tobtTimeUtc}</strong>`;
+  } else {
+    // Pilot has no TOBT → ATC can assign one
+    const availableTobts = getNextAvailableTobts(
+      pageIcao,
+      p.flight_plan.arrival
+    );
+
+    if (availableTobts.length === 0) {
+      tobtCellHtml = `<em>None</em>`;
+    } else {
+      tobtCellHtml = `
+        <select
+          class="tobt-select"
+          data-callsign="${p.callsign}"
+        >
+          <option value="">Select TOBT</option>
+          ${availableTobts.map(s =>
+            `<option value="${s.slotKey}">${s.tobt}</option>`
+          ).join('')}
+        </select>
+      `;
+    }
+  }
+}
+
+
+
 
   let primaryStatusHtml = '';
   let showRouteWarning = false;
@@ -2184,6 +2249,10 @@ app.get('/departures', async (req, res) => {
   <td>${p.callsign}</td>
   <td>${p.flight_plan.aircraft_faa || 'N/A'}</td>
   <td>${p.flight_plan.arrival || 'N/A'}</td>
+
+  <td class="col-tobt">
+  ${tobtCellHtml}
+</td>
 
   <td class="col-toggle">
     <button
@@ -2300,6 +2369,7 @@ ${!isAerodromeController ? `
             <th>Callsign</th>
             <th>Aircraft</th>
             <th>Dest</th>
+            <th>TOBT</th>
             <th class="col-toggle">START</th>
             <th>TSAT</th>
             <th class="col-route">ATC Route</th>
@@ -2379,8 +2449,10 @@ const icao = new URLSearchParams(window.location.search).get('icao');
 let countdown = 20;
 
 setInterval(() => {
-  document.getElementById('refreshTimer').innerText =
-    'Next auto-refresh in: ' + countdown + 's';
+  const timerEl = document.getElementById('refreshTimer');
+  if (timerEl) {
+    timerEl.innerText = 'Next auto-refresh in: ' + countdown + 's';
+  }
   countdown = countdown <= 0 ? 20 : countdown - 1;
 }, 1000);
 
@@ -2525,10 +2597,11 @@ tr.innerHTML =
   '<td>' + tsatValue + '</td>' +
   '<td>' +
     '<input type="checkbox" class="tsat-started-check" data-callsign="' +
-item.callsign +
-'" ' + (${canEdit} ? '' : 'disabled') + '>'
- +
+    item.callsign +
+    '"' + (CAN_EDIT ? '' : ' disabled') + '>' +
   '</td>';
+
+
 
 tbody.appendChild(tr);
 
@@ -2597,6 +2670,32 @@ document.addEventListener('keydown', async e => {
     await saveCallsign(e.target);
     e.target.blur(); // optional: visually confirms save
   }
+});
+
+
+
+  document.addEventListener('change', async e => {
+  const select = e.target.closest('.tobt-select');
+  if (!select || !select.value) return;
+
+  const callsign = select.dataset.callsign;
+  const slotKey = select.value; // IMPORTANT: already a full slotKey
+
+  const res = await fetch('/api/tobt/book', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin',
+    body: JSON.stringify({ slotKey, callsign })
+  });
+
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    alert(data.error || 'Failed to book TOBT');
+    select.value = '';
+    return;
+  }
+
+  location.reload();
 });
 
 
@@ -2851,13 +2950,11 @@ setInterval(() => {
 
 </script>
 <script>
-socket.emit('requestSyncAllState', { icao});
-</script>
-<script>
 document.addEventListener('DOMContentLoaded', () => {
 
   // IMPORTANT: listeners must already be defined ABOVE this
-  socket.emit('requestSyncAllState', { icao, cachedPilots});
+  socket.emit('requestSyncAllState', { icao });
+
 
 });
 </script>
