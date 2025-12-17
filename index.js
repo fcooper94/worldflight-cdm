@@ -2227,6 +2227,7 @@ const isEventFlight = wfStatus.isWF;
 // Look up booking BY PILOT CALLSIGN
 const tobtBooking = getTobtBookingForCallsign(p.callsign, pageIcao);
 const isBooked = !!tobtBooking;
+const isManualTobt = !!tobtBooking && tobtBooking.cid === null;
 
 
 let tobtCellHtml = '';
@@ -2296,7 +2297,7 @@ if (isEventFlight) {
 
 
 
-  let primaryStatusHtml = '';
+let primaryStatusHtml = '';
   let showRouteWarning = false;
 
   if (!isEventFlight) {
@@ -2308,26 +2309,36 @@ if (isEventFlight) {
       Non-Event
     </span>`;
 } else {
-  if (isBooked) {
-    primaryStatusHtml = `
-      <span
-        class="status-pill booked"
-        title="Has an event booking"
-      >
-        Booked
-      </span>`;
-  } else {
-    primaryStatusHtml = `
-      <span
-        class="status-pill non-booked"
-        title="Flying to WF destination without a booking"
-      >
-        Non-Booked
-      </span>`;
-  }
+  if (isManualTobt) {
+  primaryStatusHtml = `
+    <span
+      class="status-pill manual"
+      title="TOBT manually assigned by ATC"
+    >
+      <span class="status-icon">!</span>
+      Manual
+    </span>`;
+} else if (isBooked) {
+  primaryStatusHtml = `
+    <span
+      class="status-pill booked"
+      title="Has an event booking"
+    >
+      Booked
+    </span>`;
+} else {
+  primaryStatusHtml = `
+    <span
+      class="status-pill non-booked"
+      title="Flying to WF destination without a booking"
+    >
+      Non-Booked
+    </span>`;
+}
 
   showRouteWarning = !wfStatus.routeMatch;
 }
+
 
 
   const routeHtml = p.flight_plan.route

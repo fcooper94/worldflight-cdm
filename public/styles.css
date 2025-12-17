@@ -2260,3 +2260,20 @@ tr:hover .row-actions {
   align-items: center;
   gap: 4px;
 }
+.status-pill.manual {
+  background: rgba(255, 176, 46, 0.18);
+  color: #ffb02e;
+  border: 1px solid rgba(255, 176, 46, 0.35);
+}
+
+.status-pill.manual .status-icon {
+  font-weight: 700;
+  margin-right: 4px;
+}
+<span
+  class="status-pill manual"
+  title="TOBT manually assigned by ATC"
+>
+  <span class="status-icon">!</span>
+  Manual
+</span>
