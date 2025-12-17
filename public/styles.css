@@ -2172,3 +2172,35 @@ tr:hover .row-actions {
 .hidden {
   display: none !important;
 }
+.status-pill {
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .4px;
+  display: inline-block;
+}
+
+.status-pill.booked {
+  background: linear-gradient(160deg, #064e3b, #022c22);
+  color: #6ee7b7;
+  box-shadow: 0 0 8px rgba(34,197,94,.35);
+}
+
+.status-pill.non-booked {
+  background: linear-gradient(160deg, #450a0a, #1f0505);
+  color: #fca5a5;
+  box-shadow: 0 0 8px rgba(239,68,68,.35);
+}
+
+.status-pill.route-warning {
+  margin-left: 6px;
+  background: linear-gradient(160deg, #7c2d12, #431407);
+  color: #fde68a;
+  box-shadow: 0 0 8px rgba(245,158,11,.45);
+}
+.status-pill.non-event {
+  background: linear-gradient(160deg, #1f2937, #111827);
+  color: #9ca3af;
+  box-shadow: 0 0 6px rgba(156,163,175,.25);
+}

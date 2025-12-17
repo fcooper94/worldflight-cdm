@@ -169,6 +169,19 @@ const startedAircraft = {}; // { "BAW123": true }
 
 const tsatQueues = {};
 
+function getTobtBookingForCallsign(callsign, icao) {
+  const cs = callsign.trim().toUpperCase();
+
+  for (const booking of Object.values(tobtBookingsBySlot)) {
+    if (
+      booking.callsign === cs &&
+      booking.from === icao
+    ) {
+      return booking; // includes tobtTimeUtc
+    }
+  }
+  return null;
+}
 
 
 function canEditIcao(user, pageIcao) {
@@ -2103,65 +2116,94 @@ app.get('/departures', async (req, res) => {
 
   
   const rowsHtml = departures.map(p => {
-    const disabledAttr = CAN_EDIT ? '' : 'disabled';
+  const disabledAttr = CAN_EDIT ? '' : 'disabled';
 
-    const wf = getWorldFlightStatus(p);
-    const sectorKey = `${p.flight_plan.departure}-${p.flight_plan.arrival}`;
+  const sectorKey = `${p.flight_plan.departure}-${p.flight_plan.arrival}`;
 
-    let wfCell = `<td></td>`;
-    if (wf.isWF && wf.routeMatch) wfCell = `<td>✅</td>`;
-    else if (wf.isWF && !wf.routeMatch)
-      wfCell = `<td title="ATC route mismatch"><span class="wf-icons">✅ ⚠️</span></td>`;
+  // ✅ define wfStatus BEFORE using it
+  const wfStatus = getWorldFlightStatus(p);
 
-// after canEdit logic
+  const isEventFlight = wfStatus.isWF;
+
+  const tobtBooking = getTobtBookingForCallsign(p.callsign, pageIcao);
+  const isBooked = !!tobtBooking;
+
+  let primaryStatusHtml = '';
+  let showRouteWarning = false;
+
+  if (!isEventFlight) {
+  primaryStatusHtml = `
+    <span
+      class="status-pill non-event"
+      title="Flying to a non-event destination"
+    >
+      Non-Event
+    </span>`;
+} else {
+  if (isBooked) {
+    primaryStatusHtml = `
+      <span
+        class="status-pill booked"
+        title="Has an event booking"
+      >
+        Booked
+      </span>`;
+  } else {
+    primaryStatusHtml = `
+      <span
+        class="status-pill non-booked"
+        title="Flying to WF destination without a booking"
+      >
+        Non-Booked
+      </span>`;
+  }
+
+  showRouteWarning = !wfStatus.routeMatch;
+}
 
 
-const departuresHtml = `
-  <button class="start-btn" ${disabledAttr}>START</button>
-`;
+  const routeHtml = p.flight_plan.route
+    ? `<span class="route-collapsed">Click to expand</span><span class="route-expanded" style="display:none;">${p.flight_plan.route}</span>`
+    : 'N/A';
 
-
-    const routeHtml = p.flight_plan.route
-      ? `<span class="route-collapsed">Click to expand</span><span class="route-expanded" style="display:none;">${p.flight_plan.route}</span>`
-      : 'N/A';
-
-    return `
+  return `
 <tr>
-  ${wfCell}
+  <td class="col-status">
+    ${primaryStatusHtml}
+    ${showRouteWarning
+  ? `<span
+       class="status-pill route-warning"
+       title="Wrong route for event traffic"
+     >
+       Route!
+     </span>`
+  : ''
+}
+  </td>
+
   <td>${p.callsign}</td>
   <td>${p.flight_plan.aircraft_faa || 'N/A'}</td>
   <td>${p.flight_plan.arrival || 'N/A'}</td>
+
   <td class="col-toggle">
     <button
-  class="toggle-btn"
-  data-type="start"
-  data-callsign="${p.callsign}"
-  data-sector="${sectorKey}"
-  ${disabledAttr}
->
-  ⬜
-</button>
-
+      class="toggle-btn"
+      data-type="start"
+      data-callsign="${p.callsign}"
+      data-sector="${sectorKey}"
+      ${disabledAttr}
+    >⬜</button>
   </td>
+
   <td class="tsat-cell" data-callsign="${p.callsign}">
-  <span class="tsat-time">—</span>
-  ${CAN_EDIT
-    ? `
-      <button
-        class="tsat-refresh"
-        data-callsign="${p.callsign}"
-        style="display:none;"
-      >
-        ⟳
-      </button>
-    `
-    : ''
-  }
-</td>
+    <span class="tsat-time">—</span>
+    ${CAN_EDIT ? `<button class="tsat-refresh" data-callsign="${p.callsign}" style="display:none;">⟳</button>` : ''}
+  </td>
 
   <td class="col-route">${routeHtml}</td>
 </tr>`;
-  }).join('');
+}).join('');
+
 
  const content = `
   <section class="card dashboard-wide">
@@ -2254,7 +2296,7 @@ ${!isAerodromeController ? `
       <table class="departures-table" id="mainDeparturesTable">
         <thead>
           <tr>
-            <th>WF</th>
+            <th>Status</th>
             <th>Callsign</th>
             <th>Aircraft</th>
             <th>Dest</th>
