@@ -50,6 +50,24 @@ async function refreshPilots() {
   }
 }
 
+async function loadTobtBookingsFromDb() {
+  const bookings = await prisma.tobtBooking.findMany();
+
+  bookings.forEach(b => {
+    tobtBookingsBySlot[b.slotKey] = {
+      cid: b.cid,
+      callsign: b.callsign,
+      createdAtISO: b.createdAt.toISOString()
+    };
+
+    if (!tobtBookingsByCid[b.cid]) {
+      tobtBookingsByCid[b.cid] = new Set();
+    }
+    tobtBookingsByCid[b.cid].add(b.slotKey);
+  });
+
+  console.log(`[TOBT] Loaded ${bookings.length} bookings from DB`);
+}
 
 
 
@@ -75,6 +93,15 @@ io.use((socket, next) => {
 const sharedToggles = {};      // { callsign: { clearance: bool, start: bool, sector?: "EGCC-EGLL" } }
 const sharedDepFlows = {};     // { "EGCC-EGLL": 3, ... }  (per sector: FROM-TO)
 const connectedUsers = {};     // { socketId: { cid, position } }
+
+/* ===== DEP FLOW PERSISTENCE ===== */
+async function loadDepFlowsFromDb() {
+  const flows = await prisma.depFlow.findMany();
+  flows.forEach(f => {
+    sharedDepFlows[f.sector] = f.rate;
+  });
+  console.log(`[DEP FLOW] Loaded ${flows.length} flow rates from DB`);
+}
 
 const tobtBookingsBySlot = {}; // slotKey -> { cid, createdAtISO, callsign }
 const tobtBookingsByCid = {};  // { cid: Set(slotKey) }
@@ -107,7 +134,11 @@ const startedAircraft = {}; // { "BAW123": true }
  *   ]
  * }
  */
+
+
 const tsatQueues = {};
+
+
 
 function canEditIcao(user, pageIcao) {
   if (!user) return false;
@@ -310,8 +341,19 @@ function clearTSAT(sectorKey, callsign) {
   delete sharedTSAT[callsign];
 }
 
-await refreshPilots();
-setInterval(refreshPilots, 60000);
+async function bootstrap() {
+  await refreshPilots();
+  await loadDepFlowsFromDb();
+  await loadTobtBookingsFromDb();
+
+  setInterval(refreshPilots, 60000);
+}
+
+bootstrap().catch(err => {
+  console.error('Startup failed:', err);
+  process.exit(1);
+});
+
 
 function extractTSATMap() {
   return Object.fromEntries(
@@ -571,11 +613,33 @@ if (icaoFromQuery) {
      DEP FLOWS
      ========================================================= */
 
-  socket.on('updateDepFlow', ({ sector, value }) => {
-    const key = normalizeSectorKey(sector);
-    sharedDepFlows[key] = Number(value) || 0;
-    io.emit('depFlowUpdated', { sector: key, value: sharedDepFlows[key] });
+ socket.on('updateDepFlow', async ({ sector, value }) => {
+  const key = normalizeSectorKey(sector);
+  const rate = Number(value) || 0;
+
+  if (rate === 0) {
+    delete sharedDepFlows[key];
+
+    await prisma.depFlow.deleteMany({
+      where: { sector: key }
+    });
+
+    io.emit('depFlowUpdated', { sector: key, value: 0 });
+    return;
+  }
+
+  sharedDepFlows[key] = rate;
+
+  await prisma.depFlow.upsert({
+    where: { sector: key },
+    update: { rate },
+    create: { sector: key, rate }
   });
+
+  io.emit('depFlowUpdated', { sector: key, value: rate });
+});
+
+
 
   /* =========================================================
      CONNECTED USERS
@@ -771,31 +835,17 @@ app.get('/auth/callback', vatsimCallback);
 app.get('/dashboard', dashboard);
 
 app.get('/api/tobt/slots', (req, res) => {
-  const cid = req.session.user?.data?.cid;
-  if (!cid) return res.status(401).json({ error: 'Not logged in' });
+  const cid = Number(req.session?.user?.data?.cid);
 
   const { from, to, dateUtc, depTimeUtc } = req.query;
+
   if (!from || !to || !dateUtc || !depTimeUtc) {
     return res.status(400).json({ error: 'Missing parameters' });
   }
 
   const slots = generateTobtSlots({ from, to, dateUtc, depTimeUtc });
 
-slots.forEach(tobt => {
-  const key = makeTobtSlotKey({ from, to, dateUtc, depTimeUtc, tobtTimeUtc: tobt });
-
-  if (!allTobtSlots[key]) {
-    allTobtSlots[key] = {
-      from,
-      to,
-      dateUtc,
-      depTimeUtc,
-      tobt
-    };
-  }
-});
-
-
+  // ✅ MUST check before using slots
   if (slots === null) {
     return res.json({
       noFlow: true,
@@ -803,24 +853,29 @@ slots.forEach(tobt => {
     });
   }
 
-  const result = slots.map(tobt => {
-    const key = makeTobtSlotKey({ from, to, dateUtc, depTimeUtc, tobtTimeUtc: tobt });
-    const booking = tobtBookingsBySlot[key];
+  const results = [];
 
-    return {
+  slots.forEach(tobt => {
+    const slotKey = makeTobtSlotKey({
+      from,
+      to,
+      dateUtc,
+      depTimeUtc,
+      tobtTimeUtc: tobt
+    });
+
+    const booking = tobtBookingsBySlot[slotKey];
+
+    results.push({
       tobt,
+      slotKey,                 // 🔑 REQUIRED
       booked: !!booking,
-      byMe: booking?.cid === cid
-    };
+      byMe: booking?.cid === cid,
+      callsign: booking?.callsign || null
+    });
   });
 
-io.emit(
-  'unassignedTobtUpdate',
-  buildUnassignedTobtsForICAO(from)
-);
-
-
-  res.json({ slots: result });
+  res.json(results);
 });
 
 
@@ -831,71 +886,8 @@ app.post('/wf-schedule/refresh-schedule', requireAdmin, async (req, res) => {
   res.json({ success: true });
 });
 
-app.post('/api/tobt/book', (req, res) => {
-  const cid = req.session.user.data.cid;
-  if (!cid) return res.status(401).json({ error: 'Not logged in' });
-
-  const {
-    from,
-    to,
-    dateUtc,
-    depTimeUtc,
-    tobtTimeUtc,
-    callsign
-  } = req.body;
-
-  if (!from || !to || !dateUtc || !depTimeUtc || !tobtTimeUtc) {
-    return res.status(400).json({ error: 'Missing parameters' });
-  }
-
-  if (!callsign) {
-    return res.status(400).json({ error: 'Missing callsign' });
-  }
-
-  // ✅ slotKey is defined BEFORE it is used
-  const slotKey = makeTobtSlotKey({
-    from,
-    to,
-    dateUtc,
-    depTimeUtc,
-    tobtTimeUtc
-  });
-
-  if (tobtBookingsBySlot[slotKey]) {
-    return res.status(409).json({ error: 'Slot already booked' });
-  }
-
-  const depPrefix = `${from}-${to}|${dateUtc}|${depTimeUtc}`;
-  const mySlots = tobtBookingsByCid[cid] || new Set();
-
-  for (const s of mySlots) {
-    if (s.startsWith(depPrefix)) {
-      return res.status(409).json({
-        error: 'You already have a TOBT for this departure'
-      });
-    }
-  }
-
-  // ✅ ONLY place where booking is stored
-  tobtBookingsBySlot[slotKey] = {
-    cid,
-    callsign,
-    createdAtISO: new Date().toISOString()
-  };
-
-  mySlots.add(slotKey);
-  tobtBookingsByCid[cid] = mySlots;
-
-  io.emit(
-    'unassignedTobtUpdate',
-    buildUnassignedTobtsForICAO(from)
-  );
-
-  res.json({ success: true });
-});
-
-app.post('/api/tobt/update-callsign', (req, res) => {
-  const cid = req.session?.user?.data?.cid;
+app.post('/api/tobt/book', async (req, res) => {
+  const cid = Number(req.session?.user?.data?.cid);
   if (!cid) {
     return res.status(401).json({ error: 'Not logged in' });
   }
@@ -903,23 +895,153 @@ app.post('/api/tobt/update-callsign', (req, res) => {
   const { slotKey, callsign } = req.body;
 
   if (!slotKey || !callsign) {
-    return res.status(400).json({ error: 'Missing data' });
+    return res.status(400).json({ error: 'Missing parameters' });
+  }
+
+  // Prevent double booking (in-memory)
+  if (tobtBookingsBySlot[slotKey]) {
+    return res.status(409).json({ error: 'Slot already booked' });
+  }
+
+  const normalizedCallsign = callsign.trim().toUpperCase();
+
+  // slotKey format: FROM-TO|Date|DepTime|TOBT
+  const parts = slotKey.split('|');
+  if (parts.length !== 4) {
+    return res.status(400).json({ error: 'Invalid slot key format' });
+  }
+
+  const [sectorPart, dateUtc, depTimeUtc, tobtTimeUtc] = parts;
+  const [from, to] = sectorPart.split('-');
+
+  if (!from || !to) {
+    return res.status(400).json({ error: 'Invalid sector format' });
+  }
+
+  try {
+    await prisma.tobtBooking.create({
+      data: {
+        slotKey,
+        cid,
+        callsign: normalizedCallsign,
+        from,
+        to,
+        dateUtc,
+        depTimeUtc,
+        tobtTimeUtc
+      }
+    });
+  } catch (err) {
+    console.error('[TOBT] DB insert failed:', err);
+    return res.status(500).json({ error: 'Failed to book TOBT slot' });
+  }
+
+  // ✅ Update in-memory slot index
+  tobtBookingsBySlot[slotKey] = {
+    cid,
+    callsign: normalizedCallsign,
+    from,
+    to,
+    dateUtc,
+    depTimeUtc,
+    tobtTimeUtc
+  };
+
+  // ✅ Update in-memory CID index (THIS FIXES "My Slots")
+  if (!tobtBookingsByCid[cid]) {
+    tobtBookingsByCid[cid] = new Set();
+  }
+  tobtBookingsByCid[cid].add(slotKey);
+
+  res.json({ success: true });
+});
+
+
+
+
+
+
+app.post('/api/tobt/cancel', async (req, res) => {
+  const cid = Number(req.session?.user?.data?.cid);
+  if (!cid) {
+    return res.status(401).json({ error: 'Not logged in' });
+  }
+
+  const { slotKey } = req.body;
+  if (!slotKey) {
+    return res.status(400).json({ error: 'Missing slotKey' });
   }
 
   const booking = tobtBookingsBySlot[slotKey];
+
   if (!booking) {
     return res.status(404).json({ error: 'Booking not found' });
   }
 
-  // Security: users may only edit their own booking
   if (booking.cid !== cid) {
     return res.status(403).json({ error: 'Forbidden' });
   }
 
-  booking.callsign = callsign.trim().toUpperCase();
+  await prisma.tobtBooking.delete({
+    where: { slotKey }
+  });
+
+  delete tobtBookingsBySlot[slotKey];
+
+  if (tobtBookingsByCid[cid]) {
+    tobtBookingsByCid[cid].delete(slotKey);
+    if (tobtBookingsByCid[cid].size === 0) {
+      delete tobtBookingsByCid[cid];
+    }
+  }
 
   res.json({ success: true });
 });
+
+
+
+
+app.post('/api/tobt/update-callsign', async (req, res) => {
+  const cid = Number(req.session?.user?.data?.cid);
+  if (!cid) {
+    return res.status(401).json({ error: 'Not logged in' });
+  }
+
+  const { slotKey, callsign } = req.body;
+  if (!slotKey || !callsign) {
+    return res.status(400).json({ error: 'Missing parameters' });
+  }
+
+  const booking = tobtBookingsBySlot[slotKey];
+  if (!booking || booking.cid !== cid) {
+    return res.status(403).json({ error: 'Not your booking' });
+  }
+
+  const normalizedCallsign = callsign.trim().toUpperCase();
+
+  try {
+    await prisma.tobtBooking.update({
+      where: { slotKey },
+      data: {
+        callsign: normalizedCallsign,
+        from: booking.from,
+        to: booking.to,
+        dateUtc: booking.dateUtc,
+        depTimeUtc: booking.depTimeUtc,
+        tobtTimeUtc: booking.tobtTimeUtc
+      }
+    });
+  } catch (err) {
+    console.error('[TOBT] Callsign update failed:', err);
+    return res.status(500).json({ error: 'Failed to update callsign' });
+  }
+
+  // ✅ Update in-memory cache
+  booking.callsign = normalizedCallsign;
+
+  res.json({ success: true });
+});
+
 
 app.get('/admin', (req, res) => {
   res.redirect(301, '/wf-schedule');
@@ -2035,7 +2157,6 @@ app.get('/book', (req, res) => {
   const isAdmin = ADMIN_CIDS.includes(Number(user.cid));
 
   const content = `
-  <script type="text/javascript" src="simbrief.apiv1.js"></script>
   <div id="bookingSuccessBanner" class="booking-banner success hidden">
   <span id="successMessage"></span>
   <button id="viewBookingsBtn" class="banner-action success">
@@ -2084,186 +2205,174 @@ app.get('/book', (req, res) => {
       </table>
     </section>
     <script>
-      const select = document.getElementById('depSelect');
-      const body = document.getElementById('tobtBody');
+  const select = document.getElementById('depSelect');
+  const body = document.getElementById('tobtBody');
 
-      select.addEventListener('change', async () => {
-        body.innerHTML = '';
-        if (!select.value) return;
+  /* =========================
+     LOAD TOBT SLOTS
+     ========================= */
+  async function loadTobtSlots() {
+    body.innerHTML = '';
+    if (!select.value) return;
 
-        const opt = select.selectedOptions[0];
-        const params = new URLSearchParams({
-          from: opt.dataset.from,
-          to: opt.dataset.to,
-          dateUtc: opt.dataset.date,
-          depTimeUtc: opt.dataset.dep
-        });
-
-        const res = await fetch('/api/tobt/slots?' + params);
-const data = await res.json();
-
-body.innerHTML = '';
-
-if (data.noFlow) {
-  const tr = document.createElement('tr');
-  const td = document.createElement('td');
-
-  td.colSpan = 4;
-  td.className = 'tobt-message';
-  td.textContent = data.message;
-
-  tr.appendChild(td);
-  body.appendChild(tr);
-  return;
-}
-
-const slots = data.slots;
-const half = Math.ceil(slots.length / 2);
-const leftCol = slots.slice(0, half);
-const rightCol = slots.slice(half);
-
-
-        for (let i = 0; i < half; i++) {
-  const tr = document.createElement('tr');
-
-  [leftCol[i], rightCol[i]].forEach(slot => {
-    if (!slot) {
-      tr.innerHTML += '<td></td><td></td>';
-      return;
-    }
-
-    const btn = slot.byMe
-      ? '<button class="tobt-btn cancel" data-action="cancel">Cancel</button>'
-      : slot.booked
-        ? '<button class="tobt-btn booked" disabled>Booked</button>'
-        : '<button class="tobt-btn book" data-action="book">Book</button>';
-
-    tr.innerHTML +=
-      '<td>' + slot.tobt + '</td>' +
-      '<td>' + btn + '</td>';
-  });
-
-  body.appendChild(tr);
-}
-
-      });
-
-      body.addEventListener('click', async e => {
-  if (e.target.tagName !== 'BUTTON') return;
-
-  const action = e.target.dataset.action;
-  if (!action) return;
-
-  let callsign = null;
-  if (action === 'book') {
-    if (action === 'book') {
-  callsign = await openCallsignModal();
-  if (!callsign) return;
-}
-
-    callsign = callsign.trim().toUpperCase();
-  }
-
-  const td = e.target.closest('td');
-  const tobt = td.previousElementSibling.textContent;
-  const opt = select.selectedOptions[0];
-
-  const res = await fetch('/api/tobt/' + action, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
+    const opt = select.selectedOptions[0];
+    const params = new URLSearchParams({
       from: opt.dataset.from,
       to: opt.dataset.to,
       dateUtc: opt.dataset.date,
-      depTimeUtc: opt.dataset.dep,
-      tobtTimeUtc: tobt,
-      callsign: callsign
-    })
+      depTimeUtc: opt.dataset.dep
+    });
+
+    const res = await fetch('/api/tobt/slots?' + params);
+    const data = await res.json();
+
+    if (data.noFlow) {
+      const tr = document.createElement('tr');
+      const td = document.createElement('td');
+      td.colSpan = 4;
+      td.className = 'tobt-message';
+      td.textContent = data.message;
+      tr.appendChild(td);
+      body.appendChild(tr);
+      return;
+    }
+
+    const slots = data;
+    const half = Math.ceil(slots.length / 2);
+    const leftCol = slots.slice(0, half);
+    const rightCol = slots.slice(half);
+
+    for (let i = 0; i < half; i++) {
+      const tr = document.createElement('tr');
+
+      [leftCol[i], rightCol[i]].forEach(slot => {
+        if (!slot) {
+          tr.innerHTML += '<td></td><td></td>';
+          return;
+        }
+
+        let btn = '';
+
+        if (slot.byMe) {
+          btn =
+            '<button class="tobt-btn cancel" data-action="cancel" data-slot-key="' +
+            slot.slotKey + '">Cancel</button>';
+        } else if (slot.booked) {
+          btn =
+            '<button class="tobt-btn booked" disabled>Booked</button>';
+        } else {
+          btn =
+            '<button class="tobt-btn book" data-action="book" data-slot-key="' +
+            slot.slotKey + '">Book</button>';
+        }
+
+        tr.innerHTML +=
+          '<td>' + slot.tobt + '</td>' +
+          '<td>' + btn + '</td>';
+      });
+
+      body.appendChild(tr);
+    }
+  }
+
+  /* =========================
+     DROPDOWN CHANGE
+     ========================= */
+  select.addEventListener('change', () => {
+    loadTobtSlots();
   });
 
-  if (!res.ok) return;
+  /* =========================
+     BUTTON HANDLING (BOOK / CANCEL)
+     ========================= */
+  body.addEventListener('click', async e => {
+    const btn = e.target.closest('button');
+    if (!btn) return;
 
-  if (action === 'book') {
-    showBookingSuccess({
-      from: opt.dataset.from,
-      to: opt.dataset.to,
-      tobt: tobt
+    const action = btn.dataset.action;
+    if (!action) return;
+
+    const slotKey = btn.dataset.slotKey;
+    const opt = select.selectedOptions[0];
+    const tobt = btn.closest('td').previousElementSibling.textContent;
+
+    let callsign;
+    if (action === 'book') {
+      callsign = await openCallsignModal();
+      if (!callsign) return;
+      callsign = callsign.trim().toUpperCase();
+    }
+
+    const res = await fetch('/api/tobt/' + action, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slotKey, callsign })
     });
+
+    if (!res.ok) {
+      const err = await res.json();
+      alert(err.error || 'Action failed');
+      return;
+    }
+
+    if (action === 'book') {
+      showBookingSuccess({
+        from: opt.dataset.from,
+        to: opt.dataset.to,
+        tobt
+      });
+    }
+
+    if (action === 'cancel') {
+      showBookingCancelled({
+        from: opt.dataset.from,
+        to: opt.dataset.to,
+        tobt
+      });
+    }
+
+    loadTobtSlots();
+  });
+
+  /* =========================
+     BANNERS
+     ========================= */
+  function hideBookingBanners() {
+    const s = document.getElementById('bookingSuccessBanner');
+    const c = document.getElementById('bookingCancelBanner');
+    if (s) s.classList.add('hidden');
+    if (c) c.classList.add('hidden');
   }
 
-  if (action === 'cancel') {
-    showBookingCancelled({
-      from: opt.dataset.from,
-      to: opt.dataset.to,
-      tobt: tobt
-    });
+  function showBookingSuccess(data) {
+    hideBookingBanners();
+    const banner = document.getElementById('bookingSuccessBanner');
+    const msg = document.getElementById('successMessage');
+    if (!banner || !msg) return;
+
+    msg.textContent =
+      'You have successfully booked a slot for ' +
+      data.from + ' → ' + data.to +
+      ' at ' + data.tobt + ' UTC.';
+
+    banner.classList.remove('hidden');
   }
 
-  // Refresh slot list
-  select.dispatchEvent(new Event('change'));
-});
+  function showBookingCancelled(data) {
+    hideBookingBanners();
+    const banner = document.getElementById('bookingCancelBanner');
+    const msg = document.getElementById('cancelMessage');
+    if (!banner || !msg) return;
 
+    msg.textContent =
+      'Your slot for ' +
+      data.from + ' → ' + data.to +
+      ' at ' + data.tobt + ' UTC has been cancelled.';
 
-      function showBookingSuccess(data) {
-  const banner = document.getElementById('bookingSuccessBanner');
-  const message = document.getElementById('successMessage');
-
-  message.textContent =
-  'You have successfully booked a slot for ' +
-  data.from + ' → ' + data.to +
-  ' at ' + data.tobt + ' UTC.';
-
-
-  banner.classList.remove('hidden');
-}
-
-const viewBtn = document.getElementById('viewBookingsBtn');
-  if (viewBtn) {
-    viewBtn.onclick = function () {
-      window.location.href = '/my-slots';
-    };
+    banner.classList.remove('hidden');
   }
-
-
-    </script>
-    <script>
-    function hideBookingBanners() {
-  var s = document.getElementById('bookingSuccessBanner');
-  var c = document.getElementById('bookingCancelBanner');
-  if (s) s.classList.add('hidden');
-  if (c) c.classList.add('hidden');
-}
-
-function showBookingSuccess(data) {
-  hideBookingBanners();
-
-  var banner = document.getElementById('bookingSuccessBanner');
-  var msg = document.getElementById('successMessage');
-  if (!banner || !msg) return;
-
-  msg.textContent =
-    'You have successfully booked a slot for ' +
-    data.from + ' \u2192 ' + data.to +
-    ' at ' + data.tobt + ' UTC.';
-
-  banner.classList.remove('hidden');
-}
-
-function showBookingCancelled(data) {
-  hideBookingBanners();
-
-  var banner = document.getElementById('bookingCancelBanner');
-  var msg = document.getElementById('cancelMessage');
-  if (!banner || !msg) return;
-
-  msg.textContent =
-    'Your slot for ' +
-    data.from + ' \u2192 ' + data.to +
-    ' at ' + data.tobt + ' UTC has been cancelled.';
-
-  banner.classList.remove('hidden');
-}
 </script>
+
   `;
 
   res.send(

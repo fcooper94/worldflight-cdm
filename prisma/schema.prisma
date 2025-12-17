@@ -30,3 +30,23 @@ model Affiliate {
   participatingWf26 Boolean @default(false)
   createdAt         DateTime @default(now())
 }
+
+model DepFlow {
+  id        Int    @id @default(autoincrement())
+  sector    String @unique   // e.g. "EGCC-EGLL"
+  rate      Int
+
+  updatedAt DateTime @updatedAt
+}
+model TobtBooking {
+  id            Int      @id @default(autoincrement())
+  slotKey       String   @unique
+  cid           Int
+  callsign      String
+  from          String
+  to            String
+  dateUtc       String
+  depTimeUtc    String
+  tobtTimeUtc   String
+  createdAt     DateTime @default(now())
+}
