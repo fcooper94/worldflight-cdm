@@ -290,31 +290,40 @@ function buildUpcomingTSATsForICAO(icao, vatsimPilots = []) {
   const list = [];
 
   for (const [callsign, tsatObj] of Object.entries(sharedTSAT)) {
+    if (startedAircraft[callsign]) continue;
 
-  // Skip aircraft that have already started
-  if (startedAircraft[callsign]) continue;
+    if (tsatObj.icao !== icao) continue;
 
-  // Authoritative: determine FROM airport from stored sector
-  const tsatIcao = tsatObj.icao;
-if (tsatIcao !== icao) continue;
+    let dest = '----';
+    const pilot = vatsimPilots.find(p => p.callsign === callsign);
+    if (pilot?.flight_plan) {
+      dest = pilot.flight_plan.arrival || dest;
+    }
 
-
-  // Optional: enrich dest from VATSIM if available
-  let dest = '----';
-  const pilot = vatsimPilots.find(p => p.callsign === callsign);
-  if (pilot && pilot.flight_plan) {
-    dest = pilot.flight_plan.arrival || dest;
+    list.push({
+      callsign,
+      dest,
+      tsat: tsatObj.tsat
+    });
   }
 
-  const tsatStr = tsatObj?.tsat || '----';
-  list.push({ callsign, dest, tsat: tsatStr });
+  const now = new Date();
+
+  return list
+    .sort((a, b) => {
+      const da = hhmmToOperationalUtcDate(a.tsat, now);
+      const db = hhmmToOperationalUtcDate(b.tsat, now);
+
+      // Push invalid TSATs to bottom
+      if (!da && !db) return 0;
+      if (!da) return 1;
+      if (!db) return -1;
+
+      return da - db;
+    })
+    .slice(0, 5);
 }
 
-return list
-  .sort((a, b) => a.tsat.localeCompare(b.tsat))
-  .slice(0, 5);
-
-}
 
 function buildUnassignedTobtsForICAO(icao) {
   if (!icao) return [];
@@ -379,7 +388,38 @@ function assignTSAT(sectorKey, callsign) {
   const now = new Date();
   now.setSeconds(0, 0);
 
-  const earliest = new Date(now.getTime() + 1 * 60000); // +1 minute minimum
+    // 🔒 TOBT lower bound (if exists)
+  let tobtLowerBound = null;
+
+  // Determine FROM ICAO from sector (FROM-TO)
+  const fromIcao = sector.split('-')[0];
+
+  // Look up TOBT for this aircraft
+  const tobtBooking = getTobtBookingForCallsign(callsign, fromIcao);
+
+  if (tobtBooking?.tobtTimeUtc) {
+    const [hh, mm] = tobtBooking.tobtTimeUtc.split(':').map(Number);
+
+    const tobtDate = new Date(now);
+tobtDate.setUTCHours(hh, mm, 0, 0);
+
+// 🔁 If TOBT time is earlier than now, assume NEXT UTC DAY
+if (tobtDate <= now) {
+  tobtDate.setUTCDate(tobtDate.getUTCDate() + 1);
+}
+
+tobtLowerBound = tobtDate;
+
+  }
+
+
+    let earliest = new Date(now.getTime() + 1 * 60000);
+
+  // 🔒 Enforce TSAT ≥ TOBT
+  if (tobtLowerBound && tobtLowerBound > earliest) {
+    earliest = tobtLowerBound;
+  }
+
 
   if (!tsatQueues[sector]) tsatQueues[sector] = [];
   let queue = tsatQueues[sector];
@@ -948,6 +988,42 @@ function parseUtcDateTime(dateUtc, timeUtc) {
   return date;
 }
 
+function hhmmToNextUtcDate(hhmm, nowUtc = new Date()) {
+  if (!hhmm || !/^\d{2}:\d{2}$/.test(hhmm)) return null;
+
+  const [hh, mm] = hhmm.split(':').map(Number);
+
+  const d = new Date(nowUtc);
+  d.setUTCSeconds(0, 0);
+  d.setUTCHours(hh, mm, 0, 0);
+
+  // If the time is not in the future, treat it as next day
+  if (d <= nowUtc) {
+    d.setUTCDate(d.getUTCDate() + 1);
+  }
+
+  return d;
+}
+
+function hhmmToOperationalUtcDate(hhmm, nowUtc = new Date()) {
+  if (!hhmm || !/^\d{2}:\d{2}$/.test(hhmm)) return null;
+
+  const [hh, mm] = hhmm.split(':').map(Number);
+
+  const d = new Date(nowUtc);
+  d.setUTCSeconds(0, 0);
+  d.setUTCHours(hh, mm, 0, 0);
+
+  const diffMs = nowUtc - d;
+  const diffHours = diffMs / (1000 * 60 * 60);
+
+  // If TSAT is more than 4 hours in the past, assume next day
+  if (diffHours > 4) {
+    d.setUTCDate(d.getUTCDate() + 1);
+  }
+
+  return d;
+}
 
 
 function formatUtcHHMM(date) {
