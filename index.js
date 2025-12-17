@@ -86,19 +86,28 @@ async function loadTobtBookingsFromDb() {
 
   bookings.forEach(b => {
     tobtBookingsBySlot[b.slotKey] = {
-      cid: b.cid,
+      cid: b.cid,                      // may be null (ATC)
       callsign: b.callsign,
+      from: b.from,
+      to: b.to,
+      dateUtc: b.dateUtc,
+      depTimeUtc: b.depTimeUtc,
+      tobtTimeUtc: b.tobtTimeUtc,
       createdAtISO: b.createdAt.toISOString()
     };
 
-    if (!tobtBookingsByCid[b.cid]) {
-      tobtBookingsByCid[b.cid] = new Set();
+    // ONLY index by CID if CID exists (pilot booking)
+    if (b.cid !== null) {
+      if (!tobtBookingsByCid[b.cid]) {
+        tobtBookingsByCid[b.cid] = new Set();
+      }
+      tobtBookingsByCid[b.cid].add(b.slotKey);
     }
-    tobtBookingsByCid[b.cid].add(b.slotKey);
   });
 
   console.log(`[TOBT] Loaded ${bookings.length} bookings from DB`);
 }
+
 
 
 
@@ -837,28 +846,72 @@ function requireAdmin(req, res, next) {
   next();
 }
 
+function normalizeRoute(route, adminRoute = null) {
+  if (!route) return [];
+
+  let tokens = route
+    .toUpperCase()
+    .replace(/\/\d+[A-Z]?/g, '')      // remove runway suffixes (/27R)
+    .replace(/\bN\d+F\d+\b/g, '')     // remove speed/level (N0456F350)
+    .split(/\s+/)
+    .filter(Boolean);
+
+  // Remove trailing STAR(s) and destination ICAO
+  while (
+    tokens.length &&
+    (
+      /^[A-Z]{4}$/.test(tokens[tokens.length - 1]) || // destination ICAO
+      /\d[A-Z]$/.test(tokens[tokens.length - 1])      // STAR like IMCO1A
+    )
+  ) {
+    tokens.pop();
+  }
+
+  // If adminRoute provided, align from first matching fix
+  if (adminRoute) {
+    const adminTokens = adminRoute
+      .toUpperCase()
+      .split(/\s+/)
+      .filter(Boolean);
+
+    const firstFix = adminTokens[0];
+    const idx = tokens.indexOf(firstFix);
+
+    if (idx !== -1) {
+      tokens = tokens.slice(idx);
+    }
+  }
+
+  return tokens;
+}
+
+
+
+
 /* ===== WF STATUS ===== */
 function getWorldFlightStatus(pilot) {
   if (!pilot.flight_plan) return { isWF: false, routeMatch: false };
 
   const from = pilot.flight_plan.departure;
   const to = pilot.flight_plan.arrival;
-  const route = (pilot.flight_plan.route || '').trim();
+  const route = pilot.flight_plan.route || '';
 
-  const match = adminSheetCache.find(wf => wf.from === from && wf.to === to);
+  const match = adminSheetCache.find(
+    wf => wf.from === from && wf.to === to
+  );
   if (!match) return { isWF: false, routeMatch: false };
 
-  const adminRoute = (match.atc_route || '')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .toUpperCase();
-  const liveRoute = route
-    .replace(/\s+/g, ' ')
-    .trim()
-    .toUpperCase();
+  const adminTokens = normalizeRoute(match.atc_route);
+  const liveTokens = normalizeRoute(route, match.atc_route);
 
-  return { isWF: true, routeMatch: adminRoute === liveRoute };
+  return {
+    isWF: true,
+    routeMatch:
+      adminTokens.join(' ') === liveTokens.join(' ')
+  };
 }
+
+
 
 
 app.use(express.static('public'));
