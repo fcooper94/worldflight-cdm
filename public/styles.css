@@ -1704,7 +1704,6 @@ select{ cursor:pointer; }
   position: absolute;
   inset: 0;
   background: rgba(2, 6, 23, 0.75);
-  backdrop-filter: blur(6px);
 }
 
 .modal-card {
@@ -1776,12 +1775,18 @@ select{ cursor:pointer; }
   position: fixed;
   inset: 0;
   background: rgba(3, 8, 20, 0.75);
-  backdrop-filter: blur(6px);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 1000;
+  pointer-events: none;
 }
+
+.modal,
+.modal * {
+  pointer-events: auto;
+}
+
 
 .modal-card {
   background: radial-gradient(
@@ -1869,3 +1874,107 @@ select{ cursor:pointer; }
   cursor: not-allowed;
   filter: grayscale(1);
 }
+.form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px 16px;
+  margin-bottom: 16px;
+}
+
+.form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.form-field label {
+  font-size: 0.8rem;
+  color: #9fb4cc;
+}
+
+.checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 6px;
+  font-size: 0.9rem;
+  color: #cbd5e1;
+}
+.wf-check {
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  border: 2px solid rgba(255,255,255,.25);
+  background: linear-gradient(145deg, #0b0f1a, #070a14);
+  cursor: pointer;
+  transition: all .18s ease;
+}
+
+.wf-check:hover {
+  border-color: var(--accent);
+  box-shadow: 0 0 6px rgba(56,189,248,.45);
+}
+
+.wf-check:checked {
+  background: linear-gradient(145deg, #2cff88, #18b96a);
+  border-color: #2cff88;
+  box-shadow: 0 0 10px rgba(44,255,136,.6);
+}
+
+.wf-check:checked::after {
+  content: '✔';
+  color: #04150c;
+  font-size: 13px;
+  font-weight: 900;
+  position: relative;
+  top: -1px;
+  left: 4px;
+}
+/* Column semantics */
+.col-callsign {
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+.col-country {
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+.col-cid {
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.col-center { text-align: center; }
+.col-right  { text-align: right; }
+
+/* Action buttons de-emphasis */
+.row-actions {
+  opacity: .55;
+  transition: opacity .15s ease;
+}
+
+tr:hover .row-actions {
+  opacity: 1;
+}
+
+/* Page header */
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.page-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.section-title {
+  margin-top: 22px;
+}
+

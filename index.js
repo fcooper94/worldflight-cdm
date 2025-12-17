@@ -148,6 +148,16 @@ function canEditIcao(user, pageIcao) {
   return cs.startsWith(pageIcao + '_') && !cs.endsWith('_OBS');
 }
 
+// Basic HTML escaping for any user/admin-provided text rendered into server-side templates
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 
 
 /* ===== RECENTLY STARTED HELPER ===== */
@@ -983,10 +993,11 @@ if (slotParts.length === 4) {
         to,
         dateUtc,
         depTimeUtc,
-        tobtTimeUtc
+        tobtTimeUtc,
       }
     });
-  } catch (err) {
+
+   } catch (err) {
     console.error('[TOBT] DB insert failed:', err);
     return res.status(500).json({ error: 'Failed to book TOBT slot' });
   }
@@ -1072,7 +1083,34 @@ app.post('/api/tobt/update-callsign', async (req, res) => {
     return res.status(403).json({ error: 'Not your booking' });
   }
 
-  const normalizedCallsign = callsign.trim().toUpperCase();
+// 🔒 Enforce unique callsign per sector on UPDATE
+const normalizedCallsign = callsign.trim().toUpperCase();
+
+// sector = FROM-TO|date|depTime
+const sectorKey = slotKey.split('|').slice(0, 3).join('|');
+
+for (const existingSlotKey in tobtBookingsBySlot) {
+  if (existingSlotKey === slotKey) continue; // ignore own booking
+
+  const existingSectorKey = existingSlotKey
+    .split('|')
+    .slice(0, 3)
+    .join('|');
+
+  const existing = tobtBookingsBySlot[existingSlotKey];
+
+  if (
+    existingSectorKey === sectorKey &&
+    existing.callsign === normalizedCallsign
+  ) {
+    return res.status(409).json({
+      error:
+        'A booking has already been made with this callsign on ' +
+        sectorKey.split('|')[0]
+    });
+  }
+}
+ 
 
   try {
     await prisma.tobtBooking.update({
@@ -1100,6 +1138,434 @@ app.post('/api/tobt/update-callsign', async (req, res) => {
 
 app.get('/admin', (req, res) => {
   res.redirect(301, '/wf-schedule');
+});
+
+/* ===========================
+   OFFICIAL TEAMS / AFFILIATES
+   =========================== */
+
+app.get('/official-teams', requireAdmin, async (req, res) => {
+  if (!req.session.user || !req.session.user.data) {
+    return res.redirect('/');
+  }
+
+  const user = req.session.user.data;
+  const isAdmin = ADMIN_CIDS.includes(Number(user.cid));
+
+  if (!isAdmin) {
+    return res.status(403).send('You do not have Admin access');
+  }
+
+  const [teams, affiliates] = await Promise.all([
+    prisma.officialTeam.findMany({ orderBy: { createdAt: 'desc' } }),
+    prisma.affiliate.findMany({ orderBy: { createdAt: 'desc' } })
+  ]);
+
+  const content = `
+  <section class="card card-full">
+    <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+      <h2 style="margin:0;">Official Teams / WF Affiliates</h2>
+      <div style="display:flex; gap:10px; flex-wrap:wrap;">
+        <button class="action-btn primary" id="addTeamBtn">Add Official Team</button>
+        <button class="action-btn" id="addAffiliateBtn">Add WF Affiliate</button>
+      </div>
+    </div>
+
+    <h3 style="margin-top:18px;">Official Teams</h3>
+    <div class="table-scroll">
+      <table class="departures-table official-teams">
+        <thead>
+          <tr>
+            <th>Team Name</th>
+            <th>Callsign</th>
+            <th>Main CID</th>
+            <th>A/C Type</th>
+            <th>Country</th>
+            <th>WF26</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          ${teams.map(t => `
+            <tr data-team-id="${t.id}">
+              <td>${escapeHtml(t.teamName)}</td>
+              <td>${escapeHtml(t.callsign)}</td>
+              <td>${t.mainCid}</td>
+              <td>${escapeHtml(t.aircraftType)}</td>
+              <td>${escapeHtml(t.country)}</td>
+              <td style="text-align:center;">
+                <input
+  type="checkbox"
+  class="wf26-toggle wf-check"
+  data-entity="team"
+  data-id="${t.id}"
+  ${t.participatingWf26 ? 'checked' : ''}
+/>
+
+              </td>
+              <td style="text-align:right;">
+                <button class="tobt-btn cancel" data-action="delete-team" data-id="${t.id}">Delete</button>
+              </td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+
+    <h3 style="margin-top:22px;">WF Affiliates</h3>
+    <div class="table-scroll">
+      <table class="departures-table affiliates">
+  <thead>
+    <tr>
+      <th class="col-callsign">Callsign</th>
+      <th class="col-simtype">Full Sim / Home Cockpit</th>
+      <th class="col-cid col-right">CID</th>
+      <th class="col-wf26 col-center">WF26</th>
+      <th class="col-actions"></th>
+    </tr>
+  </thead>
+  <tbody>
+    ${affiliates.map(a => `
+      <tr data-affiliate-id="${a.id}">
+        <td class="col-callsign">${escapeHtml(a.callsign)}</td>
+        <td class="col-simtype">${escapeHtml(a.simType)}</td>
+        <td class="col-cid col-right">${a.cid}</td>
+        <td class="col-wf26 col-center">
+          <input
+            type="checkbox"
+            class="wf26-toggle wf-check"
+            data-entity="affiliate"
+            data-id="${a.id}"
+            ${a.participatingWf26 ? 'checked' : ''}
+          />
+        </td>
+        <td class="col-actions col-right">
+          <button
+            class="tobt-btn cancel"
+            data-action="delete-affiliate"
+            data-id="${a.id}">
+            Delete
+          </button>
+        </td>
+      </tr>
+    `).join('')}
+  </tbody>
+</table>
+
+    </div>
+  </section>
+
+  <!-- ===== Add Entry Modal ===== -->
+  <div id="adminEntryModal" class="modal hidden">
+    <div class="modal-backdrop"></div>
+
+    <div class="modal-card card" style="max-width:520px; text-align:left;">
+      <h3 id="adminEntryModalTitle" style="text-align:center;">Add Entry</h3>
+      <p id="adminEntryModalHelp" class="modal-help" style="text-align:center;">Fill in the details below.</p>
+
+      <form id="adminEntryForm">
+        <input type="hidden" id="adminEntryType" name="type" value="team" />
+
+        <div id="teamFields">
+          <label style="display:block; margin:10px 0 6px;">Team Name</label>
+          <input name="teamName" type="text" placeholder="e.g. Virtual Airline XYZ" required />
+
+          <label style="display:block; margin:10px 0 6px;">Callsign</label>
+          <input name="callsign" type="text" placeholder="e.g. BAW" maxlength="10" required />
+
+          <label style="display:block; margin:10px 0 6px;">Main CID</label>
+          <input name="mainCid" type="number" inputmode="numeric" placeholder="e.g. 123456" required />
+
+          <label style="display:block; margin:10px 0 6px;">A/C Type</label>
+          <input name="aircraftType" type="text" placeholder="e.g. B738" required />
+
+          <label style="display:block; margin:10px 0 6px;">Country</label>
+          <input name="country" type="text" placeholder="e.g. United Kingdom" required />
+        </div>
+
+        <div id="affiliateFields" class="hidden">
+          <label style="display:block; margin:10px 0 6px;">Callsign</label>
+          <input name="affiliateCallsign" type="text" placeholder="e.g. N123AB" maxlength="10" />
+
+          <label style="display:block; margin:10px 0 6px;">Full Sim / Home Cockpit</label>
+          <input name="simType" type="text" placeholder="e.g. Full Sim" />
+
+          <label style="display:block; margin:10px 0 6px;">CID</label>
+          <input name="cid" type="number" inputmode="numeric" placeholder="e.g. 123456" />
+        </div>
+
+        <label style="display:flex; align-items:center; gap:10px; margin:14px 0 0; user-select:none;">
+          <input type="checkbox" name="participatingWf26" />
+          Participating in WF26
+        </label>
+
+        <div class="modal-actions" style="margin-top:16px;">
+          <button type="button" class="action-btn" id="adminEntryCancel">Cancel</button>
+          <button type="submit" class="action-btn primary" id="adminEntrySave">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    const modal = document.getElementById('adminEntryModal');
+    const form = document.getElementById('adminEntryForm');
+    const typeInput = document.getElementById('adminEntryType');
+    const teamFields = document.getElementById('teamFields');
+    const affiliateFields = document.getElementById('affiliateFields');
+    const titleEl = document.getElementById('adminEntryModalTitle');
+    const cancelBtn = document.getElementById('adminEntryCancel');
+    const addTeamBtn = document.getElementById('addTeamBtn');
+    const addAffiliateBtn = document.getElementById('addAffiliateBtn');
+
+    function openEntryModal(type) {
+      typeInput.value = type;
+      form.reset();
+
+      if (type === 'team') {
+        titleEl.textContent = 'Add Official Team';
+        teamFields.classList.remove('hidden');
+        affiliateFields.classList.add('hidden');
+        // ensure required constraints match
+        form.querySelector('input[name="teamName"]').required = true;
+        form.querySelector('input[name="callsign"]').required = true;
+        form.querySelector('input[name="mainCid"]').required = true;
+        form.querySelector('input[name="aircraftType"]').required = true;
+        form.querySelector('input[name="country"]').required = true;
+        form.querySelector('input[name="affiliateCallsign"]').required = false;
+        form.querySelector('input[name="simType"]').required = false;
+        form.querySelector('input[name="cid"]').required = false;
+      } else {
+        titleEl.textContent = 'Add WF Affiliate';
+        teamFields.classList.add('hidden');
+        affiliateFields.classList.remove('hidden');
+        form.querySelector('input[name="teamName"]').required = false;
+        form.querySelector('input[name="callsign"]').required = false;
+        form.querySelector('input[name="mainCid"]').required = false;
+        form.querySelector('input[name="aircraftType"]').required = false;
+        form.querySelector('input[name="country"]').required = false;
+        form.querySelector('input[name="affiliateCallsign"]').required = true;
+        form.querySelector('input[name="simType"]').required = true;
+        form.querySelector('input[name="cid"]').required = true;
+      }
+
+      modal.classList.remove('hidden');
+      const firstInput = modal.querySelector('input:not([type="hidden"]):not([type="checkbox"])');
+      if (firstInput) firstInput.focus();
+    }
+
+    function closeEntryModal() {
+      modal.classList.add('hidden');
+    }
+
+    addTeamBtn.addEventListener('click', () => openEntryModal('team'));
+    addAffiliateBtn.addEventListener('click', () => openEntryModal('affiliate'));
+    cancelBtn.addEventListener('click', closeEntryModal);
+    modal.querySelector('.modal-backdrop').addEventListener('click', closeEntryModal);
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const type = typeInput.value;
+      const fd = new FormData(form);
+      const payload = {};
+
+      // checkbox
+      payload.participatingWf26 = fd.get('participatingWf26') === 'on';
+
+      if (type === 'team') {
+        payload.teamName = (fd.get('teamName') || '').toString().trim();
+        payload.callsign = (fd.get('callsign') || '').toString().trim().toUpperCase();
+        payload.mainCid = Number(fd.get('mainCid'));
+        payload.aircraftType = (fd.get('aircraftType') || '').toString().trim().toUpperCase();
+        payload.country = (fd.get('country') || '').toString().trim();
+      } else {
+        payload.callsign = (fd.get('affiliateCallsign') || '').toString().trim().toUpperCase();
+        payload.simType = (fd.get('simType') || '').toString().trim();
+        payload.cid = Number(fd.get('cid'));
+      }
+
+      const url = type === 'team' ? '/api/admin/official-teams' : '/api/admin/affiliates';
+
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        alert(data.error || 'Failed to save');
+        return;
+      }
+
+      closeEntryModal();
+      location.reload();
+    });
+
+    // Delete handlers
+    document.addEventListener('click', async (e) => {
+      const btn = e.target.closest('button');
+      if (!btn) return;
+
+      const action = btn.dataset.action;
+      const id = btn.dataset.id;
+
+      if (!action || !id) return;
+
+      if (action === 'delete-team') {
+        const ok = await openConfirmModal({
+          title: 'Delete Official Team',
+          message: 'Are you sure you want to delete this team?'
+        });
+        if (!ok) return;
+
+        const res = await fetch('/api/admin/official-teams/' + id, { method: 'DELETE' });
+        if (!res.ok) alert('Failed to delete');
+        else location.reload();
+      }
+
+      if (action === 'delete-affiliate') {
+        const ok = await openConfirmModal({
+          title: 'Delete WF Affiliate',
+          message: 'Are you sure you want to delete this affiliate?'
+        });
+        if (!ok) return;
+
+        const res = await fetch('/api/admin/affiliates/' + id, { method: 'DELETE' });
+        if (!res.ok) alert('Failed to delete');
+        else location.reload();
+      }
+    });
+
+    // WF26 toggle persistence
+    document.querySelectorAll('.wf26-toggle').forEach(cb => {
+      cb.addEventListener('change', async () => {
+        const entity = cb.dataset.entity;
+        const id = cb.dataset.id;
+        const participatingWf26 = cb.checked;
+
+        const url = entity === 'team'
+          ? '/api/admin/official-teams/' + id
+          : '/api/admin/affiliates/' + id;
+
+        const res = await fetch(url, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ participatingWf26 })
+        });
+
+        if (!res.ok) {
+          cb.checked = !participatingWf26;
+          alert('Failed to update WF26 flag');
+        }
+      });
+    });
+
+    // ESC close
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && !modal.classList.contains('hidden')) closeEntryModal();
+    });
+  </script>
+  `;
+
+  return res.send(renderLayout({
+    title: 'Official Teams / Affiliates',
+    user,
+    isAdmin,
+    content,
+    layoutClass: 'dashboard-full'
+  }));
+});
+
+
+
+// Create Official Team
+app.post('/api/admin/official-teams', requireAdmin, async (req, res) => {
+  const { teamName, callsign, mainCid, aircraftType, country, participatingWf26 } = req.body || {};
+
+  if (!teamName || !callsign || !mainCid || !aircraftType || !country) {
+    return res.status(400).json({ error: 'Missing required fields' });
+  }
+
+  const created = await prisma.officialTeam.create({
+    data: {
+      teamName: String(teamName).trim(),
+      callsign: String(callsign).trim().toUpperCase(),
+      mainCid: Number(mainCid),
+      aircraftType: String(aircraftType).trim().toUpperCase(),
+      country: String(country).trim(),
+      participatingWf26: Boolean(participatingWf26)
+    }
+  });
+
+  return res.json({ success: true, id: created.id });
+});
+
+// Create Affiliate
+app.post('/api/admin/affiliates', requireAdmin, async (req, res) => {
+  const { callsign, simType, cid, participatingWf26 } = req.body || {};
+
+  if (!callsign || !simType || !cid) {
+    return res.status(400).json({ error: 'Missing required fields' });
+  }
+
+  const created = await prisma.affiliate.create({
+    data: {
+      callsign: String(callsign).trim().toUpperCase(),
+      simType: String(simType).trim(),
+      cid: Number(cid),
+      participatingWf26: Boolean(participatingWf26)
+    }
+  });
+
+  return res.json({ success: true, id: created.id });
+});
+
+// Delete Official Team
+app.delete('/api/admin/official-teams/:id', requireAdmin, async (req, res) => {
+  const id = Number(req.params.id);
+  if (!id) return res.status(400).json({ error: 'Invalid id' });
+
+  await prisma.officialTeam.delete({ where: { id } }).catch(() => null);
+  return res.json({ success: true });
+});
+
+// Delete Affiliate
+app.delete('/api/admin/affiliates/:id', requireAdmin, async (req, res) => {
+  const id = Number(req.params.id);
+  if (!id) return res.status(400).json({ error: 'Invalid id' });
+
+  await prisma.affiliate.delete({ where: { id } }).catch(() => null);
+  return res.json({ success: true });
+});
+
+// Patch Official Team (WF26 toggle)
+app.patch('/api/admin/official-teams/:id', requireAdmin, async (req, res) => {
+  const id = Number(req.params.id);
+  const { participatingWf26 } = req.body || {};
+  if (!id) return res.status(400).json({ error: 'Invalid id' });
+
+  await prisma.officialTeam.update({
+    where: { id },
+    data: { participatingWf26: Boolean(participatingWf26) }
+  });
+
+  return res.json({ success: true });
+});
+
+// Patch Affiliate (WF26 toggle)
+app.patch('/api/admin/affiliates/:id', requireAdmin, async (req, res) => {
+  const id = Number(req.params.id);
+  const { participatingWf26 } = req.body || {};
+  if (!id) return res.status(400).json({ error: 'Invalid id' });
+
+  await prisma.affiliate.update({
+    where: { id },
+    data: { participatingWf26: Boolean(participatingWf26) }
+  });
+
+  return res.json({ success: true });
 });
 
 
@@ -2571,7 +3037,11 @@ const simbriefUrl =
 
 
   const content = `
-    <section class="card card-full">
+  <div id="bookingErrorBanner" class="booking-banner cancel hidden">
+  <span id="errorMessage"></span>
+</div>
+  
+  <section class="card card-full">
       <h2>My Slots</h2>
 
       ${rows.length === 0 ? `
@@ -2598,10 +3068,13 @@ const simbriefUrl =
   <td class="wf-sector">${r.wfSector}</td>
   <td class="col-callsign">
   <input
-    class="callsign-input"
-    value="${r.callsign}"
-    data-slotkey="${r.slotKey}"
-  />
+  class="callsign-input"
+  data-slotkey="${r.slotKey}"
+  data-original="${r.callsign}"
+  value="${r.callsign}"
+>
+
+  
 </td>
 
   <td>${r.from}</td>
@@ -2653,7 +3126,23 @@ const simbriefUrl =
       `}
     </section>
     <script>
+  function showBookingError(message) {
+    const banner = document.getElementById('bookingErrorBanner');
+    const msg = document.getElementById('errorMessage');
+    if (!banner || !msg) return;
+
+    msg.textContent = message;
+    banner.classList.remove('hidden');
+  }
+
+  function hideBookingError() {
+    const banner = document.getElementById('bookingErrorBanner');
+    if (banner) banner.classList.add('hidden');
+  }
+
   async function saveCallsign(input) {
+    hideBookingError();
+
     const callsign = input.value.trim().toUpperCase();
     const slotKey = input.dataset.slotkey;
 
@@ -2664,20 +3153,32 @@ const simbriefUrl =
     });
 
     if (!res.ok) {
-      alert('Failed to update callsign');
-      return false;
-    }
+  let errText = 'Failed to update callsign';
+  try {
+    const err = await res.json();
+    if (err && err.error) errText = err.error;
+  } catch {}
 
-    return true;
+  // 🔁 revert input to last valid value
+  input.value = input.dataset.original || '';
+
+  showBookingError(errText);
+  return false;
+}
+
+
+    // success
+input.dataset.original = callsign;
+return true;
   }
 
-  // Save when user clicks away (current behavior)
+  // Save when user clicks away
   document.addEventListener('change', e => {
     if (!e.target.classList.contains('callsign-input')) return;
     saveCallsign(e.target);
   });
 
-  // Save when user presses Enter (new behavior)
+  // Save when user presses Enter
   document.addEventListener('keydown', async e => {
     if (!e.target.classList.contains('callsign-input')) return;
     if (e.key !== 'Enter') return;
@@ -2687,6 +3188,7 @@ const simbriefUrl =
     e.target.blur();
   });
 </script>
+
 <script>
   document.addEventListener('click', async e => {
     const btn = e.target.closest('.cancel-slot-btn');
@@ -2737,184 +3239,6 @@ const simbriefUrl =
     })
   );
 });
-
-
-app.get('/official-teams', requireAdmin, async (req, res) => {
-  const officialTeams = await prisma.officialTeam.findMany({
-    orderBy: { teamName: 'asc' }
-  });
-
-  const affiliates = await prisma.affiliate.findMany({
-    orderBy: { callsign: 'asc' }
-  });
-
-  const content = `
-  <section class="card dashboard-full">
-
-    <h2>Official Teams</h2>
-
-    <form method="POST" action="/official-teams/add" class="form-row">
-      <input name="teamName" placeholder="Team Name" required />
-      <input name="callsign" placeholder="Callsign" required />
-      <input name="mainCid" placeholder="Main CID" required />
-      <input name="aircraftType" placeholder="A/C Type" />
-      <input name="country" placeholder="Country" />
-      <label>
-        <input type="checkbox" name="participatingWf26" /> WF26
-      </label>
-      <button>Add</button>
-    </form>
-
-    <table class="departures-table">
-      <thead>
-        <tr>
-          <th>Team</th>
-          <th>Callsign</th>
-          <th>Main CID</th>
-          <th>A/C</th>
-          <th>Country</th>
-          <th>WF26</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody>
-        ${officialTeams.map(t => `
-          <tr>
-            <td>${t.teamName}</td>
-            <td>${t.callsign}</td>
-            <td>${t.mainCid}</td>
-            <td>${t.aircraftType || ''}</td>
-            <td>${t.country || ''}</td>
-            <td>${t.participatingWf26 ? '✅' : ''}</td>
-            <td>
-              <form method="POST" action="/official-teams/${t.id}/delete">
-                <button class="action-btn delete-started-btn">🗑</button>
-              </form>
-            </td>
-          </tr>
-        `).join('')}
-      </tbody>
-    </table>
-
-    <hr style="margin:40px 0;">
-
-    <h2>Affiliates</h2>
-
-    <form method="POST" action="/affiliates/add" class="form-row">
-      <input name="callsign" placeholder="Callsign" required />
-      <select name="simType">
-        <option value="Full Sim">Full Sim</option>
-        <option value="Home Cockpit">Home Cockpit</option>
-      </select>
-      <input name="cid" placeholder="CID" required />
-      <label>
-        <input type="checkbox" name="participatingWf26" /> WF26
-      </label>
-      <button>Add</button>
-    </form>
-
-    <table class="departures-table">
-      <thead>
-        <tr>
-          <th>Callsign</th>
-          <th>Sim</th>
-          <th>CID</th>
-          <th>WF26</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody>
-        ${affiliates.map(a => `
-          <tr>
-            <td>${a.callsign}</td>
-            <td>${a.simType}</td>
-            <td>${a.cid}</td>
-            <td>${a.participatingWf26 ? '✅' : ''}</td>
-            <td>
-              <form method="POST" action="/affiliates/${a.id}/delete">
-                <button class="action-btn delete-started-btn">🗑</button>
-              </form>
-            </td>
-          </tr>
-        `).join('')}
-      </tbody>
-    </table>
-
-  </section>
-  `;
-
-  res.send(
-    renderLayout({
-      title: 'Official Teams / Affiliates',
-      user: req.session.user.data,
-      isAdmin: true,
-      layoutClass: 'dashboard-full',
-      content
-    })
-  );
-});
-
-app.post('/official-teams/add', requireAdmin, async (req, res) => {
-  const {
-    teamName,
-    callsign,
-    mainCid,
-    aircraftType,
-    country,
-    participatingWf26
-  } = req.body;
-
-  await prisma.officialTeam.create({
-    data: {
-      teamName,
-      callsign,
-      mainCid: Number(mainCid),
-      aircraftType,
-      country,
-      participatingWf26: !!participatingWf26
-    }
-  });
-
-  res.redirect('/official-teams');
-});
-
-app.post('/affiliates/add', requireAdmin, async (req, res) => {
-  const {
-    callsign,
-    simType,
-    cid,
-    participatingWf26
-  } = req.body;
-
-  await prisma.affiliate.create({
-    data: {
-      callsign,
-      simType,
-      cid: Number(cid),
-      participatingWf26: !!participatingWf26
-    }
-  });
-
-  res.redirect('/official-teams');
-});
-
-app.post('/official-teams/:id/delete', requireAdmin, async (req, res) => {
-  await prisma.officialTeam.delete({
-    where: { id: Number(req.params.id) }
-  });
-
-  res.redirect('/official-teams');
-});
-
-app.post('/affiliates/:id/delete', requireAdmin, async (req, res) => {
-  await prisma.affiliate.delete({
-    where: { id: Number(req.params.id) }
-  });
-
-  res.redirect('/official-teams');
-});
-
-
 
 
 /* ===== LOGOUT ===== */

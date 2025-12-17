@@ -50,3 +50,7 @@ model TobtBooking {
   tobtTimeUtc   String
   createdAt     DateTime @default(now())
 }
+model User {
+  cid           Int     @id
+  name          String
+}
