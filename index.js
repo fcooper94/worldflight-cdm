@@ -902,6 +902,7 @@ app.post('/api/tobt/book', async (req, res) => {
 
   const { slotKey, callsign } = req.body;
 
+
   if (!slotKey || !callsign) {
     return res.status(400).json({ error: 'Missing parameters' });
   }
@@ -911,7 +912,53 @@ app.post('/api/tobt/book', async (req, res) => {
     return res.status(409).json({ error: 'Slot already booked' });
   }
 
-  const normalizedCallsign = callsign.trim().toUpperCase();
+  // 🔒 Enforce unique callsign per sector
+// sector = FROM-TO|date|depTime
+const sectorKey = slotKey.split('|').slice(0, 3).join('|');
+const normalizedCallsign = callsign.trim().toUpperCase();
+
+for (const existingSlotKey in tobtBookingsBySlot) {
+  const existingSectorKey = existingSlotKey
+    .split('|')
+    .slice(0, 3)
+    .join('|');
+
+  const existing = tobtBookingsBySlot[existingSlotKey];
+
+  if (
+    existingSectorKey === sectorKey &&
+    existing.callsign === normalizedCallsign
+  ) {
+    return res.status(409).json({
+      error:
+        'A booking has already been made with this callsign on ' +
+        sectorKey.split('|')[0]
+    });
+  }
+}
+
+
+  // 🔒 Enforce 1 booking per sector per user
+// sector = FROM-TO|date|depTime
+const slotParts = slotKey.split('|');
+if (slotParts.length === 4) {
+  const sectorKey = slotParts.slice(0, 3).join('|');
+
+  const existingSlots = tobtBookingsByCid[cid];
+  if (existingSlots) {
+    for (const existingKey of existingSlots) {
+      const existingParts = existingKey.split('|');
+      const existingSector = existingParts.slice(0, 3).join('|');
+
+      if (existingSector === sectorKey) {
+        return res.status(409).json({
+          error: 'You already have a booking in this sector'
+        });
+      }
+    }
+  }
+}
+
 
   // slotKey format: FROM-TO|Date|DepTime|TOBT
   const parts = slotKey.split('|');
@@ -2179,6 +2226,11 @@ app.get('/book', (req, res) => {
   </button>
 </div>
 
+<div id="bookingErrorBanner" class="booking-banner cancel hidden">
+  <span id="errorMessage"></span>
+</div>
+
+
 
 
   <section class="card card-full tobt-card">
@@ -2246,6 +2298,17 @@ app.get('/book', (req, res) => {
     }
 
     const slots = data;
+    // 🔒 Detect if user already has a booking in this sector
+let mySectorKey = null;
+
+for (const slot of slots) {
+  if (slot.byMe) {
+    const parts = slot.slotKey.split('|');
+    mySectorKey = parts.slice(0, 3).join('|'); // FROM-TO|date|dep
+    break;
+  }
+}
+
     const half = Math.ceil(slots.length / 2);
     const leftCol = slots.slice(0, half);
     const rightCol = slots.slice(half);
@@ -2261,18 +2324,34 @@ app.get('/book', (req, res) => {
 
         let btn = '';
 
-        if (slot.byMe) {
-          btn =
-            '<button class="tobt-btn cancel" data-action="cancel" data-slot-key="' +
-            slot.slotKey + '">Cancel</button>';
-        } else if (slot.booked) {
-          btn =
-            '<button class="tobt-btn booked" disabled>Booked</button>';
-        } else {
-          btn =
-            '<button class="tobt-btn book" data-action="book" data-slot-key="' +
-            slot.slotKey + '">Book</button>';
-        }
+        const slotSectorKey = slot.slotKey.split('|').slice(0, 3).join('|');
+
+if (slot.byMe) {
+  btn =
+    '<button class="tobt-btn cancel" data-action="cancel" data-slot-key="' +
+    slot.slotKey + '">Cancel</button>';
+
+} else if (mySectorKey && slotSectorKey === mySectorKey) {
+  // 🔒 Same sector, user already booked — keep label, disable only
+  const label = slot.booked ? 'Booked' : 'Book';
+
+  btn =
+    '<button class="tobt-btn ' +
+    (slot.booked ? 'booked' : 'book') +
+    ' disabled" disabled title="You already have a booking in this sector">' +
+    label +
+    '</button>';
+
+} else if (slot.booked) {
+  btn =
+    '<button class="tobt-btn booked" disabled>Booked</button>';
+
+} else {
+  btn =
+    '<button class="tobt-btn book" data-action="book" data-slot-key="' +
+    slot.slotKey + '">Book</button>';
+}
+
 
         tr.innerHTML +=
           '<td>' + slot.tobt + '</td>' +
@@ -2318,10 +2397,13 @@ app.get('/book', (req, res) => {
     });
 
     if (!res.ok) {
-      const err = await res.json();
-      alert(err.error || 'Action failed');
-      return;
-    }
+  const err = await res.json();
+  showBookingError(
+    err.error || 'Booking failed. Please try again.'
+  );
+  return;
+}
+
 
     if (action === 'book') {
       showBookingSuccess({
@@ -2380,6 +2462,33 @@ app.get('/book', (req, res) => {
     banner.classList.remove('hidden');
   }
 </script>
+<script>
+  const viewBtn = document.getElementById('viewBookingsBtn');
+  if (viewBtn) {
+    viewBtn.addEventListener('click', () => {
+      window.location.href = '/my-slots';
+    });
+  }
+
+  const viewBtnCancel = document.getElementById('viewBookingsBtnCancel');
+  if (viewBtnCancel) {
+    viewBtnCancel.addEventListener('click', () => {
+      window.location.href = '/my-slots';
+    });
+  }
+</script>
+<script>
+function showBookingError(message) {
+  hideBookingBanners();
+  const banner = document.getElementById('bookingErrorBanner');
+  const msg = document.getElementById('errorMessage');
+  if (!banner || !msg) return;
+
+  msg.textContent = message;
+  banner.classList.remove('hidden');
+}
+</script>
+
 
   `;
 

@@ -1858,3 +1858,14 @@ select{ cursor:pointer; }
   flex-shrink: 0;
 }
 
+.tobt-book-btn.disabled,
+.tobt-book-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  filter: grayscale(1);
+}
+.tobt-btn.disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  filter: grayscale(1);
+}
