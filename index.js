@@ -811,7 +811,7 @@ io.emit(
 
 
 /* ===== ADMIN MANUAL REFRESH ===== */
-app.post('/admin/refresh-schedule', requireAdmin, async (req, res) => {
+app.post('/wf-schedule/refresh-schedule', requireAdmin, async (req, res) => {
   await refreshAdminSheet();
   res.json({ success: true });
 });
@@ -906,6 +906,9 @@ app.post('/api/tobt/update-callsign', (req, res) => {
   res.json({ success: true });
 });
 
+app.get('/admin', (req, res) => {
+  res.redirect(301, '/wf-schedule');
+});
 
 
 /* ===== CHANGE CHECK ===== */
@@ -928,7 +931,7 @@ app.get('/departures/check-changes', async (req, res) => {
 });
 
 /* ===== ADMIN PAGE ===== */
-app.get('/admin', requireAdmin, (req, res) => {
+app.get('/wf-schedule', requireAdmin, (req, res) => {
 if (!req.session.user || !req.session.user.data) {
   return res.redirect('/');
 }
@@ -1004,7 +1007,7 @@ ${adminSheetCache.map(r => {
   <!-- KEEP ALL EXISTING <script> TAGS EXACTLY AS THEY ARE -->
   <script>
 document.getElementById('refreshScheduleBtn').onclick = async () => {
-  await fetch('/admin/refresh-schedule', { method: 'POST' });
+  await fetch('/wf-schedule/refresh-schedule', { method: 'POST' });
   location.reload();
 };
 </script>
@@ -1148,7 +1151,7 @@ toggleBtn.onclick = () => {
 `;
 res.send(
   renderLayout({
-    title: 'Admin',
+    title: 'WF Schedule',
     user,
     isAdmin,
     layoutClass: 'dashboard-full',

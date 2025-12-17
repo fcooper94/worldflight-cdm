@@ -54,9 +54,9 @@ export default function renderLayout({
     ${isAdmin ? `
     <div class="nav-section nav-admin">
       <div class="nav-title">Admin</div>
-      <a href="/admin" class="nav-item">
+      <a href="/wf-schedule" class="nav-item">
         <span class="icon">🛠️</span>
-        <span class="label">Admin</span>
+        <span class="label">WF Schedule / Flow</span>
       </a>
     </div>
     ` : ''}
