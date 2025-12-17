@@ -2205,3 +2205,58 @@ tr:hover .row-actions {
   box-shadow: 0 0 6px rgba(156,163,175,.25);
 }
 .col-tobt { width: 110px; text-align: center; }
+.tobt-select {
+  height: 26px;                 /* 🔑 controls row height */
+  min-height: 26px;
+  padding: 2px 26px 2px 8px;    /* compact vertical padding */
+  font-size: 13px;
+  line-height: 1.2;
+  border-radius: 6px;
+  background-color: #0e1624;
+  color: #ffffff;
+  border: 1px solid #1f2a3a;
+  appearance: none;             /* remove native tall select */
+  -webkit-appearance: none;
+  -moz-appearance: none;
+}
+
+/* Keep dropdown arrow aligned */
+.tobt-select-wrapper {
+  position: relative;
+}
+
+.tobt-select-wrapper::after {
+  content: "▾";
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 10px;
+  pointer-events: none;
+  color: #9fb3c8;
+}
+.tobt-remove-btn {
+  all: unset;                 /* 🔑 removes browser defaults */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  width: 22px;
+  height: 22px;
+
+  margin-left: 6px;
+  border-radius: 50%;
+
+  color: #ff6b6b;
+  cursor: pointer;
+}
+
+.tobt-remove-btn:hover {
+  background: rgba(255, 107, 107, 0.18);
+  color: #ff9a9a;
+}
+.tobt-assigned {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}

@@ -2239,11 +2239,29 @@ if (isEventFlight) {
         <div class="tobt-assigned">
           <strong>${tobtBooking.tobtTimeUtc}</strong>
           <button
-            class="tobt-remove-btn"
-            data-slotkey="${tobtBooking.slotKey}"
-            data-callsign="${p.callsign}"
-            title="Remove TOBT"
-          >✖</button>
+  class="tobt-remove-btn"
+  data-slotkey="${tobtBooking.slotKey}"
+  data-callsign="${p.callsign}"
+  title="Remove TOBT"
+  aria-label="Remove TOBT"
+>
+  <svg
+    viewBox="0 0 24 24"
+    width="18"
+    height="18"
+    aria-hidden="true"
+  >
+    <path
+      d="M7 7l10 10M17 7L7 17"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="2.5"
+      stroke-linecap="round"
+    />
+  </svg>
+</button>
+
+
         </div>
       `;
     } else {
@@ -2261,12 +2279,14 @@ if (isEventFlight) {
       tobtCellHtml = `<em>None</em>`;
     } else {
       tobtCellHtml = `
+      <div class="tobt-select-wrapper">
         <select class="tobt-select" data-callsign="${p.callsign}">
           <option value="">Select TOBT</option>
           ${availableTobts.map(s =>
             `<option value="${s.slotKey}">${s.tobt}</option>`
           ).join('')}
         </select>
+      </div>
       `;
     }
   }
