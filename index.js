@@ -3967,6 +3967,7 @@ app.get('/my-slots', requireLogin, (req, res) => {
     connectDate.getUTCMinutes().toString().padStart(2, '0');
 
   const callsign = booking?.callsign || '';
+  const [deph, depm] = booking.tobtTimeUtc.split(':');
 
 const simbriefUrl =
   'https://dispatch.simbrief.com/options/custom' +
@@ -3977,8 +3978,9 @@ const simbriefUrl =
   '&depm=' + mm +
   '&route=' + encodeURIComponent(atcRoute || '') +
   '&manualrmk=' + encodeURIComponent(
-    'Route validated from www.WorldFlight.center'
+    `WF TOBT [SLOT] ${hh}:${mm} UTC - Route validated from www.worldflight.center`
   );
+
 
 
 
@@ -4008,76 +4010,68 @@ const simbriefUrl =
       ${rows.length === 0 ? `
         <p><em>You have no booked slots.</em></p>
       ` : `
-        <div class="table-scroll">
-          <table class="departures-table my-slots-table">
-            <thead>
+        <div class="table-scroll my-slots-table-wrapper">
+          <table class="my-slots-table">
+           <thead>
               <tr>
-                <th>WF Sector</th>
+                <th class="col-wf-sector">WF Sector</th>
                 <th class="col-callsign">Callsign</th>
-                <th>Departure</th>
-                <th>Destination</th>
-                <th>TOBT</th>
-                <th>Connect by</th>
-                <th>ATC Route</th>
-                <th>Plan with SimBrief</th>
-                <th>Actions</th>
+                <th class="col-departure">Departure</th>
+                <th class="col-destination">Destination</th>
+                <th class="col-tobt">TOBT</th>
+                <th class="col-connect">Connect by</th>
+                <th class="col-route">ATC Route</th>
+                <th class="col-plan">Plan with SimBrief</th>
+                <th class="col-actions">Actions</th>
               </tr>
-            </thead>
+          </thead>
+
             <tbody>
   ${rows.map(r => `
     <tr>
-  <td class="wf-sector">${r.wfSector}</td>
+  <td class="col-wf-sector">${r.wfSector}</td>
+
   <td class="col-callsign">
-  <input
-  class="callsign-input"
-  data-slotkey="${r.slotKey}"
-  data-original="${r.callsign}"
-  value="${r.callsign}"
->
-
-  
-</td>
-
-  <td>${r.from}</td>
-  <td>${r.to}</td>
-
-  <td class="tobt-primary">
-    ${r.tobt}Z
+    <input
+      class="callsign-input"
+      data-slotkey="${r.slotKey}"
+      data-original="${r.callsign}"
+      value="${r.callsign}">
   </td>
 
-  <td>${r.connectBy}Z</td>
+  <td class="col-departure">${r.from}</td>
+  <td class="col-destination">${r.to}</td>
 
-  <!-- ATC Route: constrained + padded -->
-  <td class="atc-route-col col-route">
-    ${r.atcRoute}
+  <td class="col-tobt tobt-primary">${r.tobt}Z</td>
+  <td class="col-connect">${r.connectBy}Z</td>
+
+  <td class="col-route">
+    <div class="route-box">
+      ${r.atcRoute}
+    </div>
   </td>
 
-  <!-- SimBrief: reserved space -->
-  <td class="simbrief-col">
-  <a
-    href="${r.simbriefUrl}"
-    class="simbrief-link"
-    target="_blank"
-    rel="noopener noreferrer"
-  >
-    Plan with SimBrief
-  </a>
-</td>
-<td class="actions-cell">
-  <div class="actions-wrap">
+  <td class="col-plan">
+    <a class="simbrief-btn"
+       href="${r.simbriefUrl}"
+       target="_blank"
+       rel="noopener">
+      <span class="simbrief-logo">SB</span>
+      <span class="simbrief-text">Plan with SimBrief</span>
+    </a>
+  </td>
+
+  <td class="col-actions">
     <button
       type="button"
       class="tobt-btn cancel cancel-slot-btn"
       data-slot-key="${r.slotKey}"
-      data-callsign="${r.callsign}"
-    >
+      data-callsign="${r.callsign}">
       Cancel Slot
     </button>
-  </div>
-</td>
-
-
+  </td>
 </tr>
+
 
   `).join('')}
 </tbody>

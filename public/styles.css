@@ -495,18 +495,7 @@ select{ cursor:pointer; }
 }
 
 /* ===== My Slots table column sizing ===== */
-.my-slots-table th.col-callsign,
-.my-slots-table td.col-callsign {
-  width: 140px;
-  max-width: 140px;
-}
-.my-slots-table .callsign-input {
-  width: 100%;
-  max-width: 120px;
-  text-transform: uppercase;
-  font-weight: 600;
-  text-align: center;
-}
+
 
 
 
@@ -517,6 +506,7 @@ select{ cursor:pointer; }
   table-layout:fixed;
   min-width:1100px; /* forces scroll instead of squeeze */
 }
+
 .departures-table th,
 .departures-table td{
   padding:2px;
@@ -2462,6 +2452,16 @@ tr:hover .row-actions {
   white-space: nowrap;
 }
 
+/* Plan with SimBrief column */
+/* Plan with SimBrief column */
+/* =========================
+   My Slots table (ISOLATED)
+   ========================= */
+
+
+
+
+
 /* Book Slot */
 .schedule-page .departures-table th.col-book,
 .schedule-page .departures-table td.col-book {
@@ -2524,4 +2524,224 @@ tr:hover .row-actions {
 .schedule-page .table-scroll::-webkit-scrollbar-thumb {
   background: rgba(255,255,255,0.25);
   border-radius: 4px;
+}
+/* =========================
+   My Slots table (isolated)
+   ========================= */
+
+/* Wrapper: controls width + scroll */
+.my-slots-table-wrapper {
+ max-width: 1300px;
+  margin: 0 auto;
+
+  overflow-x: auto;
+  overflow-y: hidden;
+
+  padding-bottom: 6px; /* space so scrollbar doesn’t crowd content */
+}
+
+/* Table base */
+.my-slots-table {
+  width: 100%;
+  max-width: 1300px;
+  min-width: 1200px; /* 🔑 THIS FIXES IT */
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+/* Header + cell base */
+.my-slots-table th,
+.my-slots-table td {
+  padding: 10px 12px;
+  text-align: left;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+/* Header styling */
+.my-slots-table thead th {
+  font-size: 13px;
+  font-weight: 600;
+  color: #94a3b8;
+  letter-spacing: 0.4px;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+
+/* =========================
+   Column sizing
+   ========================= */
+/* =========================
+   Column sizing (balanced)
+   ========================= */
+
+   .my-slots-table .col-plan,
+.my-slots-table .col-actions {
+  vertical-align: middle;
+}
+
+.my-slots-table .col-wf-sector   { width: 90px;  }
+.my-slots-table .col-callsign    { width: 140px; padding-right: 8px; white-space: normal;}
+.my-slots-table .col-departure   { width: 95px;  }
+.my-slots-table .col-destination { width: 105px; }
+.my-slots-table .col-tobt        { width: 90px;  }
+.my-slots-table .col-connect     { width: 105px; }
+
+.callsign-input:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59,130,246,0.25);
+}
+
+
+/* Route absorbs remaining space */
+.my-slots-table .col-route {
+   width: auto;
+  min-width: 300px;
+  white-space: normal;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+
+/* ATC Route — contained, readable */
+.my-slots-table .col-route {
+  width: auto;
+  min-width: 320px;
+  white-space: normal;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #cbd5f5;
+}
+
+.my-slots-table .route-box {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 10px;
+  padding: 8px 10px;
+}
+
+.my-slots-table .col-plan        {
+  width: 220px;          /* 🔑 extra room */
+  text-align: center;
+}
+
+.my-slots-table .col-actions     {
+  width: 140px;
+  text-align: center;
+}
+
+/* =========================
+   Action buttons
+   ========================= */
+
+.actions-stack {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+}
+
+/* SimBrief button */
+.simbrief-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+
+  height: 34px;
+  padding: 0 14px;
+  border-radius: 18px;
+
+  background: linear-gradient(160deg, #2563eb, #1d4ed8);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+
+  white-space: nowrap;
+  flex-shrink: 0;
+
+  box-shadow: 0 0 10px rgba(37,99,235,0.35);
+}
+
+.simbrief-btn:hover {
+  filter: brightness(1.06);
+}
+
+/* Cancel slot button */
+.cancel-slot-btn {
+  height: 34px;
+  padding: 0 14px;
+  border-radius: 18px;
+
+  background: linear-gradient(160deg, #7f1d1d, #991b1b);
+  color: #fee2e2;
+  border: none;
+
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+
+  white-space: nowrap;
+}
+
+.cancel-slot-btn:hover {
+  filter: brightness(1.08);
+}
+.callsign-input {
+  width: 100%;
+  max-width: 100%;
+
+  box-sizing: border-box; /* 🔑 critical */
+
+  padding: 6px 10px;
+  height: 34px;
+
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.12);
+
+  background: rgba(255,255,255,0.04);
+  color: #fff;
+
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
+
+  outline: none;
+}
+
+
+/* =========================
+   Row separation
+   ========================= */
+
+.my-slots-table tbody tr:not(:last-child) td {
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+/* WebKit (Chrome, Edge, Safari) */
+.my-slots-table-wrapper::-webkit-scrollbar {
+  height: 8px;
+}
+
+.my-slots-table-wrapper::-webkit-scrollbar-track {
+  background: rgba(255,255,255,0.05);
+  border-radius: 10px;
+}
+
+.my-slots-table-wrapper::-webkit-scrollbar-thumb {
+  background: rgba(148,163,184,0.6);
+  border-radius: 10px;
+}
+
+.my-slots-table-wrapper::-webkit-scrollbar-thumb:hover {
+  background: rgba(148,163,184,0.85);
+}
+
+/* Firefox */
+.my-slots-table-wrapper {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148,163,184,0.6) rgba(255,255,255,0.05);
+}
+@media (pointer: fine) {
+  .my-slots-table-wrapper {
+    scrollbar-gutter: stable both-edges;
+  }
 }
