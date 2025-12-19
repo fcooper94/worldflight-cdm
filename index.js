@@ -1030,6 +1030,19 @@ function hhmmToNextUtcDate(hhmm, nowUtc = new Date()) {
   return d;
 }
 
+function buildTimeWindow(hhmm) {
+  if (!hhmm) return '';
+  return `${subtractMinutes(hhmm, 60)}–${addMinutes(hhmm, 60)}`;
+}
+
+function addMinutes(timeStr, minutes) {
+  const [hh, mm] = timeStr.split(':').map(Number);
+  const d = new Date(Date.UTC(2000, 0, 1, hh, mm));
+  d.setUTCMinutes(d.getUTCMinutes() + minutes);
+  return d.toISOString().substring(11, 16);
+}
+
+
 function hhmmToOperationalUtcDate(hhmm, nowUtc = new Date()) {
   if (!hhmm || !/^\d{2}:\d{2}$/.test(hhmm)) return null;
 
@@ -1105,7 +1118,66 @@ app.get('/', (req, res) => {
 
 app.get('/auth/login', vatsimLogin);
 app.get('/auth/callback', vatsimCallback);
-app.get('/dashboard', dashboard);
+app.get('/dashboard', (req, res) => {
+  /* ===============================
+     AUTH GUARD
+  =============================== */
+  if (!req.session.user || !req.session.user.data) {
+    return res.redirect('/');
+  }
+
+  /* ===============================
+     USER CONTEXT
+  =============================== */
+  const user = req.session.user.data;
+  const isAdmin = [10000010, 1303570, 10000005].includes(Number(user.cid));
+  const isATC = !!user.callsign;
+
+  /* ===============================
+     DASHBOARD CONTENT
+  =============================== */
+  const content = `
+  <section class="card">
+    <h2>Session Info</h2>
+
+    <div class="stat">
+      <span>VATSIM ID</span>
+      <strong>${user.cid}</strong>
+    </div>
+
+    <div class="stat">
+      <span>Controller Callsign</span>
+      <strong>${user.callsign || 'Not Connected'}</strong>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Status</h2>
+    <div class="status ${isATC ? 'online' : 'offline'}">
+      ${isATC ? 'ATC Online' : 'Offline'}
+    </div>
+  </section>
+
+
+
+
+</div>
+
+`;
+
+
+  /* ===============================
+     RENDER WITH SHARED LAYOUT
+  =============================== */
+  res.send(
+    renderLayout({
+      title: 'WorldFlight CDM',
+      user,
+      isAdmin,
+      content
+    })
+  );
+});
 
 app.get('/api/tobt/slots', (req, res) => {
   const cid = Number(req.session?.user?.data?.cid);
