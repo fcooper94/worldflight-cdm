@@ -366,7 +366,7 @@ const GOOGLE_SHEET_CSV_URL =
 let adminSheetCache = [];
 let lastDepartureSnapshot = new Set();
 
-const port = process.env.PORT || 3000;
+const port = process.env.PORT || 8080;
 
 /* ================= TSAT HELPERS (SERVER) ================= */
 
@@ -3939,6 +3939,6 @@ app.get('/logout', (req, res) => {
 
 
 /* ===== SERVER START ===== */
-httpServer.listen(port, () => {
-  console.log(`WorldFlight CDM running on http://localhost:${port}`);
+httpServer.listen(port, '0.0.0.0', () => {
+  console.log(`WorldFlight CDM is running on ${port}`);
 });
