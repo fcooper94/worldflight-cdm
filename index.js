@@ -3465,35 +3465,10 @@ app.get('/book', (req, res) => {
     from && to && depTimeUtc
       ? `${from}-${to}-${depTimeUtc}`
       : null;
-   const params = new URLSearchParams(window.location.search);
 
 
   const user = req.session.user.data;
   const isAdmin = ADMIN_CIDS.includes(Number(user.cid));
-
-  const depSelect = document.getElementById('departureSelect');
-
-if (depSelect.value) {
-  handleDepartureChange(depSelect.value);
-}
-
-depSelect.addEventListener('change', e => {
-  handleDepartureChange(e.target.value);
-});
-
-function handleDepartureChange(value) {
-  if (!value) return;
-
-  const opt = depSelect.selectedOptions[0];
-
-  const from = opt.dataset.from;
-  const to = opt.dataset.to;
-  const dateUtc = opt.dataset.date;
-  const depTimeUtc = opt.dataset.dep;
-
-  fetchSlots(from, to, dateUtc, depTimeUtc);
-}
-
 
   const content = `
   <div id="bookingSuccessBanner" class="booking-banner success hidden">
@@ -3807,6 +3782,17 @@ function showBookingError(message) {
   msg.textContent = message;
   banner.classList.remove('hidden');
 }
+</script>
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const select = document.getElementById('depSelect');
+  if (!select) return;
+
+  // 🔑 AUTO-LOAD when arriving from "Book Slot" link
+  if (select.value) {
+    loadTobtSlots();
+  }
+});
 </script>
 
 
