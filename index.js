@@ -201,6 +201,12 @@ function getTobtBookingForCallsign(callsign, icao) {
   return null;
 }
 
+function hhmmColonToHHMM(time) {
+  if (!time) return '';
+  return time.replace(':', '');
+}
+
+
 function getNextAvailableTobts(from, to, limit = 5) {
   return Object.entries(allTobtSlots)
     .filter(([slotKey, slot]) =>
@@ -1232,14 +1238,60 @@ const myBookings = cid ? tobtBookingsByCid[cid] : null;
 </td>
 
 <td class="col-plan">
-<a class="simbrief-btn" href="https://dispatch.simbrief.com/options/custom?orig=${r.from}&dest=${r.to}&route=${r.atc_route}&manualrmk=Route validated from www.worldflight.center"
-  target="_blank"
-  rel="noopener"
->
-  <span class="simbrief-logo">SB</span>
-  <span class="simbrief-text">Plan with SimBrief</span>
-</a>
+  ${
+    (() => {
+      // Base SimBrief URL (always present)
+      let url =
+        `https://dispatch.simbrief.com/options/custom` +
+        `?orig=${r.from}` +
+        `&dest=${r.to}` +
+        `&route=${encodeURIComponent(r.atc_route)}`;
+
+      // If user has bookings, check this sector
+      if (myBookings) {
+        const sectorKey = `${r.from}-${r.to}|${r.date_utc}|${r.dep_time_utc}`;
+
+        const mySlotKey = [...myBookings].find(k =>
+          k.startsWith(sectorKey + '|')
+        );
+
+        if (mySlotKey) {
+          const booking = tobtBookingsBySlot[mySlotKey];
+          const [deph, depm] = booking.tobtTimeUtc.split(':');
+
+url +=
+  `&callsign=${encodeURIComponent(booking.callsign)}` +
+  `&deph=${deph}` +
+  `&depm=${depm}` +
+  `&manualrmk=${encodeURIComponent(`WF TOBT [SLOT] ${deph}:${depm} UTC - Route validated from www.worldflight.center`)}`;
+
+        } else {
+          url +=
+            `&manualrmk=${encodeURIComponent(
+              'Route validated from www.worldflight.center'
+            )}`;
+        }
+      } else {
+        url +=
+          `&manualrmk=${encodeURIComponent(
+            'Route validated from www.worldflight.center'
+          )}`;
+      }
+
+      // ✅ THIS WAS MISSING
+      return `
+        <a class="simbrief-btn"
+           href="${url}"
+           target="_blank"
+           rel="noopener">
+          <span class="simbrief-logo">SB</span>
+          <span class="simbrief-text">Plan with SimBrief</span>
+        </a>
+      `;
+    })()
+  }
 </td>
+
 
             </tr>
           `).join('')}
