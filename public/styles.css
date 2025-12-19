@@ -1108,7 +1108,7 @@ select{ cursor:pointer; }
   color: #fff;
   text-decoration: none;
   transition: all 0.25s ease;
-  box-shadow: 0 10px 20px rgba(56,189,248,0.4);
+  box-shadow: 0 7px 15px rgba(56,189,248,0.4);
 }
 
 .tsat-top-row.three-cols {
@@ -2270,10 +2270,246 @@ tr:hover .row-actions {
   font-weight: 700;
   margin-right: 4px;
 }
-<span
-  class="status-pill manual"
-  title="TOBT manually assigned by ATC"
->
-  <span class="status-icon">!</span>
-  Manual
-</span>
+/* ===== Collapsible ATC route (Schedule page) ===== */
+.route-text {
+  display: block;
+  max-width: 520px;
+  white-space: normal;
+}
+
+.route-text.collapsed {
+  max-height: 1.4em;           /* single-line height */
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.route-toggle {
+  margin-top: 4px;
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+}
+/* =========================
+   Schedule page overrides
+   ========================= */
+
+.schedule-page .departures-table td.col-route {
+  padding-right: 20px;   /* extra breathing room */
+}
+/* =========================
+   SimBrief button
+   ========================= */
+
+.simbrief-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+
+  padding: 8px 14px;
+  border-radius: 999px;
+
+  background: linear-gradient(
+    135deg,
+    #2f80ed,
+    #1c63c7
+  );
+
+  color: #ffffff;
+  font-weight: 600;
+  font-size: 13px;
+  line-height: 1;
+
+  text-decoration: none;
+  white-space: nowrap;
+
+  box-shadow:
+    0 0 0 1px rgba(255,255,255,0.12),
+    0 6px 18px rgba(47,128,237,0.35);
+
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease,
+    filter 0.15s ease;
+}
+
+.simbrief-btn:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.08);
+  box-shadow:
+    0 0 0 1px rgba(255,255,255,0.18),
+    0 10px 26px rgba(47,128,237,0.55);
+}
+
+.simbrief-btn:active {
+  transform: translateY(0);
+}
+
+/* Optional logo bubble */
+.simbrief-logo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  width: 22px;
+  height: 22px;
+
+  border-radius: 50%;
+  background: rgba(255,255,255,0.18);
+
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+/* =========================
+   Schedule page – tighter columns
+   ========================= */
+
+/* =====================================================
+   Schedule page – departures table column layout
+   ===================================================== */
+
+.schedule-page .departures-table {
+  table-layout: fixed;
+  min-width: 980px; /* tighter than default dashboard */
+}
+
+/* WF sector number */
+.schedule-page .departures-table th.col-wf-sector,
+.schedule-page .departures-table td.col-wf-sector {
+  width: 150px;
+  min-width: 150px;
+  max-width: 150px;
+  padding: 4px 8px;
+  white-space: nowrap;
+}
+
+/* Departure / Arrival ICAO */
+.schedule-page .departures-table th.col-from,
+.schedule-page .departures-table td.col-from,
+.schedule-page .departures-table th.col-to,
+.schedule-page .departures-table td.col-to {
+  width: 100px;
+  min-width: 100px;
+  max-width: 100px;
+  padding: 4px 6px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+/* Date */
+.schedule-page .departures-table th.col-date,
+.schedule-page .departures-table td.col-date {
+  width: 170px;
+  min-width: 170px;
+  max-width: 170px;
+  white-space: nowrap;
+}
+
+/* Departure / Arrival windows */
+.schedule-page .departures-table th.col-dep-window,
+.schedule-page .departures-table td.col-dep-window,
+.schedule-page .departures-table th.col-arr-window,
+.schedule-page .departures-table td.col-arr-window {
+  width: 250px;
+  padding-right: 20px;
+  min-width: 250px;
+  max-width: 250px;
+  white-space: nowrap;
+  font-family: "JetBrains Mono", monospace;
+  letter-spacing: 0.02em;
+}
+
+/* Block Time (HH:MM) */
+.schedule-page .departures-table th.col-time,
+.schedule-page .departures-table td.col-time {
+  width: 100px;
+  min-width: 100px;
+  max-width: 100px;
+  padding: 4px 6px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+/* ATC Route – expandable column */
+.schedule-page .departures-table th.col-route,
+.schedule-page .departures-table td.col-route {
+  width: auto;
+  min-width: 260px;
+  padding-right: 24px;
+  white-space: nowrap;
+}
+
+/* Plan (SimBrief) */
+.schedule-page .departures-table th.col-plan,
+.schedule-page .departures-table td.col-plan {
+  width: 200px;
+  min-width: 200px;
+  max-width: 200px;
+  padding-right: 18px;
+  white-space: nowrap;
+}
+
+/* Book Slot */
+.schedule-page .departures-table th.col-book,
+.schedule-page .departures-table td.col-book {
+  width: 130px;
+  min-width: 130px;
+  max-width: 130px;
+  white-space: nowrap;
+}
+.schedule-page .departures-table td.col-route {
+  white-space: normal;
+  line-height: 1.4;
+}
+.schedule-page .departures-table td.col-plan {
+  padding-right: 16px;
+}
+
+.schedule-page .departures-table td.col-book {
+  padding-left: 16px;
+}
+/* =====================================================
+   Schedule page – horizontal scroll, no wrapping
+   ===================================================== */
+
+/* Scroll container */
+.schedule-page .table-scroll {
+  overflow-x: auto;
+  overflow-y: hidden;
+  width: 100%;
+  padding-bottom: 8px; /* space for scrollbar */
+}
+
+/* Table must not shrink */
+.schedule-page .departures-table {
+  min-width: 1300px;   /* adjust if you want even wider */
+  table-layout: fixed;
+}
+
+/* Prevent wrapping globally */
+.schedule-page .departures-table th,
+.schedule-page .departures-table td {
+  white-space: nowrap;
+}
+
+/* Allow ATC Route to wrap ONLY when expanded */
+.schedule-page .col-route .route-text.collapsed {
+  white-space: nowrap;
+}
+
+.schedule-page .col-route .route-text:not(.collapsed) {
+  white-space: normal;
+}
+.schedule-page .table-scroll::-webkit-scrollbar {
+  height: 8px;
+}
+
+.schedule-page .table-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.25);
+  border-radius: 4px;
+}

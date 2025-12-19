@@ -79,13 +79,14 @@ export default function renderLayout({
 
   <div id="utcClock" class="utc-clock">00:00:00 UTC</div>
 
-  <div class="user-menu">
-    <button id="userMenuToggle" class="user-trigger">
-      Welcome, ${user?.personal?.name_full || 'User'}
-      <span class="chevron">▾</span>
-    </button>
+  ${user ? `
+    <div class="user-menu">
+      <button id="userMenuToggle" class="user-trigger">
+        Welcome, ${user.personal?.name_full}
+        <span class="chevron">▾</span>
+      </button>
 
-    <div id="userMenu" class="user-dropdown">
+      <div id="userMenu" class="user-dropdown">
         <a href="/logout" class="logout-btn compact">
           <svg
             class="logout-icon"
@@ -102,9 +103,15 @@ export default function renderLayout({
           </svg>
           <span class="logout-text">Logout</span>
         </a>
+      </div>
     </div>
-  </div>
+  ` : `
+    <a href="/auth/login" class="login-btn">
+      Login with VATSIM
+    </a>
+  `}
 </div>
+
 </header>
 
 

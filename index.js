@@ -47,7 +47,6 @@ import session from 'express-session';
 import axios from 'axios';
 import vatsimLogin from './auth/login.js';
 import vatsimCallback from './auth/callback.js';
-import dashboard from './dashboard.js';
 import cron from 'node-cron';
 import renderLayout from './layout.js';
 
@@ -217,6 +216,16 @@ function getNextAvailableTobts(from, to, limit = 5) {
     .slice(0, limit);
 }
 
+function requireLogin(req, res, next) {
+  if (req.session?.user?.data) {
+    return next();
+  }
+
+  // Save where the user wanted to go
+  req.session.returnTo = req.originalUrl;
+
+  return res.redirect('/');
+}
 
 
 
@@ -853,24 +862,26 @@ async function refreshAdminSheet() {
 
     const idx = {
       number: headers.indexOf('Number'),
-      from: headers.indexOf('From'),
-      to: headers.indexOf('To'),
-      date_utc: headers.indexOf('Date_UTC'),
-      dep_time_utc: headers.indexOf('Dep_Time_UTC'),
-      arr_time_utc: headers.indexOf('Arr_Time_UTC'),
-      atc_route: headers.indexOf('ATC_Route')
+  from: headers.indexOf('From'),
+  to: headers.indexOf('To'),
+  date_utc: headers.indexOf('Date_UTC'),
+  dep_time_utc: headers.indexOf('Dep_Time_UTC'),
+  arr_time_utc: headers.indexOf('Arr_Time_UTC'),
+  block_time: headers.indexOf('Block_Time'),
+  atc_route: headers.indexOf('ATC_Route')
     };
 
     adminSheetCache = lines.slice(1).map(line => {
       const cols = line.split(',').map(c => c.replace(/"/g, '').trim());
       return {
         number: cols[idx.number] || '',
-        from: cols[idx.from] || '',
-        to: cols[idx.to] || '',
-        date_utc: cols[idx.date_utc] || '',
-        dep_time_utc: cols[idx.dep_time_utc] || '',
-        arr_time_utc: cols[idx.arr_time_utc] || '',
-        atc_route: cols[idx.atc_route] || ''
+    from: cols[idx.from] || '',
+    to: cols[idx.to] || '',
+    date_utc: cols[idx.date_utc] || '',
+    dep_time_utc: cols[idx.dep_time_utc] || '',
+    arr_time_utc: cols[idx.arr_time_utc] || '',
+    block_time: cols[idx.block_time] || '',
+    atc_route: cols[idx.atc_route] || ''
       };
     });
 
@@ -895,13 +906,12 @@ const sessionMiddleware = session({
 app.use(sessionMiddleware);
 
 // HOME: logged in → dashboard, logged out → login page
-app.get('/', (req, res) => {
-  if (req.session?.user?.data) {
-    return res.redirect('/dashboard');
-  }
 
-  return res.sendFile(path.join(__dirname, 'public', 'index.html'));
+
+app.get('/dashboard', (req, res) => {
+  return res.redirect(301, '/schedule');
 });
+
 
 
 /* ===== ADMIN AUTH ===== */
@@ -1110,74 +1120,125 @@ function makeTobtSlotKey({ from, to, dateUtc, depTimeUtc, tobtTimeUtc }) {
   return `${from}-${to}|${dateUtc}|${depTimeUtc}|${tobtTimeUtc}`;
 }
 app.get('/', (req, res) => {
-  return res.redirect('/auth/login');
+  if (req.session?.user?.data) {
+    return res.redirect('/schedule');
+  }
+
+  return res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
+
+
 
 
 
 
 app.get('/auth/login', vatsimLogin);
 app.get('/auth/callback', vatsimCallback);
-app.get('/dashboard', (req, res) => {
-  /* ===============================
-     AUTH GUARD
-  =============================== */
-  if (!req.session.user || !req.session.user.data) {
-    return res.redirect('/');
-  }
-
-  /* ===============================
-     USER CONTEXT
-  =============================== */
-  const user = req.session.user.data;
-  const isAdmin = [10000010, 1303570, 10000005].includes(Number(user.cid));
-  const isATC = !!user.callsign;
-
-  /* ===============================
-     DASHBOARD CONTENT
-  =============================== */
+app.get('/schedule', (req, res) => {
   const content = `
-  <section class="card">
-    <h2>Session Info</h2>
+  <section class="card card-full">
+    <h2>WorldFlight Event Schedule</h2>
 
-    <div class="stat">
-      <span>VATSIM ID</span>
-      <strong>${user.cid}</strong>
-    </div>
+    <div class="table-scroll">
+      <table class="departures-table">
+        <thead>
+  <tr>
+    <th class="col-wf-sector">WF</th>
+    <th class="col-from">Dep</th>
+    <th class="col-to">Arr</th>
+    <th class="col-date">Date</th>
+    <th class="col-window">Dep Window</th>
+    <th class="col-window">Arr Window</th>
+    <th class="col-time">Block Time</th>
+    <th class="col-route">ATC Route</th>
+    <th class="col-plan">Plan</th>
+    <th class="col-book">Book Slot</th>
+  </tr>
+</thead>
 
-    <div class="stat">
-      <span>Controller Callsign</span>
-      <strong>${user.callsign || 'Not Connected'}</strong>
+        <tbody>
+          ${adminSheetCache.map(r => `
+            <tr>
+              <td class="col-wf-sector">${r.number}</td>
+              <td class="col-from">
+                <a target="_blank" href="https://planning.worldflight.center/briefs/${r.from}.pdf">
+                  ${r.from}
+                </a>
+              </td>
+              <td class="col-to">
+                <a target="_blank" href="https://planning.worldflight.center/briefs/${r.to}.pdf">
+                  ${r.to}
+                </a>
+              </td>
+              <td class="col-date">${r.date_utc}</td>
+              <td class="col-window">${buildTimeWindow(r.dep_time_utc)}</td>
+              <td class="col-window">${buildTimeWindow(r.arr_time_utc)}</td>
+              <td class="col-time">${r.block_time}</td>
+              <td class="col-route">
+  <div class="route-collapsible">
+    <span class="route-text collapsed">
+      ${escapeHtml(r.atc_route)}
+    </span>
+    <button
+      type="button"
+      class="route-toggle"
+      aria-expanded="false">
+      Expand
+    </button>
+  </div>
+</td>
+<td class="col-plan">
+<a class="simbrief-btn" href="https://dispatch.simbrief.com/options/custom?orig=${r.from}&dest=${r.to}&route=${r.atc_route}&manualrmk=Route validated from www.worldflight.center"
+  target="_blank"
+  rel="noopener"
+>
+  <span class="simbrief-logo">SB</span>
+  <span class="simbrief-text">Plan with SimBrief</span>
+</a>
+</td>
+<td class="col-book">
+  <a
+    class="action-btn primary"
+    href="/book?from=${r.from}&to=${r.to}&dateUtc=${encodeURIComponent(r.date_utc)}&depTimeUtc=${r.dep_time_utc}"
+  >
+    Book Slot
+  </a>
+</td>
+
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
     </div>
   </section>
+  <script>
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest('.route-toggle');
+  if (!btn) return;
 
-  <section class="card">
-    <h2>Status</h2>
-    <div class="status ${isATC ? 'online' : 'offline'}">
-      ${isATC ? 'ATC Online' : 'Offline'}
-    </div>
-  </section>
+  const wrapper = btn.closest('.route-collapsible');
+  const text = wrapper.querySelector('.route-text');
 
+  const expanded = btn.getAttribute('aria-expanded') === 'true';
 
+  btn.setAttribute('aria-expanded', String(!expanded));
+  btn.textContent = expanded ? 'Expand' : 'Collapse';
 
-
-</div>
-
-`;
-
-
-  /* ===============================
-     RENDER WITH SHARED LAYOUT
-  =============================== */
-  res.send(
-    renderLayout({
-      title: 'WorldFlight CDM',
-      user,
-      isAdmin,
-      content
-    })
-  );
+  text.classList.toggle('collapsed', expanded);
 });
+</script>
+
+
+  `;
+
+  res.send(renderLayout({
+    title: 'WorldFlight Schedule',
+    user: req.session.user?.data || null,
+    content,
+    layoutClass: 'dashboard-full schedule-page'
+  }));
+});
+
 
 app.get('/api/tobt/slots', (req, res) => {
   const cid = Number(req.session?.user?.data?.cid);
@@ -1299,7 +1360,10 @@ emitToIcao(
 });
 
 
-app.post('/api/tobt/book', async (req, res) => {
+app.post('/api/tobt/book', requireLogin, async (req, res) => {
+
+ 
+
 
   const cid = Number(req.session.user?.data?.cid);
 
@@ -3351,7 +3415,7 @@ app.post('/api/tobt/remove', async (req, res) => {
 
 
 
-app.get('/atc', (req, res) => {
+app.get('/atc', requireLogin, (req, res) => {
   if (!req.session.user || !req.session.user.data) {
     return res.redirect('/');
   }
@@ -3395,8 +3459,41 @@ app.get('/book', (req, res) => {
     return res.redirect('/auth/login');
   }
 
+  const { from, to, depTimeUtc } = req.query;
+
+  const preselectedKey =
+    from && to && depTimeUtc
+      ? `${from}-${to}-${depTimeUtc}`
+      : null;
+   const params = new URLSearchParams(window.location.search);
+
+
   const user = req.session.user.data;
   const isAdmin = ADMIN_CIDS.includes(Number(user.cid));
+
+  const depSelect = document.getElementById('departureSelect');
+
+if (depSelect.value) {
+  handleDepartureChange(depSelect.value);
+}
+
+depSelect.addEventListener('change', e => {
+  handleDepartureChange(e.target.value);
+});
+
+function handleDepartureChange(value) {
+  if (!value) return;
+
+  const opt = depSelect.selectedOptions[0];
+
+  const from = opt.dataset.from;
+  const to = opt.dataset.to;
+  const dateUtc = opt.dataset.date;
+  const depTimeUtc = opt.dataset.dep;
+
+  fetchSlots(from, to, dateUtc, depTimeUtc);
+}
+
 
   const content = `
   <div id="bookingSuccessBanner" class="booking-banner success hidden">
@@ -3427,18 +3524,25 @@ app.get('/book', (req, res) => {
   <label for="depSelect">Departure</label>
   <select id="depSelect" class="tobt-select">
         <option value="">Select a departure</option>
-        ${adminSheetCache.map(s => `
-          <option
-  value="${s.from}-${s.to}-${s.date_utc}-${s.dep_time_utc}"
-  data-from="${s.from}"
-  data-to="${s.to}"
-  data-date="${s.date_utc}"
-  data-dep="${s.dep_time_utc}"
->
+        ${adminSheetCache.map(s => {
+  const value = `${s.from}-${s.to}-${s.dep_time_utc}`;
+const selected = value === preselectedKey ? 'selected' : '';
 
-            ${s.from} → ${s.to} | ${s.dep_time_utc}Z
-          </option>
-        `).join('')}
+
+  return `
+    <option
+      value="${value}"
+      data-from="${s.from}"
+      data-to="${s.to}"
+      data-date="${s.date_utc}"
+      data-dep="${s.dep_time_utc}"
+      ${selected}
+    >
+      ${s.from} → ${s.to} | ${s.dep_time_utc}Z
+    </option>
+  `;
+}).join('')}
+
       </select>
 </div>
       <table class="tobt-table">
@@ -3706,6 +3810,7 @@ function showBookingError(message) {
 </script>
 
 
+
   `;
 
   res.send(
@@ -3719,7 +3824,7 @@ function showBookingError(message) {
   );
 });
 
-app.get('/my-slots', (req, res) => {
+app.get('/my-slots', requireLogin, (req, res) => {
   if (!req.session.user || !req.session.user.data) {
     return res.redirect('/auth/login');
   }

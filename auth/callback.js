@@ -56,7 +56,10 @@ export default async function vatsimCallback(req, res) {
 
     req.session.user = userResponse.data;
 
-    return res.redirect('/dashboard');
+    const redirectTo = req.session.returnTo || '/schedule';
+delete req.session.returnTo;
+return res.redirect(redirectTo);
+
 
   } catch (err) {
     console.error('VATSIM CALLBACK FAILURE:');
