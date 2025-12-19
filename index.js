@@ -1135,6 +1135,10 @@ app.get('/', (req, res) => {
 app.get('/auth/login', vatsimLogin);
 app.get('/auth/callback', vatsimCallback);
 app.get('/schedule', (req, res) => {
+
+  const cid = Number(req.session?.user?.data?.cid);
+const myBookings = cid ? tobtBookingsByCid[cid] : null;
+
   const content = `
   <section class="card card-full">
     <h2>WorldFlight Event Schedule</h2>
@@ -1151,8 +1155,9 @@ app.get('/schedule', (req, res) => {
     <th class="col-window">Arr Window</th>
     <th class="col-time">Block Time</th>
     <th class="col-route">ATC Route</th>
-    <th class="col-plan">Plan</th>
     <th class="col-book">Book Slot</th>
+    <th class="col-plan">Plan</th>
+    
   </tr>
 </thead>
 
@@ -1187,6 +1192,45 @@ app.get('/schedule', (req, res) => {
     </button>
   </div>
 </td>
+
+<td class="col-book">
+  ${
+    (() => {
+      if (!myBookings) {
+        return `
+          <a class="tobt-btn book"
+             href="/book?from=${r.from}&to=${r.to}&dateUtc=${encodeURIComponent(r.date_utc)}&depTimeUtc=${r.dep_time_utc}">
+            Book Slot
+          </a>
+        `;
+      }
+
+      const sectorKey = `${r.from}-${r.to}|${r.date_utc}|${r.dep_time_utc}`;
+
+      const mySlotKey = [...myBookings].find(k =>
+        k.startsWith(sectorKey + '|')
+      );
+
+      if (!mySlotKey) {
+        return `
+          <a class="tobt-btn book"
+             href="/book?from=${r.from}&to=${r.to}&dateUtc=${encodeURIComponent(r.date_utc)}&depTimeUtc=${r.dep_time_utc}">
+            Book Slot
+          </a>
+        `;
+      }
+
+      return `
+        <button
+          class="tobt-btn cancel"
+          data-slot-key="${mySlotKey}">
+          Cancel
+        </button>
+      `;
+    })()
+  }
+</td>
+
 <td class="col-plan">
 <a class="simbrief-btn" href="https://dispatch.simbrief.com/options/custom?orig=${r.from}&dest=${r.to}&route=${r.atc_route}&manualrmk=Route validated from www.worldflight.center"
   target="_blank"
@@ -1195,14 +1239,6 @@ app.get('/schedule', (req, res) => {
   <span class="simbrief-logo">SB</span>
   <span class="simbrief-text">Plan with SimBrief</span>
 </a>
-</td>
-<td class="col-book">
-  <a
-    class="action-btn primary"
-    href="/book?from=${r.from}&to=${r.to}&dateUtc=${encodeURIComponent(r.date_utc)}&depTimeUtc=${r.dep_time_utc}"
-  >
-    Book Slot
-  </a>
 </td>
 
             </tr>
@@ -1227,6 +1263,38 @@ document.addEventListener('click', (e) => {
   text.classList.toggle('collapsed', expanded);
 });
 </script>
+<script>
+document.addEventListener('click', async (e) => {
+  const btn = e.target.closest('.tobt-btn.cancel');
+  if (!btn) return;
+
+  const slotKey = btn.dataset.slotKey;
+  if (!slotKey) return;
+
+  const ok = await openConfirmModal({
+    title: 'Cancel TOBT Slot',
+    message: 'Are you sure you want to cancel this booking?'
+  });
+
+  if (!ok) return;
+
+  const res = await fetch('/api/tobt/cancel', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin',
+    body: JSON.stringify({ slotKey })
+  });
+
+  if (!res.ok) {
+    alert('Failed to cancel booking');
+    return;
+  }
+
+  location.reload();
+});
+
+</script>
+
 
 
   `;
@@ -3622,19 +3690,16 @@ for (const slot of slots) {
         const slotSectorKey = slot.slotKey.split('|').slice(0, 3).join('|');
 
 if (slot.byMe) {
+  // ✅ ALWAYS show Cancel for own booking
   btn =
     '<button class="tobt-btn cancel" data-action="cancel" data-slot-key="' +
     slot.slotKey + '">Cancel</button>';
 
 } else if (mySectorKey && slotSectorKey === mySectorKey) {
-  // 🔒 Same sector, user already booked — keep label, disable only
-  const label = slot.booked ? 'Booked' : 'Book';
-
+  // 🔒 Same sector, but NOT my slot
   btn =
-    '<button class="tobt-btn ' +
-    (slot.booked ? 'booked' : 'book') +
-    ' disabled" disabled title="You already have a booking in this sector">' +
-    label +
+    '<button class="tobt-btn booked disabled" disabled>' +
+    'Booked' +
     '</button>';
 
 } else if (slot.booked) {
@@ -3646,6 +3711,8 @@ if (slot.byMe) {
     '<button class="tobt-btn book" data-action="book" data-slot-key="' +
     slot.slotKey + '">Book</button>';
 }
+
+
 
 
         tr.innerHTML +=
