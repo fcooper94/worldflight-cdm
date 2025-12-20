@@ -378,6 +378,18 @@ if (userToggle && userMenu) {
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="/icao-map.js"></script>
 
+<div id="mapModal" class="map-modal hidden">
+  <div class="map-modal-backdrop"></div>
+
+  <div class="map-modal-panel">
+    <div class="map-modal-header">
+      <span id="mapModalTitle">Airport Map</span>
+      <button id="closeMapModal" aria-label="Close map">✕</button>
+    </div>
+
+    <div id="mapModalMap"></div>
+  </div>
+</div>
 
 
 </body>

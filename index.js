@@ -998,8 +998,10 @@ app.get('/api/icao/:icao/map', async (req, res) => {
   const icao = req.params.icao.toUpperCase();
 
   const airport = await prisma.airport.findUnique({
-    where: { icao }
-  });
+  where: { icao },
+  include: { runways: true }
+});
+
 
   if (!airport) {
     return res.status(404).json({ error: 'Airport not found' });
@@ -1243,12 +1245,12 @@ const myBookings = cid ? tobtBookingsByCid[cid] : null;
             <tr>
               <td class="col-wf-sector">${r.number}</td>
               <td class="col-from">
-                <a target="_blank" href="/icao/${r.from}">
+                <a href="/icao/${r.from}">
                   ${r.from}
                 </a>
               </td>
               <td class="col-to">
-                <a target="_blank" href="/icao/${r.to}">
+                <a href="/icao/${r.to}">
                   ${r.to}
                 </a>
               </td>
@@ -1466,30 +1468,22 @@ app.get('/icao/:icao', async (req, res) => {
   const content = `
   <section class="card">
     <div class="icao-top-row">
-      
-      <div class="icao-deps">
-        <h2>Upcoming Departures</h2>
-        <div id="upcomingDepartures" class="upcoming-deps"></div>
-      </div>
+  <div class="icao-deps">
+    <h2>Upcoming Departures</h2>
+    <div id="upcomingDepartures" class="upcoming-deps"></div>
+  </div>
 
-      <div class="icao-map">
-  <div id="icaoMap" data-icao="${icao}"></div>
+  <div class="icao-map">
+    <div id="icaoMap" data-icao="${icao}"></div>
 
-  <div class="icao-map-footer">
-    <a
-      href="https://map.vatsim.net/?airport=${icao}"
-      target="_blank"
-      rel="noopener noreferrer"
-    >
-      Open full map in VATSIM Radar
-    </a>
+    <div class="icao-map-footer">
+      <button id="expandMapBtn" class="map-expand-btn">
+        Expand map
+      </button>
+    </div>
   </div>
 </div>
 
-
-
-
-    </div>
   </section>
 
   <section class="card">

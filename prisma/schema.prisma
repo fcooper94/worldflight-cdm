@@ -55,9 +55,24 @@ model User {
   name          String
 }
 model Airport {
-  icao String @id
-  lat  Float
-  lon  Float
-  elev Int   // 👈 optional for now
+  icao     String   @id
+  lat      Float
+  lon      Float
+  elev     Int?
+  runways  Runway[]
 }
+
+model Runway {
+  id           Int     @id @default(autoincrement())
+  airportIcao  String
+  ident1       String
+  ident2       String
+  lat1         Float
+  lon1         Float
+  lat2         Float
+  lon2         Float
+
+  airport Airport @relation(fields: [airportIcao], references: [icao])
+}
+
 
