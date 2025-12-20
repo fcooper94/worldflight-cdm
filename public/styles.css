@@ -2379,9 +2379,9 @@ tr:hover .row-actions {
 /* WF sector number */
 .schedule-page .departures-table th.col-wf-sector,
 .schedule-page .departures-table td.col-wf-sector {
-  width: 150px;
-  min-width: 150px;
-  max-width: 150px;
+  width: 100px;
+  min-width: 100px;
+  max-width: 100px;
   padding: 4px 8px;
   white-space: nowrap;
 }
