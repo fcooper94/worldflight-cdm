@@ -54,3 +54,10 @@ model User {
   cid           Int     @id
   name          String
 }
+model Airport {
+  icao String @id
+  lat  Float
+  lon  Float
+  elev Int   // 👈 optional for now
+}
+

@@ -2745,3 +2745,64 @@ tr:hover .row-actions {
     scrollbar-gutter: stable both-edges;
   }
 }
+.upcoming-deps {
+  max-height: 240px;
+  overflow-y: auto;
+}
+.icao-top-row {
+  display: grid;
+  grid-template-columns: 1fr 0.5fr; /* 👈 half-width map */
+  gap: 24px;
+  align-items: stretch;
+}
+
+
+.icao-map iframe {
+  width: 100%;
+  aspect-ratio: 1 / 1;   /* square */
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #000;
+}
+
+@media (max-width: 900px) {
+  .icao-top-row {
+    grid-template-columns: 1fr;
+  }
+}
+/* ===== ICAO MAP ===== */
+/* Map column */
+.icao-map {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+
+/* Leaflet map itself */
+#icaoMap {
+  height: 320px;        /* or whatever height you chose */
+  width: 100%;
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+/* Footer below map */
+.icao-map-footer {
+  margin-top: 8px;
+  text-align: center;
+  font-size: 13px;
+  opacity: 0.85;
+}
+
+/* Footer link styling */
+.icao-map-footer a {
+  color: var(--accent);
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.icao-map-footer a:hover {
+  text-decoration: underline;
+}
+
+

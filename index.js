@@ -994,6 +994,77 @@ function getWorldFlightStatus(pilot) {
   };
 }
 
+app.get('/api/icao/:icao/map', async (req, res) => {
+  const icao = req.params.icao.toUpperCase();
+
+  const airport = await prisma.airport.findUnique({
+    where: { icao }
+  });
+
+  if (!airport) {
+    return res.status(404).json({ error: 'Airport not found' });
+  }
+
+  function distanceNm(lat1, lon1, lat2, lon2) {
+  const R = 3440;
+  const toRad = d => d * Math.PI / 180;
+
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) *
+    Math.cos(toRad(lat2)) *
+    Math.sin(dLon / 2) ** 2;
+
+  return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+}
+
+const aircraft = cachedPilots
+  // must have a flight plan
+  .filter(p => p.flight_plan)
+
+  // ✅ departures only
+  .filter(p => p.flight_plan.departure === icao)
+
+  // must have position
+  .filter(p => p.latitude && p.longitude)
+.filter(p => {
+  const d = distanceNm(
+    airport.lat,
+    airport.lon,
+    p.latitude,
+    p.longitude
+  );
+
+  const altMSL = Number(p.altitude ?? 0);
+  const airportElev = Number(airport.elev ?? 0);
+  const altAGL = altMSL - airportElev;
+
+  return (
+    d <= 8 &&                 // spatial clamp
+    altAGL >= -50 &&          // allow slight negatives
+    altAGL <= 200             // surface / flare / rollout
+  );
+})
+
+
+  .map(p => ({
+    callsign: p.callsign,
+    lat: p.latitude,
+    lon: p.longitude,
+    heading: p.heading,
+    groundspeed: p.groundspeed,
+    altitude: p.altitude
+  }));
+
+
+
+
+
+  res.json({ airport, aircraft });
+});
 
 
 
@@ -1172,12 +1243,12 @@ const myBookings = cid ? tobtBookingsByCid[cid] : null;
             <tr>
               <td class="col-wf-sector">${r.number}</td>
               <td class="col-from">
-                <a target="_blank" href="https://planning.worldflight.center/briefs/${r.from}.pdf">
+                <a target="_blank" href="/icao/${r.from}">
                   ${r.from}
                 </a>
               </td>
               <td class="col-to">
-                <a target="_blank" href="https://planning.worldflight.center/briefs/${r.to}.pdf">
+                <a target="_blank" href="/icao/${r.to}">
                   ${r.to}
                 </a>
               </td>
@@ -1357,6 +1428,104 @@ document.addEventListener('click', async (e) => {
     content,
     layoutClass: 'dashboard-full schedule-page'
   }));
+});
+
+app.get('/api/icao/:icao/departures', (req, res) => {
+  const icao = req.params.icao.toUpperCase();
+  const list = buildUpcomingTSATsForICAO(icao, cachedPilots);
+  res.json(list);
+});
+
+import fs from 'fs';
+
+app.get('/api/icao/:icao/docs', (req, res) => {
+  const icao = req.params.icao.toUpperCase();
+  const dir = path.join(__dirname, 'Uploads', icao);
+
+  if (!fs.existsSync(dir)) {
+    return res.json([]);
+  }
+
+  const files = fs.readdirSync(dir).map(name => ({
+    name,
+    type: path.extname(name).replace('.', '').toUpperCase(),
+    url: `/uploads/${icao}/${name}`
+  }));
+
+  res.json(files);
+});
+
+
+
+
+app.use('/uploads', express.static(path.join(__dirname, 'Uploads')));
+
+app.get('/icao/:icao', async (req, res) => {
+  const icao = req.params.icao.toUpperCase();
+
+  const content = `
+  <section class="card">
+    <div class="icao-top-row">
+      
+      <div class="icao-deps">
+        <h2>Upcoming Departures</h2>
+        <div id="upcomingDepartures" class="upcoming-deps"></div>
+      </div>
+
+      <div class="icao-map">
+  <div id="icaoMap" data-icao="${icao}"></div>
+
+  <div class="icao-map-footer">
+    <a
+      href="https://map.vatsim.net/?airport=${icao}"
+      target="_blank"
+      rel="noopener noreferrer"
+    >
+      Open full map in VATSIM Radar
+    </a>
+  </div>
+</div>
+
+
+
+
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Airport Documentation</h2>
+    <div id="airportDocs"></div>
+  </section>
+
+  <section class="card">
+    <h2>Available Scenery</h2>
+    <div id="airportScenery"></div>
+  </section>
+ 
+
+`;
+
+  
+
+
+  res.send(renderLayout({
+    title: `${icao} Airport Portal`,
+    user: req.session?.user?.data,
+    isAdmin: ADMIN_CIDS.includes(Number(req.session?.user?.data?.cid)),
+    content,
+    layoutClass: 'dashboard-wide'
+  }));
+});
+
+app.get('/api/icao/:icao/scenery', async (req, res) => {
+  const icao = req.params.icao.toUpperCase();
+
+  const scenery = await prisma.airportScenery.findMany({
+    where: { icao },
+    orderBy: { updatedAt: 'desc' }
+  });
+
+  res.json(groupBySim(scenery));
 });
 
 

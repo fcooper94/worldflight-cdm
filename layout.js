@@ -12,8 +12,17 @@ export default function renderLayout({
   <meta charset="UTF-8" />
   <title>${title}</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
   <link rel="stylesheet" href="/styles.css" />
+
+  <!-- Leaflet (global, safe) -->
+  <link
+  rel="stylesheet"
+  href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+/>
+
 </head>
+
 <body>
 
   <aside class="sidebar" id="sidebar">
@@ -298,7 +307,6 @@ function openConfirmModal({ title, message }) {
   <script>
     (() => {
       const sidebar = document.getElementById('sidebar');
-      ...
     })();
   </script>
 
@@ -366,6 +374,11 @@ if (userToggle && userMenu) {
   setInterval(updateUtcClock, 1000);
 })();
 </script>
+<!-- Leaflet JS -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="/icao-map.js"></script>
+
+
 
 </body>
 </html>`;
