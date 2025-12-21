@@ -4167,7 +4167,7 @@ const simbriefUrl =
   <span id="errorMessage"></span>
 </div>
   
-  <section class="card card-full">
+  <section class="card card-full my-slots-card">
       <h2>My Slots</h2>
 
       ${rows.length === 0 ? `
