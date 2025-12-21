@@ -71,6 +71,10 @@ export default function renderLayout({
         <span class="icon">👥</span>
         <span class="label">Official Teams / Affiliates</span>
       </a>
+      <a href="#" class="nav-item" id="refreshSceneryLinks">
+    <span class="icon">🗺️</span>
+    <span class="label">Refresh Scenery Links</span>
+  </a>
     </div>
     ` : ''}
   </nav>
@@ -253,6 +257,38 @@ function openConfirmModal({ title, message }) {
   });
 }
 </script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  const btn = document.getElementById('refreshSceneryLinks');
+  if (!btn) return; // not on this page or not admin
+
+  btn.addEventListener('click', async function (e) {
+    e.preventDefault();
+
+    const ok = confirm(
+      'This will regenerate the scenery links file using the current WorldFlight route.\n\nContinue?'
+    );
+    if (!ok) return;
+
+    try {
+      const res = await fetch('/admin/scenery/refresh-links', {
+        method: 'POST'
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        throw new Error('Refresh failed');
+      }
+
+      alert('Scenery links refreshed for ' + data.count + ' WF airports.');
+    } catch (err) {
+      console.error(err);
+      alert('Failed to refresh scenery links. Check server logs.');
+    }
+  });
+});
+</script>
 
 <script>
   function openConfirmModal({ title, message }) {
@@ -373,6 +409,22 @@ if (userToggle && userMenu) {
   updateUtcClock();
   setInterval(updateUtcClock, 1000);
 })();
+</script>
+<script>
+document.getElementById('refreshSceneryLinksBtn')?.addEventListener('click', async () => {
+  const ok = confirm('Regenerate scenery links file from the current WF schedule?');
+  if (!ok) return;
+
+  const res = await fetch('/admin/scenery/refresh-links', { method: 'POST' });
+  const data = await res.json();
+
+  if (!res.ok || !data.success) {
+    alert('Failed to refresh scenery links');
+    return;
+  }
+
+  alert('Scenery links refreshed for ' + data.count + ' WF airports');
+});
 </script>
 <!-- Leaflet JS -->
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>

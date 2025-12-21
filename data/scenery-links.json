@@ -1,0 +1,195 @@
+{
+  "EGCC": {
+    "msfs": [
+      {
+        "name": "Manchester Airport",
+        "developer": "TAIMODELS",
+        "store": "Orbx Direct",
+        "url": "https://orbxdirect.com/product/taimodels-egcc-msfs",
+        "type": "Payware"
+      }
+    ],
+    "xplane": [],
+    "p3d": [
+      {
+        "name": "Manchester Airport",
+        "developer": "UK2000",
+        "store": "SimMarket",
+        "url": "https://secure.simmarket.com/uk2000-manchester-airport-egcc-p3d.phtml",
+        "type": "Payware"
+      }
+    ]
+  },
+
+  "EGLL": {
+    "msfs": [
+      {
+        "name": "London Heathrow",
+        "developer": "iniBuilds",
+        "store": "iniBuilds Store",
+        "url": "https://www.inibuilds.com/products/iniscene-london-heathrow-egll-msfs",
+        "type": "Payware"
+      }
+    ],
+    "xplane": [
+      {
+        "name": "London Heathrow",
+        "developer": "ShortFinal Design",
+        "store": "X-Plane.org",
+        "url": "https://store.x-plane.org/EGLL-London-Heathrow_p_1491.html",
+        "type": "Payware"
+      }
+    ],
+    "p3d": [
+      {
+        "name": "London Heathrow",
+        "developer": "Aerosoft",
+        "store": "Aerosoft",
+        "url": "https://www.aerosoft.com/en/flight-simulation/prepar3d-v4/sceneries/2617/aerosoft-airport-london-heathrow-professional",
+        "type": "Payware"
+      }
+    ]
+  },
+
+  "EDDF": {
+    "msfs": [
+      {
+        "name": "Frankfurt Airport",
+        "developer": "Aerosoft",
+        "store": "Aerosoft",
+        "url": "https://www.aerosoft.com/en/flight-simulation/microsoft-flight-simulator/sceneries/3725/aerosoft-airport-frankfurt",
+        "type": "Payware"
+      }
+    ],
+    "xplane": [
+      {
+        "name": "Frankfurt Airport",
+        "developer": "Aerosoft",
+        "store": "X-Plane.org",
+        "url": "https://store.x-plane.org/EDDF-Frankfurt_p_1650.html",
+        "type": "Payware"
+      }
+    ],
+    "p3d": [
+      {
+        "name": "Frankfurt Airport",
+        "developer": "Aerosoft",
+        "store": "Aerosoft",
+        "url": "https://www.aerosoft.com/en/flight-simulation/prepar3d-v4/sceneries/2613/aerosoft-airport-frankfurt-professional",
+        "type": "Payware"
+      }
+    ]
+  },
+
+  "LFPG": {
+    "msfs": [
+      {
+        "name": "Paris Charles de Gaulle",
+        "developer": "iniBuilds",
+        "store": "iniBuilds Store",
+        "url": "https://www.inibuilds.com/products/iniscene-paris-cdg-lfpg-msfs",
+        "type": "Payware"
+      }
+    ],
+    "xplane": [],
+    "p3d": [
+      {
+        "name": "Paris Charles de Gaulle",
+        "developer": "Taxi2Gate",
+        "store": "SimMarket",
+        "url": "https://secure.simmarket.com/taxi2gate-paris-charles-de-gaulle-lfpg-p3d.phtml",
+        "type": "Payware"
+      }
+    ]
+  },
+
+  "KJFK": {
+    "msfs": [
+      {
+        "name": "New York JFK",
+        "developer": "iniBuilds",
+        "store": "iniBuilds Store",
+        "url": "https://www.inibuilds.com/products/iniscene-new-york-jfk-kjfk-msfs",
+        "type": "Payware"
+      }
+    ],
+    "xplane": [
+      {
+        "name": "New York JFK",
+        "developer": "MisterX6",
+        "store": "X-Plane.org",
+        "url": "https://store.x-plane.org/KJFK-John-F-Kennedy_p_1115.html",
+        "type": "Payware"
+      }
+    ],
+    "p3d": [
+      {
+        "name": "New York JFK",
+        "developer": "FSDreamTeam",
+        "store": "FSDreamTeam",
+        "url": "https://www.fsdreamteam.com/products_jfk.html",
+        "type": "Payware"
+      }
+    ]
+  },
+
+  "KLAX": {
+    "msfs": [
+      {
+        "name": "Los Angeles International",
+        "developer": "iniBuilds",
+        "store": "iniBuilds Store",
+        "url": "https://www.inibuilds.com/products/iniscene-los-angeles-klax-msfs",
+        "type": "Payware"
+      }
+    ],
+    "xplane": [
+      {
+        "name": "Los Angeles International",
+        "developer": "ShortFinal Design",
+        "store": "X-Plane.org",
+        "url": "https://store.x-plane.org/KLAX-Los-Angeles_p_1490.html",
+        "type": "Payware"
+      }
+    ],
+    "p3d": [
+      {
+        "name": "Los Angeles International",
+        "developer": "FSDreamTeam",
+        "store": "FSDreamTeam",
+        "url": "https://www.fsdreamteam.com/products_klax.html",
+        "type": "Payware"
+      }
+    ]
+  },
+
+  "YSSY": {
+    "msfs": [
+      {
+        "name": "Sydney Kingsford Smith",
+        "developer": "FlyTampa",
+        "store": "FlyTampa",
+        "url": "https://www.flytampa.org/yssy.html",
+        "type": "Payware"
+      }
+    ],
+    "xplane": [
+      {
+        "name": "Sydney Kingsford Smith",
+        "developer": "ShortFinal Design",
+        "store": "X-Plane.org",
+        "url": "https://store.x-plane.org/YSSY-Sydney_p_1478.html",
+        "type": "Payware"
+      }
+    ],
+    "p3d": [
+      {
+        "name": "Sydney Kingsford Smith",
+        "developer": "FlyTampa",
+        "store": "FlyTampa",
+        "url": "https://www.flytampa.org/yssy.html",
+        "type": "Payware"
+      }
+    ]
+  }
+}

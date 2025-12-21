@@ -75,4 +75,37 @@ model Runway {
   airport Airport @relation(fields: [airportIcao], references: [icao])
 }
 
+model AirportScenery {
+  id           Int      @id @default(autoincrement())
 
+ icao String
+
+  sim          Simulator
+  name         String
+  developer    String?
+  store        String?
+  url          String
+
+  type         SceneryType
+
+  submittedBy  String
+  submittedAt  DateTime @default(now())
+
+  approved     Boolean  @default(false)
+  approvedBy   String?
+  approvedAt   DateTime?
+
+  @@index([icao])
+  @@index([approved])
+}
+
+enum Simulator {
+  MSFS
+  XPLANE
+  P3D
+}
+
+enum SceneryType {
+  Freeware
+  Payware
+}
