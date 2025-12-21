@@ -1432,6 +1432,35 @@ document.addEventListener('click', async (e) => {
   }));
 });
 
+app.get('/api/icao/:icao/departures/live', (req, res) => {
+  const icao = req.params.icao.toUpperCase();
+
+  const departures = cachedPilots
+    .filter(p => p.flight_plan?.departure === icao)
+    .filter(p => {
+      const alt = Number(p.altitude || 0);
+      const gs  = Number(p.groundspeed || 0);
+      return alt < 500 && gs < 40;
+    })
+    .map(p => {
+      let status = 'At Gate';
+      if (p.groundspeed >= 5) status = 'Taxiing';
+
+      return {
+        status,
+        callsign: p.callsign,
+        aircraft: p.flight_plan.aircraft_short || p.flight_plan.aircraft || '—',
+        destination: p.flight_plan.arrival || '—',
+        route: p.flight_plan.route || ''
+      };
+    });
+
+  // ✅ THIS WAS MISSING
+  res.json(departures);
+});
+
+
+
 app.get('/api/icao/:icao/departures', (req, res) => {
   const icao = req.params.icao.toUpperCase();
   const list = buildUpcomingTSATsForICAO(icao, cachedPilots);
@@ -1440,26 +1469,6 @@ app.get('/api/icao/:icao/departures', (req, res) => {
 
 import fs from 'fs';
 
-app.get('/api/icao/:icao/docs', (req, res) => {
-  const icao = req.params.icao.toUpperCase();
-  const dir = path.join(__dirname, 'Uploads', icao);
-
-  if (!fs.existsSync(dir)) {
-    return res.json([]);
-  }
-
-  const files = fs.readdirSync(dir).map(name => ({
-    name,
-    type: path.extname(name).replace('.', '').toUpperCase(),
-    url: `/uploads/${icao}/${name}`
-  }));
-
-  res.json(files);
-});
-
-
-
-
 app.use('/uploads', express.static(path.join(__dirname, 'Uploads')));
 
 app.get('/icao/:icao', async (req, res) => {
@@ -1467,35 +1476,237 @@ app.get('/icao/:icao', async (req, res) => {
 
   const content = `
   <section class="card">
-    <div class="icao-top-row">
-  <div class="icao-deps">
-    <h2>Upcoming Departures</h2>
-    <div id="upcomingDepartures" class="upcoming-deps"></div>
-  </div>
 
-  <div class="icao-map">
-    <div id="icaoMap" data-icao="${icao}"></div>
+  <div class="icao-top-row three-cols">
 
-    <div class="icao-map-footer">
-      <button id="expandMapBtn" class="map-expand-btn">
-        Expand map
-      </button>
-    </div>
+    <!-- LEFT: Upcoming Departures -->
+    <div class="icao-deps">
+  <div class="deps-scroll">
+    <table class="departures-table">
+      <thead>
+        <tr>
+          <th class="col-sts">STS</th>
+          <th>Callsign</th>
+          <th>A/C</th>
+          <th>Dest</th>
+          <th>ATC Route</th>
+        </tr>
+      </thead>
+      <tbody id="upcomingDepartures"></tbody>
+    </table>
   </div>
 </div>
 
-  </section>
 
-  <section class="card">
-    <h2>Airport Documentation</h2>
-    <div id="airportDocs"></div>
-  </section>
+    <!-- MIDDLE: Online Controllers -->
+    
+    <ul id="onlineControllers" class="atc-list">
+  <li class="atc-item">
+    <span class="atc-callsign">EGCC_M_TWR</span>
+    <span class="atc-freq">199.998</span>
+  </li>
+</ul>
 
-  <section class="card">
-    <h2>Available Scenery</h2>
-    <div id="airportScenery"></div>
-  </section>
- 
+
+    <!-- RIGHT: Map -->
+    <div class="icao-map">
+      <div id="icaoMap" data-icao="${icao}"></div>
+
+      <div class="icao-map-footer">
+        <button id="expandMapBtn" class="map-expand-btn">
+          Expand map
+        </button>
+      </div>
+    </div>
+
+  </div>
+
+</section>
+
+<section class="card">
+  <h2>Airport Documentation</h2>
+
+  <table class="docs-table">
+    <thead>
+      <tr>
+        <th>File Name</th>
+        <th>Type</th>
+        <th>Last Updated</th>
+        <th>Submitted By</th>
+      </tr>
+    </thead>
+    <tbody id="airportDocs"></tbody>
+  </table>
+</section>
+
+
+<section class="card">
+  <h2>Available Scenery</h2>
+  <div id="airportScenery"></div>
+</section>
+
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const icao = document
+    .getElementById('icaoMap')
+    ?.dataset?.icao;
+
+  if (!icao) return;
+
+  loadDepartures(icao);
+  loadControllers(icao);
+
+  setInterval(() => {
+    loadDepartures(icao);
+    loadControllers(icao);
+  }, 60000);
+});
+</script>
+<script>
+async function loadControllers(icao) {
+  const res = await fetch('/api/icao/' + icao + '/controllers');
+  const data = await res.json();
+
+  const ul = document.getElementById('onlineControllers');
+  if (!ul) return;
+
+  if (!data.length) {
+    ul.innerHTML = '<li class="empty">No ATC online</li>';
+    return;
+  }
+
+  ul.innerHTML = data.length
+  ? data.map(c =>
+      '<li class="atc-item">' +
+        '<span class="atc-callsign">' + c.callsign + '</span>' +
+        '<span class="atc-freq">' + c.frequency + '</span>' +
+      '</li>'
+    ).join('')
+  : '<li class="atc-empty">No ATC online</li>';
+
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+  const map = document.getElementById('icaoMap');
+  if (!map) return;
+
+  const icao = map.dataset.icao;
+  if (!icao) return;
+
+  loadControllers(icao);
+});
+</script>
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const icao = document.getElementById('icaoMap').dataset.icao;
+
+  loadDepartures(icao);
+  loadControllers(icao);
+
+  setInterval(() => {
+    loadDepartures(icao);
+    loadControllers(icao);
+  }, 60000);
+});
+</script>
+<script>
+async function loadDepartures(icao) {
+  const res = await fetch('/api/icao/' + icao + '/departures/live');
+  const data = await res.json();
+
+  const tbody = document.getElementById('upcomingDepartures');
+  if (!tbody) return;
+
+  tbody.innerHTML = data.map(d =>
+  '<tr>' +
+    '<td class="col-sts">' +
+  '<span class="sts-icon ' +
+    (d.status === 'Taxiing' ? 'sts-taxi' : 'sts-gate') +
+  '" title="' + d.status + '">' +
+    (d.status === 'Taxiing' ? '➜' : '⎍') +
+  '</span>' +
+'</td>' +
+
+    '<td>' + d.callsign + '</td>' +
+    '<td>' + d.aircraft + '</td>' +
+    '<td>' + d.destination + '</td>' +
+    '<td>' +
+      '<div class="route-collapsible">' +
+        '<span class="route-text collapsed">' +
+          d.route +
+        '</span>' +
+        '<button type="button" class="route-toggle" aria-expanded="false">' +
+          'Expand' +
+        '</button>' +
+      '</div>' +
+    '</td>' +
+  '</tr>'
+).join('');
+
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+  const map = document.getElementById('icaoMap');
+  if (!map) return;
+
+  const icao = map.dataset.icao;
+  loadDepartures(icao);
+  loadAirportDocs(icao);
+
+});
+</script>
+<script>
+document.addEventListener('click', function (e) {
+  const btn = e.target.closest('.route-toggle');
+  if (!btn) return;
+
+  const wrapper = btn.closest('.route-collapsible');
+  const text = wrapper.querySelector('.route-text');
+
+  const expanded = btn.getAttribute('aria-expanded') === 'true';
+
+  btn.setAttribute('aria-expanded', String(!expanded));
+  btn.textContent = expanded ? 'Expand' : 'Collapse';
+
+  text.classList.toggle('collapsed', expanded);
+});
+</script>
+<script>
+async function loadAirportDocs(icao) {
+  const res = await fetch('/api/icao/' + icao + '/docs');
+  const docs = await res.json();
+
+  const tbody = document.getElementById('airportDocs');
+  if (!tbody) return;
+
+  if (!docs.length) {
+    tbody.innerHTML =
+      '<tr><td colspan="4" class="empty">No documentation available</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = docs.map(d =>
+    '<tr>' +
+      '<td><a href="' + d.url + '" target="_blank">' + d.filename + '</a></td>' +
+      '<td>' + d.type + '</td>' +
+      '<td>' + new Date(d.updated).toLocaleDateString('en-GB') + '</td>' +
+      '<td>' + d.submittedBy + '</td>' +
+    '</tr>'
+  ).join('');
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+  const map = document.getElementById('icaoMap');
+  if (!map) return;
+
+  const icao = map.dataset.icao;
+  loadAirportDocs(icao);
+});
+</script>
+
+
+
 
 `;
 
@@ -1510,6 +1721,104 @@ app.get('/icao/:icao', async (req, res) => {
     layoutClass: 'dashboard-wide'
   }));
 });
+
+app.get('/api/icao/:icao/departures/live', (req, res) => {
+  const icao = req.params.icao.toUpperCase();
+
+  const departures = cachedPilots
+    .filter(p => p.flight_plan?.departure === icao)
+    .map(p => {
+      let status = 'Airborne';
+
+      if (p.groundspeed < 5 && p.altitude < 500) {
+        status = 'At Gate';
+      } else if (p.groundspeed >= 5 && p.altitude < 500) {
+        status = 'Taxiing';
+      } else if (p.altitude >= 500 && p.altitude < 3000) {
+        status = 'Departed';
+      }
+
+      return {
+        status,
+        callsign: p.callsign,
+        aircraft: p.flight_plan.aircraft_short || p.flight_plan.aircraft || '—',
+        destination: p.flight_plan.arrival || '—',
+        route: p.flight_plan.route || ''
+      };
+    })
+    // ✅ KEEP ONLY RELEVANT STATES
+    .filter(d =>
+      d.status === 'At Gate' ||
+      d.status === 'Taxiing'
+    )
+    // optional: stable order
+    .sort((a, b) => {
+      if (a.status !== b.status) {
+        return a.status === 'At Gate' ? -1 : 1;
+      }
+      return a.callsign.localeCompare(b.callsign);
+    });
+
+  res.json(departures);
+});
+
+
+
+app.get('/api/icao/:icao/controllers', (req, res) => {
+  const icao = req.params.icao.toUpperCase();
+
+  axios.get('https://data.vatsim.net/v3/vatsim-data.json')
+    .then(r => {
+      const controllers = r.data.controllers || [];
+
+      const filtered = controllers
+        .filter(c =>
+          c.callsign.startsWith(icao + '_') &&
+          !c.callsign.endsWith('_OBS')
+        )
+        .map(c => ({
+          callsign: c.callsign,
+          frequency: c.frequency,
+          name: c.name
+        }))
+        .sort((a, b) => a.callsign.localeCompare(b.callsign));
+
+      res.json(filtered);
+    })
+    .catch(() => res.json([]));
+});
+
+app.get('/api/icao/:icao/docs', (req, res) => {
+  const icao = req.params.icao.toUpperCase();
+  const dir = path.join(__dirname, 'uploads', icao);
+
+  if (!fs.existsSync(dir)) {
+    return res.json([]);
+  }
+
+  const files = fs.readdirSync(dir)
+    .filter(f => !f.startsWith('.'))
+    .map(file => {
+      const fullPath = path.join(dir, file);
+      const stat = fs.statSync(fullPath);
+
+      const ext = path.extname(file).replace('.', '').toUpperCase();
+      const name = path.basename(file, path.extname(file));
+
+      return {
+        filename: name,
+        type: ext || 'FILE',
+        updated: stat.mtime,
+        submittedBy: 'System', // ← future override
+        url: `/uploads/${icao}/${file}`
+      };
+    })
+    .sort((a, b) => b.updated - a.updated);
+
+  res.json(files);
+});
+
+
 
 app.get('/api/icao/:icao/scenery', async (req, res) => {
   const icao = req.params.icao.toUpperCase();
