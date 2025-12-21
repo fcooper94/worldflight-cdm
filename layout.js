@@ -71,10 +71,11 @@ export default function renderLayout({
         <span class="icon">👥</span>
         <span class="label">Official Teams / Affiliates</span>
       </a>
-      <a href="#" class="nav-item" id="refreshSceneryLinks">
-    <span class="icon">🗺️</span>
-    <span class="label">Refresh Scenery Links</span>
-  </a>
+      <a href="/admin/scenery" class="nav-item">
+  <span class="icon">🗺️</span>
+  <span class="label">Scenery Submissions</span>
+</a>
+
     </div>
     ` : ''}
   </nav>

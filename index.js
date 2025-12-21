@@ -367,6 +367,13 @@ function buildUnassignedTobtsForICAO(icao) {
     .sort((a, b) => a.tobt.localeCompare(b.tobt));
 }
 
+function isWorldFlightDestination(icao) {
+  const upper = String(icao).toUpperCase();
+
+  return adminSheetCache.some(row =>
+    row.from === upper || row.to === upper
+  );
+}
 
 
 
@@ -1025,24 +1032,39 @@ function getWorldFlightStatus(pilot) {
   };
 }
 
-app.get('/api/icao/:icao/scenery-links', (req, res) => {
+app.get('/api/icao/:icao/scenery-links', async (req, res) => {
   const icao = req.params.icao.toUpperCase();
-  const wfSet = getWfAirportsSet();
 
-  if (!wfSet.has(icao)) {
-    return res.json({
-      notWF: true,
-      message: 'No scenery data available when not a WorldFlight destination this year.'
-    });
+  // Optional: WF-only guard (keep if you want)
+  
+
+  const rows = await prisma.airportScenery.findMany({
+    where: {
+      icao,
+      approved: true
+    },
+    orderBy: [
+      { sim: 'asc' },
+      { name: 'asc' }
+    ]
+  });
+
+  // Group by simulator for existing frontend
+  const result = {
+    msfs: [],
+    xplane: [],
+    p3d: []
+  };
+
+  for (const r of rows) {
+    if (r.sim === 'MSFS') result.msfs.push(r);
+    if (r.sim === 'XPLANE') result.xplane.push(r);
+    if (r.sim === 'P3D') result.p3d.push(r);
   }
 
-  if (!fs.existsSync(SCENERY_FILE)) {
-    return res.json({ msfs: [], xplane: [], p3d: [] });
-  }
-
-  const all = JSON.parse(fs.readFileSync(SCENERY_FILE, 'utf8'));
-  res.json(all[icao] || { msfs: [], xplane: [], p3d: [] });
+  res.json(result);
 });
+
 
 app.post('/admin/scenery/refresh-links', requireAdmin, (req, res) => {
   const result = refreshSceneryLinksFile();
@@ -1523,6 +1545,143 @@ app.get('/api/icao/:icao/departures', (req, res) => {
   res.json(list);
 });
 
+app.post('/admin/api/scenery/:id/approve', requireAdmin, async (req, res) => {
+  const id = Number(req.params.id);
+
+  await prisma.airportScenery.update({
+    where: { id },
+    data: {
+      approved: true,
+      approvedBy: req.session.user.data.name || 'Admin',
+      approvedAt: new Date()
+    }
+  });
+
+  res.json({ success: true });
+});
+
+app.post('/admin/api/scenery/:id/reject', requireAdmin, async (req, res) => {
+  const id = Number(req.params.id);
+
+  await prisma.airportScenery.delete({
+    where: { id }
+  });
+
+  res.json({ success: true });
+});
+
+app.get('/admin/scenery', requireAdmin, (req, res) => {
+  const user = req.session.user?.data || null;
+
+  const content = `
+    <section class="card card-narrow">
+  <h2>Pending Scenery Submissions</h2>
+
+  <div class="table-wrap">
+    <table class="admin-table admin-scenery-table">
+        <thead>
+          <tr>
+            <th>ICAO</th>
+            <th>Sim</th>
+            <th>Product</th>
+            <th>Developer</th>
+            <th>Store</th>
+            <th>Type</th>
+            <th>Submitted by</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+
+        <tbody id="sceneryAdminTable">
+          <tr>
+            <td colspan="8" class="empty">Loading…</td>
+          </tr>
+        </tbody>
+      </table>
+  </div>
+</section>
+
+    <script>
+      async function loadPendingScenery() {
+        const tbody = document.getElementById('sceneryAdminTable');
+
+        const res = await fetch('/admin/api/scenery/pending');
+
+if (!res.ok) {
+  console.error('Failed to load pending scenery', res.status);
+  tbody.innerHTML =
+    '<tr><td colspan="8" class="empty">Failed to load submissions</td></tr>';
+  return;
+}
+
+const rows = await res.json();
+
+
+        if (!rows.length) {
+          tbody.innerHTML =
+            '<tr><td colspan="8" class="empty">No pending submissions</td></tr>';
+          return;
+        }
+
+       tbody.innerHTML = rows.map(r =>
+  '<tr>' +
+    '<td>' + r.icao + '</td>' +
+    '<td><span class="sim-badge">' + r.sim + '</span></td>' +
+    '<td><a href="' + r.url + '" target="_blank" rel="noopener">' + r.name + '</a></td>' +
+    '<td>' + (r.developer || '—') + '</td>' +
+    '<td>' + (r.store || '—') + '</td>' +
+    '<td>' + r.type + '</td>' +
+    '<td>' + (r.submittedBy || '—') + '</td>' +
+    '<td class="actions">' +
+      '<div class="action-group">' +
+        '<button class="btn-approve" onclick="approveScenery(' + r.id + ')">Approve</button>' +
+        '<button class="btn-reject" onclick="rejectScenery(' + r.id + ')">Reject</button>' +
+      '</div>' +
+    '</td>' +
+  '</tr>'
+).join('');
+
+      }
+
+      async function approveScenery(id) {
+        const ok = confirm('Approve this scenery submission?');
+        if (!ok) return;
+        await fetch('/admin/api/scenery/' + id + '/approve', { method: 'POST' });
+        loadPendingScenery();
+      }
+
+      async function rejectScenery(id) {
+        const ok = confirm('Reject this scenery submission?');
+        if (!ok) return;
+        await fetch('/admin/api/scenery/' + id + '/reject', { method: 'POST' });
+        loadPendingScenery();
+      }
+
+      document.addEventListener('DOMContentLoaded', loadPendingScenery);
+    </script>
+  `;
+
+  res.send(renderLayout({
+    title: 'Scenery Submissions',
+    user,
+    isAdmin: true,
+    content,
+    layoutClass: 'dashboard-full'
+  }));
+});
+
+
+
+
+app.get('/admin/api/scenery/pending', requireAdmin, async (req, res) => {
+  const rows = await prisma.airportScenery.findMany({
+    where: { approved: false },
+    orderBy: { submittedAt: 'asc' }
+  });
+
+  res.json(rows);
+});
+
 
 
 app.use('/uploads', express.static(path.join(__dirname, 'Uploads')));
@@ -1843,19 +2002,15 @@ async function loadAirportScenery(icao) {
     const res = await fetch('/api/icao/' + icao + '/scenery-links');
     const data = await res.json();
 
-    if (data.notWF) {
-      container.innerHTML =
-        '<div class="empty">No scenery data available when not a WorldFlight destination this year.</div>';
-      return;
-    }
-
-    if (
+        if (
       (!data.msfs?.length) &&
       (!data.xplane?.length) &&
       (!data.p3d?.length)
     ) {
       container.innerHTML =
-        '<div class="empty">No scenery links have been added for this WorldFlight destination yet.</div>';
+    '<div class="empty">' +
+      'No sceneries have been submitted for this airport yet.' +
+    '</div>';
       return;
     }
 

@@ -3256,3 +3256,125 @@ tr:hover .row-actions {
 .modal-message.hidden {
   display: none;
 }
+.btn-approve {
+  background: #16a34a;
+  color: white;
+  border: none;
+  padding: 6px 10px;
+  border-radius: 6px;
+}
+
+.btn-reject {
+  background: #dc2626;
+  color: white;
+  border: none;
+  padding: 6px 10px;
+  border-radius: 6px;
+}
+
+.admin-table td.actions {
+  white-space: nowrap;
+}
+/* Limit width for readability */
+.card-narrow {
+  max-width: 1200px;
+}
+
+/* Table container */
+.table-wrap {
+  overflow-x: auto;
+}
+
+/* Base admin table */
+.admin-scenery-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 14px;
+}
+
+/* Header */
+.admin-scenery-table thead th {
+  text-align: left;
+  font-weight: 600;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: #9ca3af;
+  padding: 12px 14px;
+  border-bottom: 1px solid #1f2937;
+}
+
+/* Rows */
+.admin-scenery-table tbody tr {
+  background: rgba(255,255,255,0.02);
+  transition: background 0.15s ease;
+}
+
+.admin-scenery-table tbody tr:hover {
+  background: rgba(255,255,255,0.05);
+}
+
+/* Cells */
+.admin-scenery-table td {
+  padding: 12px 14px;
+  vertical-align: middle;
+  border-bottom: 1px solid #1f2937;
+  white-space: nowrap;
+}
+
+/* Product link */
+.admin-scenery-table td a {
+  color: #60a5fa;
+  font-weight: 600;
+}
+
+.admin-scenery-table td a:hover {
+  text-decoration: underline;
+}
+
+/* Simulator badge */
+.sim-badge {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  background: #0f172a;
+  border: 1px solid #1e293b;
+}
+
+/* Actions column */
+.admin-scenery-table td.actions {
+  text-align: right;
+}
+
+/* Buttons */
+.btn-approve,
+.btn-reject {
+  border: none;
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-left: 6px;
+}
+
+.btn-approve {
+  background: #16a34a;
+  color: #ecfdf5;
+}
+
+.btn-approve:hover {
+  background: #22c55e;
+}
+
+.btn-reject {
+  background: #dc2626;
+  color: #fef2f2;
+}
+
+.btn-reject:hover {
+  background: #ef4444;
+}
