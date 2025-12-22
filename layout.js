@@ -40,8 +40,15 @@ export default function renderLayout({
       <div class="nav-title">Pilots</div>
       <a href="/dashboard" class="nav-item">
         <span class="icon">🏠</span>
-        <span class="label">Home</span>
+        <span class="label">WF Schedule</span>
       </a>
+      
+      <a href="#" class="nav-item" id="openAirportPortal">
+  <span class="icon">🛫</span>
+  <span class="label">Airport Portal</span>
+</a>
+
+      
       <a href="/book" class="nav-item">
         <span class="icon">🗓️</span>
         <span class="label">Book a Slot</span>
@@ -182,6 +189,33 @@ export default function renderLayout({
       </div>
     </div>
   </div>
+<div id="airportPortalModal" class="modal hidden">
+  <div class="modal-backdrop"></div>
+
+  <div class="modal-dialog">
+    <h3>Open Airport Portal</h3>
+
+    <form id="airportPortalForm">
+      <input
+        type="text"
+        id="airportPortalIcao"
+        placeholder="Enter ICAO (e.g. EGCC)"
+        maxlength="4"
+        required
+        autocomplete="off"
+      />
+
+      <div class="modal-actions">
+        <button type="button" id="closeAirportPortal" class="modal-btn">
+          Cancel
+        </button>
+        <button type="submit" class="modal-btn modal-btn-submit">
+          Open
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
 
   <!-- ===== CALLSIGN MODAL LOGIC ===== -->
   <script>
@@ -427,6 +461,65 @@ document.getElementById('refreshSceneryLinksBtn')?.addEventListener('click', asy
   alert('Scenery links refreshed for ' + data.count + ' WF airports');
 });
 </script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  const openBtn  = document.getElementById('openAirportPortal');
+  const modal    = document.getElementById('airportPortalModal');
+  const closeBtn = document.getElementById('closeAirportPortal');
+  const form     = document.getElementById('airportPortalForm');
+  const input    = document.getElementById('airportPortalIcao');
+
+  if (!openBtn || !modal || !form || !input) return;
+
+  function openModal() {
+    modal.classList.remove('hidden');
+    input.value = '';
+    input.focus();
+  }
+
+  function closeModal() {
+    modal.classList.add('hidden');
+  }
+
+  openBtn.addEventListener('click', function (e) {
+    e.preventDefault();
+    openModal();
+  });
+
+  closeBtn.addEventListener('click', closeModal);
+
+  var backdrop = modal.querySelector('.modal-backdrop');
+  if (backdrop) {
+    backdrop.addEventListener('click', closeModal);
+  }
+
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+
+    var raw = input.value.trim().toUpperCase();
+var icao = null;
+
+// 3-letter US shorthand → assume K prefix
+if (/^[A-Z]{3}$/.test(raw)) {
+  icao = 'K' + raw;
+}
+// Full ICAO
+else if (/^[A-Z]{4}$/.test(raw)) {
+  icao = raw;
+}
+else {
+  alert('Please enter a valid ICAO (e.g. LAX or KLAX)');
+  return;
+}
+
+window.location.href = '/icao/' + icao;
+
+  });
+});
+</script>
+
+
 <!-- Leaflet JS -->
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="/icao-map.js"></script>

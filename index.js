@@ -1839,11 +1839,11 @@ app.get('/icao/:icao', async (req, res) => {
 
 
 <script>
-document.addEventListener('DOMContentLoaded', () => {
-  const map = document.getElementById('icaoMap');
+document.addEventListener('DOMContentLoaded', function () {
+  var map = document.getElementById('icaoMap');
   if (!map) return;
 
-  const icao = map.dataset.icao;
+  var icao = map.dataset.icao;
   if (!icao) return;
 
   /* ---------- INITIAL LOAD ---------- */
@@ -1853,35 +1853,35 @@ document.addEventListener('DOMContentLoaded', () => {
   loadAirportScenery(icao);
 
   /* ---------- REFRESH EVERY 60s ---------- */
-  setInterval(() => {
+  setInterval(function () {
     loadDepartures(icao);
     loadControllers(icao);
   }, 60000);
 
   /* ---------- ROUTE EXPAND / COLLAPSE ---------- */
-  document.addEventListener('click', (e) => {
-    const btn = e.target.closest('.route-toggle');
+  document.addEventListener('click', function (e) {
+    var btn = e.target.closest('.route-toggle');
     if (!btn) return;
 
-    const wrapper = btn.closest('.route-collapsible');
-    const text = wrapper.querySelector('.route-text');
+    var wrapper = btn.closest('.route-collapsible');
+    var text = wrapper.querySelector('.route-text');
 
-    const expanded = btn.getAttribute('aria-expanded') === 'true';
+    var expanded = btn.getAttribute('aria-expanded') === 'true';
     btn.setAttribute('aria-expanded', String(!expanded));
     btn.textContent = expanded ? 'Expand' : 'Collapse';
     text.classList.toggle('collapsed', expanded);
   });
 
   /* ---------- SCENERY MODAL ---------- */
-  const openBtn  = document.getElementById('openSceneryModal');
-  const modal    = document.getElementById('sceneryModal');
-  const closeBtn = document.getElementById('closeSceneryModal');
-  const form     = document.getElementById('sceneryForm');
-  const submitBtn = document.getElementById('submitSceneryBtn');
-  const msg       = document.getElementById('sceneryFormMessage');
+  var openBtn  = document.getElementById('openSceneryModal');
+  var modal    = document.getElementById('sceneryModal');
+  var closeBtn = document.getElementById('closeSceneryModal');
+  var form     = document.getElementById('sceneryForm');
+  var submitBtn = document.getElementById('submitSceneryBtn');
+  var msg       = document.getElementById('sceneryFormMessage');
 
   if (openBtn && modal && form) {
-    openBtn.addEventListener('click', () => {
+    openBtn.addEventListener('click', function () {
       document.getElementById('sceneryIcao').textContent = icao;
       document.getElementById('sceneryIcaoInput').value = icao;
       modal.classList.remove('hidden');
@@ -1895,10 +1895,12 @@ document.addEventListener('DOMContentLoaded', () => {
       submitBtn.textContent = 'Submit scenery';
     }
 
-    closeBtn.addEventListener('click', closeModal);
-    modal.querySelector('.modal-backdrop').addEventListener('click', closeModal);
+    if (closeBtn) closeBtn.addEventListener('click', closeModal);
 
-    form.addEventListener('submit', async (e) => {
+    var backdrop = modal.querySelector('.modal-backdrop');
+    if (backdrop) backdrop.addEventListener('click', closeModal);
+
+    form.addEventListener('submit', function (e) {
       e.preventDefault();
 
       submitBtn.disabled = true;
@@ -1907,26 +1909,29 @@ document.addEventListener('DOMContentLoaded', () => {
       msg.textContent = '';
 
       try {
-        const payload = Object.fromEntries(new FormData(form).entries());
+        var payload = Object.fromEntries(new FormData(form).entries());
 
-        const res = await fetch('/api/scenery/submit', {
+        fetch('/api/scenery/submit', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
+        })
+        .then(function (res) {
+          if (!res.ok) throw new Error('Submit failed');
+
+          msg.textContent = 'Scenery submitted for approval';
+          msg.className = 'modal-message success';
+          setTimeout(closeModal, 1500);
+        })
+        .catch(function () {
+          msg.textContent = 'Failed to submit scenery. Please try again.';
+          msg.className = 'modal-message error';
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Submit scenery';
         });
-
-        if (!res.ok) throw new Error('Submit failed');
-
-        msg.textContent = 'Scenery submitted for approval';
-        msg.className = 'modal-message success';
-        setTimeout(closeModal, 1500);
 
       } catch (err) {
         console.error(err);
-        msg.textContent = 'Failed to submit scenery. Please try again.';
-        msg.className = 'modal-message error';
-        submitBtn.disabled = false;
-        submitBtn.textContent = 'Submit scenery';
       }
     });
   }
@@ -1934,125 +1939,81 @@ document.addEventListener('DOMContentLoaded', () => {
 
 /* ================= FUNCTIONS ================= */
 
-async function loadControllers(icao) {
-  const res = await fetch('/api/icao/' + icao + '/controllers');
-  const data = await res.json();
+function loadControllers(icao) {
+  fetch('/api/icao/' + icao + '/controllers')
+    .then(function (res) { return res.json(); })
+    .then(function (data) {
+      var ul = document.getElementById('onlineControllers');
+      if (!ul) return;
 
-  const ul = document.getElementById('onlineControllers');
-  if (!ul) return;
-
-  ul.innerHTML = data.length
-    ? data.map(c =>
-        '<li class="atc-item">' +
-          '<span class="atc-callsign">' + c.callsign + '</span>' +
-          '<span class="atc-freq">' + c.frequency + '</span>' +
-        '</li>'
-      ).join('')
-    : '<li class="atc-empty">No ATC online</li>';
+      ul.innerHTML = data.length
+        ? data.map(function (c) {
+            return (
+              '<li class="atc-item">' +
+                '<span class="atc-callsign">' + c.callsign + '</span>' +
+                '<span class="atc-freq">' + c.frequency + '</span>' +
+              '</li>'
+            );
+          }).join('')
+        : '<li class="atc-empty">No ATC online</li>';
+    });
 }
 
-async function loadDepartures(icao) {
-  const res = await fetch('/api/icao/' + icao + '/departures/live');
-  const data = await res.json();
+function loadDepartures(icao) {
+  fetch('/api/icao/' + icao + '/departures/live')
+    .then(function (res) { return res.json(); })
+    .then(function (data) {
+      var tbody = document.getElementById('upcomingDepartures');
+      if (!tbody) return;
 
-  const tbody = document.getElementById('upcomingDepartures');
-  if (!tbody) return;
-
-  tbody.innerHTML = data.map(d =>
-    '<tr>' +
-      '<td class="col-sts">' +
-        '<span class="sts-icon ' +
-          (d.status === 'Taxiing' ? 'sts-taxi' : 'sts-gate') +
-        '" title="' + d.status + '">' +
-          (d.status === 'Taxiing' ? '➜' : '⎍') +
-        '</span>' +
-      '</td>' +
-      '<td>' + d.callsign + '</td>' +
-      '<td>' + d.aircraft + '</td>' +
-      '<td>' + d.destination + '</td>' +
-      '<td>' +
-        '<div class="route-collapsible">' +
-          '<span class="route-text collapsed">' + d.route + '</span>' +
-          '<button type="button" class="route-toggle" aria-expanded="false">Expand</button>' +
-        '</div>' +
-      '</td>' +
-    '</tr>'
-  ).join('');
-}
-
-async function loadAirportDocs(icao) {
-  const res = await fetch('/api/icao/' + icao + '/docs');
-  const docs = await res.json();
-
-  const tbody = document.getElementById('airportDocs');
-  if (!tbody) return;
-
-  tbody.innerHTML = docs.length
-    ? docs.map(d =>
-        '<tr>' +
-          '<td><a href="' + d.url + '" target="_blank">' + d.filename + '</a></td>' +
-          '<td>' + d.type + '</td>' +
-          '<td>' + new Date(d.updated).toLocaleDateString('en-GB') + '</td>' +
-          '<td>' + d.submittedBy + '</td>' +
-        '</tr>'
-      ).join('')
-    : '<tr><td colspan="4" class="empty">No documentation available</td></tr>';
-}
-
-async function loadAirportScenery(icao) {
-  const container = document.getElementById('airportScenery');
-  if (!container) return;
-
-  try {
-    const res = await fetch('/api/icao/' + icao + '/scenery-links');
-    const data = await res.json();
-
-        if (
-      (!data.msfs?.length) &&
-      (!data.xplane?.length) &&
-      (!data.p3d?.length)
-    ) {
-      container.innerHTML =
-    '<div class="empty">' +
-      'No sceneries have been submitted for this airport yet.' +
-    '</div>';
-      return;
-    }
-
-    container.innerHTML = renderSceneryTables(data);
-
-  } catch {
-    container.innerHTML = '<div class="empty">Failed to load scenery data</div>';
-  }
-}
-
-function renderSceneryTables(data) {
-  let html = '';
-  if (data.msfs?.length) html += renderSceneryTable('MSFS', data.msfs);
-  if (data.xplane?.length) html += renderSceneryTable('X-Plane', data.xplane);
-  if (data.p3d?.length) html += renderSceneryTable('Prepar3D', data.p3d);
-  return html;
-}
-
-function renderSceneryTable(title, rows) {
-  return (
-    '<h3 class="scenery-platform">' + title + '</h3>' +
-    '<table class="scenery-table">' +
-      '<thead><tr><th>Product</th><th>Developer</th><th>Store</th><th>Type</th></tr></thead>' +
-      '<tbody>' +
-        rows.map(r =>
+      tbody.innerHTML = data.map(function (d) {
+        return (
           '<tr>' +
-            '<td><a href="' + r.url + '" target="_blank">' + r.name + '</a></td>' +
-            '<td>' + r.developer + '</td>' +
-            '<td>' + r.store + '</td>' +
-            '<td>' + r.type + '</td>' +
+            '<td class="col-sts">' +
+              '<span class="sts-icon ' +
+                (d.status === 'Taxiing' ? 'sts-taxi' : 'sts-gate') +
+              '" title="' + d.status + '">' +
+                (d.status === 'Taxiing' ? '➜' : '⎍') +
+              '</span>' +
+            '</td>' +
+            '<td>' + d.callsign + '</td>' +
+            '<td>' + d.aircraft + '</td>' +
+            '<td>' + d.destination + '</td>' +
+            '<td>' +
+              '<div class="route-collapsible">' +
+                '<span class="route-text collapsed">' + d.route + '</span>' +
+                '<button type="button" class="route-toggle" aria-expanded="false">Expand</button>' +
+              '</div>' +
+            '</td>' +
           '</tr>'
-        ).join('') +
-      '</tbody>' +
-    '</table>'
-  );
+        );
+      }).join('');
+    });
+}
+
+function loadAirportDocs(icao) {
+  fetch('/api/icao/' + icao + '/docs')
+    .then(function (res) { return res.json(); })
+    .then(function (docs) {
+      var tbody = document.getElementById('airportDocs');
+      if (!tbody) return;
+
+      tbody.innerHTML = docs.length
+        ? docs.map(function (d) {
+            return (
+              '<tr>' +
+                '<td><a href="' + d.url + '" target="_blank">' + d.filename + '</a></td>' +
+                '<td>' + d.type + '</td>' +
+                '<td>' + new Date(d.updated).toLocaleDateString('en-GB') + '</td>' +
+                '<td>' + d.submittedBy + '</td>' +
+              '</tr>'
+            );
+          }).join('')
+        : '<tr><td colspan="4" class="empty">No documentation available</td></tr>';
+    });
 }
 </script>
+
 
 
 
@@ -2152,16 +2113,22 @@ app.post('/api/scenery/submit', requireLogin, async (req, res) => {
 
 app.get('/api/icao/:icao/controllers', (req, res) => {
   const icao = req.params.icao.toUpperCase();
+  const shortIcao = icao.startsWith('K') ? icao.slice(1) : null;
 
   axios.get('https://data.vatsim.net/v3/vatsim-data.json')
     .then(r => {
       const controllers = r.data.controllers || [];
 
       const filtered = controllers
-        .filter(c =>
-          c.callsign.startsWith(icao + '_') &&
-          !c.callsign.endsWith('_OBS')
-        )
+        .filter(c => {
+          const cs = c.callsign.toUpperCase();
+
+          if (cs.endsWith('_OBS')) return false;
+          if (cs.startsWith(icao + '_')) return true;
+          if (shortIcao && cs.startsWith(shortIcao + '_')) return true;
+
+          return false;
+        })
         .map(c => ({
           callsign: c.callsign,
           frequency: c.frequency,
@@ -2173,6 +2140,7 @@ app.get('/api/icao/:icao/controllers', (req, res) => {
     })
     .catch(() => res.json([]));
 });
+
 
 app.get('/api/icao/:icao/docs', (req, res) => {
   const icao = req.params.icao.toUpperCase();
