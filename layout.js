@@ -82,6 +82,11 @@ export default function renderLayout({
   <span class="icon">🗺️</span>
   <span class="label">Scenery Submissions</span>
 </a>
+<a href="/admin/documentation-access" class="nav-item">
+  <span class="icon">📄</span>
+  <span class="label">Documentation Access</span>
+</a>
+
 
     </div>
     ` : ''}
@@ -292,38 +297,7 @@ function openConfirmModal({ title, message }) {
   });
 }
 </script>
-<script>
-document.addEventListener('DOMContentLoaded', function () {
-  const btn = document.getElementById('refreshSceneryLinks');
-  if (!btn) return; // not on this page or not admin
 
-  btn.addEventListener('click', async function (e) {
-    e.preventDefault();
-
-    const ok = confirm(
-      'This will regenerate the scenery links file using the current WorldFlight route.\n\nContinue?'
-    );
-    if (!ok) return;
-
-    try {
-      const res = await fetch('/admin/scenery/refresh-links', {
-        method: 'POST'
-      });
-
-      const data = await res.json();
-
-      if (!res.ok || !data.success) {
-        throw new Error('Refresh failed');
-      }
-
-      alert('Scenery links refreshed for ' + data.count + ' WF airports.');
-    } catch (err) {
-      console.error(err);
-      alert('Failed to refresh scenery links. Check server logs.');
-    }
-  });
-});
-</script>
 
 <script>
   function openConfirmModal({ title, message }) {

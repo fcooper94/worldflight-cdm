@@ -2847,9 +2847,10 @@ tr:hover .row-actions {
 
 .map-modal-panel {
   position: relative;
-  width: min(96vw, 1400px);
-  height: min(92vh, 900px);
-  margin: 4vh auto;
+  width: 100%;
+  max-width: none;     /* 🔑 remove card constraint */
+  height: calc(100vh - 48px);
+  margin: 0 auto;
   background: #020617;
   border-radius: 16px;
   box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6);
@@ -2911,17 +2912,13 @@ tr:hover .row-actions {
 }
 .icao-top-row.three-cols {
   display: grid;
-  grid-template-columns: 1.2fr 0.6fr 1fr;
-  gap: 24px;
-  align-items: stretch;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 32px;
+  align-items: start;
 }
-/* ICAO page ONLY – 3 equal columns */
-.icao-top-row.three-cols {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 24px;
-  align-items: stretch;
-  width: 100%;
+
+.icao-top-row.three-cols > .icao-deps {
+  grid-column: span 2;
 }
 
 /* Critical: allow grid children to shrink */
@@ -2958,6 +2955,7 @@ tr:hover .row-actions {
 
 .icao-top-row.three-cols .route-text.collapsed {
   display: -webkit-box;
+  align-self: start;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
@@ -3383,31 +3381,76 @@ tr:hover .row-actions {
 }
 
 .route-text {
-  display: block;
-  font-family: monospace;
-  font-size: 12px;
-  color: rgba(255,255,255,0.85);
-  margin-bottom: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
 }
 
-/* Collapsed state */
-.route-text.collapsed {
-  max-height: 1.4em;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
+.route-text:not(.collapsed) {
+  white-space: normal;
 }
+
+
+/* Collapsed state */
+.route-collapsible {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 
 /* Toggle button */
 .route-toggle {
   background: none;
   border: none;
   padding: 0;
-  font-size: 12px;
-  color: #5da9ff;
+  font-size: 0.75rem;
+  color: #4fc3ff;
   cursor: pointer;
+  white-space: nowrap;
 }
 
 .route-toggle:hover {
   text-decoration: underline;
 }
+
+.atis-container {
+  display: grid;
+  grid-template-columns: 72px 1fr;
+  gap: 16px;
+  width: 100%;
+}
+
+.atis-letter {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 40px;
+  font-weight: 700;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #2aa9ff, #0077ff);
+  color: #fff;
+}
+
+.atis-body {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.atis-header {
+  font-size: 12px;
+  opacity: 0.7;
+  margin-bottom: 8px;
+}
+
+.atis-text {
+  margin: 0;
+  white-space: normal;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.5;
+  width: 100%;
+}
+

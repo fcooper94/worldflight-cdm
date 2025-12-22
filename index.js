@@ -207,6 +207,59 @@ function hhmmColonToHHMM(time) {
 }
 
 
+const PHONETIC_TO_LETTER = {
+  ALFA: 'A',
+  BRAVO: 'B',
+  CHARLIE: 'C',
+  DELTA: 'D',
+  ECHO: 'E',
+  FOXTROT: 'F',
+  GOLF: 'G',
+  HOTEL: 'H',
+  INDIA: 'I',
+  JULIET: 'J',
+  KILO: 'K',
+  LIMA: 'L',
+  MIKE: 'M',
+  NOVEMBER: 'N',
+  OSCAR: 'O',
+  PAPA: 'P',
+  QUEBEC: 'Q',
+  ROMEO: 'R',
+  SIERRA: 'S',
+  TANGO: 'T',
+  UNIFORM: 'U',
+  VICTOR: 'V',
+  WHISKEY: 'W',
+  XRAY: 'X',
+  YANKEE: 'Y',
+  ZULU: 'Z'
+};
+
+function extractAtisLetter(lines = []) {
+  for (const line of lines) {
+    // Match either "INFORMATION R" or "INFORMATION ROMEO"
+    const match = line.match(/information\s+([a-z]+)/i);
+    if (!match) continue;
+
+    const token = match[1].toUpperCase();
+
+    // Single-letter ATIS
+    if (token.length === 1 && token >= 'A' && token <= 'Z') {
+      return token;
+    }
+
+    // Phonetic ATIS
+    if (PHONETIC_TO_LETTER[token]) {
+      return PHONETIC_TO_LETTER[token];
+    }
+  }
+
+  return '';
+}
+
+
+
 function getNextAvailableTobts(from, to, limit = 5) {
   return Object.entries(allTobtSlots)
     .filter(([slotKey, slot]) =>
@@ -233,6 +286,36 @@ function requireLogin(req, res, next) {
   return res.redirect('/');
 }
 
+function isAirportController(cs, icao) {
+  if (!cs || !icao) return false;
+
+  const callsign = cs.toUpperCase().trim();
+  const airport = icao.toUpperCase();
+  const short = airport.startsWith('K') ? airport.slice(1) : null;
+
+  const prefixes = [
+    airport + '_',
+    short ? short + '_' : null
+  ].filter(Boolean);
+
+  const roles = [
+    '_ATIS',
+    '_DEL',
+    '_GND',
+    '_TWR',
+    '_APP',
+    '_DEP'
+  ];
+
+  return prefixes.some(prefix =>
+    roles.some(role =>
+      callsign.startsWith(prefix) &&
+      callsign.includes(role)   // 🔑 THIS IS THE FIX
+    )
+  );
+}
+
+
 
 
 function canEditIcao(user, pageIcao) {
@@ -252,6 +335,24 @@ function escapeHtml(value) {
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
 }
+
+function matchesIcaoPattern(pattern, icao) {
+  if (pattern.endsWith('**')) {
+    return icao.startsWith(pattern.slice(0, -2));
+  }
+  return pattern === icao;
+}
+
+async function canEditDocumentation(cid, icao) {
+  const rules = await prisma.documentationPermission.findMany({
+    where: { cid }
+  });
+
+  return rules.some(r =>
+    matchesIcaoPattern(r.pattern.toUpperCase(), icao.toUpperCase())
+  );
+}
+
 
 function rebuildAllTobtSlots() {
   // Clear existing slots
@@ -563,26 +664,6 @@ function getWfAirportsSet() {
 
 const SCENERY_FILE = path.join(__dirname, 'data', 'scenery-links.json');
 
-function refreshSceneryLinksFile() {
-  const wfSet = getWfAirportsSet();
-
-  // ensure /data exists
-  const dataDir = path.dirname(SCENERY_FILE);
-  if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
-
-  const existing = fs.existsSync(SCENERY_FILE)
-    ? JSON.parse(fs.readFileSync(SCENERY_FILE, 'utf8'))
-    : {};
-
-  const next = {};
-
-  for (const icao of wfSet) {
-    next[icao] = existing[icao] || { msfs: [], xplane: [], p3d: [] };
-  }
-
-  fs.writeFileSync(SCENERY_FILE, JSON.stringify(next, null, 2));
-  return { count: wfSet.size };
-}
 
 function extractTSATMap() {
   return Object.fromEntries(
@@ -1515,34 +1596,6 @@ document.addEventListener('click', async (e) => {
   }));
 });
 
-app.get('/api/icao/:icao/departures/live', (req, res) => {
-  const icao = req.params.icao.toUpperCase();
-
-  const departures = cachedPilots
-    .filter(p => p.flight_plan?.departure === icao)
-    .filter(p => {
-      const alt = Number(p.altitude || 0);
-      const gs  = Number(p.groundspeed || 0);
-      return alt < 500 && gs < 40;
-    })
-    .map(p => {
-      let status = 'At Gate';
-      if (p.groundspeed >= 5) status = 'Taxiing';
-
-      return {
-        status,
-        callsign: p.callsign,
-        aircraft: p.flight_plan.aircraft_short || p.flight_plan.aircraft || '—',
-        destination: p.flight_plan.arrival || '—',
-        route: p.flight_plan.route || ''
-      };
-    });
-
-  // ✅ THIS WAS MISSING
-  res.json(departures);
-});
-
-
 
 app.get('/api/icao/:icao/departures', (req, res) => {
   const icao = req.params.icao.toUpperCase();
@@ -1575,6 +1628,159 @@ app.post('/admin/api/scenery/:id/reject', requireAdmin, async (req, res) => {
   res.json({ success: true });
 });
 
+app.get('/admin/documentation-access', requireAdmin, (req, res) => {
+  const content = `
+<section class="card card-narrow">
+  <h2>Documentation Access</h2>
+
+  <form id="docAccessSearch">
+    <label>
+      VATSIM CID
+      <input id="docAccessCid" required>
+    </label>
+
+    <button class="action-btn">Load Permissions</button>
+  </form>
+</section>
+
+<section class="card hidden" id="docAccessPanel">
+  <h3>Permissions for CID <span id="currentCid"></span></h3>
+
+  <table class="admin-table">
+    <thead>
+      <tr>
+        <th>Pattern</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody id="docAccessTable"></tbody>
+  </table>
+
+  <form id="addDocAccess">
+    <input
+      id="newPattern"
+      placeholder="EGLL or EG**"
+      required
+    >
+    <button class="action-btn">Add Permission</button>
+  </form>
+</section>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  var searchForm = document.getElementById('docAccessSearch');
+  var cidInput = document.getElementById('docAccessCid');
+  var panel = document.getElementById('docAccessPanel');
+  var table = document.getElementById('docAccessTable');
+  var currentCidSpan = document.getElementById('currentCid');
+  var addForm = document.getElementById('addDocAccess');
+  var patternInput = document.getElementById('newPattern');
+
+  var currentCid = null;
+
+  searchForm.addEventListener('submit', function (e) {
+    e.preventDefault();
+    currentCid = cidInput.value.trim();
+    if (!/^[0-9]+$/.test(currentCid)) {
+      alert('Invalid CID');
+      return;
+    }
+
+    fetch('/admin/api/documentation/' + currentCid)
+      .then(r => r.json())
+      .then(rows => {
+        panel.classList.remove('hidden');
+        currentCidSpan.textContent = currentCid;
+
+        table.innerHTML = rows.length
+          ? rows.map(r =>
+              '<tr>' +
+                '<td>' + r.pattern + '</td>' +
+                '<td>' +
+                  '<button data-id="' + r.id + '" class="btn-reject">Remove</button>' +
+                '</td>' +
+              '</tr>'
+            ).join('')
+          : '<tr><td colspan="2" class="empty">No permissions</td></tr>';
+      });
+  });
+
+  addForm.addEventListener('submit', function (e) {
+    e.preventDefault();
+    if (!currentCid) return;
+
+    var pattern = patternInput.value.trim().toUpperCase();
+
+    fetch('/admin/api/documentation', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cid: currentCid, pattern })
+    })
+    .then(() => searchForm.dispatchEvent(new Event('submit')));
+  });
+
+  table.addEventListener('click', function (e) {
+    var btn = e.target.closest('.btn-reject');
+    if (!btn) return;
+
+    fetch('/admin/api/documentation/' + btn.dataset.id, {
+      method: 'DELETE'
+    })
+    .then(() => searchForm.dispatchEvent(new Event('submit')));
+  });
+});
+</script>
+  `;
+
+  res.send(renderLayout({
+    title: 'Documentation Access',
+    user: req.session.user?.data,
+    isAdmin: true,
+    content,
+    layoutClass: 'dashboard-full'
+  }));
+});
+
+app.get('/admin/api/documentation/:cid', requireAdmin, async (req, res) => {
+  const cid = Number(req.params.cid);
+
+  const rows = await prisma.documentationPermission.findMany({
+    where: { cid }
+  });
+
+  res.json(rows);
+});
+
+app.post('/admin/api/documentation', requireAdmin, async (req, res) => {
+  const { cid, pattern } = req.body;
+
+  if (!cid || !pattern) {
+    return res.status(400).json({ error: 'Missing fields' });
+  }
+
+  const normalized = pattern.toUpperCase();
+
+  if (!/^[A-Z]{2}(\*\*|[A-Z]{2})$/.test(normalized)) {
+    return res.status(400).json({ error: 'Invalid ICAO pattern' });
+  }
+
+  await prisma.documentationPermission.create({
+    data: { cid: Number(cid), pattern: normalized }
+  });
+
+  res.json({ success: true });
+});
+
+app.delete('/admin/api/documentation/:id', requireAdmin, async (req, res) => {
+  await prisma.documentationPermission.delete({
+    where: { id: Number(req.params.id) }
+  });
+
+  res.json({ success: true });
+});
+
+
+
 app.get('/admin/scenery', requireAdmin, (req, res) => {
   const user = req.session.user?.data || null;
 
@@ -1599,7 +1805,7 @@ app.get('/admin/scenery', requireAdmin, (req, res) => {
 
         <tbody id="sceneryAdminTable">
           <tr>
-            <td colspan="8" class="empty">Loading…</td>
+            <td colspan="8" class="empty">Loading...</td>
           </tr>
         </tbody>
       </table>
@@ -1633,10 +1839,10 @@ const rows = await res.json();
     '<td>' + r.icao + '</td>' +
     '<td><span class="sim-badge">' + r.sim + '</span></td>' +
     '<td><a href="' + r.url + '" target="_blank" rel="noopener">' + r.name + '</a></td>' +
-    '<td>' + (r.developer || '—') + '</td>' +
-    '<td>' + (r.store || '—') + '</td>' +
+    '<td>' + (r.developer || '-') + '</td>' +
+    '<td>' + (r.store || '-') + '</td>' +
     '<td>' + r.type + '</td>' +
-    '<td>' + (r.submittedBy || '—') + '</td>' +
+    '<td>' + (r.submittedBy || '-') + '</td>' +
     '<td class="actions">' +
       '<div class="action-group">' +
         '<button class="btn-approve" onclick="approveScenery(' + r.id + ')">Approve</button>' +
@@ -1674,6 +1880,62 @@ const rows = await res.json();
     layoutClass: 'dashboard-full'
   }));
 });
+
+function normalizeAtisText(lines) {
+  return lines
+    .join(' ')                 // flatten radio line breaks
+    .replace(/\s*\.\s*/g, '. ') // normalize dot spacing
+    .replace(/\s{2,}/g, ' ')    // collapse extra spaces
+    .trim();
+}
+
+
+app.get('/api/icao/:icao/atis', async (req, res) => {
+  const icao = req.params.icao.toUpperCase();
+  const short = icao.startsWith('K') ? icao.slice(1) : null;
+
+  try {
+    const r = await axios.get('https://data.vatsim.net/v3/vatsim-data.json');
+    const atisList = r.data.atis || [];
+
+    const atis = atisList.find(a => {
+      const cs = a.callsign?.toUpperCase().trim();
+      if (!cs) return false;
+
+      if (!cs.includes('_ATIS')) return false;
+
+      return (
+        cs.startsWith(icao + '_') ||
+        (short && cs.startsWith(short + '_'))
+      );
+    });
+
+    if (!atis) {
+      return res.json(null);
+    }
+
+    const lines = Array.isArray(atis.text_atis)
+      ? atis.text_atis
+      : typeof atis.text_atis === 'string'
+        ? atis.text_atis.split('\n')
+        : [];
+
+   res.json({
+  callsign: atis.callsign,
+  frequency: atis.frequency,
+  letter: extractAtisLetter(lines),
+  text: normalizeAtisText(lines)
+});
+
+
+
+  } catch (err) {
+    console.error('[ATIS]', err.message);
+    res.json(null);
+  }
+});
+
+
 
 
 
@@ -1721,11 +1983,9 @@ app.get('/icao/:icao', async (req, res) => {
     <!-- MIDDLE: Online Controllers -->
     
     <ul id="onlineControllers" class="atc-list">
-  <li class="atc-item">
-    <span class="atc-callsign">EGCC_M_TWR</span>
-    <span class="atc-freq">199.998</span>
-  </li>
+  <li class="atc-empty">Loading ATC...</li>
 </ul>
+
 
 
     <!-- RIGHT: Map -->
@@ -1741,6 +2001,20 @@ app.get('/icao/:icao', async (req, res) => {
 
   </div>
 
+</section>
+<section class="card hidden" id="airportAtisCard">
+  <div class="atis-container">
+    <div class="atis-letter" id="atisLetter">?</div>
+
+
+    <div class="atis-body">
+      <div class="atis-header">
+        <span class="atis-source" id="atisSource"></span>
+      </div>
+
+      <pre class="atis-text" id="atisText"></pre>
+    </div>
+  </div>
 </section>
 
 <section class="card">
@@ -1849,13 +2123,14 @@ document.addEventListener('DOMContentLoaded', function () {
   /* ---------- INITIAL LOAD ---------- */
   loadDepartures(icao);
   loadControllers(icao);
+  loadAtis(icao);
   loadAirportDocs(icao);
-  loadAirportScenery(icao);
 
   /* ---------- REFRESH EVERY 60s ---------- */
   setInterval(function () {
     loadDepartures(icao);
     loadControllers(icao);
+    loadAtis(icao);
   }, 60000);
 
   /* ---------- ROUTE EXPAND / COLLAPSE ---------- */
@@ -1904,115 +2179,144 @@ document.addEventListener('DOMContentLoaded', function () {
       e.preventDefault();
 
       submitBtn.disabled = true;
-      submitBtn.textContent = 'Submitting…';
+      submitBtn.textContent = 'Submitting';
       msg.classList.add('hidden');
       msg.textContent = '';
 
-      try {
-        var payload = Object.fromEntries(new FormData(form).entries());
-
-        fetch('/api/scenery/submit', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        })
-        .then(function (res) {
-          if (!res.ok) throw new Error('Submit failed');
-
-          msg.textContent = 'Scenery submitted for approval';
-          msg.className = 'modal-message success';
-          setTimeout(closeModal, 1500);
-        })
-        .catch(function () {
-          msg.textContent = 'Failed to submit scenery. Please try again.';
-          msg.className = 'modal-message error';
-          submitBtn.disabled = false;
-          submitBtn.textContent = 'Submit scenery';
-        });
-
-      } catch (err) {
-        console.error(err);
-      }
+      fetch('/api/scenery/submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(
+          Object.fromEntries(new FormData(form).entries())
+        )
+      })
+      .then(function (res) {
+        if (!res.ok) throw new Error();
+        msg.textContent = 'Scenery submitted for approval';
+        msg.className = 'modal-message success';
+        setTimeout(closeModal, 1500);
+      })
+      .catch(function () {
+        msg.textContent = 'Failed to submit scenery. Please try again.';
+        msg.className = 'modal-message error';
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Submit scenery';
+      });
     });
   }
 });
 
 /* ================= FUNCTIONS ================= */
 
-function loadControllers(icao) {
-  fetch('/api/icao/' + icao + '/controllers')
+function loadAtis(icao) {
+  fetch('/api/icao/' + icao + '/atis')
     .then(function (res) { return res.json(); })
     .then(function (data) {
-      var ul = document.getElementById('onlineControllers');
+      var card = document.getElementById('airportAtisCard');
+      if (!card) return;
+
+      if (!data || !data.text) {
+        card.classList.add('hidden');
+        return;
+      }
+
+      document.getElementById('atisLetter').textContent =
+        data.letter || '?';
+
+      document.getElementById('atisSource').textContent =
+        data.callsign + ' – ATIS';
+
+      document.getElementById('atisText').textContent =
+        data.text;
+
+      card.classList.remove('hidden');
+    })
+    .catch(function () {
+      var card = document.getElementById('airportAtisCard');
+      if (card) card.classList.add('hidden');
+    });
+}
+
+function loadControllers(icao) {
+  fetch('/api/icao/' + icao + '/controllers')
+    .then(res => res.json())
+    .then(data => {
+      const ul = document.getElementById('onlineControllers');
       if (!ul) return;
 
       ul.innerHTML = data.length
-        ? data.map(function (c) {
-            return (
-              '<li class="atc-item">' +
-                '<span class="atc-callsign">' + c.callsign + '</span>' +
-                '<span class="atc-freq">' + c.frequency + '</span>' +
-              '</li>'
-            );
-          }).join('')
+        ? data.map(c =>
+            '<li class="atc-item">' +
+              '<span class="atc-callsign">' + c.callsign + '</span>' +
+              '<span class="atc-freq">' + c.frequency + '</span>' +
+            '</li>'
+          ).join('')
         : '<li class="atc-empty">No ATC online</li>';
     });
 }
 
 function loadDepartures(icao) {
   fetch('/api/icao/' + icao + '/departures/live')
-    .then(function (res) { return res.json(); })
-    .then(function (data) {
-      var tbody = document.getElementById('upcomingDepartures');
+    .then(res => res.json())
+    .then(data => {
+      const tbody = document.getElementById('upcomingDepartures');
       if (!tbody) return;
 
-      tbody.innerHTML = data.map(function (d) {
-        return (
-          '<tr>' +
-            '<td class="col-sts">' +
-              '<span class="sts-icon ' +
-                (d.status === 'Taxiing' ? 'sts-taxi' : 'sts-gate') +
-              '" title="' + d.status + '">' +
-                (d.status === 'Taxiing' ? '➜' : '⎍') +
-              '</span>' +
-            '</td>' +
-            '<td>' + d.callsign + '</td>' +
-            '<td>' + d.aircraft + '</td>' +
-            '<td>' + d.destination + '</td>' +
-            '<td>' +
-              '<div class="route-collapsible">' +
-                '<span class="route-text collapsed">' + d.route + '</span>' +
-                '<button type="button" class="route-toggle" aria-expanded="false">Expand</button>' +
-              '</div>' +
-            '</td>' +
-          '</tr>'
-        );
-      }).join('');
+      tbody.innerHTML = data.map(d =>
+        '<tr>' +
+
+          // STATUS ICON
+          '<td class="col-sts">' +
+            '<span class="sts-icon ' +
+              (d.status === 'Taxiing' ? 'sts-taxi' : 'sts-gate') +
+            '" title="' + d.status + '">' +
+              (d.status === 'Taxiing' ? '➜' : '⎍') +
+            '</span>' +
+          '</td>' +
+
+          '<td>' + d.callsign + '</td>' +
+          '<td>' + d.aircraft + '</td>' +
+          '<td>' + d.destination + '</td>' +
+
+          // ROUTE (collapsible)
+          '<td>' +
+            '<div class="route-collapsible">' +
+              '<span class="route-text collapsed">' + d.route + '</span>' +
+              '<button type="button" class="route-toggle" aria-expanded="false">' +
+                'Expand' +
+              '</button>' +
+            '</div>' +
+          '</td>' +
+
+        '</tr>'
+      ).join('');
     });
 }
+
+
 
 function loadAirportDocs(icao) {
   fetch('/api/icao/' + icao + '/docs')
-    .then(function (res) { return res.json(); })
-    .then(function (docs) {
-      var tbody = document.getElementById('airportDocs');
+    .then(res => res.json())
+    .then(docs => {
+      const tbody = document.getElementById('airportDocs');
       if (!tbody) return;
 
       tbody.innerHTML = docs.length
-        ? docs.map(function (d) {
-            return (
-              '<tr>' +
-                '<td><a href="' + d.url + '" target="_blank">' + d.filename + '</a></td>' +
-                '<td>' + d.type + '</td>' +
-                '<td>' + new Date(d.updated).toLocaleDateString('en-GB') + '</td>' +
-                '<td>' + d.submittedBy + '</td>' +
-              '</tr>'
-            );
-          }).join('')
+        ? docs.map(d =>
+            '<tr>' +
+              '<td><a href="' + d.url + '" target="_blank">' + d.filename + '</a></td>' +
+              '<td>' + d.type + '</td>' +
+              '<td>' + new Date(d.updated).toLocaleDateString('en-GB') + '</td>' +
+              '<td>' + d.submittedBy + '</td>' +
+            '</tr>'
+          ).join('')
         : '<tr><td colspan="4" class="empty">No documentation available</td></tr>';
     });
 }
+
 </script>
+
 
 
 
@@ -2029,7 +2333,7 @@ function loadAirportDocs(icao) {
     user: req.session?.user?.data,
     isAdmin: ADMIN_CIDS.includes(Number(req.session?.user?.data?.cid)),
     content,
-    layoutClass: 'dashboard-wide'
+    layoutClass: 'dashboard-full'
   }));
 });
 
@@ -2052,8 +2356,8 @@ app.get('/api/icao/:icao/departures/live', (req, res) => {
       return {
         status,
         callsign: p.callsign,
-        aircraft: p.flight_plan.aircraft_short || p.flight_plan.aircraft || '—',
-        destination: p.flight_plan.arrival || '—',
+        aircraft: p.flight_plan.aircraft_short || p.flight_plan.aircraft || '-',
+        destination: p.flight_plan.arrival || '-',
         route: p.flight_plan.route || ''
       };
     })
@@ -2111,35 +2415,55 @@ app.post('/api/scenery/submit', requireLogin, async (req, res) => {
 });
 
 
-app.get('/api/icao/:icao/controllers', (req, res) => {
+app.get('/api/icao/:icao/controllers', async (req, res) => {
   const icao = req.params.icao.toUpperCase();
-  const shortIcao = icao.startsWith('K') ? icao.slice(1) : null;
 
-  axios.get('https://data.vatsim.net/v3/vatsim-data.json')
-    .then(r => {
-      const controllers = r.data.controllers || [];
+  try {
+    const r = await axios.get('https://data.vatsim.net/v3/vatsim-data.json');
 
-      const filtered = controllers
-        .filter(c => {
-          const cs = c.callsign.toUpperCase();
+    const controllers = r.data.controllers || [];
+    const atis = r.data.atis || [];
 
-          if (cs.endsWith('_OBS')) return false;
-          if (cs.startsWith(icao + '_')) return true;
-          if (shortIcao && cs.startsWith(shortIcao + '_')) return true;
+    const airportAtis = atis
+      .filter(a => {
+        const cs = a.callsign?.toUpperCase();
+        return cs &&
+          cs.includes('_ATIS') &&
+          (
+            cs.startsWith(icao + '_') ||
+            (icao.startsWith('K') && cs.startsWith(icao.slice(1) + '_'))
+          );
+      })
+      .map(a => ({
+        callsign: a.callsign,
+        frequency: a.frequency || '—',
+        isAtis: true
+      }));
 
-          return false;
-        })
-        .map(c => ({
-          callsign: c.callsign,
-          frequency: c.frequency,
-          name: c.name
-        }))
-        .sort((a, b) => a.callsign.localeCompare(b.callsign));
+    const airportControllers = controllers
+      .filter(c => isAirportController(c.callsign, icao))
+      .map(c => ({
+        callsign: c.callsign,
+        frequency: c.frequency || '—',
+        isAtis: false
+      }));
 
-      res.json(filtered);
-    })
-    .catch(() => res.json([]));
+    const merged = [...airportAtis, ...airportControllers]
+      .sort((a, b) => {
+        if (a.isAtis && !b.isAtis) return -1;
+        if (!a.isAtis && b.isAtis) return 1;
+        return a.callsign.localeCompare(b.callsign);
+      });
+
+    res.json(merged);
+
+  } catch (err) {
+    console.error('[CONTROLLERS]', err.message);
+    res.json([]);
+  }
 });
+
+
 
 
 app.get('/api/icao/:icao/docs', (req, res) => {
@@ -3255,7 +3579,7 @@ socket.on('connectedUsersUpdate', users => {
     return;
   }
   container.innerHTML = users
-    .map(u => 'CID ' + u.cid + ' — ' + u.position)
+    .map(u => 'CID ' + u.cid + ' - ' + u.position)
     .join('<br>');
 });
 </script>
@@ -3591,7 +3915,7 @@ let primaryStatusHtml = '';
   </td>
 
   <td class="tsat-cell" data-callsign="${p.callsign}">
-    <span class="tsat-time">—</span>
+    <span class="tsat-time">-</span>
     ${CAN_EDIT ? `<button class="tsat-refresh" data-callsign="${p.callsign}" style="display:none;">⟳</button>` : ''}
   </td>
 
@@ -3806,7 +4130,7 @@ setInterval(() => {
    TSAT → FULL ROW COLOURING (CDM –10 / –5 / +5 / +10 LOGIC)
 ============================================================ */
 function getRowColorClass(tsatStr) {
-    if (!tsatStr || tsatStr === '—' || tsatStr === '----') return '';
+    if (!tsatStr || tsatStr === '-' || tsatStr === '----') return '';
 
     const now = new Date();
     now.setSeconds(0, 0);
@@ -3914,7 +4238,7 @@ function renderUpcomingTSATTable(data) {
   data.slice(0, MAX_ROWS).forEach(function (item) {
     const tr = document.createElement('tr');
 
-const tsatValue = item.tsat || '—';
+const tsatValue = item.tsat || '-';
 const rowClass = getRowColorClass(tsatValue);
 if (rowClass) tr.classList.add(rowClass);
 
@@ -4099,7 +4423,7 @@ socket.on('syncTSAT', data => {
     const span = cell.querySelector('.tsat-time');
     const refreshBtn = cell.querySelector('.tsat-refresh');
 
-    if (span) span.innerText = tsat || '—';
+    if (span) span.innerText = tsat || '-';
     if (refreshBtn) refreshBtn.style.display = tsat ? 'inline-block' : 'none';
   });
 });
@@ -4114,7 +4438,7 @@ socket.on('tsatUpdated', ({ callsign, tsat }) => {
   const span = cell.querySelector('.tsat-time');
   const refreshBtn = cell.querySelector('.tsat-refresh');
 
-  if (span) span.innerText = tsat || '—';
+  if (span) span.innerText = tsat || '-';
   if (refreshBtn) refreshBtn.style.display = tsat ? 'inline-block' : 'none';
 });
 
@@ -4146,7 +4470,7 @@ document.addEventListener('click', function (e) {
     if (isActive) {
       
     } else {
-      if (span) span.innerText = '—';
+      if (span) span.innerText = '-';
       if (refreshBtn) refreshBtn.style.display = 'none';
       socket.emit('cancelTSAT', { callsign, sector });
     }
@@ -4799,8 +5123,8 @@ app.get('/my-slots', requireLogin, (req, res) => {
       r.dep_time_utc === depTimeUtc
   );
 
-  const wfSector = wfRow?.number || '—';
-  const atcRoute = wfRow?.atc_route || '—';
+  const wfSector = wfRow?.number || '-';
+  const atcRoute = wfRow?.atc_route || '-';
 
   const [h, m] = booking.tobtTimeUtc.split(':').map(Number);
 

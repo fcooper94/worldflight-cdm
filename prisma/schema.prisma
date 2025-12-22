@@ -109,3 +109,12 @@ enum SceneryType {
   Freeware
   Payware
 }
+
+model DocumentationPermission {
+  id        Int      @id @default(autoincrement())
+  cid       Int
+  pattern   String   // e.g. "EGLL", "EG**", "KJ**"
+  createdAt DateTime @default(now())
+
+  @@index([cid])
+}
