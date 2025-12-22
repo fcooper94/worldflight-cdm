@@ -3423,6 +3423,9 @@ tr:hover .row-actions {
 }
 
 .atis-letter {
+  height: 70px;
+  min-height: 70px;
+  width: 70px;   
   display: flex;
   align-items: center;
   justify-content: center;
@@ -3431,6 +3434,7 @@ tr:hover .row-actions {
   border-radius: 12px;
   background: linear-gradient(135deg, #2aa9ff, #0077ff);
   color: #fff;
+  box-shadow: 0 0 14px rgba(11, 56, 65, 0.45);
 }
 
 .atis-body {
@@ -3453,4 +3457,18 @@ tr:hover .row-actions {
   line-height: 1.5;
   width: 100%;
 }
+.atis-letter.arrival {
+  background: linear-gradient(160deg, #312e81, #1e1b4b);
+  color: #c7d2fe;
+  box-shadow: 0 0 14px rgba(99,102,241,.45);
+}
 
+.atis-letter.departure {
+  background: linear-gradient(160deg, #064e3b, #022c22);
+  color: #6ee7b7;
+  box-shadow: 0 0 14px rgba(16,185,129,.45);
+}
+
+#airportAtisCard > .card:not(:last-child) {
+  margin-bottom: 12px;
+}

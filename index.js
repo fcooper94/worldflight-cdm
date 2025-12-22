@@ -238,25 +238,39 @@ const PHONETIC_TO_LETTER = {
 
 function extractAtisLetter(lines = []) {
   for (const line of lines) {
-    // Match either "INFORMATION R" or "INFORMATION ROMEO"
-    const match = line.match(/information\s+([a-z]+)/i);
-    if (!match) continue;
+    const upper = line.toUpperCase();
 
-    const token = match[1].toUpperCase();
-
-    // Single-letter ATIS
-    if (token.length === 1 && token >= 'A' && token <= 'Z') {
-      return token;
+    // 1. INFORMATION ROMEO / INFORMATION R
+    let m = upper.match(/\bINFORMATION\s+([A-Z]+)\b/);
+    if (m) {
+      return phoneticOrLetter(m[1]);
     }
 
-    // Phonetic ATIS
-    if (PHONETIC_TO_LETTER[token]) {
-      return PHONETIC_TO_LETTER[token];
+    // 2. ATIS F / DEP ATIS F / ARR ATIS J
+    m = upper.match(/\bATIS\s+([A-Z])\b/);
+    if (m) {
+      return m[1];
     }
   }
-
   return '';
 }
+
+function phoneticOrLetter(token) {
+  if (token.length === 1) return token;
+
+  const map = {
+    ALFA: 'A', BRAVO: 'B', CHARLIE: 'C', DELTA: 'D',
+    ECHO: 'E', FOXTROT: 'F', GOLF: 'G', HOTEL: 'H',
+    INDIA: 'I', JULIET: 'J', KILO: 'K', LIMA: 'L',
+    MIKE: 'M', NOVEMBER: 'N', OSCAR: 'O', PAPA: 'P',
+    QUEBEC: 'Q', ROMEO: 'R', SIERRA: 'S', TANGO: 'T',
+    UNIFORM: 'U', VICTOR: 'V', WHISKEY: 'W',
+    XRAY: 'X', YANKEE: 'Y', ZULU: 'Z'
+  };
+
+  return map[token] || '';
+}
+
 
 
 
@@ -1898,11 +1912,10 @@ app.get('/api/icao/:icao/atis', async (req, res) => {
     const r = await axios.get('https://data.vatsim.net/v3/vatsim-data.json');
     const atisList = r.data.atis || [];
 
-    const atis = atisList.find(a => {
+    const matches = atisList.filter(a => {
       const cs = a.callsign?.toUpperCase().trim();
       if (!cs) return false;
-
-      if (!cs.includes('_ATIS')) return false;
+      if (!cs.endsWith('_ATIS')) return false;
 
       return (
         cs.startsWith(icao + '_') ||
@@ -1910,28 +1923,37 @@ app.get('/api/icao/:icao/atis', async (req, res) => {
       );
     });
 
-    if (!atis) {
-      return res.json(null);
+    if (!matches.length) {
+      return res.json([]);
     }
 
-    const lines = Array.isArray(atis.text_atis)
-      ? atis.text_atis
-      : typeof atis.text_atis === 'string'
-        ? atis.text_atis.split('\n')
-        : [];
+    const result = matches.map(a => {
+      const cs = a.callsign.toUpperCase();
 
-   res.json({
-  callsign: atis.callsign,
-  frequency: atis.frequency,
-  letter: extractAtisLetter(lines),
-  text: normalizeAtisText(lines)
-});
+      let atisType = 'general';
+      if (cs.includes('_D_ATIS')) atisType = 'departure';
+      else if (cs.includes('_A_ATIS')) atisType = 'arrival';
 
+      const lines = Array.isArray(a.text_atis)
+        ? a.text_atis
+        : typeof a.text_atis === 'string'
+          ? a.text_atis.split('\n')
+          : [];
 
+      return {
+        callsign: a.callsign,
+        frequency: a.frequency,
+        atisType,                       // 🔑
+        letter: extractAtisLetter(lines),
+        text: normalizeAtisText(lines)
+      };
+    });
+
+    res.json(result);
 
   } catch (err) {
     console.error('[ATIS]', err.message);
-    res.json(null);
+    res.json([]);
   }
 });
 
@@ -2210,32 +2232,63 @@ document.addEventListener('DOMContentLoaded', function () {
 
 function loadAtis(icao) {
   fetch('/api/icao/' + icao + '/atis')
-    .then(function (res) { return res.json(); })
-    .then(function (data) {
-      var card = document.getElementById('airportAtisCard');
-      if (!card) return;
+    .then(res => res.json())
+    .then(data => {
+      const container = document.getElementById('airportAtisCard');
+      if (!container) return;
 
-      if (!data || !data.text) {
-        card.classList.add('hidden');
+      container.innerHTML = '';
+
+      if (!Array.isArray(data) || !data.length) {
+        container.classList.add('hidden');
         return;
       }
 
-      document.getElementById('atisLetter').textContent =
-        data.letter || '?';
+      data.forEach(atis => {
+        const card = document.createElement('section');
+        card.className = 'card';
 
-      document.getElementById('atisSource').textContent =
-        data.callsign + ' – ATIS';
+        const wrap = document.createElement('div');
+        wrap.className = 'atis-container';
 
-      document.getElementById('atisText').textContent =
-        data.text;
+        const letter = document.createElement('div');
+        letter.className = 'atis-letter ' + (atis.atisType || '');
+        letter.textContent = atis.letter || '?';
 
-      card.classList.remove('hidden');
+        const body = document.createElement('div');
+        body.className = 'atis-body';
+
+        const header = document.createElement('div');
+        header.className = 'atis-header';
+
+        const source = document.createElement('span');
+        source.className = 'atis-source';
+        source.textContent =
+          atis.callsign +
+          (atis.atisType ? ' – ' + atis.atisType.toUpperCase() + ' ATIS' : '');
+
+        const text = document.createElement('pre');
+        text.className = 'atis-text';
+        text.textContent = atis.text || '';
+
+        header.appendChild(source);
+        body.appendChild(header);
+        body.appendChild(text);
+
+        wrap.appendChild(letter);
+        wrap.appendChild(body);
+        card.appendChild(wrap);
+
+        container.appendChild(card);
+      });
+
+      container.classList.remove('hidden');
     })
-    .catch(function () {
-      var card = document.getElementById('airportAtisCard');
-      if (card) card.classList.add('hidden');
+    .catch(err => {
+      console.error('[ATIS]', err);
     });
 }
+
 
 function loadControllers(icao) {
   fetch('/api/icao/' + icao + '/controllers')
@@ -2434,11 +2487,23 @@ app.get('/api/icao/:icao/controllers', async (req, res) => {
             (icao.startsWith('K') && cs.startsWith(icao.slice(1) + '_'))
           );
       })
-      .map(a => ({
-        callsign: a.callsign,
-        frequency: a.frequency || '—',
-        isAtis: true
-      }));
+      .map(a => {
+  const cs = a.callsign.toUpperCase();
+
+  let atisType = 'general';
+  if (cs.includes('_D_ATIS')) atisType = 'departure';
+  else if (cs.includes('_A_ATIS')) atisType = 'arrival';
+
+  return {
+    callsign: a.callsign,
+    frequency: a.frequency || '—',
+    isAtis: true,
+    atisType   // departure | arrival | general
+  };
+});
+
+
+
 
     const airportControllers = controllers
       .filter(c => isAirportController(c.callsign, icao))
