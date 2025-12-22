@@ -3378,3 +3378,36 @@ tr:hover .row-actions {
 .btn-reject:hover {
   background: #ef4444;
 }
+.route-collapsible {
+  max-width: 420px;
+}
+
+.route-text {
+  display: block;
+  font-family: monospace;
+  font-size: 12px;
+  color: rgba(255,255,255,0.85);
+  margin-bottom: 4px;
+}
+
+/* Collapsed state */
+.route-text.collapsed {
+  max-height: 1.4em;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* Toggle button */
+.route-toggle {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 12px;
+  color: #5da9ff;
+  cursor: pointer;
+}
+
+.route-toggle:hover {
+  text-decoration: underline;
+}

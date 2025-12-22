@@ -1292,8 +1292,8 @@ app.get('/', (req, res) => {
 app.get('/auth/login', vatsimLogin);
 app.get('/auth/callback', vatsimCallback);
 app.get('/schedule', (req, res) => {
-
   const cid = Number(req.session?.user?.data?.cid);
+const isAdmin = ADMIN_CIDS.includes(cid);
 const myBookings = cid ? tobtBookingsByCid[cid] : null;
 
   const content = `
@@ -1408,13 +1408,17 @@ const myBookings = cid ? tobtBookingsByCid[cid] : null;
 
         if (mySlotKey) {
           const booking = tobtBookingsBySlot[mySlotKey];
-          const [deph, depm] = booking.tobtTimeUtc.split(':');
+          const [h, m] = booking.tobtTimeUtc.split(':').map(Number);
+
+const hh = String(h).padStart(2, '0');
+const mm = String(m).padStart(2, '0');
+
 
 url +=
   `&callsign=${encodeURIComponent(booking.callsign)}` +
-  `&deph=${deph}` +
-  `&depm=${depm}` +
-  `&manualrmk=${encodeURIComponent(`WF TOBT [SLOT] ${deph}:${depm} UTC - Route validated from www.worldflight.center`)}`;
+  `&deph=${hh}` +
+  `&depm=${mm}` +
+  `&manualrmk=${encodeURIComponent(`WF TOBT [SLOT] ${hh}:${mm} UTC - Route validated from www.worldflight.center`)}`;
 
         } else {
           url +=
@@ -1505,6 +1509,7 @@ document.addEventListener('click', async (e) => {
   res.send(renderLayout({
     title: 'WorldFlight Schedule',
     user: req.session.user?.data || null,
+    isAdmin,
     content,
     layoutClass: 'dashboard-full schedule-page'
   }));
@@ -3173,7 +3178,20 @@ ${adminSheetCache.map(r => {
   <td>${r.date_utc}</td>
   <td>${r.dep_time_utc}</td>
   <td>${r.arr_time_utc}</td>
-  <td class="col-route">${r.atc_route}</td>
+  <td>
+  <div class="route-collapsible">
+    <span class="route-text collapsed">
+      ${r.atc_route}
+      </span>
+
+    <button
+      type="button"
+      class="route-toggle"
+      aria-expanded="false">
+      Show route
+    </button>
+  </div>
+</td>
 </tr>`;
 }).join('')}
 </tbody>
@@ -3336,6 +3354,23 @@ toggleBtn.onclick = () => {
   );
 };
 </script>
+<script>
+document.addEventListener('click', function (e) {
+  const btn = e.target.closest('.route-toggle');
+  if (!btn) return;
+
+  const wrapper = btn.closest('.route-collapsible');
+  const text = wrapper.querySelector('.route-text');
+
+  const expanded = btn.getAttribute('aria-expanded') === 'true';
+
+  btn.setAttribute('aria-expanded', String(!expanded));
+  btn.textContent = expanded ? 'Show route' : 'Hide route';
+
+  text.classList.toggle('collapsed', expanded);
+});
+</script>
+
 `;
 res.send(
   renderLayout({
@@ -4799,7 +4834,10 @@ app.get('/my-slots', requireLogin, (req, res) => {
   const wfSector = wfRow?.number || '—';
   const atcRoute = wfRow?.atc_route || '—';
 
-  const [hh, mm] = tobtTimeUtc.split(':').map(Number);
+  const [h, m] = booking.tobtTimeUtc.split(':').map(Number);
+
+const hh = String(h).padStart(2, '0');
+const mm = String(m).padStart(2, '0');
   const connectDate = new Date(Date.UTC(2000, 0, 1, hh, mm - 30));
   const connectBy =
     connectDate.getUTCHours().toString().padStart(2, '0') +
@@ -4807,7 +4845,11 @@ app.get('/my-slots', requireLogin, (req, res) => {
     connectDate.getUTCMinutes().toString().padStart(2, '0');
 
   const callsign = booking?.callsign || '';
-  const [deph, depm] = booking.tobtTimeUtc.split(':');
+ const [rawH, rawM] = booking.tobtTimeUtc.split(':');
+
+const deph = rawH.padStart(2, '0');
+const depm = rawM.padStart(2, '0');
+
 
 const simbriefUrl =
   'https://dispatch.simbrief.com/options/custom' +
