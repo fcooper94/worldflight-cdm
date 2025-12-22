@@ -242,16 +242,17 @@ function extractAtisLetter(lines = []) {
 
     // 1. INFORMATION ROMEO / INFORMATION R
     let m = upper.match(/\bINFORMATION\s+([A-Z]+)\b/);
-    if (m) {
-      return phoneticOrLetter(m[1]);
-    }
+    if (m) return phoneticOrLetter(m[1]);
 
     // 2. ATIS F / DEP ATIS F / ARR ATIS J
     m = upper.match(/\bATIS\s+([A-Z])\b/);
-    if (m) {
-      return m[1];
-    }
+    if (m) return m[1];
+
+    // 3. RECEIVING INFO GOLF / INFO CHARLIE (OMAA, OMDB, etc.)
+    m = upper.match(/\bINFO\s+([A-Z]+)\b/);
+    if (m) return phoneticOrLetter(m[1]);
   }
+
   return '';
 }
 
@@ -270,6 +271,7 @@ function phoneticOrLetter(token) {
 
   return map[token] || '';
 }
+
 
 
 
