@@ -7594,17 +7594,19 @@ html {
 }
 
 /* WF Admin Schedule — local-time subline under Dep / Arr UTC values.
-   Bucketed by local hour at the airport:
+   Shows just "HH:MM" by default; full "HH:MM GMT±N" appears on hover via
+   the native title tooltip. Bucketed by local hour at the airport:
      01:00–06:00 → red (graveyard slot)
      06:00–10:00 → amber (early)
      else        → green */
 .sched-local-time {
   font-size: 11px;
   font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-weight: 700;
   letter-spacing: 0.02em;
   margin-top: 2px;
   white-space: nowrap;
-  opacity: 0.95;
+  cursor: help;
 }
 .sched-local-green { color: #4ade80; }
 .sched-local-amber { color: #fbbf24; }

@@ -20277,16 +20277,29 @@ app.get('/wf-schedule', requireAdmin, async (req, res) => {
 });
 
 // Format a UTC date+time at an airport's local timezone (resolved from lat/lon).
-// dayShift=1 covers arrivals whose UTC hour wraps past midnight relative to dep.
-// Returns "HH:MM GMT±N" or null if anything is missing/invalid.
+// dateUtc accepts ISO ("2026-10-31") or the codebase's display format
+// ("Sat 31st Oct") — the latter is what eventSheetCaches stores. dayShift=1
+// covers arrivals whose UTC hour wraps past midnight relative to dep.
+// Returns { time: "HH:MM", zone: "GMT+11" } or null. The caller renders the
+// time visibly and stashes the zone on a hover tooltip.
 function formatLocalAtAirport(lat, lon, dateUtc, timeUtc, dayShift = 0) {
   if (lat == null || lon == null) return null;
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateUtc || '')) return null;
   const m = /^(\d{2}):(\d{2})$/.exec(timeUtc || '');
   if (!m) return null;
+
+  let y, mo, d;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateUtc || '')) {
+    [y, mo, d] = dateUtc.split('-').map(Number);
+  } else {
+    const parsed = parseServerDate(dateUtc);
+    if (!parsed) return null;
+    y = parsed.getUTCFullYear();
+    mo = parsed.getUTCMonth() + 1;
+    d = parsed.getUTCDate();
+  }
+
   let tz;
   try { tz = tzLookup(lat, lon); } catch { return null; }
-  const [y, mo, d] = dateUtc.split('-').map(Number);
   const instant = new Date(Date.UTC(y, mo - 1, d + dayShift, Number(m[1]), Number(m[2])));
   try {
     const parts = new Intl.DateTimeFormat('en-GB', {
@@ -20300,7 +20313,7 @@ function formatLocalAtAirport(lat, lon, dateUtc, timeUtc, dayShift = 0) {
     const mm = parts.find(p => p.type === 'minute')?.value || '';
     const zone = parts.find(p => p.type === 'timeZoneName')?.value || '';
     if (!hh || !mm) return null;
-    return `${hh}:${mm} ${zone}`.trim();
+    return { time: `${hh}:${mm}`, zone };
   } catch {
     return null;
   }
@@ -20335,8 +20348,8 @@ for (const a of airportCoordsForLocal) coordsByIcao[a.icao] = { lat: a.lat, lon:
 //   01:00–06:00 → red   (graveyard slot)
 //   06:00–10:00 → amber (early)
 //   else        → green
-function localTimeColorClass(localStr) {
-  const m = /^(\d{2}):/.exec(localStr || '');
+function localTimeColorClass(hhmm) {
+  const m = /^(\d{2}):/.exec(hhmm || '');
   if (!m) return 'sched-local-green';
   const h = Number(m[1]);
   if (h >= 1 && h < 6)  return 'sched-local-red';
@@ -20357,10 +20370,12 @@ for (const r of eventRows) {
   }
   const arrLocal = arr ? formatLocalAtAirport(arr.lat, arr.lon, r.date_utc, r.arr_time_utc, arrDayShift) : null;
   localTimesByWf[r.number] = {
-    depLocal,
-    arrLocal,
-    depClass: depLocal ? localTimeColorClass(depLocal) : '',
-    arrClass: arrLocal ? localTimeColorClass(arrLocal) : ''
+    depTime: depLocal?.time || '',
+    depZone: depLocal?.zone || '',
+    depClass: depLocal ? localTimeColorClass(depLocal.time) : '',
+    arrTime: arrLocal?.time || '',
+    arrZone: arrLocal?.zone || '',
+    arrClass: arrLocal ? localTimeColorClass(arrLocal.time) : ''
   };
 }
 
@@ -20581,8 +20596,8 @@ ${eventRows.map((r, idx) => {
     : '<td>' + r.date_utc + '</td>'}
   ${(() => {
     const lt = localTimesByWf[r.number] || {};
-    const localHtml = lt.depLocal
-      ? '<div class="sched-local-time ' + lt.depClass + '">' + lt.depLocal + '</div>'
+    const localHtml = lt.depTime
+      ? '<div class="sched-local-time ' + lt.depClass + '" title="' + lt.depTime + ' ' + lt.depZone + '">' + lt.depTime + '</div>'
       : '';
     if (isScratch) {
       return isFirst
@@ -20595,8 +20610,8 @@ ${eventRows.map((r, idx) => {
     ? '<td></td><td></td><td></td>'
       + '<td><div class="sched-edit sched-route" data-field="atcRoute" contenteditable="true" style="min-width:200px;">' + (r.atc_route || '') + '</div></td>'
     : '<td class="calc-cell" data-field="arr">' + r.arr_time_utc
-      + ((localTimesByWf[r.number] && localTimesByWf[r.number].arrLocal)
-          ? '<div class="sched-local-time ' + localTimesByWf[r.number].arrClass + '">' + localTimesByWf[r.number].arrLocal + '</div>'
+      + ((localTimesByWf[r.number] && localTimesByWf[r.number].arrTime)
+          ? '<div class="sched-local-time ' + localTimesByWf[r.number].arrClass + '" title="' + localTimesByWf[r.number].arrTime + ' ' + localTimesByWf[r.number].arrZone + '">' + localTimesByWf[r.number].arrTime + '</div>'
           : '')
       + '</td>'
       + (isScratch
