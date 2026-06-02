@@ -42,9 +42,10 @@ document.addEventListener('DOMContentLoaded', () => {
     maxZoom: 19
   });
 
-  // Stamen Toner Background — black ocean, grey land, no labels (cleaner with our own markers)
-  const tileUrl = 'https://tiles.stadiamaps.com/tiles/stamen_toner_background/{z}/{x}/{y}{r}.png';
-  const baseLayer = L.tileLayer(tileUrl, { maxZoom: 19, noWrap: false }).addTo(map);
+  // CartoDB via the shared helper — no auth, theme-aware (swaps dark/light
+  // when the footer toggle changes data-theme), matches every other map page.
+  // Previously used Stadia Maps directly which 401'd without an API key.
+  const baseLayer = wfAddTileLayer(map, { maxZoom: 19, noWrap: false });
   map._wfBaseTileLayer = baseLayer;
 
   map.setView([20, 10], 2);
