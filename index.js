@@ -353,6 +353,7 @@ import vatsimLogin from './auth/login.js';
 import vatsimCallback from './auth/callback.js';
 import cron from 'node-cron';
 import nodemailer from 'nodemailer';
+import tzLookup from 'tz-lookup';
 import _renderLayout from './layout.js';
 import { getAirportGround, detectStandOccupancy } from './lib/osm-ground.mjs';
 function renderLayout(opts) {
@@ -20276,6 +20277,36 @@ app.get('/wf-schedule', requireAdmin, async (req, res) => {
   res.send(renderLayout({ title: 'WF Schedules', user, isAdmin, content, layoutClass: 'dashboard-full' }));
 });
 
+// Format a UTC date+time at an airport's local timezone (resolved from lat/lon).
+// dayShift=1 covers arrivals whose UTC hour wraps past midnight relative to dep.
+// Returns "HH:MM GMT±N" or null if anything is missing/invalid.
+function formatLocalAtAirport(lat, lon, dateUtc, timeUtc, dayShift = 0) {
+  if (lat == null || lon == null) return null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateUtc || '')) return null;
+  const m = /^(\d{2}):(\d{2})$/.exec(timeUtc || '');
+  if (!m) return null;
+  let tz;
+  try { tz = tzLookup(lat, lon); } catch { return null; }
+  const [y, mo, d] = dateUtc.split('-').map(Number);
+  const instant = new Date(Date.UTC(y, mo - 1, d + dayShift, Number(m[1]), Number(m[2])));
+  try {
+    const parts = new Intl.DateTimeFormat('en-GB', {
+      timeZone: tz,
+      hour: '2-digit',
+      minute: '2-digit',
+      timeZoneName: 'short',
+      hourCycle: 'h23'
+    }).formatToParts(instant);
+    const hh = parts.find(p => p.type === 'hour')?.value || '';
+    const mm = parts.find(p => p.type === 'minute')?.value || '';
+    const zone = parts.find(p => p.type === 'timeZoneName')?.value || '';
+    if (!hh || !mm) return null;
+    return `${hh}:${mm} ${zone}`.trim();
+  } catch {
+    return null;
+  }
+}
+
 /* ===== WF EVENT SCHEDULE (PER-EVENT) ===== */
 app.get('/wf-schedule/:eventId', requireAdmin, async (req, res) => {
 const eventId = Number(req.params.eventId);
@@ -20284,6 +20315,55 @@ if (!event) return res.redirect('/wf-schedule');
 console.log('[WF-SCHEDULE GET] event', eventId, 'startDateUtc=', JSON.stringify(event.startDateUtc), 'startTimeUtc=', JSON.stringify(event.startTimeUtc));
 
 const eventRows = eventSheetCaches[eventId] || [];
+
+// Resolve airport coordinates for every from/to ICAO used in this event so we
+// can render local departure / arrival times alongside the UTC values.
+const scheduleIcaos = [...new Set(
+  eventRows.flatMap(r => [r.from, r.to]).filter(Boolean).map(s => String(s).toUpperCase())
+)];
+const airportCoordsForLocal = scheduleIcaos.length
+  ? await prisma.airport.findMany({
+      where: { icao: { in: scheduleIcaos } },
+      select: { icao: true, lat: true, lon: true }
+    }).catch(() => [])
+  : [];
+const coordsByIcao = {};
+for (const a of airportCoordsForLocal) coordsByIcao[a.icao] = { lat: a.lat, lon: a.lon };
+
+// Compute local Dep / Arr per row. If arr_time_utc < dep_time_utc the
+// arrival has wrapped past midnight UTC, so its local instant is +1 day.
+// Each entry also carries a colour class based on local-hour buckets:
+//   01:00–06:00 → red   (graveyard slot)
+//   06:00–10:00 → amber (early)
+//   else        → green
+function localTimeColorClass(localStr) {
+  const m = /^(\d{2}):/.exec(localStr || '');
+  if (!m) return 'sched-local-green';
+  const h = Number(m[1]);
+  if (h >= 1 && h < 6)  return 'sched-local-red';
+  if (h >= 6 && h < 10) return 'sched-local-amber';
+  return 'sched-local-green';
+}
+const localTimesByWf = {};
+for (const r of eventRows) {
+  const from = String(r.from || '').toUpperCase();
+  const to   = String(r.to   || '').toUpperCase();
+  const dep  = coordsByIcao[from];
+  const arr  = coordsByIcao[to];
+  const depLocal = dep ? formatLocalAtAirport(dep.lat, dep.lon, r.date_utc, r.dep_time_utc) : null;
+  let arrDayShift = 0;
+  if (/^\d{2}:\d{2}$/.test(r.arr_time_utc || '') && /^\d{2}:\d{2}$/.test(r.dep_time_utc || '')) {
+    const toMins = s => Number(s.slice(0,2)) * 60 + Number(s.slice(3,5));
+    if (toMins(r.arr_time_utc) < toMins(r.dep_time_utc)) arrDayShift = 1;
+  }
+  const arrLocal = arr ? formatLocalAtAirport(arr.lat, arr.lon, r.date_utc, r.arr_time_utc, arrDayShift) : null;
+  localTimesByWf[r.number] = {
+    depLocal,
+    arrLocal,
+    depClass: depLocal ? localTimeColorClass(depLocal) : '',
+    arrClass: arrLocal ? localTimeColorClass(arrLocal) : ''
+  };
+}
 
 if (!req.session.user || !req.session.user.data) {
   return res.redirect('/');
@@ -20500,15 +20580,26 @@ ${eventRows.map((r, idx) => {
       ? '<td><input class="sched-edit" data-field="dateUtc" value="' + r.date_utc + '" style="width:100px;" /></td>'
       : '<td class="calc-cell" data-field="date">' + r.date_utc + '</td>')
     : '<td>' + r.date_utc + '</td>'}
-  ${isScratch
-    ? (isFirst
-      ? '<td><input class="sched-edit" data-field="depTimeUtc" value="' + r.dep_time_utc + '" style="width:60px;" /></td>'
-      : '<td class="calc-cell" data-field="dep">' + r.dep_time_utc + '</td>')
-    : '<td>' + r.dep_time_utc + '</td>'}
+  ${(() => {
+    const lt = localTimesByWf[r.number] || {};
+    const localHtml = lt.depLocal
+      ? '<div class="sched-local-time ' + lt.depClass + '">' + lt.depLocal + '</div>'
+      : '';
+    if (isScratch) {
+      return isFirst
+        ? '<td><input class="sched-edit" data-field="depTimeUtc" value="' + r.dep_time_utc + '" style="width:60px;" />' + localHtml + '</td>'
+        : '<td class="calc-cell" data-field="dep">' + r.dep_time_utc + localHtml + '</td>';
+    }
+    return '<td>' + r.dep_time_utc + localHtml + '</td>';
+  })()}
   ${isScratch && !r.block_time && r.from && r.to
     ? '<td></td><td></td><td></td>'
       + '<td><div class="sched-edit sched-route" data-field="atcRoute" contenteditable="true" style="min-width:200px;">' + (r.atc_route || '') + '</div></td>'
-    : '<td class="calc-cell" data-field="arr">' + r.arr_time_utc + '</td>'
+    : '<td class="calc-cell" data-field="arr">' + r.arr_time_utc
+      + ((localTimesByWf[r.number] && localTimesByWf[r.number].arrLocal)
+          ? '<div class="sched-local-time ' + localTimesByWf[r.number].arrClass + '">' + localTimesByWf[r.number].arrLocal + '</div>'
+          : '')
+      + '</td>'
       + (isScratch
         ? '<td><input class="sched-edit" data-field="flightTime" value="' + (r.flight_time || '') + '" placeholder="HH:MM" style="width:60px;" /></td>'
         : '<td>' + (r.flight_time || '') + '</td>')

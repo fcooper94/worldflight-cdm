@@ -21,7 +21,8 @@
     "multer": "^2.0.2",
     "node-cron": "^4.2.1",
     "nodemailer": "^8.0.4",
-    "socket.io": "^4.8.1"
+    "socket.io": "^4.8.1",
+    "tz-lookup": "^6.1.25"
   },
   "prisma": {
     "seed": "node prisma/seed.js"

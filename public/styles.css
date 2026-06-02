@@ -7592,3 +7592,20 @@ html {
     display: none; /* Remove edge vignettes on mobile */
   }
 }
+
+/* WF Admin Schedule — local-time subline under Dep / Arr UTC values.
+   Bucketed by local hour at the airport:
+     01:00–06:00 → red (graveyard slot)
+     06:00–10:00 → amber (early)
+     else        → green */
+.sched-local-time {
+  font-size: 11px;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  letter-spacing: 0.02em;
+  margin-top: 2px;
+  white-space: nowrap;
+  opacity: 0.95;
+}
+.sched-local-green { color: #4ade80; }
+.sched-local-amber { color: #fbbf24; }
+.sched-local-red   { color: #f87171; }
