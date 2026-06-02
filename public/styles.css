@@ -6161,6 +6161,16 @@ body.sidebar-collapsed {
   box-shadow: 0 0 6px rgba(34,197,94,0.4);
 }
 
+/* Suggested Airports map: neutral grey pin under the zoomed-in label.
+   Per-airport popularity colour comes from the circle marker below it. */
+#suggMap .wf-airport-pin {
+  border: none;
+  width: 8px;
+  height: 8px;
+  background: #94a3b8;
+  box-shadow: 0 0 6px rgba(148,163,184,0.4);
+}
+
 .wf-airport-text {
   position: absolute;
   padding: 2px 5px;
@@ -6306,7 +6316,8 @@ main.dashboard.map-layout .wf-map-page {
 
 /* 4) Leaflet map fills map page */
 main.dashboard.map-layout #wfWorldMap,
-main.dashboard.map-layout #prevDestMap {
+main.dashboard.map-layout #prevDestMap,
+main.dashboard.map-layout #suggMap {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -6361,7 +6372,8 @@ main.dashboard.map-layout {
   background: #0b0f1a;
 }
 #wfWorldMap,
-#prevDestMap {
+#prevDestMap,
+#suggMap {
   position: absolute;
   inset: 0;
   width: 100%;

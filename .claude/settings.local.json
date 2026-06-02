@@ -239,7 +239,8 @@
       "Bash(mv affiliate-banner-temp.jpg affiliate-banner.jpg)",
       "Bash(git ls-files *)",
       "Bash(cd /c/dev/WorldFlight-Planning && ls public | grep -i banner)",
-      "Read(//c/c/dev/WorldFlight-Planning/**)"
+      "Read(//c/c/dev/WorldFlight-Planning/**)",
+      "Bash(node --check public/suggested-airports-map.js)"
     ]
   }
 }

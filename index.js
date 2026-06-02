@@ -3292,9 +3292,13 @@ app.get('/admin/suggestions', requireAdmin, async (req, res) => {
   }
 
   const content = `
-    ${isSuperAdmin(Number(user.cid)) ? `<div style="margin-bottom:24px;">
-      <button id="deleteAllSuggestionsBtn" class="action-btn" style="background:var(--danger);color:#fff;">Delete All Suggestions</button>
-    </div>` : ''}
+    <div style="margin-bottom:24px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+      <a href="/admin/suggestions/map" class="action-btn" style="display:inline-flex;align-items:center;gap:8px;text-decoration:none;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg>
+        View on Map
+      </a>
+      ${isSuperAdmin(Number(user.cid)) ? `<button id="deleteAllSuggestionsBtn" class="action-btn" style="background:var(--danger);color:#fff;">Delete All Suggestions</button>` : ''}
+    </div>
 
     <div class="suggestions-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:24px;">
       <section class="card">
@@ -4853,6 +4857,60 @@ app.get('/api/previous-destinations', async (req, res) => {
     res.json({ airports: result });
   } catch (err) {
     console.error('previous-destinations API error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Aggregated suggestion popularity per ICAO, joined with airport coords.
+// Only "visit" suggestions (the "I want to fly here" ones) are surfaced;
+// "avoid" submissions and wildcard ICAOs (e.g. K***) are skipped.
+app.get('/api/admin/suggested-airports-map', requireAdmin, async (req, res) => {
+  try {
+    const suggestions = await prisma.airportSuggestion.findMany({
+      select: { icao: true, type: true, association: true }
+    });
+
+    const byIcao = {};
+    for (const s of suggestions) {
+      const k = String(s.icao || '').toUpperCase();
+      if (!k || /\*/.test(k)) continue;
+      if (s.type === 'avoid') continue;
+      if (!byIcao[k]) byIcao[k] = { count: 0, staffCount: 0 };
+      byIcao[k].count++;
+      if (/director|staff/i.test(s.association || '')) byIcao[k].staffCount++;
+    }
+
+    const icaos = Object.keys(byIcao);
+    if (icaos.length === 0) return res.json({ airports: {} });
+
+    let airports;
+    try {
+      airports = await prisma.airport.findMany({
+        where: { icao: { in: icaos } },
+        select: { icao: true, name: true, lat: true, lon: true }
+      });
+    } catch {
+      airports = await prisma.airport.findMany({
+        where: { icao: { in: icaos } },
+        select: { icao: true, lat: true, lon: true }
+      });
+    }
+
+    const result = {};
+    for (const ap of airports) {
+      const c = byIcao[ap.icao];
+      result[ap.icao] = {
+        icao: ap.icao,
+        name: ap.name || null,
+        lat: ap.lat,
+        lon: ap.lon,
+        count: c.count,
+        staffCount: c.staffCount
+      };
+    }
+    res.json({ airports: result });
+  } catch (err) {
+    console.error('suggested-airports-map API error:', err);
     res.status(500).json({ error: 'Server error' });
   }
 });
@@ -7771,6 +7829,25 @@ app.get('/previous-destinations', (req, res) => {
     title: 'Previous Destinations',
     user,
     isAdmin,
+    content,
+    layoutClass: 'dashboard-full map-layout'
+  }));
+});
+
+app.get('/admin/suggestions/map', requireAdmin, (req, res) => {
+  const user = req.session.user.data;
+  const content = `
+    <div class="wf-map-page">
+      <div id="suggMap"></div>
+    </div>
+
+    <script src="/suggested-airports-map.js"></script>
+  `;
+
+  res.send(renderLayout({
+    title: 'Suggested Airports Map',
+    user,
+    isAdmin: true,
     content,
     layoutClass: 'dashboard-full map-layout'
   }));
