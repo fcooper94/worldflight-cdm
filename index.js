@@ -2555,10 +2555,10 @@ function clearTSAT(sectorKey, callsign) {
 }
 
 let bootstrapComplete = false;
-let bootstrapStatus = { step: 0, total: 9, label: 'Starting...' };
+let bootstrapStatus = { step: 0, total: 8, label: 'Starting...' };
 
 function setBootstrapStatus(step, label) {
-  bootstrapStatus = { step, total: 9, label };
+  bootstrapStatus = { step, total: 8, label };
 }
 
 // Pre-fetch ground GeoJSON for every airport in the active event schedule.
@@ -2638,11 +2638,11 @@ await (async () => {
   }
 })();
 
-  // Pre-fetch ground (runways/taxiways/aprons/stands) for every airport in
-  // the active schedule. Cached entries return instantly; only airports we've
-  // never seen before hit OSM. Failures are non-fatal — server still starts.
-  setBootstrapStatus(9, 'Pre-fetching airport ground layouts');
-  await prefetchGroundForActiveSchedule();
+  // Ground-layout pre-fetch temporarily disabled — was adding minutes to
+  // first-boot for airports without a cache hit. Layouts are still fetched
+  // lazily on first /api/icao/:icao/ground request. To re-enable, restore
+  // the setBootstrapStatus(9, ...) + prefetchGroundForActiveSchedule() pair
+  // and bump bootstrapStatus.total back to 9 (two spots above).
 
 
   rebuildAllTobtSlots();       // 🔑 NOW WORKS
@@ -6800,7 +6800,6 @@ app.use((req, res, next) => {
       <div class="step-item" data-step="6"><span class="step-dot"></span>Loading bookings</div>
       <div class="step-item" data-step="7"><span class="step-dot"></span>Fetching VATSIM data</div>
       <div class="step-item" data-step="8"><span class="step-dot"></span>Building map cache</div>
-      <div class="step-item" data-step="9"><span class="step-dot"></span>Pre-fetching airport ground layouts</div>
     </div>
   </div>
 
