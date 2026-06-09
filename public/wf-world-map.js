@@ -132,55 +132,59 @@ document.addEventListener('DOMContentLoaded', () => {
   /* --------------------------------------------------
      Airport icon + hover popup
   -------------------------------------------------- */
-  function airportIcon(label, placement, extra) {
-    // placement: 'right' (default), 'left', 'top', 'bottom',
-    //            'top-right', 'top-left', 'bottom-right', 'bottom-left'
-    const p = placement || 'right';
-    const extraClass = extra?.isStartEnd ? ' wf-start-end' : '';
-    const badge = extra?.badge ? `<div class="wf-airport-badge">${extra.badge}</div>` : '';
+  function pinIcon(extra) {
+    const cls = extra?.isStartEnd ? ' wf-start-end' : '';
     return L.divIcon({
       className: 'wf-airport-label',
-      html: `
-        <div class="wf-airport-pin${extraClass}"></div>
-        <div class="wf-airport-text wf-label-${p}${extraClass}">${label}${badge}</div>`,
+      html: `<div class="wf-airport-pin${cls}"></div>`,
       iconSize: [1, 1]
     });
+  }
+
+  function tagIcon(label, extra) {
+    const cls = extra?.isStartEnd ? ' wf-start-end' : '';
+    const badge = extra?.badge ? `<div class="wf-airport-badge">${extra.badge}</div>` : '';
+    return L.divIcon({
+      className: 'wf-airport-tag',
+      html: `<div class="wf-airport-text${cls}">${label}${badge}</div>`,
+      iconAnchor: [0, 0]
+    });
+  }
+
+  function tagCenterLL(map, tagMarker) {
+    const ll = tagMarker.getLatLng();
+    const el = tagMarker.getElement();
+    if (!el) return ll;
+    const w = el.offsetWidth || 0, h = el.offsetHeight || 0;
+    if (!w || !h) return ll;
+    const pt = map.latLngToContainerPoint(ll);
+    return map.containerPointToLatLng([pt.x + w / 2, pt.y + h / 2]);
   }
 
   function airportPopupHtml(icao, a) {
   return `
     <div class="wf-airport-popup">
-      <div class="wf-airport-popup-header">
-        ${icao}
+      <div class="wf-airport-popup-header">${icao}</div>
+      <div class="wf-airport-popup-body">
+        ${a.inbound ? `
+          <a class="wf-airport-row" href="/sector/${a.inbound.wf}/${a.inbound.from}/${a.inbound.to}">
+            <span class="wf-airport-dot inbound"></span>
+            <div class="wf-airport-row-content">
+              <span class="wf-airport-leg">${a.inbound.wf}  ${a.inbound.from} \u2192 ${a.inbound.to}</span>
+              <span class="wf-airport-meta">${formatUtcDatePretty(a.inbound.dateIso)} \u00b7 Arr ${a.inbound.arrWindow}</span>
+            </div>
+          </a>
+        ` : ''}
+        ${a.outbound ? `
+          <a class="wf-airport-row" href="/sector/${a.outbound.wf}/${a.outbound.from}/${a.outbound.to}">
+            <span class="wf-airport-dot outbound"></span>
+            <div class="wf-airport-row-content">
+              <span class="wf-airport-leg">${a.outbound.wf}  ${a.outbound.from} \u2192 ${a.outbound.to}</span>
+              <span class="wf-airport-meta">${formatUtcDatePretty(a.outbound.dateIso)} \u00b7 Dep ${a.outbound.depWindow}</span>
+            </div>
+          </a>
+        ` : ''}
       </div>
-
-      ${a.inbound ? `
-        <a class="wf-airport-section inbound" href="/sector/${a.inbound.wf}/${a.inbound.from}/${a.inbound.to}">
-          <div class="wf-airport-section-title">Inbound</div>
-          <div class="wf-airport-leg">
-            ${a.inbound.wf} ${a.inbound.from} → ${a.inbound.to}
-          </div>
-          <div class="wf-airport-meta">
-            <span>${formatUtcDatePretty(a.inbound.dateIso)}</span>
-            <span class="dot">•</span>
-            <span>Arr Window ${a.inbound.arrWindow}</span>
-          </div>
-        </a>
-      ` : ''}
-
-      ${a.outbound ? `
-        <a class="wf-airport-section outbound" href="/sector/${a.outbound.wf}/${a.outbound.from}/${a.outbound.to}">
-          <div class="wf-airport-section-title">Outbound</div>
-          <div class="wf-airport-leg">
-            ${a.outbound.wf} ${a.outbound.from} → ${a.outbound.to}
-          </div>
-          <div class="wf-airport-meta">
-            <span>${formatUtcDatePretty(a.outbound.dateIso)}</span>
-            <span class="dot">•</span>
-            <span>Dep Window ${a.outbound.depWindow}</span>
-          </div>
-        </a>
-      ` : ''}
     </div>
   `;
 }
@@ -388,79 +392,130 @@ document.addEventListener('DOMContentLoaded', () => {
       bounds.push([pos.lat, pos.lon]);
     });
 
-    // Declutter: decide label placement for each airport to minimise overlaps.
-    // Estimate label bounding boxes in pixel space, try 8 directions per label.
-    const PLACEMENTS = ['right', 'left', 'top', 'bottom', 'top-right', 'top-left', 'bottom-right', 'bottom-left'];
-    // Approximate label size in pixels
-    const LW = 95, LH = 18, PIN = 8;
-    // Offset from pin centre for each placement
-    const OFFSETS = {
-      'right':        { x: PIN,      y: -LH / 2 },
-      'left':         { x: -LW - PIN, y: -LH / 2 },
-      'top':          { x: -LW / 2,  y: -LH - PIN },
-      'bottom':       { x: -LW / 2,  y: PIN },
-      'top-right':    { x: PIN,      y: -LH - PIN },
-      'top-left':     { x: -LW - PIN, y: -LH - PIN },
-      'bottom-right': { x: PIN,      y: PIN },
-      'bottom-left':  { x: -LW - PIN, y: PIN },
-    };
+    // Declutter: choose initial label offsets that minimise overlap.
+    const DIRECTIONS = [
+      { x:  1, y:  0 },   // right
+      { x: -1, y:  0 },   // left
+      { x:  0, y: -1 },   // top
+      { x:  0, y:  1 },   // bottom
+      { x:  1, y: -1 },   // top-right
+      { x: -1, y: -1 },   // top-left
+      { x:  1, y:  1 },   // bottom-right
+      { x: -1, y:  1 },   // bottom-left
+    ];
+    const LH = 20, PIN_GAP = 14, PAD = 6;
+    function estimateLabelWidth(label) { return label.length * 6.5 + 14; }
 
     function getPixelPos(lat, lon) {
       return targetMap.latLngToContainerPoint(L.latLng(lat, lon));
     }
 
-    function labelRect(px, placement) {
-      const o = OFFSETS[placement];
-      return { x: px.x + o.x, y: px.y + o.y, w: LW, h: LH };
+    function dirRect(px, dir, lw) {
+      const x = dir.x >= 0 ? px.x + PIN_GAP : px.x - lw - PIN_GAP;
+      const y = dir.y < 0 ? px.y - LH - PIN_GAP : dir.y > 0 ? px.y + PIN_GAP : px.y - LH / 2;
+      return { x: x - PAD, y: y - PAD, w: lw + PAD * 2, h: LH + PAD * 2 };
     }
 
     function rectsOverlap(a, b) {
       return !(a.x + a.w < b.x || b.x + b.w < a.x || a.y + a.h < b.y || b.y + b.h < a.y);
     }
 
-    // Compute pixel positions and choose placements
+    // Pixel offset of the label anchor relative to the pin — stays
+    // constant across zoom levels so labels hug their pins when zoomed in.
+    function dirPxOffset(px, dir, lw) {
+      const rect = dirRect(px, dir, lw);
+      return { dx: rect.x + PAD - px.x, dy: rect.y + PAD - px.y };
+    }
+
     const pixelPositions = airportList.map(ap => getPixelPos(ap.pos.lat, ap.pos.lon));
-    const chosenPlacements = [];
+    const labelWidths = airportList.map(ap => estimateLabelWidth(ap.displayLabel));
+    const chosenOffsets = [];
     const placedRects = [];
 
     airportList.forEach((ap, i) => {
       const px = pixelPositions[i];
-      let best = 'right';
+      const lw = labelWidths[i];
+      let bestDir = DIRECTIONS[0];
       let bestOverlaps = Infinity;
 
-      for (const p of PLACEMENTS) {
-        const rect = labelRect(px, p);
+      for (const dir of DIRECTIONS) {
+        const rect = dirRect(px, dir, lw);
         let overlaps = 0;
         for (const pr of placedRects) {
           if (rectsOverlap(rect, pr)) overlaps++;
         }
         if (overlaps < bestOverlaps) {
           bestOverlaps = overlaps;
-          best = p;
+          bestDir = dir;
           if (overlaps === 0) break;
         }
       }
 
-      chosenPlacements.push(best);
-      placedRects.push(labelRect(px, best));
+      chosenOffsets.push(dirPxOffset(px, bestDir, lw));
+      placedRects.push(dirRect(px, bestDir, lw));
     });
 
-    // Place markers with chosen label placements
+    // Place pin markers + draggable label tags with connector lines
+    const tagStates = []; // { pinMarker, tagMarker, line, offsetPx }
+
+    function tagLLFromPx(pinLL, offsetPx) {
+      const pt = targetMap.latLngToContainerPoint(L.latLng(pinLL[0] ?? pinLL.lat, pinLL[1] ?? pinLL.lng));
+      return targetMap.containerPointToLatLng([pt.x + offsetPx.dx, pt.y + offsetPx.dy]);
+    }
+
     airportList.forEach((ap, i) => {
-      WORLD_OFFSETS.forEach(offset => {
-        const ll = [ap.pos.lat, ap.pos.lon + offset];
-        L.marker(ll, { icon: airportIcon(ap.displayLabel, chosenPlacements[i], ap.extra) })
+      const offsetPx = chosenOffsets[i];
+
+      WORLD_OFFSETS.forEach(wo => {
+        const pinLL = [ap.pos.lat, ap.pos.lon + wo];
+        const tagLL = tagLLFromPx(pinLL, offsetPx);
+
+        // Pin marker (non-draggable, holds popup)
+        const pinMarker = L.marker(pinLL, { icon: pinIcon(ap.extra), zIndexOffset: 1000 })
           .addTo(localAirports)
           .bindPopup(
             airportPopupHtml(ap.icao, ap.a),
-            {
-              closeButton: true,
-              autoPan: true,
-              maxWidth: 320,
-              className: 'wf-airport-leaflet-popup'
-            }
+            { closeButton: true, autoPan: true, maxWidth: 320, className: 'wf-airport-leaflet-popup' }
           );
+
+        // Connector line
+        const line = L.polyline([pinLL, tagLL], {
+          color: 'rgba(255,255,255,0.3)',
+          weight: 1,
+          interactive: false
+        }).addTo(localAirports);
+
+        // Draggable label tag
+        const tagMarker = L.marker(tagLL, {
+          icon: tagIcon(ap.displayLabel, ap.extra),
+          draggable: true,
+          zIndexOffset: 2000,
+          autoPan: false
+        }).addTo(localAirports);
+
+        // Click tag to open pin popup
+        tagMarker.on('click', () => pinMarker.openPopup());
+
+        // Drag handler — update pixel offset + connector
+        const state = { pinMarker, tagMarker, line, offsetPx: { ...offsetPx } };
+        tagMarker.on('drag', () => {
+          const pPt = targetMap.latLngToContainerPoint(pinMarker.getLatLng());
+          const tPt = targetMap.latLngToContainerPoint(tagMarker.getLatLng());
+          state.offsetPx = { dx: tPt.x - pPt.x, dy: tPt.y - pPt.y };
+          line.setLatLngs([pinMarker.getLatLng(), tagCenterLL(targetMap, tagMarker)]);
+        });
+
+        tagStates.push(state);
       });
+    });
+
+    // Re-anchor tags at a constant pixel offset from their pin on zoom
+    targetMap.on('zoomend', () => {
+      for (const s of tagStates) {
+        const pinLL = s.pinMarker.getLatLng();
+        s.tagMarker.setLatLng(tagLLFromPx(pinLL, s.offsetPx));
+        s.line.setLatLngs([pinLL, tagCenterLL(targetMap, s.tagMarker)]);
+      }
     });
 
     if (bounds.length) {

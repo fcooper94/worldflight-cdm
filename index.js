@@ -22414,39 +22414,15 @@ document.querySelectorAll('.nav-item').forEach(link => {
 });
 
 /* ===============================
-   SIDEBAR TOGGLE (PERSISTENT)
+   SIDEBAR TOGGLE — map resize on toggle
 ================================ */
-
-const sidebar = document.getElementById('sidebar');
-const toggleBtn = document.getElementById('sidebarToggle');
-
-const collapsed = localStorage.getItem('sidebarCollapsed') === 'true';
-
-if (collapsed) {
-  sidebar.classList.add('collapsed');
-  document.body.classList.add('sidebar-collapsed');
-}
-
-toggleBtn.onclick = () => {
-  sidebar.classList.toggle('collapsed');
-  document.body.classList.toggle('sidebar-collapsed');
-
-  localStorage.setItem(
-    'sidebarCollapsed',
-    sidebar.classList.contains('collapsed')
-  );
-};
-
-function onSidebarToggle() {
-  document.body.classList.toggle('sidebar-collapsed');
-
-  // Give CSS time to finish transition
+window.addEventListener('sidebar:toggle', () => {
   setTimeout(() => {
     if (window.wfWorldMap) {
       window.wfWorldMap.invalidateSize({ animate: false });
     }
-  }, 260); // match CSS transition duration
-}
+  }, 260);
+});
 
 </script>
 <script>
