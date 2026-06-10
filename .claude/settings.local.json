@@ -243,7 +243,17 @@
       "Bash(node --check public/suggested-airports-map.js)",
       "Bash(node --input-type=module -e ' *)",
       "Bash(node --check public/wf-world-map.js)",
-      "Bash(git commit *)"
+      "Bash(git commit *)",
+      "Bash(node -e \"const net = require\\('net'\\); const s = net.connect\\(28655, 'mainline.proxy.rlwy.net', \\(\\) => { console.log\\('Connected'\\); s.end\\(\\); }\\); s.on\\('error', e => console.log\\('Error:', e.message\\)\\); s.setTimeout\\(5000, \\(\\) => { console.log\\('Timeout'\\); s.destroy\\(\\); }\\);\")",
+      "Bash(node -e 'const { PrismaClient } = require\\('\\\\''./node_modules/.prisma/client'\\\\''\\); const p = new PrismaClient\\(\\); p.$queryRaw`SELECT 1`.then\\(r => { console.log\\('\\\\''OK'\\\\'', r\\); p.$disconnect\\(\\); }\\).catch\\(e => { console.log\\('\\\\''Error:'\\\\'', e.message\\); p.$disconnect\\(\\); }\\);')",
+      "Bash(node -e \"const { Client } = require\\('pg'\\); const c = new Client\\({ connectionString: process.env.DATABASE_URL }\\); c.connect\\(\\).then\\(\\(\\) => c.query\\('SELECT 1'\\)\\).then\\(r => { console.log\\('pg OK:', r.rows\\); c.end\\(\\); }\\).catch\\(e => { console.log\\('pg Error:', e.message\\); c.end\\(\\); }\\);\")",
+      "Bash(node -e \"const { Client } = require\\('pg'\\); const c = new Client\\('postgresql://postgres:eqlaWvnIHoAflvdngKPhZtHNWwojqXnv@mainline.proxy.rlwy.net:28655/railway'\\); c.connect\\(\\).then\\(\\(\\) => c.query\\('SELECT 1 as ok'\\)\\).then\\(r => { console.log\\('OK:', r.rows\\); c.end\\(\\); }\\).catch\\(e => { console.log\\('Error:', e.message\\); c.end\\(\\); }\\);\")",
+      "Bash(claude config:*)",
+      "Bash(claude model:*)",
+      "Bash(claude update:*)",
+      "Bash(ls *.mjs scripts/)",
+      "Bash(node scripts/backfill-airport-iata.js)",
+      "Bash(node --input-type=module -e ':*)"
     ]
   }
 }

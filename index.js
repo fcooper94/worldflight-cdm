@@ -661,7 +661,7 @@ io.use((socket, next) => {
 
 
 /* ===== PAGE VISIBILITY (GLOBAL) ===== */
-const PAGE_KEYS = ['schedule', 'world-map', 'my-slots', 'atc', 'suggest-airport', 'arrival-info', 'departure-info', 'book-slot', 'airspace', 'fake-pilots', 'wf-portal-banner', 'flow-restrictions', 'atc-route'];
+const PAGE_KEYS = ['schedule', 'world-map', 'my-slots', 'atc', 'suggest-airport', 'arrival-info', 'departure-info', 'airspace', 'fake-pilots', 'wf-portal-banner', 'flow-restrictions', 'atc-route', 'worldflight-challenge'];
 
 // Per-key default mode used when no DB row exists yet. Most keys default to
 // 'visible'; ATC Route defaults to 'hidden' because routes are typically
@@ -1665,7 +1665,8 @@ const adminPermissions = new Map();
 const ADMIN_PAGE_KEYS = [
   'wf-schedule', 'official-teams', 'scenery', 'access-management',
   'visited-airports', 'suggestions', 'mailing-list', 'settings',
-  'airac', 'test-pilots', 'controller-pack', 'documents-scenery'
+  'airac', 'test-pilots', 'controller-pack', 'documents-scenery',
+  'wf-challenge'
 ];
 
 const ADMIN_PAGE_LABELS = {
@@ -1680,7 +1681,8 @@ const ADMIN_PAGE_LABELS = {
   'airac': 'AIRAC Data',
   'test-pilots': 'Test Pilot Data',
   'controller-pack': 'Controller Pack',
-  'documents-scenery': 'Documents & Scenery'
+  'documents-scenery': 'Documents & Scenery',
+  'wf-challenge': 'WF Challenge Scoring'
 };
 
 async function loadAdminPermissions() {
@@ -5975,7 +5977,8 @@ async function loadScheduleFromDb(eventId) {
     arr_time_utc: r.arrTimeUtc,
     block_time: r.blockTime,
     flight_time: r.flightTime,
-    atc_route: r.atcRoute
+    atc_route: r.atcRoute,
+    is_wf_challenge: r.isWfChallenge === true
   }));
 
   eventSheetCaches[eventId] = rows;
@@ -7024,6 +7027,27 @@ app.get('/', async (req, res) => {
 
   const greeting = user ? `Welcome back, ${user.personal?.name_first || 'Pilot'}` : 'Welcome to WorldFlight';
 
+  // Hero tiles: pool of nav pages, filtered to those the viewer can actually see,
+  // shuffled per request so each refresh shows a different 3.
+  const heroTilePool = [
+    { key: null, href: '/airport-portal', label: 'Airport Portal', desc: "View details, charts and info for airports on this year's route",
+      icon: '<path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"/><path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"/><path d="M10 6h4"/><path d="M10 10h4"/><path d="M10 14h4"/><path d="M10 18h4"/>' },
+    { key: 'schedule', href: '/schedule', label: 'Full Schedule', desc: 'Browse every sector on this year\u2019s WorldFlight route',
+      icon: '<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>' },
+    { key: 'suggest-airport', href: '/suggest-airport', label: 'Suggest Airport', desc: "Tell us where you'd like to see WorldFlight 2026 visit",
+      icon: '<path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7c.7.6 1 1.5 1 2.3v1h6v-1c0-.8.3-1.7 1-2.3A7 7 0 0 0 12 2Z"/>' },
+    { key: 'atc', href: '/atc', label: 'WF Flow Control', desc: 'Manage departure flow restrictions and rates for controllers',
+      icon: '<path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3Z"/><path d="M3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3Z"/>' },
+    { key: 'airspace', href: '/airspace', label: 'Airspace Management', desc: 'See which FIRs the route crosses and coordinate coverage',
+      icon: '<circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10Z"/>' },
+    { key: 'world-map', href: '/wf/world-map', label: 'Route Map', desc: 'Explore the full WorldFlight route on an interactive world map',
+      icon: '<polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21 3 6"/><line x1="9" y1="3" x2="9" y2="18"/><line x1="15" y1="6" x2="15" y2="21"/>' }
+  ];
+  const heroTiles = heroTilePool
+    .filter(t => !t.key || isPageVisibleTo(t.key, isAdmin))
+    .sort(() => Math.random() - 0.5)
+    .slice(0, 3);
+
   const content = `
     <div class="db-page">
 
@@ -7036,27 +7060,13 @@ app.get('/', async (req, res) => {
       </div>
 
       <div class="db-stats">
-        <a href="/suggest-airport" class="db-stat db-stat-link">
+        ${heroTiles.map(t => `<a href="${t.href}" class="db-stat db-stat-link">
           <div class="db-stat-icon">
-            <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7c.7.6 1 1.5 1 2.3v1h6v-1c0-.8.3-1.7 1-2.3A7 7 0 0 0 12 2Z"/></svg>
+            <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${t.icon}</svg>
           </div>
-          <div class="db-stat-label">Suggest Airport</div>
-          <div class="db-stat-desc">Tell us where you'd like to see WorldFlight 2026 visit</div>
-        </a>
-        <a href="/previous-destinations" class="db-stat db-stat-link">
-          <div class="db-stat-icon">
-            <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 7-8 13-8 13s-8-6-8-13a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
-          </div>
-          <div class="db-stat-label">Past Destinations</div>
-          <div class="db-stat-desc">Explore every airport WorldFlight has visited over the years</div>
-        </a>
-        <a href="/airport-portal" class="db-stat db-stat-link">
-          <div class="db-stat-icon">
-            <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"/><path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"/><path d="M10 6h4"/><path d="M10 10h4"/><path d="M10 14h4"/><path d="M10 18h4"/></svg>
-          </div>
-          <div class="db-stat-label">Airport Portal</div>
-          <div class="db-stat-desc">View details, charts and info for airports on this year's route</div>
-        </a>
+          <div class="db-stat-label">${t.label}</div>
+          <div class="db-stat-desc">${t.desc}</div>
+        </a>`).join('')}
       </div>
 
       ${adminSheetCache.length > 0 && (isAdmin || isPageEnabled('schedule')) ? `
@@ -7576,6 +7586,7 @@ async function buildWfWorldMapPayload({ a = '', b = '', c = '' } = {}) {
       icao,
       name: ap.name || icao,
       shortName: airportShortName(icao, ap.name),
+      iata: ap.iata || null,
       lat: ap.lat,
       lon: ap.lon,
       inbound: null,
@@ -7593,14 +7604,25 @@ async function buildWfWorldMapPayload({ a = '', b = '', c = '' } = {}) {
     if (apDep) {
       ensureAirport(depIcao, apDep);
 
+      const depDateIso = normalizeDateToIso(leg.date_utc);
+      let depLocalWindow = '', depLocalZone = '';
+      if (leg.dep_time_utc) {
+        const ls = formatLocalAtAirport(apDep.lat, apDep.lon, depDateIso, subtractMinutes(leg.dep_time_utc, 60));
+        const le = formatLocalAtAirport(apDep.lat, apDep.lon, depDateIso, addMinutes(leg.dep_time_utc, 60));
+        if (ls && le) { depLocalWindow = `${ls.time}–${le.time}`; depLocalZone = ls.zone; }
+      }
+
       airports[depIcao].outbound = {
   wf: leg.wf || leg.number || null,
   from: leg.from,
   to: leg.to,
-  dateIso: normalizeDateToIso(leg.date_utc),
+  dateIso: depDateIso,
   depWindow: leg.dep_time_utc
     ? `${subtractMinutes(leg.dep_time_utc, 60)}–${addMinutes(leg.dep_time_utc, 60)}`
-    : ''
+    : '',
+  localWindow: depLocalWindow,
+  localZone: depLocalZone,
+  atcRoute: (leg.atc_route && leg.atc_route !== '-') ? leg.atc_route : ''
 };
 
 
@@ -7617,18 +7639,29 @@ async function buildWfWorldMapPayload({ a = '', b = '', c = '' } = {}) {
   leg.arr_time_utc || leg.dep_time_utc
 );
 
+const arrDateUtcIso = computeArrivalDateUtc(
+  normalizeDateToIso(leg.date_utc),
+  leg.dep_time_utc,
+  leg.block_time
+);
+let arrLocalWindow = '', arrLocalZone = '';
+if (leg.arr_time_utc) {
+  const ls = formatLocalAtAirport(apArr.lat, apArr.lon, arrDateUtcIso, subtractMinutes(leg.arr_time_utc, 60));
+  const le = formatLocalAtAirport(apArr.lat, apArr.lon, arrDateUtcIso, addMinutes(leg.arr_time_utc, 60));
+  if (ls && le) { arrLocalWindow = `${ls.time}–${le.time}`; arrLocalZone = ls.zone; }
+}
+
 airports[arrIcao].inbound = {
   wf: leg.wf || leg.number || null,
   from: leg.from,
   to: leg.to,
-  dateIso: computeArrivalDateUtc(
-    normalizeDateToIso(leg.date_utc),
-    leg.dep_time_utc,
-    leg.block_time
-  ),
+  dateIso: arrDateUtcIso,
   arrWindow: leg.arr_time_utc
     ? `${subtractMinutes(leg.arr_time_utc, 60)}–${addMinutes(leg.arr_time_utc, 60)}`
-    : ''
+    : '',
+  localWindow: arrLocalWindow,
+  localZone: arrLocalZone,
+  atcRoute: (leg.atc_route && leg.atc_route !== '-') ? leg.atc_route : ''
 };
 
 
@@ -7731,13 +7764,39 @@ app.get('/api/wf/world-map/version', (req, res) => {
     c: (req.query.c || '').toString().trim().toUpperCase()
   });
   const cached = wfWorldMapCache.get(key);
-  res.json({ builtAt: cached?.builtAt ?? null, eventId: activeEventId });
+  const viewerIsAdmin = isAdminUser(Number(req.session?.user?.data?.cid) || null);
+  res.json({
+    builtAt: cached?.builtAt ?? null,
+    eventId: activeEventId,
+    atcRoutes: isPageVisibleTo('atc-route', viewerIsAdmin)
+  });
 });
+
+// The world-map payload is cached and shared across all users, so ATC route
+// text is removed per-request when the atc-route page key hides it from the viewer.
+function stripWfMapAtcRoutes(payload) {
+  const airports = {};
+  for (const [k, ap] of Object.entries(payload.airports || {})) {
+    airports[k] = {
+      ...ap,
+      inbound: ap.inbound ? { ...ap.inbound, atcRoute: '' } : null,
+      outbound: ap.outbound ? { ...ap.outbound, atcRoute: '' } : null
+    };
+  }
+  return {
+    ...payload,
+    airports,
+    atcPolylines: (payload.atcPolylines || []).map(p => ({ ...p, atc_route: '' }))
+  };
+}
 
 app.get('/api/wf/world-map', async (req, res) => {
   const a = (req.query.a || '').toString().trim().toUpperCase();
   const b = (req.query.b || '').toString().trim().toUpperCase();
   const c = (req.query.c || '').toString().trim().toUpperCase();
+
+  const viewerIsAdmin = isAdminUser(Number(req.session?.user?.data?.cid) || null);
+  const showAtcRoutes = isPageVisibleTo('atc-route', viewerIsAdmin);
 
   const key = wfWorldMapKey({
   a: (req.query.a || '').toString().trim().toUpperCase(),
@@ -7749,7 +7808,7 @@ app.get('/api/wf/world-map', async (req, res) => {
   // 1) Serve from cache instantly
   const cached = wfWorldMapCache.get(key);
   if (cached) {
-    return res.json({ builtAt: cached.builtAt, eventId: activeEventId, ...cached.payload });
+    return res.json({ builtAt: cached.builtAt, eventId: activeEventId, atcRoutes: showAtcRoutes, ...(showAtcRoutes ? cached.payload : stripWfMapAtcRoutes(cached.payload)) });
   }
 
   // 2) De-dupe concurrent builds (first request builds, others await)
@@ -7770,7 +7829,7 @@ app.get('/api/wf/world-map', async (req, res) => {
 
   try {
     const built = await p;
-    return res.json({ builtAt: built.builtAt, eventId: activeEventId, ...built.payload });
+    return res.json({ builtAt: built.builtAt, eventId: activeEventId, atcRoutes: showAtcRoutes, ...(showAtcRoutes ? built.payload : stripWfMapAtcRoutes(built.payload)) });
   } catch (err) {
     console.error('[WF MAP] Build failed', err);
     return res.status(500).json({ error: 'Failed to build world map' });
@@ -7782,7 +7841,7 @@ app.get('/api/wf/world-map', async (req, res) => {
 
 
 
-app.get('/wf/world-map', requireLogin, requirePageEnabled('world-map'), (req, res) => {
+app.get('/wf/world-map', requirePageEnabled('world-map'), (req, res) => {
   const user = req.session.user?.data || null;
   const isAdmin = isAdminUser(user?.cid);
 
@@ -7831,6 +7890,492 @@ app.get('/previous-destinations', (req, res) => {
     isAdmin,
     content,
     layoutClass: 'dashboard-full map-layout'
+  }));
+});
+
+app.get('/worldflight-challenge', requirePageEnabled('worldflight-challenge'), (req, res) => {
+  const user = req.session?.user?.data || null;
+  const isAdmin = isAdminUser(user ? Number(user.cid) : null);
+  const activeEvent = wfEvents.find(e => e.id === activeEventId) || null;
+  const leg = adminSheetCache.find(r => r.is_wf_challenge) || null;
+
+  const starSvg = `<svg viewBox="0 0 24 24" width="34" height="34" fill="currentColor" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>`;
+
+  const content = `
+  <section class="card card-full">
+    <div class="wf-challenge-hero">
+      ${starSvg}
+      <div>
+        <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:0.5px;color:#fbbf24;">WorldFlight Challenge</h1>
+        ${activeEvent ? `<div style="font-size:13px;color:var(--muted);margin-top:4px;">${activeEvent.name}</div>` : ''}
+      </div>
+    </div>
+
+    ${leg ? `
+    <div class="wf-challenge-sector-card">
+      <div style="font-size:11px;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted);margin-bottom:8px;">Challenge Sector</div>
+      <div style="font-size:24px;font-weight:800;letter-spacing:0.5px;margin-bottom:4px;">
+        <span style="color:#fbbf24;">${leg.number}</span>
+        <span style="color:var(--muted);font-weight:400;margin:0 8px;">\u2014</span>
+        <span style="color:var(--text);">${leg.from}</span>
+        <span style="color:var(--muted);margin:0 6px;">\u2192</span>
+        <span style="color:var(--text);">${leg.to}</span>
+      </div>
+      ${leg.date_utc ? `<div style="font-size:13px;color:var(--muted);margin-bottom:14px;">${leg.date_utc}${leg.dep_time_utc ? ` \u00b7 Dep window ${buildTimeWindow(leg.dep_time_utc)}` : ''}</div>` : ''}
+      <div style="font-size:15px;font-weight:700;color:#fbbf24;">Anyone can take part! Just advise Kelowna Tower you wish to take part in the WF Challenge!</div>
+    </div>
+    ` : `
+    <div class="wf-challenge-sector-card" style="text-align:center;color:var(--muted);">
+      The challenge sector hasn't been announced yet. Check back soon!
+    </div>
+    `}
+
+  </section>
+
+  <div class="wfc-grid">
+
+  <section class="card wfc-card">
+    <div class="wfc-brief">
+
+      <h2 class="wfc-heading" style="margin-top:0;">The Brief</h2>
+      <p class="wfc-intro">Kamloops (CYKA) to Vancouver (CYVR) via Kelowna (CYLW) \u2014 for a showboating flypast.</p>
+
+      <div class="wfc-step">
+        <div class="wfc-step-num">1</div>
+        <div>
+          <h3>Departure \u2014 Kamloops (CYKA)</h3>
+          <p>Depart Kamloops (CYKA) on the <strong>KEBRA 1</strong> SID, then fly to <strong>DASAS</strong> to pick up the approach into Kelowna (CYLW).</p>
+          <figure class="wfc-chart" data-src="/wf-challenge/SID.png">
+            <img src="/wf-challenge/SID.png" alt="Kamloops KEBRA 1 departure" loading="lazy" />
+            <figcaption>KEBRA 1 SID \u2014 Kamloops (CYKA) \u00b7 click to expand</figcaption>
+          </figure>
+        </div>
+      </div>
+
+      <div class="wfc-step">
+        <div class="wfc-step-num">2</div>
+        <div>
+          <h3>Approach \u2014 Kelowna (CYLW)</h3>
+          <p>From DASAS, fly the <strong>RNP X Runway 16</strong> approach. Prefer to hand-fly? The <strong>visual approach</strong> is fine too. Aircraft will be sequenced as if they were landing.</p>
+          <figure class="wfc-chart" data-src="/wf-challenge/APP.png">
+            <img src="/wf-challenge/APP.png" alt="Kelowna RNP X Runway 16 approach" loading="lazy" />
+            <figcaption>RNP X Rwy 16 \u2014 Kelowna (CYLW) \u00b7 click to expand</figcaption>
+          </figure>
+        </div>
+      </div>
+
+      <div class="wfc-step">
+        <div class="wfc-step-num">3</div>
+        <div>
+          <h3>The Flypast</h3>
+          <p>Conduct a <strong>showboating flypast</strong>. A member of the WorldFlight team will be perfectly positioned in the control tower, scoring each flypast. <strong>If you touch the runway, you will be disqualified!</strong></p>
+        </div>
+      </div>
+
+      <div class="wfc-step">
+        <div class="wfc-step-num">4</div>
+        <div>
+          <h3>Onwards to Vancouver (CYVR)</h3>
+          <p>After departure, fly the <strong>YDC6</strong> departure: <strong>ULEKA \u2192 BOXAR \u2192 GABER \u2192 TABVO \u2192 TDC</strong>.</p>
+          <figure class="wfc-chart" data-src="/wf-challenge/SID-LW.png">
+            <img src="/wf-challenge/SID-LW.png" alt="Kelowna YDC6 departure" loading="lazy" />
+            <figcaption>YDC6 Departure \u2014 Kelowna (CYLW) \u00b7 click to expand</figcaption>
+          </figure>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <section class="card wfc-card">
+    <div class="wfc-brief">
+      <h2 class="wfc-heading" style="margin-top:0;">Scoring</h2>
+      <p>Each flypast is scored live from the tower by a WorldFlight team member \u2014 out of <strong>10</strong> each for <strong>Style</strong>, <strong>Speed</strong> and <strong>Height</strong>, for a maximum of <strong>30 points</strong>.</p>
+
+      <h2 class="wfc-heading">Live Scoreboard</h2>
+      <div class="wfc-board">
+        <div class="wfc-board-row wfc-board-head">
+          <div>Callsign</div>
+          <div>Total</div>
+          <div>Style</div>
+          <div>Speed</div>
+          <div>Height</div>
+        </div>
+        <div id="wfcBoardBody"></div>
+      </div>
+
+      <p class="wfc-prize">\u{1F3C6} The winner takes home a <strong>merch pack from SimFestUK</strong>!</p>
+    </div>
+  </section>
+
+  </div>
+
+  <div id="wfcLightbox" class="wfc-lightbox" aria-hidden="true">
+    <img src="" alt="Expanded chart" />
+  </div>
+
+  <script>
+    (function () {
+      const lb = document.getElementById('wfcLightbox');
+      const lbImg = lb.querySelector('img');
+      document.querySelectorAll('.wfc-chart').forEach(fig => {
+        fig.addEventListener('click', () => {
+          lbImg.src = fig.dataset.src;
+          lb.classList.add('open');
+        });
+      });
+      function close() { lb.classList.remove('open'); lbImg.src = ''; }
+      lb.addEventListener('click', close);
+      document.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
+    })();
+
+    // Split-flap departure-board scoreboard
+    (function () {
+      const FLAPS = ' ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-.';
+      const body = document.getElementById('wfcBoardBody');
+
+      function flapCell(parent, text, len) {
+        const cell = document.createElement('div');
+        cell.className = 'wfc-board-cell';
+        const t = (text == null ? '' : String(text)).toUpperCase().padEnd(len).slice(0, len);
+        for (let i = 0; i < t.length; i++) {
+          const span = document.createElement('span');
+          span.className = 'wfc-flap';
+          span.textContent = ' ';
+          cell.appendChild(span);
+          tickTo(span, t[i], i);
+        }
+        parent.appendChild(cell);
+      }
+
+      function tickTo(span, target, charIdx) {
+        const targetIdx = FLAPS.indexOf(target) === -1 ? 0 : FLAPS.indexOf(target);
+        let cur = 0;
+        const delay = 120 + charIdx * 70;
+        setTimeout(function step() {
+          span.textContent = FLAPS[cur];
+          if (cur === targetIdx) return;
+          cur = (cur + 1) % FLAPS.length;
+          setTimeout(step, 25);
+        }, delay);
+      }
+
+      // rows: [{ callsign, total, style, speed, height }]
+      window.wfcRenderScoreboard = function (rows) {
+        body.innerHTML = '';
+        if (!rows || !rows.length) {
+          const row = document.createElement('div');
+          row.className = 'wfc-board-row wfc-board-msg';
+          flapCell(row, 'AWAITING SCORES', 15);
+          body.appendChild(row);
+          return;
+        }
+        rows.forEach(r => {
+          const row = document.createElement('div');
+          row.className = 'wfc-board-row';
+          flapCell(row, r.callsign, 8);
+          flapCell(row, r.total, 3);
+          flapCell(row, r.style, 2);
+          flapCell(row, r.speed, 2);
+          flapCell(row, r.height, 2);
+          body.appendChild(row);
+        });
+      };
+
+      let lastJson = null;
+      async function refreshScores() {
+        try {
+          const r = await fetch('/api/wf-challenge/scores');
+          const d = await r.json();
+          const json = JSON.stringify(d.scores || []);
+          if (json === lastJson) return; // don't re-flap unless something changed
+          lastJson = json;
+          window.wfcRenderScoreboard(d.scores || []);
+        } catch (e) {
+          if (lastJson === null) { lastJson = '[]'; window.wfcRenderScoreboard([]); }
+        }
+      }
+      refreshScores();
+      setInterval(refreshScores, 30000);
+    })();
+  </script>`;
+
+  res.send(renderLayout({
+    title: 'WorldFlight Challenge',
+    user,
+    isAdmin,
+    content,
+    layoutClass: 'dashboard-full'
+  }));
+});
+
+/* ===== WF CHALLENGE SCORING ===== */
+
+function clampScore(v) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return null;
+  return Math.max(0, Math.min(10, Math.round(n)));
+}
+
+// Public: live scores for the active event, sorted by total desc
+app.get('/api/wf-challenge/scores', async (req, res) => {
+  try {
+    const rows = activeEventId
+      ? await prisma.wfChallengeScore.findMany({ where: { eventId: activeEventId } })
+      : [];
+    const scores = rows
+      .map(r => ({ id: r.id, callsign: r.callsign, style: r.style, speed: r.speed, height: r.height, total: r.style + r.speed + r.height }))
+      .sort((a, b) => b.total - a.total || a.callsign.localeCompare(b.callsign));
+    res.json({ scores });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/admin/api/wf-challenge/scores', requireAdminPage('wf-challenge'), async (req, res) => {
+  const callsign = (req.body.callsign || '').toString().trim().toUpperCase();
+  const style = clampScore(req.body.style);
+  const speed = clampScore(req.body.speed);
+  const height = clampScore(req.body.height);
+  if (!callsign) return res.status(400).json({ error: 'Callsign is required' });
+  if (style === null || speed === null || height === null) return res.status(400).json({ error: 'Scores must be numbers 0-10' });
+  if (!activeEventId) return res.status(400).json({ error: 'No active event' });
+  try {
+    const row = await prisma.wfChallengeScore.create({
+      data: { eventId: activeEventId, callsign, style, speed, height }
+    });
+    res.json({ ok: true, id: row.id });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/admin/api/wf-challenge/scores/:id', requireAdminPage('wf-challenge'), async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) return res.status(400).json({ error: 'Invalid id' });
+  const callsign = (req.body.callsign || '').toString().trim().toUpperCase();
+  const style = clampScore(req.body.style);
+  const speed = clampScore(req.body.speed);
+  const height = clampScore(req.body.height);
+  if (!callsign) return res.status(400).json({ error: 'Callsign is required' });
+  if (style === null || speed === null || height === null) return res.status(400).json({ error: 'Scores must be numbers 0-10' });
+  try {
+    await prisma.wfChallengeScore.update({ where: { id }, data: { callsign, style, speed, height } });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/admin/api/wf-challenge/scores/:id', requireAdminPage('wf-challenge'), async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) return res.status(400).json({ error: 'Invalid id' });
+  try {
+    await prisma.wfChallengeScore.delete({ where: { id } });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/admin/wf-challenge', requireAdminPage('wf-challenge'), (req, res) => {
+  const user = req.session.user.data;
+
+  const content = `
+  <section class="card card-full">
+    <a href="/admin/control-panel" class="back-link">&larr; Back to Admin</a>
+    <h2 style="display:flex;align-items:center;gap:10px;">
+      <svg viewBox="0 0 24 24" width="22" height="22" fill="#fbbf24" stroke="#fbbf24" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+      WF Challenge Scoring
+    </h2>
+    <p style="color:var(--muted);font-size:13px;">Scores appear instantly on the public <a href="/worldflight-challenge" style="color:#fbbf24;">WorldFlight Challenge</a> scoreboard. Each category is out of 10.</p>
+
+    <div class="wfca-form">
+      <input id="wfcaCallsign" type="text" placeholder="CALLSIGN" maxlength="10" style="width:140px;" />
+      <input id="wfcaStyle" type="number" min="0" max="10" placeholder="Style" style="width:80px;" />
+      <input id="wfcaSpeed" type="number" min="0" max="10" placeholder="Speed" style="width:80px;" />
+      <input id="wfcaHeight" type="number" min="0" max="10" placeholder="Height" style="width:80px;" />
+      <button id="wfcaAdd" class="action-btn primary">Add Score</button>
+      <span id="wfcaMsg" style="font-size:13px;color:var(--muted);"></span>
+    </div>
+
+    <div class="table-scroll" style="margin-top:20px;">
+      <table class="departures-table">
+        <thead>
+          <tr>
+            <th style="width:40px;">#</th>
+            <th>Callsign</th>
+            <th>Total</th>
+            <th>Style</th>
+            <th>Speed</th>
+            <th>Height</th>
+            <th style="width:160px;">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="wfcaBody">
+          <tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px;">Loading\u2026</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <style>
+    .wfca-form { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-top:8px; }
+    .wfca-form input {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      padding: 8px 10px;
+      font-size: 14px;
+    }
+    .wfca-form input:focus { outline: none; border-color: #fbbf24; }
+    #wfcaCallsign { text-transform: uppercase; }
+    .wfca-edit-input {
+      background: rgba(255,255,255,0.06);
+      border: 1px solid #fbbf24;
+      border-radius: 6px;
+      color: var(--text);
+      padding: 4px 6px;
+      font-size: 13px;
+      width: 60px;
+    }
+    .wfca-edit-input.cs { width: 110px; text-transform: uppercase; }
+    .wfca-row-btn {
+      background: rgba(255,255,255,0.05);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      padding: 4px 10px;
+      font-size: 12px;
+      cursor: pointer;
+      margin-right: 6px;
+    }
+    .wfca-row-btn:hover { border-color: #fbbf24; color: #fbbf24; }
+    .wfca-row-btn.danger:hover { border-color: #ef4444; color: #ef4444; }
+  </style>
+
+  <script>
+    (function () {
+      const body = document.getElementById('wfcaBody');
+      const msg = document.getElementById('wfcaMsg');
+      let scores = [];
+      let editingId = null;
+
+      function setMsg(text, isError) {
+        msg.textContent = text || '';
+        msg.style.color = isError ? '#ef4444' : 'var(--muted)';
+        if (text) setTimeout(() => { if (msg.textContent === text) msg.textContent = ''; }, 4000);
+      }
+
+      function esc(s) {
+        return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+      }
+
+      function render() {
+        if (!scores.length) {
+          body.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px;">No scores yet.</td></tr>';
+          return;
+        }
+        body.innerHTML = scores.map((s, i) => {
+          if (s.id === editingId) {
+            return '<tr data-id="' + s.id + '">' +
+              '<td>' + (i + 1) + '</td>' +
+              '<td><input class="wfca-edit-input cs" id="wfcaEditCs" value="' + esc(s.callsign) + '" maxlength="10" /></td>' +
+              '<td style="color:var(--muted);">\u2014</td>' +
+              '<td><input class="wfca-edit-input" id="wfcaEditStyle" type="number" min="0" max="10" value="' + s.style + '" /></td>' +
+              '<td><input class="wfca-edit-input" id="wfcaEditSpeed" type="number" min="0" max="10" value="' + s.speed + '" /></td>' +
+              '<td><input class="wfca-edit-input" id="wfcaEditHeight" type="number" min="0" max="10" value="' + s.height + '" /></td>' +
+              '<td><button class="wfca-row-btn" data-act="save">Save</button><button class="wfca-row-btn" data-act="cancel">Cancel</button></td>' +
+              '</tr>';
+          }
+          return '<tr data-id="' + s.id + '">' +
+            '<td>' + (i + 1) + '</td>' +
+            '<td style="font-weight:700;">' + esc(s.callsign) + '</td>' +
+            '<td style="font-weight:700;color:#fbbf24;">' + s.total + '</td>' +
+            '<td>' + s.style + '</td>' +
+            '<td>' + s.speed + '</td>' +
+            '<td>' + s.height + '</td>' +
+            '<td><button class="wfca-row-btn" data-act="edit">Edit</button><button class="wfca-row-btn danger" data-act="delete">Delete</button></td>' +
+            '</tr>';
+        }).join('');
+      }
+
+      async function refresh() {
+        try {
+          const r = await fetch('/api/wf-challenge/scores');
+          const d = await r.json();
+          scores = d.scores || [];
+          render();
+        } catch (e) {}
+      }
+
+      document.getElementById('wfcaAdd').addEventListener('click', async () => {
+        const payload = {
+          callsign: document.getElementById('wfcaCallsign').value,
+          style: document.getElementById('wfcaStyle').value,
+          speed: document.getElementById('wfcaSpeed').value,
+          height: document.getElementById('wfcaHeight').value
+        };
+        const r = await fetch('/admin/api/wf-challenge/scores', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const d = await r.json();
+        if (!r.ok) return setMsg(d.error || 'Failed to add', true);
+        ['wfcaCallsign', 'wfcaStyle', 'wfcaSpeed', 'wfcaHeight'].forEach(id => document.getElementById(id).value = '');
+        setMsg('Score added');
+        refresh();
+      });
+
+      body.addEventListener('click', async (e) => {
+        const btn = e.target.closest('button[data-act]');
+        if (!btn) return;
+        const id = Number(btn.closest('tr').dataset.id);
+        const act = btn.dataset.act;
+        if (act === 'edit') { editingId = id; render(); return; }
+        if (act === 'cancel') { editingId = null; render(); return; }
+        if (act === 'save') {
+          const payload = {
+            callsign: document.getElementById('wfcaEditCs').value,
+            style: document.getElementById('wfcaEditStyle').value,
+            speed: document.getElementById('wfcaEditSpeed').value,
+            height: document.getElementById('wfcaEditHeight').value
+          };
+          const r = await fetch('/admin/api/wf-challenge/scores/' + id, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+          const d = await r.json();
+          if (!r.ok) return setMsg(d.error || 'Failed to save', true);
+          editingId = null;
+          setMsg('Score updated');
+          refresh();
+          return;
+        }
+        if (act === 'delete') {
+          if (!confirm('Delete this score entry?')) return;
+          const r = await fetch('/admin/api/wf-challenge/scores/' + id, { method: 'DELETE' });
+          const d = await r.json();
+          if (!r.ok) return setMsg(d.error || 'Failed to delete', true);
+          setMsg('Score deleted');
+          refresh();
+        }
+      });
+
+      refresh();
+      setInterval(() => { if (editingId === null) refresh(); }, 15000);
+    })();
+  </script>`;
+
+  res.send(renderLayout({
+    title: 'WF Challenge Scoring',
+    user,
+    isAdmin: true,
+    content,
+    layoutClass: 'dashboard-full'
   }));
 });
 
@@ -8115,6 +8660,14 @@ app.get('/sector/:wf/:from/:to', async (req, res) => {
         </h1>
       </div>
 
+      ${leg?.is_wf_challenge && isPageVisibleTo('worldflight-challenge', isAdmin) ? `
+      <a href="/worldflight-challenge" class="wf-challenge-banner">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+        <span class="wf-challenge-banner-text"><strong>This sector is the WorldFlight Challenge!</strong> Click for more details</span>
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-left:auto;"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+      </a>
+      ` : ''}
+
       <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:16px;align-items:stretch;">
         <div style="width:calc(60% - 8px);min-width:300px;padding:16px;background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:12px;box-sizing:border-box;display:flex;flex-direction:column;gap:14px;">
           <div style="display:flex;gap:24px;flex-wrap:wrap;">
@@ -8131,7 +8684,14 @@ app.get('/sector/:wf/:from/:to', async (req, res) => {
               <div><div style="font-size:9px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);">Block Time</div><div style="font-size:15px;font-weight:600;color:var(--text);">${leg ? leg.block_time || '-' : '-'}</div></div>
             </div>
           </div>
-          ${(isAdmin || isPageEnabled('atc-route')) && leg && leg.atc_route ? '<div style="border-top:1px solid var(--border);padding-top:12px;"><div style="font-size:9px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:6px;">ATC Route</div><div style="font-family:monospace;font-size:11px;line-height:1.6;color:var(--text);word-break:break-all;">' + leg.atc_route + '</div></div>' : ''}
+          ${(isAdmin || isPageEnabled('atc-route')) && leg && leg.atc_route
+            ? '<div style="border-top:1px solid var(--border);padding-top:12px;"><div style="font-size:9px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:6px;">ATC Route</div><div style="font-family:monospace;font-size:11px;line-height:1.6;color:var(--text);word-break:break-all;">' + leg.atc_route + '</div></div>'
+            : !(isAdmin || isPageEnabled('atc-route'))
+              ? '<div style="border-top:1px solid var(--border);padding-top:12px;"><div style="font-size:9px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:6px;">ATC Route</div><div style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;background:rgba(251,191,36,0.06);border:1px solid rgba(251,191,36,0.25);border-radius:8px;">'
+                + '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:1px;"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>'
+                + '<div style="font-size:12px;line-height:1.5;color:#cbd5e1;">The ATC route has not yet been published. We are in coordination with local division / vACC staff. The ATC route will be published here as soon as possible.</div>'
+                + '</div></div>'
+              : ''}
         </div>
         ${!isPageVisibleTo('flow-restrictions', isAdmin) ? `
         <div class="sector-banner sector-banner-flow-full" style="width:calc(40% - 8px);min-width:250px;flex-direction:column;justify-content:center;padding:16px;box-sizing:border-box;">
@@ -8139,7 +8699,7 @@ app.get('/sector/:wf/:from/:to', async (req, res) => {
             <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/><path d="M12 6v6l4 2"/></svg>
             <div class="sector-banner-text" style="align-items:center;text-align:center;">
               <span class="sector-banner-label">Flow Restrictions</span>
-              <span style="font-size:13px;font-weight:500;color:#94a3b8;line-height:1.5;margin-top:4px;">No flow restrictions yet available. We are in communication with the local division / vACC to determine if any flow restrictions are required for this sector.</span>
+              <span style="font-size:13px;font-weight:500;color:#94a3b8;line-height:1.5;margin-top:4px;">Closer to the event, we will confirm if any flow restrictions are applicable for this sector.</span>
             </div>
           </div>
         </div>
@@ -8579,8 +9139,9 @@ app.get('/schedule', requirePageEnabled('schedule'), async (req, res) => {
   const isAdmin = isAdminUser(cid);
   const isLoggedIn = !!cid;
   const myBookings = cid ? tobtBookingsByCid[cid] : null;
-  const showBookSlot = isAdmin || isPageEnabled('book-slot');
+  const showBookSlot = isPageVisibleTo('flow-restrictions', isAdmin);
   const showAtcRoute = isAdmin || isPageEnabled('atc-route');
+  const showWfChallenge = isPageVisibleTo('worldflight-challenge', isAdmin);
 
   // Team-booking context for booking-only flow (same resolution as /sector)
   let teamBookingContext = null;
@@ -8619,6 +9180,7 @@ app.get('/schedule', requirePageEnabled('schedule'), async (req, res) => {
             <th class="col-to">Arr</th>
             <th class="col-date">Date</th>
             <th class="col-window">Dep Window <span class="col-help" title="There is no published departure time.&#10;Please aim to depart within this window." style="cursor:help;color:var(--muted);">?</span></th>
+            <th class="col-flight">Flight Time</th>
             <th class="col-block">Block</th>
             ${showAtcRoute ? '<th class="col-route">ATC Route</th>' : ''}
             ${showBookSlot ? '<th class="col-book">Book</th>' : ''}
@@ -8640,7 +9202,7 @@ app.get('/schedule', requirePageEnabled('schedule'), async (req, res) => {
 
             return `
             <tr>
-              <td class="col-wf-sector"><button class="sector-details-btn" data-from="${r.from}" data-to="${r.to}" data-wf="${r.number}" data-date="${r.date_utc}" data-dep="${r.dep_time_utc}" data-block="${r.block_time}" data-route="${showAtcRoute ? escapeHtml(r.atc_route) : ''}">${r.number}</button></td>
+              <td class="col-wf-sector"><button class="sector-details-btn${r.is_wf_challenge && showWfChallenge ? ' wf-challenge-btn' : ''}"${r.is_wf_challenge && showWfChallenge ? ' title="WorldFlight Challenge sector"' : ''} data-from="${r.from}" data-to="${r.to}" data-wf="${r.number}" data-date="${r.date_utc}" data-dep="${r.dep_time_utc}" data-block="${r.block_time}" data-route="${showAtcRoute ? escapeHtml(r.atc_route) : ''}">${r.is_wf_challenge && showWfChallenge ? '<svg class="wf-challenge-star" viewBox="0 0 24 24" width="13" height="13" fill="currentColor" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>' : ''}${r.number}</button></td>
 
               <td class="col-from">
                 <a href="/icao/${r.from}">${r.from}</a>
@@ -8652,6 +9214,7 @@ app.get('/schedule', requirePageEnabled('schedule'), async (req, res) => {
 
               <td class="col-date">${r.date_utc}</td>
               <td class="col-window">${buildTimeWindow(r.dep_time_utc)}</td>
+              <td class="col-flight">${r.flight_time || '-'}</td>
               <td class="col-block">${r.block_time}</td>
 
               ${showAtcRoute ? `
@@ -12356,9 +12919,10 @@ app.get('/icao/:icao', async (req, res) => {
   });
   const airportRow = await prisma.airport.findUnique({
     where: { icao },
-    select: { name: true }
+    select: { name: true, iata: true }
   });
   const airportName = airportRow?.name || '';
+  const airportIata = airportRow?.iata || '';
   // US airports use a "K" prefix on the ICAO (KLAX, KJFK) — display the 3-letter FAA code instead.
   const displayIcao = (icao.length === 4 && icao.startsWith('K')) ? icao.slice(1) : icao;
   // Find ALL WF legs involving this airport
@@ -12417,7 +12981,7 @@ app.get('/icao/:icao', async (req, res) => {
 
   <section class="card icao-portal-header">
     <div class="icao-portal-title">
-      <span class="icao-portal-icao">${displayIcao}</span>
+      <span class="icao-portal-icao">${displayIcao}${airportIata ? ` / ${airportIata}` : ''}</span>
       ${airportName ? `<span class="icao-portal-name">${airportName}</span>` : ''}
     </div>
     ${wfInvolved && isPageVisibleTo('wf-portal-banner', isAdmin) ? `
@@ -19105,7 +19669,8 @@ app.get('/admin/control-panel', requireAdmin, async (req, res) => {
     settings:    adminSvg('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.09a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/>'),
     compass:     adminSvg('<circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/>'),
     flask:       adminSvg('<path d="M9 2v6L3.5 17.5A2.5 2.5 0 0 0 6 21h12a2.5 2.5 0 0 0 2.5-3.5L15 8V2"/><path d="M8 2h8"/><path d="M6.5 14h11"/>'),
-    headphones:  adminSvg('<path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3Z"/><path d="M3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3Z"/>')
+    headphones:  adminSvg('<path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3Z"/><path d="M3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3Z"/>'),
+    star:        adminSvg('<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>')
   };
 
   const allSections = [
@@ -19119,7 +19684,8 @@ app.get('/admin/control-panel', requireAdmin, async (req, res) => {
     { key: 'settings', title: 'Page Visibility', desc: 'Control page visibility for pilots and controllers.', icon: adminIcons.settings, href: '/admin/settings', badge: null },
     { key: 'airac', title: 'AIRAC Data', desc: 'Upload and manage navigation data (waypoints, airways) for route planning.', icon: adminIcons.compass, href: '/admin/airac', badge: airacAlert ? '!' : null },
     { key: 'test-pilots', title: 'Test Pilot Data', desc: 'Generate fake pilot departures at WF airports for testing.', icon: adminIcons.flask, href: '/admin/test-pilots', badge: null },
-    { key: 'controller-pack', title: 'Controller Pack', desc: 'Generate EuroScope controller pack files for WorldFlight airports.', icon: adminIcons.headphones, href: '/admin/controller-pack', badge: null }
+    { key: 'controller-pack', title: 'Controller Pack', desc: 'Generate EuroScope controller pack files for WorldFlight airports.', icon: adminIcons.headphones, href: '/admin/controller-pack', badge: null },
+    { key: 'wf-challenge', title: 'WF Challenge Scoring', desc: 'Enter flypast scores and manage the live WF Challenge scoreboard.', icon: adminIcons.star, href: '/admin/wf-challenge', badge: null }
   ];
 
   // Super admins see all sections; granular admins see only their permitted pages
@@ -20474,6 +21040,14 @@ const content = `
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px;">
   <h2 style="margin:0;">WorldFlight Admin Schedule</h2>
   <div style="display:flex;gap:8px;align-items:center;">
+    <div id="wfChallengeBox" style="display:${event.isWorldFlight !== false ? 'flex' : 'none'};align-items:center;gap:6px;background:rgba(251,191,36,0.06);border:1px solid rgba(251,191,36,0.35);border-radius:6px;padding:4px 12px;" title="Flag one sector as the WF Challenge sector">
+      <input type="checkbox" id="wfChallengeChk" ${eventRows.some(r => r.is_wf_challenge) ? 'checked' : ''} style="cursor:pointer;" />
+      <label for="wfChallengeChk" style="font-size:12px;color:#fbbf24;cursor:pointer;white-space:nowrap;">Has WF Challenge</label>
+      <select id="wfChallengeSelect" style="display:${eventRows.some(r => r.is_wf_challenge) ? '' : 'none'};padding:2px 6px;background:#0f172a;border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:12px;max-width:220px;">
+        <option value="">Select sector\u2026</option>
+        ${eventRows.filter(r => r.number).map(r => `<option value="${r.number}" ${r.is_wf_challenge ? 'selected' : ''}>${r.number}: ${r.from} \u2192 ${r.to}</option>`).join('')}
+      </select>
+    </div>
     ${isScratch ? `
     <div style="display:flex;align-items:center;gap:6px;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:6px;padding:4px 12px;" title="Treat as WorldFlight: YSSY start, WF flight numbers, B738 SimBrief default">
       <input type="checkbox" id="isWorldFlightChk" ${event.isWorldFlight !== false ? 'checked' : ''} style="cursor:pointer;" />
@@ -20559,7 +21133,7 @@ ${eventRows.map((r, idx) => {
   const sectorKey = `${r.from}-${r.to}`;
   const isFirst = idx === 0;
   return `
-<tr data-wf="${r.number}" data-idx="${idx}">
+<tr data-wf="${r.number}" data-idx="${idx}"${r.is_wf_challenge ? ' class="wf-challenge-row"' : ''}>
   ${isScratch ? '<td class="col-del" style="white-space:nowrap;">'
     + '<button class="btn-delete-row" data-wf="' + r.number + '" title="Delete leg">&#x2715;</button>'
     + (r.from && r.to ? '<a class="row-icon simbrief-launch" data-from="' + r.from + '" data-to="' + r.to + '" data-wf="' + r.number + '" href="#" title="Generate SimBrief plan">SB</a>' : '')
@@ -21002,6 +21576,35 @@ document.querySelectorAll('.sched-edit').forEach(function(input) {
     });
   });
 });
+
+/* ===== WF CHALLENGE SECTOR ===== */
+(function() {
+  var chk = document.getElementById('wfChallengeChk');
+  var sel = document.getElementById('wfChallengeSelect');
+  if (!chk || !sel) return;
+
+  function saveWfChallenge(number) {
+    return fetch('/admin/api/schedule/wf-challenge', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ eventId: window.WF_EVENT_ID, number: number })
+    });
+  }
+
+  chk.addEventListener('change', function() {
+    if (chk.checked) {
+      sel.style.display = '';
+    } else {
+      sel.style.display = 'none';
+      sel.value = '';
+      saveWfChallenge('').then(function() { location.reload(); });
+    }
+  });
+
+  sel.addEventListener('change', function() {
+    if (sel.value) saveWfChallenge(sel.value).then(function() { location.reload(); });
+  });
+})();
 
 /* ===== TURNAROUND TIME ===== */
 if (document.getElementById('editTurnaroundBtn')) document.getElementById('editTurnaroundBtn').addEventListener('click', function() {
@@ -21682,6 +22285,21 @@ function greatCircleArc(lat1, lon1, lat2, lon2, numPoints) {
 
   chk.addEventListener('change', function() {
     cfgBox.style.display = chk.checked ? 'none' : 'flex';
+    // WF Challenge only applies to WorldFlight events — hide and clear it otherwise
+    var challengeBox = document.getElementById('wfChallengeBox');
+    if (challengeBox) {
+      challengeBox.style.display = chk.checked ? 'flex' : 'none';
+      var cChk = document.getElementById('wfChallengeChk');
+      if (!chk.checked && cChk && cChk.checked) {
+        cChk.checked = false;
+        document.getElementById('wfChallengeSelect').style.display = 'none';
+        fetch('/admin/api/schedule/wf-challenge', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ eventId: window.WF_EVENT_ID, number: '' })
+        });
+      }
+    }
     save({ isWorldFlight: chk.checked });
     var fromInput = document.getElementById('addLegFrom');
     var prevSel = document.getElementById('addLegPrev');
@@ -22966,6 +23584,32 @@ app.post('/admin/api/schedule-row/update', requireAdmin, async (req, res) => {
   }
 });
 
+// Set (or clear) the WF Challenge sector for an event. Only one row per event
+// can be flagged — selecting a sector clears any previous flag first.
+app.post('/admin/api/schedule/wf-challenge', requireAdmin, async (req, res) => {
+  const eventId = Number(req.body.eventId);
+  const number = (req.body.number || '').toString().trim();
+  if (!Number.isFinite(eventId)) return res.status(400).json({ error: 'Invalid eventId' });
+
+  try {
+    await prisma.wfScheduleRow.updateMany({
+      where: { eventId },
+      data: { isWfChallenge: false }
+    });
+    if (number) {
+      const updated = await prisma.wfScheduleRow.updateMany({
+        where: { eventId, number },
+        data: { isWfChallenge: true }
+      });
+      if (updated.count === 0) return res.status(404).json({ error: 'Sector not found' });
+    }
+    await loadScheduleFromDb(eventId);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.post('/admin/api/schedule-row/add', requireAdmin, async (req, res) => {
   const { eventId, from, to, depFlow, flowType, atcRoute, blockTime, flightTime } = req.body;
 
@@ -23822,9 +24466,9 @@ app.get('/admin/settings', requireAdmin, async (req, res) => {
       hint: 'Granular toggles for elements inside other pages.',
       items: [
         { key: 'wf-portal-banner',  label: 'Portal - Airport Selected for WF', icon: '✈️', desc: 'WorldFlight event banner on airport portal pages' },
-        { key: 'flow-restrictions', label: 'Flow Restrictions on Sector Details', icon: '🚦', desc: 'When off, the sector page shows a placeholder instead of flow info' },
-        { key: 'book-slot',         label: 'Book Slot Column',     icon: '📋', desc: 'Book Slot column on the schedule page' },
-        { key: 'atc-route',         label: 'ATC Routes',           icon: '🛣️', desc: 'ATC route shown on schedule, sector, my-slots, affiliate, team-bookings and portal banners. Hide while routes are still being agreed with controllers.' }
+        { key: 'flow-restrictions', label: 'Flow Restrictions & Booking', icon: '🚦', desc: 'Flow info on sector details and the Book column on the schedule page. When off, the sector page shows a placeholder and the schedule hides the Book column.' },
+        { key: 'atc-route',         label: 'ATC Routes',           icon: '🛣️', desc: 'ATC route shown on schedule, sector, my-slots, affiliate, team-bookings and portal banners. Hide while routes are still being agreed with controllers.' },
+        { key: 'worldflight-challenge', label: 'WorldFlight Challenge', icon: '⭐', desc: 'Gold challenge-sector highlights on the schedule and sector pages, and the WorldFlight Challenge page. The admin schedule always shows the challenge sector regardless.' }
       ]
     }
   ];

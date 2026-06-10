@@ -322,14 +322,25 @@
   color: var(--text) !important;
   border-bottom-color: var(--border) !important;
 }
-[data-theme="light"] .wf-airport-row:hover {
+[data-theme="light"] .wf-airport-popup .wf-airport-section:hover {
   background: rgba(0,0,0,0.03) !important;
 }
-[data-theme="light"] .wf-airport-row + .wf-airport-row {
+[data-theme="light"] .wf-airport-popup .wf-airport-section + .wf-airport-section {
   border-top-color: var(--border) !important;
 }
+[data-theme="light"] .wf-airport-section.inbound  { --dir-color: #059669; }
+[data-theme="light"] .wf-airport-section.outbound { --dir-color: #2563eb; }
 [data-theme="light"] .wf-airport-leg { color: var(--text) !important; }
-[data-theme="light"] .wf-airport-meta { color: var(--muted) !important; }
+[data-theme="light"] .wf-airport-leg-wf { color: #b45309 !important; }
+[data-theme="light"] .wf-airport-popup-name { color: var(--text) !important; }
+[data-theme="light"] .wf-airport-popup-codes { color: var(--muted) !important; }
+[data-theme="light"] .wf-time-utc { color: #334155 !important; }
+[data-theme="light"] .wf-time-utc strong { color: var(--text) !important; }
+[data-theme="light"] .wf-time-local { color: var(--muted) !important; }
+[data-theme="light"] .wf-airport-route {
+  color: #5b6478 !important;
+  background: rgba(0,0,0,0.04) !important;
+}
 [data-theme="light"] .wf-airport-text {
   background: rgba(255,255,255,0.88) !important;
   color: #1e293b !important;
@@ -1034,6 +1045,17 @@ select{ cursor:pointer; }
 }
 .departures-table tbody tr {
   border-top: 1px solid var(--border);
+}
+/* WF Challenge sector — gold highlight (set via admin schedule "Has WF Challenge") */
+.departures-table tbody tr.wf-challenge-row td {
+  background: rgba(251, 191, 36, 0.10);
+}
+.departures-table tbody tr.wf-challenge-row td:first-child {
+  box-shadow: inset 3px 0 0 #fbbf24;
+}
+.departures-table tbody tr.wf-challenge-row .sector-link {
+  color: #fbbf24;
+  font-weight: 700;
 }
 .departures-table thead tr {
   border-bottom: 1px solid var(--border);
@@ -5737,6 +5759,7 @@ html[data-map-theme="light"] .ac-label {
 .schedule-page .col-to        { width: 65px; }
 .schedule-page .col-date      { width: 125px; }
 .schedule-page .col-window    { width: 115px; }
+.schedule-page .col-flight    { width: 95px; text-align: center; }
 .schedule-page .col-block     { width: 55px; text-align: center; }
 .schedule-page .col-book      { width: 180px; text-align: center; overflow: visible; }
 .schedule-page .col-details   { width: 110px; text-align: center; }
@@ -5775,6 +5798,221 @@ html[data-map-theme="light"] .ac-label {
 .sector-details-btn:hover {
   background: rgba(56,189,248,0.2);
   border-color: var(--accent);
+}
+
+/* WorldFlight Challenge sector — gold button + star */
+.sector-details-btn.wf-challenge-btn {
+  background: rgba(251,191,36,0.12);
+  border-color: rgba(251,191,36,0.45);
+  color: #fbbf24;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.sector-details-btn.wf-challenge-btn:hover {
+  background: rgba(251,191,36,0.22);
+  border-color: #fbbf24;
+}
+.wf-challenge-star {
+  flex: 0 0 auto;
+  color: #fbbf24;
+}
+
+/* Sector page — WorldFlight Challenge banner */
+.wf-challenge-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 12px 16px;
+  background: rgba(251,191,36,0.08);
+  border: 1px solid rgba(251,191,36,0.4);
+  border-radius: 12px;
+  color: #fbbf24;
+  text-decoration: none;
+  transition: background 0.15s, border-color 0.15s;
+}
+.wf-challenge-banner:hover {
+  background: rgba(251,191,36,0.16);
+  border-color: #fbbf24;
+}
+.wf-challenge-banner-text {
+  font-size: 14px;
+  color: #e2e8f0;
+}
+.wf-challenge-banner-text strong {
+  color: #fbbf24;
+  margin-right: 6px;
+}
+/* WorldFlight Challenge page */
+.wf-challenge-hero {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 24px;
+  color: #fbbf24;
+}
+.wf-challenge-sector-card {
+  padding: 20px 24px;
+  background: rgba(251,191,36,0.06);
+  border: 1px solid rgba(251,191,36,0.35);
+  border-radius: 12px;
+}
+.wfc-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+  grid-column: 1 / -1;
+}
+@media (max-width: 1100px) {
+  .wfc-grid { grid-template-columns: minmax(0, 1fr); }
+}
+/* Split-flap departure-board scoreboard */
+.wfc-board {
+  background: #0c0d10;
+  border: 1px solid #2a2c33;
+  border-radius: 10px;
+  padding: 14px 16px;
+  font-family: 'Consolas', 'Courier New', monospace;
+  overflow-x: auto;
+}
+.wfc-board-row {
+  display: grid;
+  grid-template-columns: minmax(0, 2.4fr) minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  padding: 5px 0;
+}
+.wfc-board-head {
+  border-bottom: 1px solid #2a2c33;
+  padding-bottom: 8px;
+  margin-bottom: 6px;
+}
+.wfc-board-head div {
+  color: #8b8e98;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+}
+.wfc-board-msg {
+  grid-template-columns: minmax(0, 1fr);
+}
+.wfc-board-cell { white-space: nowrap; }
+.wfc-flap {
+  display: inline-block;
+  width: 1.1em;
+  padding: 4px 1px;
+  margin-right: 2px;
+  text-align: center;
+  font-size: 15px;
+  font-weight: 700;
+  color: #ffd34d;
+  background: linear-gradient(#26272e 48%, #17181d 52%);
+  border-radius: 3px;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.05), inset 0 -2px 3px rgba(0,0,0,0.5);
+}
+.wfc-card .wfc-brief {
+  margin-top: 0;
+  max-width: none;
+}
+.wfc-brief {
+  margin-top: 28px;
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.7;
+  max-width: 860px;
+}
+.wfc-brief p { color: var(--muted); }
+.wfc-heading {
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  color: #fbbf24;
+  margin: 32px 0 8px;
+}
+.wfc-intro {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text) !important;
+}
+.wfc-step {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  margin: 16px 0;
+  padding: 14px 16px;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.wfc-step-num {
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(251,191,36,0.12);
+  border: 1px solid rgba(251,191,36,0.4);
+  color: #fbbf24;
+  font-weight: 800;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 2px;
+}
+.wfc-step h3 { margin: 0 0 4px; font-size: 15px; font-weight: 700; color: var(--text); }
+.wfc-step p { margin: 0; }
+.wfc-step strong { color: #fbbf24; }
+.wfc-prize {
+  margin-top: 16px;
+  padding: 12px 16px;
+  background: rgba(251,191,36,0.08);
+  border: 1px solid rgba(251,191,36,0.4);
+  border-radius: 12px;
+  color: var(--text) !important;
+}
+.wfc-prize strong { color: #fbbf24; }
+.wfc-step .wfc-chart {
+  margin-top: 12px;
+}
+.wfc-chart {
+  flex: 1 1 200px;
+  max-width: 260px;
+  margin: 0;
+  cursor: zoom-in;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  background: rgba(255,255,255,0.02);
+  transition: border-color 0.15s, transform 0.15s;
+}
+.wfc-chart:hover { border-color: #fbbf24; transform: translateY(-2px); }
+.wfc-chart img { display: block; width: 100%; height: auto; }
+.wfc-chart figcaption {
+  padding: 8px 12px;
+  font-size: 12px;
+  color: var(--muted);
+  border-top: 1px solid var(--border);
+}
+.wfc-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 4000;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,0,0,0.85);
+  cursor: zoom-out;
+  padding: 24px;
+}
+.wfc-lightbox.open { display: flex; }
+.wfc-lightbox img {
+  max-width: 95vw;
+  max-height: 95vh;
+  border-radius: 8px;
+  box-shadow: 0 12px 48px rgba(0,0,0,0.6);
 }
 /* Sector page banners */
 .sector-banner {
@@ -6056,6 +6294,7 @@ body.sidebar-collapsed {
 
 .wf-direction-arrow {
   pointer-events: none;
+  transition: opacity .2s ease;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -6064,6 +6303,12 @@ body.sidebar-collapsed {
   padding: 14px 20px;
   border-radius: 8px;
   border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+/* Hidden while an airport popup is open so it never covers the popup
+   (Leaflet controls always stack above the popup pane). */
+.wf-direction-arrow.wf-direction-hidden {
+  opacity: 0;
 }
 
 .wf-direction-label {
@@ -6410,40 +6655,66 @@ main.dashboard.map-layout {
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
+.wf-airport-popup-name {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: normal;
+  text-transform: none;
+  color: #e2e8f0;
+}
+
+.wf-airport-popup-codes {
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  color: #94a3b8;
+  margin-top: 1px;
+}
+
 .wf-airport-popup-body {
   padding: 6px 0;
 }
 
-.wf-airport-row {
+.wf-airport-popup .wf-airport-section {
   display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 7px 12px;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 12px 9px;
   text-decoration: none;
   color: inherit;
+  cursor: pointer;
   transition: background .12s;
+  --dir-color: #94a3b8;
 }
-.wf-airport-row:hover {
+.wf-airport-popup .wf-airport-section:hover {
   background: rgba(255, 255, 255, 0.05);
 }
-.wf-airport-row + .wf-airport-row {
-  border-top: 1px solid rgba(255, 255, 255, 0.04);
+.wf-airport-section.inbound  { --dir-color: #3cffc2; }
+.wf-airport-section.outbound { --dir-color: #4da6ff; }
+.wf-airport-popup .wf-airport-section + .wf-airport-section {
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.wf-airport-row-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .wf-airport-dot {
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
   flex-shrink: 0;
+  background: var(--dir-color);
 }
-.wf-airport-dot.inbound  { background: #3cffc2; }
-.wf-airport-dot.outbound { background: #4da6ff; }
 
-.wf-airport-row-content {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  min-width: 0;
+.wf-airport-row-kind {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--dir-color);
 }
 
 .wf-airport-leg {
@@ -6453,10 +6724,59 @@ main.dashboard.map-layout {
   white-space: nowrap;
 }
 
-.wf-airport-meta {
-  font-size: 11.5px;
-  color: #94a3b8;
+.wf-airport-leg-wf {
+  color: #fbbf24;
+}
+
+.wf-airport-times {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.wf-time-utc {
+  font-size: 12px;
+  color: #cbd5e1;
   white-space: nowrap;
+}
+.wf-time-utc strong {
+  font-weight: 700;
+  color: #f1f5f9;
+}
+
+.wf-time-local {
+  font-size: 10.5px;
+  color: #748199;
+  white-space: nowrap;
+}
+
+.wf-airport-route {
+  font-size: 10.5px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color: #8b98b0;
+  white-space: normal;
+  word-break: break-word;
+  max-height: 56px;
+  overflow-y: auto;
+  margin-top: 5px;
+  padding: 5px 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 6px;
+}
+
+.wf-airport-portal-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--dir-color);
+  opacity: 0.85;
+}
+.wf-airport-popup .wf-airport-section:hover .wf-airport-portal-hint {
+  opacity: 1;
+  text-decoration: underline;
 }
 
 /* =========================================================

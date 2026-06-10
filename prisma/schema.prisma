@@ -89,6 +89,7 @@ model User {
 model Airport {
   icao    String   @id
   name    String?
+  iata    String?
   lat     Float
   lon     Float
   elev    Int?
@@ -285,6 +286,7 @@ model WfScheduleRow {
   blockTime   String @default("")
   flightTime  String @default("")
   atcRoute    String @default("")
+  isWfChallenge Boolean @default(false)
 
   @@unique([eventId, number])
   @@index([eventId])
@@ -311,6 +313,18 @@ model WfEvent {
   createdAt      DateTime @default(now())
 
   @@unique([year])
+}
+
+model WfChallengeScore {
+  id        Int      @id @default(autoincrement())
+  eventId   Int
+  callsign  String
+  style     Int
+  speed     Int
+  height    Int
+  createdAt DateTime @default(now())
+
+  @@index([eventId])
 }
 
 model PageVisibility {

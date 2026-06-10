@@ -1,6 +1,6 @@
 // --- Session cache helpers ---
-function wfCacheKey(eventId, builtAt, qs) {
-  return `wfWorldMap:v6:${eventId}:${builtAt}:${qs || 'default'}`;
+function wfCacheKey(eventId, builtAt, qs, atcRoutes) {
+  return `wfWorldMap:v7:${eventId}:${builtAt}:${atcRoutes ? 'r1' : 'r0'}:${qs || 'default'}`;
 }
 
 function getCachedMapData(key) {
@@ -73,6 +73,15 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
   map.addControl(new DirectionControl());
+
+  // Hide the direction banner while a popup is open — Leaflet controls
+  // always stack above the popup pane, so it would cover the popup.
+  map.on('popupopen', () => {
+    document.querySelector('.wf-direction-arrow')?.classList.add('wf-direction-hidden');
+  });
+  map.on('popupclose', () => {
+    document.querySelector('.wf-direction-arrow')?.classList.remove('wf-direction-hidden');
+  });
 
   /* --------------------------------------------------
      Layers
@@ -161,29 +170,47 @@ document.addEventListener('DOMContentLoaded', () => {
     return map.containerPointToLatLng([pt.x + w / 2, pt.y + h / 2]);
   }
 
+  const ARROW_SVG = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>';
+
+  function popupRowHtml(kind, leg, windowStr, icao) {
+    const dir = kind === 'Arrival' ? 'inbound' : 'outbound';
+    return `
+      <a class="wf-airport-section ${dir}" href="/sector/${leg.wf}/${leg.from}/${leg.to}">
+        <div class="wf-airport-row-head">
+          <span class="wf-airport-dot ${dir}"></span>
+          <span class="wf-airport-row-kind">${kind}</span>
+        </div>
+        <span class="wf-airport-leg"><span class="wf-airport-leg-wf">${leg.wf}</span>  ${leg.from} \u2192 ${leg.to}</span>
+        <div class="wf-airport-times">
+          <span class="wf-time-utc">${formatUtcDatePretty(leg.dateIso)} \u00b7 ${kind} window <strong>${windowStr}</strong> UTC</span>
+          ${leg.localWindow ? `<span class="wf-time-local">${leg.localWindow} local (${leg.localZone || '?'})</span>` : ''}
+        </div>
+        ${leg.atcRoute ? `<span class="wf-airport-route">${leg.atcRoute}</span>` : ''}
+        <span class="wf-airport-portal-hint">View ${leg.wf} sector details ${ARROW_SVG}</span>
+      </a>
+    `;
+  }
+
   function airportPopupHtml(icao, a) {
+  const codes = a.iata ? `${icao} / ${a.iata}` : icao;
   return `
     <div class="wf-airport-popup">
-      <div class="wf-airport-popup-header">${icao}</div>
+      <div class="wf-airport-popup-header">
+        <div class="wf-airport-popup-name">${a.name || icao}</div>
+        <div class="wf-airport-popup-codes">${codes}</div>
+      </div>
       <div class="wf-airport-popup-body">
-        ${a.inbound ? `
-          <a class="wf-airport-row" href="/sector/${a.inbound.wf}/${a.inbound.from}/${a.inbound.to}">
-            <span class="wf-airport-dot inbound"></span>
-            <div class="wf-airport-row-content">
-              <span class="wf-airport-leg">${a.inbound.wf}  ${a.inbound.from} \u2192 ${a.inbound.to}</span>
-              <span class="wf-airport-meta">${formatUtcDatePretty(a.inbound.dateIso)} \u00b7 Arr ${a.inbound.arrWindow}</span>
-            </div>
-          </a>
-        ` : ''}
-        ${a.outbound ? `
-          <a class="wf-airport-row" href="/sector/${a.outbound.wf}/${a.outbound.from}/${a.outbound.to}">
-            <span class="wf-airport-dot outbound"></span>
-            <div class="wf-airport-row-content">
-              <span class="wf-airport-leg">${a.outbound.wf}  ${a.outbound.from} \u2192 ${a.outbound.to}</span>
-              <span class="wf-airport-meta">${formatUtcDatePretty(a.outbound.dateIso)} \u00b7 Dep ${a.outbound.depWindow}</span>
-            </div>
-          </a>
-        ` : ''}
+        ${[
+          a.inbound && { kind: 'Arrival', leg: a.inbound, win: a.inbound.arrWindow },
+          a.outbound && { kind: 'Departure', leg: a.outbound, win: a.outbound.depWindow }
+        ]
+          .filter(Boolean)
+          // Chronological: usually Arrival then Departure, but e.g. Sydney
+          // departs 31 Oct and arrives back 7 Nov.
+          .sort((x, y) =>
+            `${x.leg.dateIso || ''} ${x.win}`.localeCompare(`${y.leg.dateIso || ''} ${y.win}`))
+          .map(r => popupRowHtml(r.kind, r.leg, r.win, icao))
+          .join('')}
       </div>
     </div>
   `;
@@ -378,21 +405,31 @@ document.addEventListener('DOMContentLoaded', () => {
       if (placed.has(key)) return;
       placed.add(key);
 
-      const displayLabel = a.shortName ? `${a.shortName} ${icao}` : icao;
+      const codes = a.iata ? `${icao} / ${a.iata}` : icao;
+      const displayLabel = a.shortName ? `${a.shortName} ${codes}` : codes;
       let extra = null;
 
       if (idx === 0) {
-        extra = { isStartEnd: true, badge: 'START \u2022 31 Oct' };
+        extra = isRoundTrip
+          ? { isStartEnd: true, badge: 'START / FINISH' }
+          : { isStartEnd: true, badge: 'START' };
       }
       if (isEnd) {
-        extra = { isStartEnd: true, badge: 'FINISH \u2022 7 Nov' };
+        // Round trip: start marker already covers this airport (and is
+        // duplicated across world copies) — skip the second tag, but keep
+        // the unwrapped end position in the fit bounds.
+        if (isRoundTrip) {
+          bounds.push([pos.lat, pos.lon]);
+          return;
+        }
+        extra = { isStartEnd: true, badge: 'FINISH' };
       }
 
       airportList.push({ icao, pos, a, displayLabel, extra });
       bounds.push([pos.lat, pos.lon]);
     });
 
-    // Declutter: choose initial label offsets that minimise overlap.
+    // Declutter: choose label offsets that minimise overlap.
     const DIRECTIONS = [
       { x:  1, y:  0 },   // right
       { x: -1, y:  0 },   // left
@@ -410,9 +447,9 @@ document.addEventListener('DOMContentLoaded', () => {
       return targetMap.latLngToContainerPoint(L.latLng(lat, lon));
     }
 
-    function dirRect(px, dir, lw) {
-      const x = dir.x >= 0 ? px.x + PIN_GAP : px.x - lw - PIN_GAP;
-      const y = dir.y < 0 ? px.y - LH - PIN_GAP : dir.y > 0 ? px.y + PIN_GAP : px.y - LH / 2;
+    function dirRect(px, dir, lw, gap) {
+      const x = dir.x >= 0 ? px.x + gap : px.x - lw - gap;
+      const y = dir.y < 0 ? px.y - LH - gap : dir.y > 0 ? px.y + gap : px.y - LH / 2;
       return { x: x - PAD, y: y - PAD, w: lw + PAD * 2, h: LH + PAD * 2 };
     }
 
@@ -420,73 +457,54 @@ document.addEventListener('DOMContentLoaded', () => {
       return !(a.x + a.w < b.x || b.x + b.w < a.x || a.y + a.h < b.y || b.y + b.h < a.y);
     }
 
-    // Pixel offset of the label anchor relative to the pin — stays
-    // constant across zoom levels so labels hug their pins when zoomed in.
-    function dirPxOffset(px, dir, lw) {
-      const rect = dirRect(px, dir, lw);
-      return { dx: rect.x + PAD - px.x, dy: rect.y + PAD - px.y };
-    }
-
-    const pixelPositions = airportList.map(ap => getPixelPos(ap.pos.lat, ap.pos.lon));
-    const labelWidths = airportList.map(ap => estimateLabelWidth(ap.displayLabel));
-    const chosenOffsets = [];
-    const placedRects = [];
-
-    airportList.forEach((ap, i) => {
-      const px = pixelPositions[i];
-      const lw = labelWidths[i];
-      let bestDir = DIRECTIONS[0];
-      let bestOverlaps = Infinity;
-
-      for (const dir of DIRECTIONS) {
-        const rect = dirRect(px, dir, lw);
-        let overlaps = 0;
-        for (const pr of placedRects) {
-          if (rectsOverlap(rect, pr)) overlaps++;
-        }
-        if (overlaps < bestOverlaps) {
-          bestOverlaps = overlaps;
-          bestDir = dir;
-          if (overlaps === 0) break;
-        }
-      }
-
-      chosenOffsets.push(dirPxOffset(px, bestDir, lw));
-      placedRects.push(dirRect(px, bestDir, lw));
-    });
-
-    // Place pin markers + draggable label tags with connector lines
-    const tagStates = []; // { pinMarker, tagMarker, line, offsetPx }
+    // Place pin markers + draggable label tags with connector lines.
+    // Layout (label text, offsets, leaders) is applied by relayout().
+    const tagStates = []; // { idx, ap, pinMarker, tagMarker, line, offsetPx, dragged, label, compact }
 
     function tagLLFromPx(pinLL, offsetPx) {
       const pt = targetMap.latLngToContainerPoint(L.latLng(pinLL[0] ?? pinLL.lat, pinLL[1] ?? pinLL.lng));
       return targetMap.containerPointToLatLng([pt.x + offsetPx.dx, pt.y + offsetPx.dy]);
     }
 
-    airportList.forEach((ap, i) => {
-      const offsetPx = chosenOffsets[i];
+    // The translucent topbar / site banner overlay the top of the map, so
+    // autoPan must treat that strip as off-screen or popups open cut off.
+    function topOverlapPx() {
+      const mapTop = targetMap.getContainer().getBoundingClientRect().top;
+      let overlap = 0;
+      document.querySelectorAll('header.topbar, .site-banner').forEach(el => {
+        const r = el.getBoundingClientRect();
+        if (r.height > 0 && r.bottom > mapTop) overlap = Math.max(overlap, r.bottom - mapTop);
+      });
+      return overlap;
+    }
 
+    airportList.forEach((ap, i) => {
       WORLD_OFFSETS.forEach(wo => {
         const pinLL = [ap.pos.lat, ap.pos.lon + wo];
-        const tagLL = tagLLFromPx(pinLL, offsetPx);
 
         // Pin marker (non-draggable, holds popup)
         const pinMarker = L.marker(pinLL, { icon: pinIcon(ap.extra), zIndexOffset: 1000 })
           .addTo(localAirports)
           .bindPopup(
             airportPopupHtml(ap.icao, ap.a),
-            { closeButton: true, autoPan: true, maxWidth: 320, className: 'wf-airport-leaflet-popup' }
+            {
+              closeButton: true, autoPan: true, maxWidth: 320,
+              autoPanPaddingTopLeft: L.point(12, topOverlapPx() + 12),
+              autoPanPaddingBottomRight: L.point(12, 12),
+              className: 'wf-airport-leaflet-popup'
+            }
           );
 
-        // Connector line
-        const line = L.polyline([pinLL, tagLL], {
-          color: 'rgba(255,255,255,0.3)',
-          weight: 1,
+        // Connector line (hidden at world zoom)
+        const line = L.polyline([pinLL, pinLL], {
+          color: 'rgba(255,255,255,0.55)',
+          weight: 2,
+          dashArray: '4 6',
           interactive: false
         }).addTo(localAirports);
 
         // Draggable label tag
-        const tagMarker = L.marker(tagLL, {
+        const tagMarker = L.marker(pinLL, {
           icon: tagIcon(ap.displayLabel, ap.extra),
           draggable: true,
           zIndexOffset: 2000,
@@ -496,12 +514,17 @@ document.addEventListener('DOMContentLoaded', () => {
         // Click tag to open pin popup
         tagMarker.on('click', () => pinMarker.openPopup());
 
-        // Drag handler — update pixel offset + connector
-        const state = { pinMarker, tagMarker, line, offsetPx: { ...offsetPx } };
+        // Drag handler — capture pixel offset, pin it against re-declutter
+        const state = {
+          idx: i, ap, pinMarker, tagMarker, line,
+          offsetPx: { dx: 0, dy: 0 }, dragged: false,
+          label: ap.displayLabel, compact: null
+        };
         tagMarker.on('drag', () => {
           const pPt = targetMap.latLngToContainerPoint(pinMarker.getLatLng());
           const tPt = targetMap.latLngToContainerPoint(tagMarker.getLatLng());
           state.offsetPx = { dx: tPt.x - pPt.x, dy: tPt.y - pPt.y };
+          state.dragged = true;
           line.setLatLngs([pinMarker.getLatLng(), tagCenterLL(targetMap, tagMarker)]);
         });
 
@@ -509,14 +532,79 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     });
 
-    // Re-anchor tags at a constant pixel offset from their pin on zoom
-    targetMap.on('zoomend', () => {
-      for (const s of tagStates) {
+    /* ----- Zoom-aware label layout -----
+       World view (zoom <= COMPACT_MAX_ZOOM): ICAO-only chips tight to the
+       pin, no leader lines. Zoomed in: full "Name ICAO" tags with dashed
+       leaders. Declutter re-runs at the current zoom on every zoomend;
+       user-dragged tags keep their position (within the same mode) and act
+       as obstacles for the rest. */
+    const COMPACT_MAX_ZOOM = 3;
+
+    function relayout() {
+      const compact = targetMap.getZoom() <= COMPACT_MAX_ZOOM;
+      const gap = compact ? 7 : PIN_GAP;
+
+      const labels = airportList.map(ap =>
+        compact
+          ? (ap.a.iata ? `${ap.icao} / ${ap.a.iata}` : ap.icao)
+          : ap.displayLabel);
+      const widths = labels.map(estimateLabelWidth);
+      const pxs = airportList.map(ap => getPixelPos(ap.pos.lat, ap.pos.lon));
+
+      // Mode switch invalidates manual drags (offsets sized for other labels)
+      tagStates.forEach(s => { if (s.compact !== compact) s.dragged = false; });
+
+      const draggedOffsets = new Map(); // airport idx -> offsetPx
+      tagStates.forEach(s => { if (s.dragged) draggedOffsets.set(s.idx, s.offsetPx); });
+
+      const placedRects = [];
+      draggedOffsets.forEach((off, idx) => {
+        placedRects.push({
+          x: pxs[idx].x + off.dx - PAD, y: pxs[idx].y + off.dy - PAD,
+          w: widths[idx] + PAD * 2, h: LH + PAD * 2
+        });
+      });
+
+      const offsets = airportList.map((ap, i) => {
+        if (draggedOffsets.has(i)) return draggedOffsets.get(i);
+
+        let bestDir = DIRECTIONS[0];
+        let bestOverlaps = Infinity;
+        for (const dir of DIRECTIONS) {
+          const rect = dirRect(pxs[i], dir, widths[i], gap);
+          let overlaps = 0;
+          for (const pr of placedRects) {
+            if (rectsOverlap(rect, pr)) overlaps++;
+          }
+          if (overlaps < bestOverlaps) {
+            bestOverlaps = overlaps;
+            bestDir = dir;
+            if (overlaps === 0) break;
+          }
+        }
+        const rect = dirRect(pxs[i], bestDir, widths[i], gap);
+        placedRects.push(rect);
+        return { dx: rect.x + PAD - pxs[i].x, dy: rect.y + PAD - pxs[i].y };
+      });
+
+      tagStates.forEach(s => {
+        s.compact = compact;
+        if (!s.dragged) s.offsetPx = { ...offsets[s.idx] };
+
+        const label = labels[s.idx];
+        if (s.label !== label) {
+          s.label = label;
+          s.tagMarker.setIcon(tagIcon(label, s.ap.extra));
+        }
+
         const pinLL = s.pinMarker.getLatLng();
         s.tagMarker.setLatLng(tagLLFromPx(pinLL, s.offsetPx));
+
         s.line.setLatLngs([pinLL, tagCenterLL(targetMap, s.tagMarker)]);
-      }
-    });
+      });
+    }
+
+    targetMap.on('zoomend', relayout);
 
     if (bounds.length) {
       const sidebarWidth = document.body.classList.contains('sidebar-collapsed')
@@ -532,7 +620,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
       requestAnimationFrame(() => {
         targetMap.invalidateSize(true);
+        relayout();
       });
+    } else {
+      relayout();
     }
   }
 
@@ -557,9 +648,9 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       const vRes = await fetch('/api/wf/world-map/version' + (qs ? `?${qs}` : ''), { credentials: 'same-origin' });
       if (vRes.ok) {
-        const { builtAt, eventId } = await vRes.json();
+        const { builtAt, eventId, atcRoutes } = await vRes.json();
         if (builtAt && eventId) {
-          const key = wfCacheKey(eventId, builtAt, qs);
+          const key = wfCacheKey(eventId, builtAt, qs, atcRoutes);
           const cached = getCachedMapData(key);
           if (cached) {
             lastData = cached;
@@ -585,9 +676,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     const payload = await res.json();
-    const { builtAt, eventId } = payload;
+    const { builtAt, eventId, atcRoutes } = payload;
     if (builtAt && eventId) {
-      setCachedMapData(wfCacheKey(eventId, builtAt, qs), payload);
+      setCachedMapData(wfCacheKey(eventId, builtAt, qs, atcRoutes), payload);
     }
 
     lastData = payload;
