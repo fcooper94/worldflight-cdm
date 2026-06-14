@@ -7027,11 +7027,14 @@ app.get('/', async (req, res) => {
 
   const greeting = user ? `Welcome back, ${user.personal?.name_first || 'Pilot'}` : 'Welcome to WorldFlight';
 
-  // Hero tiles: pool of nav pages, filtered to those the viewer can actually see,
-  // shuffled per request so each refresh shows a different 3.
+  // Hero tiles: pool of nav pages, filtered to those the viewer can actually see.
+  // Up to 3 render initially; the full filtered pool is also emitted to JS so a
+  // client-side carousel can cycle through the rest (slot-by-slot fade swap).
   const heroTilePool = [
     { key: null, href: '/airport-portal', label: 'Airport Portal', desc: "View details, charts and info for airports on this year's route",
       icon: '<path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"/><path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"/><path d="M10 6h4"/><path d="M10 10h4"/><path d="M10 14h4"/><path d="M10 18h4"/>' },
+    { key: null, href: '/previous-destinations', label: 'Past Destinations', desc: 'See every airport WorldFlight has visited across past events',
+      icon: '<path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>' },
     { key: 'schedule', href: '/schedule', label: 'Full Schedule', desc: 'Browse every sector on this year\u2019s WorldFlight route',
       icon: '<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>' },
     { key: 'suggest-airport', href: '/suggest-airport', label: 'Suggest Airport', desc: "Tell us where you'd like to see WorldFlight 2026 visit",
@@ -7043,10 +7046,11 @@ app.get('/', async (req, res) => {
     { key: 'world-map', href: '/wf/world-map', label: 'Route Map', desc: 'Explore the full WorldFlight route on an interactive world map',
       icon: '<polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21 3 6"/><line x1="9" y1="3" x2="9" y2="18"/><line x1="15" y1="6" x2="15" y2="21"/>' }
   ];
-  const heroTiles = heroTilePool
+  const visibleTiles = heroTilePool
     .filter(t => !t.key || isPageVisibleTo(t.key, isAdmin))
-    .sort(() => Math.random() - 0.5)
-    .slice(0, 3);
+    .sort(() => Math.random() - 0.5);
+  // Render up to 3 to seed the grid; the carousel will reshuffle from the full set.
+  const heroTiles = visibleTiles.slice(0, 3);
 
   const content = `
     <div class="db-page">
@@ -7059,8 +7063,8 @@ app.get('/', async (req, res) => {
         ${activeEvent.startDateUtc ? `<div class="db-hero-date">${activeEvent.startDateUtc}</div>` : ''}
       </div>
 
-      <div class="db-stats">
-        ${heroTiles.map(t => `<a href="${t.href}" class="db-stat db-stat-link">
+      <div class="db-stats" id="dbHeroTiles">
+        ${heroTiles.map((t, i) => `<a href="${t.href}" class="db-stat db-stat-link" data-slot="${i}">
           <div class="db-stat-icon">
             <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${t.icon}</svg>
           </div>
@@ -7068,6 +7072,9 @@ app.get('/', async (req, res) => {
           <div class="db-stat-desc">${t.desc}</div>
         </a>`).join('')}
       </div>
+      <script>
+        window.WF_HERO_POOL = ${JSON.stringify(visibleTiles)};
+      </script>
 
       ${adminSheetCache.length > 0 && (isAdmin || isPageEnabled('schedule')) ? `
       <div class="db-section">
@@ -7091,11 +7098,6 @@ app.get('/', async (req, res) => {
           </table>
         </div>
       </div>` : ''}
-
-      <div class="db-cta">
-        <span class="db-cta-icon">🚧</span>
-        <p class="db-cta-text">This planning portal is still under construction — a lot of exciting features are just around the corner!</p>
-      </div>
 
     </div>
 
@@ -7258,46 +7260,66 @@ app.get('/', async (req, res) => {
         color: var(--muted, #94a3b8);
       }
 
-      .db-cta {
-        display: flex;
-        align-items: center;
-        gap: 14px;
-        padding: 20px 24px;
-        border-radius: 12px;
-        border: 1px solid rgba(245,158,11,0.25);
-        background: rgba(245,158,11,0.06);
-      }
-      .db-cta-icon {
-        font-size: 24px;
-        flex-shrink: 0;
-      }
-      .db-cta-text {
-        font-size: 14px;
-        color: var(--text, #e2e8f0);
-        margin: 0;
-      }
-      .db-cta-btn {
-        padding: 8px 20px;
-        border-radius: 8px;
-        background: var(--accent, #3b82f6);
-        color: #fff;
-        font-size: 13px;
-        font-weight: 600;
-        text-decoration: none;
-        white-space: nowrap;
-      }
-      .db-cta-btn:hover {
-        filter: brightness(1.1);
-      }
+      /* Hero-tile carousel: each slot fades when its content swaps. */
+      .db-stat-link { transition: opacity .35s ease, border-color 0.2s, background 0.2s, transform 0.15s; }
+      .db-stat-link.is-fading { opacity: 0; }
 
       @media (max-width: 600px) {
         .db-hero { flex-direction: column; align-items: flex-start; }
         .db-greeting { font-size: 20px; }
         .db-page { padding: 24px 16px; }
         .db-stats { grid-template-columns: 1fr; }
-        .db-cta { flex-direction: column; gap: 12px; text-align: center; }
       }
-    </style>`;
+    </style>
+
+    <script>
+      // Hero-tile carousel — rotates one slot at a time to a pool entry not
+      // currently visible. Skips entirely if the pool has nothing extra to
+      // show beyond what's already on screen.
+      (function () {
+        const pool = window.WF_HERO_POOL || [];
+        const container = document.getElementById('dbHeroTiles');
+        if (!container || pool.length === 0) return;
+        const slots = Array.from(container.querySelectorAll('.db-stat-link'));
+        if (slots.length === 0) return;
+        if (pool.length <= slots.length) return;  // nothing to cycle to
+
+        // Track which pool index each slot is currently showing.
+        // Initial state: assume first N pool entries match first N slots
+        // (server renders them in the same shuffled order).
+        const current = slots.map((_, i) => i);
+
+        function nextPoolIndex() {
+          // Pick a pool entry not currently visible in any slot
+          const visible = new Set(current);
+          const candidates = pool.map((_, i) => i).filter(i => !visible.has(i));
+          if (candidates.length === 0) return null;
+          return candidates[Math.floor(Math.random() * candidates.length)];
+        }
+
+        function paint(slot, tile) {
+          slot.setAttribute('href', tile.href);
+          slot.querySelector('.db-stat-icon svg').innerHTML = tile.icon;
+          slot.querySelector('.db-stat-label').textContent = tile.label;
+          slot.querySelector('.db-stat-desc').textContent = tile.desc;
+        }
+
+        let rrIdx = 0;
+        setInterval(function () {
+          const slotIdx = rrIdx % slots.length;
+          rrIdx++;
+          const newPoolIdx = nextPoolIndex();
+          if (newPoolIdx == null) return;
+          const slot = slots[slotIdx];
+          slot.classList.add('is-fading');
+          setTimeout(function () {
+            paint(slot, pool[newPoolIdx]);
+            current[slotIdx] = newPoolIdx;
+            slot.classList.remove('is-fading');
+          }, 360);
+        }, 5000);
+      })();
+    </script>`;
 
   return res.send(renderLayout({
     title: 'WorldFlight Planning',

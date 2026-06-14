@@ -253,7 +253,9 @@
       "Bash(claude update:*)",
       "Bash(ls *.mjs scripts/)",
       "Bash(node scripts/backfill-airport-iata.js)",
-      "Bash(node --input-type=module -e ':*)"
+      "Bash(node --input-type=module -e ':*)",
+      "Bash(git pull *)",
+      "Bash(node -e \"JSON.parse\\(require\\('fs'\\).readFileSync\\('.claude/settings.local.json', 'utf8'\\)\\); console.log\\('JSON valid'\\)\")"
     ]
   }
 }
