@@ -214,6 +214,47 @@ model FirEventAccess {
   @@index([cid])
 }
 
+model SectorPlan {
+  id                 Int       @id @default(autoincrement())
+  wf                 String
+  fromIcao           String
+  toIcao             String
+  eventId            Int?
+  depRouteSuggestion String?
+  arrRouteSuggestion String?
+  depFlowType        String?
+  depFlowRate        Int?
+  arrFlowRequest     String?
+  arrFlowRequestedBy Int?
+  arrFlowRequestedAt DateTime?
+  depUpdatedBy       Int?
+  depUpdatedAt       DateTime?
+  arrUpdatedBy       Int?
+  arrUpdatedAt       DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@unique([wf, eventId])
+  @@index([wf])
+}
+
+model SectorPlanIssue {
+  id            Int       @id @default(autoincrement())
+  sectorPlanId  Int
+  wf            String
+  raisedByCid   Int
+  raisedByFir   String?
+  notes         String
+  status        String    @default("OPEN")
+  resolvedByCid Int?
+  resolvedAt    DateTime?
+  createdAt     DateTime  @default(now())
+
+  @@index([sectorPlanId])
+  @@index([wf])
+  @@index([status])
+}
+
 model MasterToken {
   id        Int      @id @default(autoincrement())
   token     String   @unique

@@ -214,6 +214,53 @@ model FirEventAccess {
   @@index([cid])
 }
 
+// Per-WF-sector planning workspace. The dep and arr managers each propose
+// an ATC route and we surface a validation panel comparing the two. Flow
+// type lives here as a proposal — an admin can push it to the live
+// WfScheduleRow separately.
+model SectorPlan {
+  id                 Int       @id @default(autoincrement())
+  wf                 String
+  fromIcao           String
+  toIcao             String
+  eventId            Int?
+  depRouteSuggestion String?
+  arrRouteSuggestion String?
+  depFlowType        String?   // 'NONE' | 'BOOKING_REQUIRED'
+  depFlowRate        Int?      // planes/hr — only meaningful when depFlowType = BOOKING_REQUIRED
+  arrFlowRequest     String?
+  arrFlowRequestedBy Int?
+  arrFlowRequestedAt DateTime?
+  depUpdatedBy       Int?
+  depUpdatedAt       DateTime?
+  arrUpdatedBy       Int?
+  arrUpdatedAt       DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@unique([wf, eventId])
+  @@index([wf])
+}
+
+// Route issues raised by enroute FIR managers once a route is agreed
+// between Dep and Arr. Visible to everyone viewing the sector plan.
+model SectorPlanIssue {
+  id            Int       @id @default(autoincrement())
+  sectorPlanId  Int
+  wf            String
+  raisedByCid   Int
+  raisedByFir   String?
+  notes         String
+  status        String    @default("OPEN")   // 'OPEN' | 'RESOLVED'
+  resolvedByCid Int?
+  resolvedAt    DateTime?
+  createdAt     DateTime  @default(now())
+
+  @@index([sectorPlanId])
+  @@index([wf])
+  @@index([status])
+}
+
 model MasterToken {
   id        Int      @id @default(autoincrement())
   token     String   @unique

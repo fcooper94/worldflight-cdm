@@ -28309,7 +28309,7 @@ app.get('/sector-planning', requirePageEnabled('sector-planning'), async (req, r
       const bg = isDep ? 'rgba(245,158,11,0.14)' : isArr ? 'rgba(16,185,129,0.14)' : 'rgba(96,165,250,0.14)';
       return `<span style="display:inline-flex;align-items:center;padding:2px 7px;background:${bg};color:${color};border:1px solid ${color};border-radius:4px;font-size:10px;font-weight:700;letter-spacing:0.04em;">${r}</span>`;
     }).join('');
-    return `<a href="/airspace/by-sector?wf=${encodeURIComponent(s.wf)}" class="sp-pill" style="display:flex;flex-direction:column;gap:8px;padding:14px 16px;background:rgba(255,255,255,0.025);border:1px solid var(--border);border-radius:10px;text-decoration:none;color:var(--text);min-width:260px;flex:1 1 260px;max-width:340px;transition:border-color .15s, transform .15s;">
+    return `<a href="/sector-planning/${encodeURIComponent(s.wf)}" class="sp-pill" style="display:flex;flex-direction:column;gap:8px;padding:14px 16px;background:rgba(255,255,255,0.025);border:1px solid var(--border);border-radius:10px;text-decoration:none;color:var(--text);min-width:260px;flex:1 1 260px;max-width:340px;transition:border-color .15s, transform .15s;">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
         <span style="font-weight:800;font-size:15px;color:var(--accent);">${s.wf}</span>
         <span style="font-size:11px;color:var(--muted);">${s.date || ''}</span>
@@ -28374,6 +28374,1000 @@ app.get('/sector-planning', requirePageEnabled('sector-planning'), async (req, r
     content,
     layoutClass: 'dashboard-full'
   }));
+});
+
+// ============================================================
+// Sector Planning — per-sector detail page
+// ============================================================
+
+// Find or create the SectorPlan row for this WF. eventId is fixed at
+// creation time so plans from different years stay distinct.
+async function getOrCreateSectorPlan(wf, fromIcao, toIcao) {
+  const eventId = activeEventId || null;
+  let row = await prisma.sectorPlan.findFirst({ where: { wf, eventId } });
+  if (!row) {
+    try {
+      row = await prisma.sectorPlan.create({
+        data: { wf, fromIcao, toIcao, eventId }
+      });
+    } catch (e) {
+      // Race condition fallback
+      row = await prisma.sectorPlan.findFirst({ where: { wf, eventId } });
+    }
+  }
+  return row;
+}
+
+// Whether `cid` can edit a given side of a SectorPlan. Admins always can;
+// otherwise they need FIR Events Access for the airport's geographic FIR.
+async function canEditPlanSide(cid, side, fromIcao, toIcao) {
+  if (!cid) return false;
+  if (isAdminUser(cid)) return true;
+  const owned = await getUserOwnedFirs(cid);
+  if (!owned.size) return false;
+  const icao = side === 'DEP' ? fromIcao : toIcao;
+  const fir = await resolveAirportFir(icao);
+  return !!(fir && owned.has(fir));
+}
+
+// Lightweight whitespace/token normalisation for route comparison.
+// Returns { tokens: [...], normalised: 'A B C' }.
+function normaliseRoute(route) {
+  const raw = String(route || '').trim().toUpperCase().replace(/\s+/g, ' ');
+  const tokens = raw ? raw.split(' ').filter(Boolean) : [];
+  return { tokens, normalised: tokens.join(' ') };
+}
+
+// Compare two route strings → { status: 'EMPTY'|'GREEN'|'AMBER'|'RED',
+// matchPct, depOnly: [tokens], arrOnly: [tokens], shared: [tokens] }.
+function compareRoutes(depRoute, arrRoute) {
+  const d = normaliseRoute(depRoute);
+  const a = normaliseRoute(arrRoute);
+  if (!d.tokens.length && !a.tokens.length) return { status: 'EMPTY', matchPct: 0, depOnly: [], arrOnly: [], shared: [] };
+  if (!d.tokens.length || !a.tokens.length) return { status: 'PARTIAL', matchPct: 0, depOnly: d.tokens, arrOnly: a.tokens, shared: [] };
+  if (d.normalised === a.normalised) return { status: 'GREEN', matchPct: 100, depOnly: [], arrOnly: [], shared: d.tokens };
+  const setD = new Set(d.tokens), setA = new Set(a.tokens);
+  const shared = [...setD].filter(t => setA.has(t));
+  const depOnly = [...setD].filter(t => !setA.has(t));
+  const arrOnly = [...setA].filter(t => !setD.has(t));
+  const matchPct = Math.round((shared.length * 2 * 100) / (setD.size + setA.size));
+  let status;
+  if (matchPct >= 75) status = 'AMBER';
+  else status = 'RED';
+  return { status, matchPct, depOnly, arrOnly, shared };
+}
+
+app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (req, res) => {
+  const user = req.session?.user?.data || null;
+  const cid = Number(user?.cid) || null;
+  const isAdmin = isAdminUser(cid);
+  const wf = String(req.params.wf || '').toUpperCase();
+
+  // Find the schedule row for this WF
+  const sched = (adminSheetCache || []).find(r => r?.number === wf);
+  if (!sched) {
+    return res.status(404).send(renderLayout({
+      title: 'Sector Not Found',
+      user, isAdmin,
+      content: `<section class="card card-full"><h2>Sector ${wf} not found</h2><p style="color:var(--muted);">No row in the active schedule matches this WF number.</p><a href="/sector-planning" class="action-btn primary">Back to Sector Planning</a></section>`,
+      layoutClass: 'dashboard-full'
+    }));
+  }
+
+  const fromIcao = sched.from;
+  const toIcao = sched.to;
+  const plan = await getOrCreateSectorPlan(wf, fromIcao, toIcao);
+  const [canEditDep, canEditArr, depFir, arrFir, allFirs, scenery, docs, issues, ownedFirs] = await Promise.all([
+    canEditPlanSide(cid, 'DEP', fromIcao, toIcao),
+    canEditPlanSide(cid, 'ARR', fromIcao, toIcao),
+    resolveAirportFir(fromIcao),
+    resolveAirportFir(toIcao),
+    buildFirAnalysis().catch(() => []),
+    prisma.airportScenery.findMany({ where: { icao: { in: [fromIcao, toIcao] } }, select: { icao: true } }).catch(() => []),
+    prisma.airportDocument.findMany({ where: { icao: { in: [fromIcao, toIcao] } }, select: { icao: true } }).catch(() => []),
+    prisma.sectorPlanIssue.findMany({ where: { sectorPlanId: plan.id }, orderBy: { createdAt: 'desc' } }).catch(() => []),
+    getUserOwnedFirs(cid)
+  ]);
+
+  // FIR legs transited by this sector (for the map)
+  const sectorFirLegs = [];
+  for (const fir of allFirs) {
+    for (const leg of (fir.legs || [])) {
+      if (leg.wf === wf) {
+        sectorFirLegs.push({
+          fir: fir.fir,
+          division: fir.division || '',
+          staffStart: leg.staffStart, staffEnd: leg.staffEnd,
+          staffStartLocal: leg.staffStartLocal, staffEndLocal: leg.staffEndLocal,
+          staffMins: leg.staffMins,
+          flowType: leg.flowType, depFlow: leg.depFlow,
+          combinedWith: leg.combinedWith || []
+        });
+      }
+    }
+  }
+
+  const routeComparison = compareRoutes(plan.depRouteSuggestion, plan.arrRouteSuggestion);
+
+  // Enroute FIRs = transited FIRs minus dep/arr airport FIRs. A user is an
+  // "enroute manager" for this sector if they own one of those FIRs and
+  // can't already edit either side.
+  const transitedFirIds = sectorFirLegs.map(fl => fl.fir);
+  const enrouteFirIds = transitedFirIds.filter(f => f !== depFir && f !== arrFir);
+  const userEnrouteFirs = enrouteFirIds.filter(f => ownedFirs.has(f));
+  // Show the "raise issue" button only once a route is agreed.
+  const canRaiseIssue = !!cid && userEnrouteFirs.length > 0 && routeComparison.status === 'GREEN';
+
+  // Build name lookup for issue authors
+  const allIssueCids = [...new Set(issues.map(i => i.raisedByCid))];
+  const issueAuthorNames = {};
+  if (allIssueCids.length) {
+    try {
+      const users = await prisma.user.findMany({ where: { cid: { in: allIssueCids } }, select: { cid: true, name: true } });
+      users.forEach(u => { if (u.name) issueAuthorNames[u.cid] = u.name; });
+    } catch (e) {}
+  }
+  const issuesWithNames = issues.map(i => ({
+    id: i.id,
+    raisedByCid: i.raisedByCid,
+    raisedByName: issueAuthorNames[i.raisedByCid] || null,
+    raisedByFir: i.raisedByFir,
+    notes: i.notes,
+    status: i.status,
+    createdAt: i.createdAt
+  }));
+
+  // Checklist auto-detect
+  const checklist = {
+    // "Agreed" = both sides proposed a route and the comparison is GREEN.
+    atcRouteAgreed: routeComparison.status === 'GREEN',
+    scenery: { dep: scenery.some(s => s.icao === fromIcao), arr: scenery.some(s => s.icao === toIcao) },
+    docs:    { dep: docs.some(d => d.icao === fromIcao), arr: docs.some(d => d.icao === toIcao) }
+  };
+
+  // Initial data blob for client side
+  const initialData = {
+    wf, fromIcao, toIcao,
+    date: sched.date_utc || '',
+    depTime: sched.dep_time_utc || '',
+    arrTime: sched.arr_time_utc || '',
+    blockTime: sched.blockTime || '',
+    depFir, arrFir,
+    canEditDep, canEditArr, isAdmin,
+    canRaiseIssue,
+    userEnrouteFirs,
+    depRouteSuggestion: plan.depRouteSuggestion || '',
+    arrRouteSuggestion: plan.arrRouteSuggestion || '',
+    depFlowType: plan.depFlowType || '',
+    depFlowRate: plan.depFlowRate || null,
+    arrFlowRequest: plan.arrFlowRequest || '',
+    sectorFirLegs,
+    routeComparison,
+    checklist,
+    scheduleRoute: sched.atcRoute || '',
+    issues: issuesWithNames
+  };
+
+  const FLOW_LABELS = { 'NONE': 'No Flow', 'BOOKING_REQUIRED': 'Booking Required' };
+  const depWindowUtc = sched.dep_time_utc ? buildTimeWindow(sched.dep_time_utc) : '';
+  const arrWindowUtc = sched.arr_time_utc ? buildTimeWindow(sched.arr_time_utc) : '';
+  // Departure window is fixed at ±60min = 2h via buildTimeWindow().
+  const depWindowHours = 2;
+
+  const content = `
+    <style>
+      #spDetailWrap { display:flex; flex-direction:column; gap:10px; }
+      .sp-detail-grid { display:grid; grid-template-columns: 1fr; gap:10px; }
+      .sp-map-card { position:relative; height:260px; border-radius:10px; border:1px solid var(--border); background:#0b1220; overflow:hidden; padding:0 !important; }
+      .sp-map-card #spMap { width:100%; height:100%; }
+      .sp-sides { display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
+      @media (max-width: 900px) { .sp-sides { grid-template-columns: 1fr; } }
+      .sp-side {
+        background: rgba(255,255,255,0.02); border:1px solid var(--border);
+        border-radius:10px; padding:12px;
+      }
+      .sp-side.dep { border-top:3px solid #f59e0b; }
+      .sp-side.arr { border-top:3px solid #10b981; }
+      .sp-side-head { display:flex;justify-content:space-between;align-items:flex-start;gap:6px;margin-bottom:8px; }
+      .sp-side-head h3 { margin:0; font-size:14px; }
+      .sp-side-head .sp-side-sub { font-size:10px; color:var(--muted); margin-top:1px; }
+      .sp-side-label { font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px; }
+      .sp-textarea {
+        width:100%; box-sizing:border-box; padding:7px 10px;
+        background:#0b1220; border:1px solid var(--border); border-radius:6px;
+        color:var(--text); font-family: monospace; font-size:12px; resize:vertical;
+        min-height: 60px;
+      }
+      .sp-textarea:disabled { opacity:0.6; cursor:not-allowed; }
+      .sp-row { display:flex;gap:8px;align-items:center;flex-wrap:wrap; }
+      .sp-flow-options { display:flex; flex-wrap:wrap; gap:6px; }
+      .sp-flow-option {
+        padding:4px 10px; font-size:11px; font-weight:600;
+        background: rgba(255,255,255,0.04); border:1px solid var(--border);
+        border-radius:6px; cursor:pointer; transition: all .12s;
+      }
+      .sp-flow-option:hover { border-color:#f59e0b; color:#f59e0b; }
+      .sp-flow-option.active { background:#f59e0b; color:#0f172a; border-color:#f59e0b; font-weight:700; }
+      .sp-flow-option:disabled, .sp-flow-option.disabled { opacity:0.6; cursor:not-allowed; }
+      .sp-comparison {
+        margin-top:8px; padding:10px 12px;
+        border-radius:8px; border:1px solid var(--border);
+      }
+      .sp-cmp-empty   { background: rgba(255,255,255,0.02); }
+      .sp-cmp-partial { background: rgba(148,163,184,0.06); border-color: rgba(148,163,184,0.4); }
+      .sp-cmp-green   { background: rgba(74,222,128,0.08); border-color: rgba(74,222,128,0.5); }
+      .sp-cmp-amber   { background: rgba(245,158,11,0.08); border-color: rgba(245,158,11,0.5); }
+      .sp-cmp-red     { background: rgba(239,68,68,0.08);  border-color: rgba(239,68,68,0.5); }
+      .sp-cmp-status { display:inline-flex;align-items:center;gap:6px;font-weight:700;font-size:13px; }
+      .sp-cmp-pill { padding:2px 8px;border-radius:999px;font-size:10px;letter-spacing:0.04em;text-transform:uppercase; }
+      .sp-token { display:inline-block;font-family:monospace;font-size:11px;padding:1px 5px;background:rgba(255,255,255,0.06);border-radius:3px;margin:1px; }
+      .sp-token.dep-only { background:rgba(245,158,11,0.18); color:#fbbf24; }
+      .sp-token.arr-only { background:rgba(16,185,129,0.18); color:#34d399; }
+      .sp-token.shared   { background:rgba(74,222,128,0.16); color:#86efac; }
+      .sp-msg-ok    { color:#4ade80; font-size:12px; }
+      .sp-msg-err   { color:#f87171; font-size:12px; }
+      .sp-checklist { display:grid; grid-template-columns: repeat(auto-fit, minmax(220px,1fr)); gap:8px; }
+      .sp-check {
+        display:flex;align-items:center;gap:8px;padding:8px 10px;
+        background:rgba(255,255,255,0.02); border:1px solid var(--border); border-radius:8px;
+      }
+      .sp-check.done { border-color: rgba(74,222,128,0.5); background: rgba(74,222,128,0.06); }
+      .sp-check-icon {
+        flex:0 0 auto; width:22px; height:22px; border-radius:50%;
+        display:inline-flex;align-items:center;justify-content:center;
+        background: rgba(255,255,255,0.05); color:var(--muted); font-weight:700; font-size:12px;
+      }
+      .sp-check.done .sp-check-icon { background: rgba(74,222,128,0.2); color:#4ade80; }
+      .sp-check.missing-required { border-color: rgba(239,68,68,0.45); background: rgba(239,68,68,0.06); }
+      .sp-check.missing-required .sp-check-icon { background: rgba(239,68,68,0.18); color:#f87171; }
+      .sp-check-body { flex:1; min-width:0; }
+      .sp-check-title { font-size:12px; font-weight:600; display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+      .sp-check-tag {
+        font-size:9px; font-weight:700; letter-spacing:0.05em; text-transform:uppercase;
+        padding:1px 6px; border-radius:4px;
+      }
+      .sp-check-tag.required    { background: rgba(239,68,68,0.16); color:#f87171; border:1px solid rgba(239,68,68,0.35); }
+      .sp-check-tag.recommended { background: rgba(96,165,250,0.14); color:#60a5fa; border:1px solid rgba(96,165,250,0.35); }
+      .sp-check-sub   { font-size:10px; color:var(--muted); margin-top:1px; }
+      .sp-readonly-note { font-size:11px;color:var(--muted);margin-top:8px;font-style:italic; }
+      .sp-details {
+        display:flex; flex-wrap:wrap; gap:10px;
+        margin: 2px 0 10px;
+        padding: 6px 10px;
+        background: rgba(255,255,255,0.025);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+      }
+      .sp-detail-item { display:flex; flex-direction:column; gap:1px; }
+      .sp-detail-label { font-size:9px; font-weight:700; color:var(--muted); letter-spacing:0.05em; text-transform:uppercase; }
+      .sp-detail-value { font-size:12px; font-weight:600; color:var(--text); font-family: monospace; }
+
+      /* Compact card overrides for this page only */
+      .sp-detail-grid + .card,
+      #spDetailWrap .card { padding: 12px 14px !important; }
+
+      .leaflet-tooltip.fir-tooltip {
+        background: rgba(15,23,42,0.92); border: 1px solid rgba(99,102,241,0.5);
+        color: #c7d2fe; font-weight: 700; font-size: 11px; padding: 3px 8px;
+        border-radius: 4px;
+      }
+      .leaflet-tooltip.fir-tooltip::before { display: none; }
+      .sp-map-card path:focus { outline: none; }
+    </style>
+
+    <div id="spDetailWrap">
+
+    <section class="card card-full">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <a href="/sector-planning" style="font-size:11px;color:var(--accent);text-decoration:none;">← Sector Planning</a>
+        <h2 style="margin:0;font-size:17px;">${wf} — ${fromIcao} → ${toIcao}</h2>
+      </div>
+    </section>
+
+    <section class="card card-full sp-map-card">
+      <div id="spMap"></div>
+    </section>
+
+    <section class="card card-full">
+      <div class="sp-side-label">Proposed ATC Routes</div>
+      <div id="spComparisonBox" class="sp-comparison sp-cmp-${routeComparison.status.toLowerCase()}">
+        <!-- comparison rendered client-side -->
+      </div>
+    </section>
+
+    <section class="card card-full">
+      <div class="sp-sides">
+        <div class="sp-side dep" data-side="DEP">
+          <div class="sp-side-head">
+            <div>
+              <h3>Departure (${fromIcao})</h3>
+              <div class="sp-side-sub">${depFir ? 'FIR: ' + depFir : ''}</div>
+            </div>
+            <a href="/icao/${fromIcao}" target="_blank" rel="noopener" class="sp-portal-link" style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;background:rgba(245,158,11,0.12);color:#fbbf24;border:1px solid rgba(245,158,11,0.35);border-radius:6px;font-size:11px;font-weight:600;text-decoration:none;white-space:nowrap;">↗ ${fromIcao} portal</a>
+          </div>
+
+          <div class="sp-details">
+            <div class="sp-detail-item">
+              <span class="sp-detail-label">Date</span>
+              <span class="sp-detail-value">${sched.date_utc || '-'}</span>
+            </div>
+            <div class="sp-detail-item">
+              <span class="sp-detail-label">Departure Window (UTC)</span>
+              <span class="sp-detail-value">${depWindowUtc || '-'}</span>
+            </div>
+            <div class="sp-detail-item">
+              <span class="sp-detail-label">Dep Time</span>
+              <span class="sp-detail-value">${sched.dep_time_utc ? sched.dep_time_utc + 'z' : '-'}</span>
+            </div>
+          </div>
+
+          <div class="sp-side-label">Submit your ATC route suggestion</div>
+          <textarea id="spDepRoute" class="sp-textarea" ${canEditDep ? '' : 'disabled'} placeholder="${canEditDep ? 'Enter the route the departure team proposes…' : 'Read-only — no edit access to this side.'}">${(plan.depRouteSuggestion || '').replace(/</g, '&lt;')}</textarea>
+          <div style="margin-top:6px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+            <span id="spDepRouteMsg" style="font-size:11px;color:var(--muted);"></span>
+            ${canEditDep ? '<button class="action-btn primary" id="spDepRouteSave" style="font-size:12px;padding:5px 12px;">Save</button>' : ''}
+          </div>
+
+          <div class="sp-side-label" style="margin-top:14px;">Flow Type</div>
+          <div class="sp-flow-options" id="spFlowOptions">
+            ${['NONE','BOOKING_REQUIRED'].map(ft => `
+              <button type="button" class="sp-flow-option ${plan.depFlowType === ft ? 'active' : ''} ${canEditDep ? '' : 'disabled'}" data-flow="${ft}" ${canEditDep ? '' : 'disabled'}>${FLOW_LABELS[ft]}</button>
+            `).join('')}
+          </div>
+          <div id="spFlowMsg" style="font-size:11px;color:var(--muted);margin-top:4px;"></div>
+
+          <div id="spFlowRateWrap" style="display:${plan.depFlowType === 'BOOKING_REQUIRED' ? 'block' : 'none'};margin-top:10px;padding:8px 10px;background:rgba(56,189,248,0.06);border:1px solid rgba(56,189,248,0.25);border-radius:6px;">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+              <span style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;">Flow Rate</span>
+              <input type="number" id="spFlowRate" min="0" max="240" step="1" value="${plan.depFlowRate != null ? plan.depFlowRate : ''}" ${canEditDep ? '' : 'disabled'} style="width:64px;padding:3px 6px;background:#0b1220;border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:monospace;font-size:12px;text-align:center;" />
+              <span style="font-size:11px;color:var(--muted);">planes/hr</span>
+              ${canEditDep ? '<button type="button" id="spFlowRateSave" class="action-btn primary" style="font-size:11px;padding:3px 10px;">Save</button>' : ''}
+            </div>
+            <div id="spFlowRateMsg" style="font-size:10px;color:var(--muted);margin-top:4px;"></div>
+            <div id="spFlowRateTotal" style="font-size:12px;color:var(--text);margin-top:6px;padding-top:6px;border-top:1px dashed rgba(255,255,255,0.06);"></div>
+          </div>
+
+          ${!canEditDep ? '<div class="sp-readonly-note">You need FIR Events Access for ' + (depFir || 'this airport') + ' to edit the departure side.</div>' : ''}
+        </div>
+
+        <div class="sp-side arr" data-side="ARR">
+          <div class="sp-side-head">
+            <div>
+              <h3>Arrival (${toIcao})</h3>
+              <div class="sp-side-sub">${arrFir ? 'FIR: ' + arrFir : ''}</div>
+            </div>
+            <a href="/icao/${toIcao}" target="_blank" rel="noopener" class="sp-portal-link" style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;background:rgba(16,185,129,0.12);color:#34d399;border:1px solid rgba(16,185,129,0.35);border-radius:6px;font-size:11px;font-weight:600;text-decoration:none;white-space:nowrap;">↗ ${toIcao} portal</a>
+          </div>
+
+          <div class="sp-details">
+            <div class="sp-detail-item">
+              <span class="sp-detail-label">Date</span>
+              <span class="sp-detail-value">${sched.date_utc || '-'}</span>
+            </div>
+            <div class="sp-detail-item">
+              <span class="sp-detail-label">Arrival Window (UTC)</span>
+              <span class="sp-detail-value">${arrWindowUtc || '-'}</span>
+            </div>
+            <div class="sp-detail-item">
+              <span class="sp-detail-label">Arr Time</span>
+              <span class="sp-detail-value">${sched.arr_time_utc ? sched.arr_time_utc + 'z' : '-'}</span>
+            </div>
+          </div>
+
+          <div class="sp-side-label">Submit your ATC route suggestion</div>
+          <textarea id="spArrRoute" class="sp-textarea" ${canEditArr ? '' : 'disabled'} placeholder="${canEditArr ? 'Enter the route the arrival team proposes…' : 'Read-only — no edit access to this side.'}">${(plan.arrRouteSuggestion || '').replace(/</g, '&lt;')}</textarea>
+          <div style="margin-top:6px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+            <span id="spArrRouteMsg" style="font-size:11px;color:var(--muted);"></span>
+            ${canEditArr ? '<button class="action-btn primary" id="spArrRouteSave" style="font-size:12px;padding:5px 12px;">Save</button>' : ''}
+          </div>
+
+          <div class="sp-side-label" style="margin-top:18px;">Request Flow from Departure</div>
+          <textarea id="spArrFlowReq" class="sp-textarea" ${canEditArr ? '' : 'disabled'} placeholder="${canEditArr ? 'Describe any flow request for ' + fromIcao + ' to impose…' : ''}">${(plan.arrFlowRequest || '').replace(/</g, '&lt;')}</textarea>
+          <div style="margin-top:6px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+            <span id="spArrFlowMsg" style="font-size:11px;color:var(--muted);"></span>
+            ${canEditArr ? '<button class="action-btn primary" id="spArrFlowSave" style="font-size:12px;padding:5px 12px;">Save</button>' : ''}
+          </div>
+          ${!canEditArr ? '<div class="sp-readonly-note">You need FIR Events Access for ' + (arrFir || 'this airport') + ' to edit the arrival side.</div>' : ''}
+        </div>
+      </div>
+    </section>
+
+    <section id="spIssuesSection" class="card card-full">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:8px;">
+        <div>
+          <h3 style="margin:0;font-size:14px;">Route Issues</h3>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px;">Enroute FIR managers can flag issues with the agreed route here.</div>
+        </div>
+        <button type="button" id="spRaiseIssueBtn" class="action-btn" style="display:none;font-size:12px;padding:6px 14px;background:rgba(239,68,68,0.15);color:#f87171;border:1px solid rgba(239,68,68,0.4);">⚠ We have an issue with this route</button>
+      </div>
+
+      <div id="spIssueFormWrap" style="display:none;margin-bottom:12px;padding:12px;background:rgba(239,68,68,0.04);border:1px solid rgba(239,68,68,0.3);border-radius:8px;">
+        <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px;">Raise an issue</div>
+        <textarea id="spIssueNotes" class="sp-textarea" placeholder="Describe the issue with the agreed route — e.g. conflict with a SID, restricted area, capacity concern…"></textarea>
+        <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:8px;">
+          <button type="button" id="spIssueCancel" class="action-btn" style="font-size:12px;padding:5px 12px;background:rgba(255,255,255,0.04);color:var(--muted);border:1px solid var(--border);">Cancel</button>
+          <button type="button" id="spIssueSubmit" class="action-btn primary" style="font-size:12px;padding:5px 12px;">Submit Issue</button>
+        </div>
+        <div id="spIssueMsg" style="font-size:11px;margin-top:6px;"></div>
+      </div>
+
+      <div id="spIssuesList"><!-- rendered client-side --></div>
+    </section>
+
+    <section class="card card-full">
+      <h3 style="margin:0 0 8px;font-size:14px;">Sector Readiness Checklist</h3>
+      <div class="sp-checklist">
+        <div class="sp-check ${checklist.atcRouteAgreed ? 'done' : 'missing-required'}" id="spChkAtcRoute">
+          <div class="sp-check-icon">${checklist.atcRouteAgreed ? '✓' : '—'}</div>
+          <div class="sp-check-body">
+            <div class="sp-check-title">ATC Route Agreed <span class="sp-check-tag required">Required</span></div>
+            <div class="sp-check-sub">${checklist.atcRouteAgreed ? 'Dep and Arr have proposed the same route.' : 'Routes don’t match yet — coordinate with the other side.'}</div>
+          </div>
+        </div>
+        <div class="sp-check ${(checklist.scenery.dep && checklist.scenery.arr) ? 'done' : 'missing-required'}">
+          <div class="sp-check-icon">${(checklist.scenery.dep && checklist.scenery.arr) ? '✓' : '—'}</div>
+          <div class="sp-check-body">
+            <div class="sp-check-title">Scenery on Portal <span class="sp-check-tag required">Required</span></div>
+            <div class="sp-check-sub"><a href="/icao/${fromIcao}#scenery" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline dotted;">${fromIcao}</a>: ${checklist.scenery.dep ? '✓' : '—'} · <a href="/icao/${toIcao}#scenery" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline dotted;">${toIcao}</a>: ${checklist.scenery.arr ? '✓' : '—'}</div>
+          </div>
+        </div>
+        <div class="sp-check ${(checklist.docs.dep || checklist.docs.arr) ? 'done' : ''}">
+          <div class="sp-check-icon">${(checklist.docs.dep || checklist.docs.arr) ? '✓' : '—'}</div>
+          <div class="sp-check-body">
+            <div class="sp-check-title">Pilot Brief / Documents <span class="sp-check-tag recommended">Recommended</span></div>
+            <div class="sp-check-sub"><a href="/icao/${fromIcao}#documents" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline dotted;">${fromIcao}</a>: ${checklist.docs.dep ? '✓' : '—'} · <a href="/icao/${toIcao}#documents" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline dotted;">${toIcao}</a>: ${checklist.docs.arr ? '✓' : '—'}</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    </div><!-- /spDetailWrap -->
+
+    <script>
+      window.SP = ${JSON.stringify(initialData)};
+
+      function spRenderComparison() {
+        var box = document.getElementById('spComparisonBox');
+        var c = window.SP.routeComparison;
+        var cls = 'sp-comparison sp-cmp-' + c.status.toLowerCase();
+        box.className = cls;
+        var statusPill, statusText;
+        if (c.status === 'EMPTY') {
+          statusPill = '<span class="sp-cmp-pill" style="background:rgba(148,163,184,0.18);color:#cbd5e1;">No routes</span>';
+          statusText = 'No proposed routes yet from either side.';
+        } else if (c.status === 'PARTIAL') {
+          statusPill = '<span class="sp-cmp-pill" style="background:rgba(148,163,184,0.18);color:#cbd5e1;">Awaiting</span>';
+          statusText = 'Only one side has proposed a route so far.';
+        } else if (c.status === 'GREEN') {
+          statusPill = '<span class="sp-cmp-pill" style="background:rgba(74,222,128,0.25);color:#4ade80;">Agreed</span>';
+          statusText = 'Dep and Arr have proposed the same route.';
+        } else if (c.status === 'AMBER') {
+          statusPill = '<span class="sp-cmp-pill" style="background:rgba(245,158,11,0.25);color:#fbbf24;">Differs (' + c.matchPct + '% match)</span>';
+          statusText = 'Routes agree on most waypoints. See differences below.';
+        } else {
+          statusPill = '<span class="sp-cmp-pill" style="background:rgba(239,68,68,0.25);color:#f87171;">Conflict (' + c.matchPct + '% match)</span>';
+          statusText = 'Routes disagree on most of the path. A coordination call may be needed.';
+        }
+
+        function tokens(arr, cls) { return arr.map(function(t) { return '<span class="sp-token ' + cls + '">' + t + '</span>'; }).join(''); }
+
+        // Render a route as a plain space-separated string with each waypoint
+        // coloured: green if shared with the other side, otherwise the side's
+        // own colour so unique waypoints stand out. Reads like a real route.
+        function renderRoutePlain(routeStr, sharedSet, ownColor) {
+          var raw = String(routeStr || '').trim().toUpperCase().replace(/\s+/g, ' ');
+          if (!raw) return '<span style="color:var(--muted);font-style:italic;">No route proposed yet.</span>';
+          var parts = raw.split(' ').filter(Boolean);
+          return parts.map(function(t) {
+            var isShared = sharedSet.has(t);
+            var color = isShared ? '#4ade80' : ownColor;
+            var weight = isShared ? 600 : 700;
+            return '<span style="color:' + color + ';font-weight:' + weight + ';">' + t + '</span>';
+          }).join(' ');
+        }
+
+        var sharedSet = new Set(c.shared || []);
+
+        var depRouteHtml = renderRoutePlain(window.SP.depRouteSuggestion, sharedSet, '#fbbf24');
+        var arrRouteHtml = renderRoutePlain(window.SP.arrRouteSuggestion, sharedSet, '#34d399');
+
+        var stackedHtml = ''
+          + '<div style="display:flex;flex-direction:column;gap:10px;margin-top:12px;">'
+          + '  <div>'
+          + '    <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">'
+          + '      <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#f59e0b;"></span>'
+          + '      <span style="font-size:11px;font-weight:700;color:#fbbf24;letter-spacing:0.04em;text-transform:uppercase;">Dep route</span>'
+          + '    </div>'
+          + '    <div style="font-family:monospace;font-size:13px;line-height:1.7;padding:8px 10px;background:rgba(0,0,0,0.22);border-radius:6px;word-break:break-word;">' + depRouteHtml + '</div>'
+          + '  </div>'
+          + '  <div>'
+          + '    <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">'
+          + '      <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#10b981;"></span>'
+          + '      <span style="font-size:11px;font-weight:700;color:#34d399;letter-spacing:0.04em;text-transform:uppercase;">Arr route</span>'
+          + '    </div>'
+          + '    <div style="font-family:monospace;font-size:13px;line-height:1.7;padding:8px 10px;background:rgba(0,0,0,0.22);border-radius:6px;word-break:break-word;">' + arrRouteHtml + '</div>'
+          + '  </div>'
+          + '</div>';
+
+        // Validation block: explicit unique-token lists below the routes
+        var validationHtml = '';
+        if (c.status === 'AMBER' || c.status === 'RED') {
+          validationHtml = ''
+            + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px;padding-top:12px;border-top:1px dashed rgba(255,255,255,0.08);font-size:12px;">'
+            + '<div><div style="color:var(--muted);font-size:11px;margin-bottom:4px;">Only on Dep route</div>' + (c.depOnly.length ? tokens(c.depOnly, 'dep-only') : '<span style="color:var(--muted);">—</span>') + '</div>'
+            + '<div><div style="color:var(--muted);font-size:11px;margin-bottom:4px;">Only on Arr route</div>' + (c.arrOnly.length ? tokens(c.arrOnly, 'arr-only') : '<span style="color:var(--muted);">—</span>') + '</div>'
+            + '</div>';
+        }
+
+        box.innerHTML = ''
+          + '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">'
+          + '<div class="sp-cmp-status">' + statusPill + '</div>'
+          + '<div style="font-size:12px;color:var(--muted);">' + statusText + '</div>'
+          + '</div>'
+          + stackedHtml
+          + validationHtml;
+
+        // Keep the ATC Route Agreed checklist tile in sync without a reload.
+        var chk = document.getElementById('spChkAtcRoute');
+        if (chk) {
+          var agreed = c.status === 'GREEN';
+          chk.classList.toggle('done', agreed);
+          chk.classList.toggle('missing-required', !agreed);
+          chk.querySelector('.sp-check-icon').textContent = agreed ? '✓' : '—';
+          chk.querySelector('.sp-check-sub').textContent = agreed
+            ? 'Dep and Arr have proposed the same route.'
+            : 'Routes don’t match yet — coordinate with the other side.';
+        }
+        // Enroute issue button only appears once routes are GREEN.
+        if (typeof spRefreshIssueButton === 'function') spRefreshIssueButton();
+      }
+
+      function spPostJson(url, body) {
+        return fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify(body)
+        }).then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }); });
+      }
+
+      function spSetMsg(el, text, ok) {
+        el.textContent = text;
+        el.style.color = ok ? '#4ade80' : '#f87171';
+        setTimeout(function() { el.textContent = ''; el.style.color = ''; }, 3000);
+      }
+
+      // Wire dep route save
+      var depBtn = document.getElementById('spDepRouteSave');
+      if (depBtn) depBtn.addEventListener('click', async function() {
+        var val = document.getElementById('spDepRoute').value;
+        var msg = document.getElementById('spDepRouteMsg');
+        var res = await spPostJson('/api/sector-plan/' + encodeURIComponent(window.SP.wf) + '/route', { side: 'DEP', route: val });
+        if (res.ok) {
+          window.SP.depRouteSuggestion = val;
+          window.SP.routeComparison = res.data.routeComparison;
+          spRenderComparison();
+          spSetMsg(msg, 'Saved', true);
+        } else spSetMsg(msg, res.data.error || 'Failed', false);
+      });
+
+      var arrBtn = document.getElementById('spArrRouteSave');
+      if (arrBtn) arrBtn.addEventListener('click', async function() {
+        var val = document.getElementById('spArrRoute').value;
+        var msg = document.getElementById('spArrRouteMsg');
+        var res = await spPostJson('/api/sector-plan/' + encodeURIComponent(window.SP.wf) + '/route', { side: 'ARR', route: val });
+        if (res.ok) {
+          window.SP.arrRouteSuggestion = val;
+          window.SP.routeComparison = res.data.routeComparison;
+          spRenderComparison();
+          spSetMsg(msg, 'Saved', true);
+        } else spSetMsg(msg, res.data.error || 'Failed', false);
+      });
+
+      // Flow type
+      // Departure window is buildTimeWindow(±60min) = 2h.
+      var DEP_WINDOW_HOURS = 2;
+
+      function spRenderFlowRateTotal() {
+        var totalEl = document.getElementById('spFlowRateTotal');
+        if (!totalEl) return;
+        var rate = window.SP.depFlowRate;
+        if (rate == null || rate === '' || !isFinite(rate)) {
+          totalEl.innerHTML = '<span style="color:var(--muted);">Set a rate to see the total expected bookings.</span>';
+          return;
+        }
+        var n = Math.round(Number(rate) * DEP_WINDOW_HOURS);
+        totalEl.innerHTML = ''
+          + '<span style="color:var(--muted);">Total expected bookings during ' + DEP_WINDOW_HOURS + 'h departure window:</span> '
+          + '<span style="font-weight:700;color:var(--accent);">' + n + '</span>'
+          + ' <span style="color:var(--muted);font-size:11px;">(' + rate + ' × ' + DEP_WINDOW_HOURS + 'h)</span>';
+      }
+
+      function spRefreshFlowRateWrap(flowType) {
+        var wrap = document.getElementById('spFlowRateWrap');
+        if (!wrap) return;
+        wrap.style.display = flowType === 'BOOKING_REQUIRED' ? 'block' : 'none';
+      }
+
+      var flowOpts = document.querySelectorAll('#spFlowOptions .sp-flow-option');
+      flowOpts.forEach(function(btn) {
+        btn.addEventListener('click', async function() {
+          if (btn.classList.contains('disabled')) return;
+          var ft = btn.dataset.flow;
+          var msg = document.getElementById('spFlowMsg');
+          var res = await spPostJson('/api/sector-plan/' + encodeURIComponent(window.SP.wf) + '/flow-type', { flowType: ft });
+          if (res.ok) {
+            flowOpts.forEach(function(b) { b.classList.remove('active'); });
+            btn.classList.add('active');
+            window.SP.depFlowType = ft;
+            // When server clears the rate (on NONE), reflect it in the UI too.
+            if (ft === 'NONE') {
+              window.SP.depFlowRate = null;
+              var rateInput = document.getElementById('spFlowRate');
+              if (rateInput) rateInput.value = '';
+            }
+            spRefreshFlowRateWrap(ft);
+            spRenderFlowRateTotal();
+            spSetMsg(msg, 'Flow type set: ' + btn.textContent, true);
+          } else spSetMsg(msg, res.data.error || 'Failed', false);
+        });
+      });
+
+      var rateSave = document.getElementById('spFlowRateSave');
+      if (rateSave) rateSave.addEventListener('click', async function() {
+        var input = document.getElementById('spFlowRate');
+        var rawVal = input.value.trim();
+        var msg = document.getElementById('spFlowRateMsg');
+        var val = rawVal === '' ? null : Number(rawVal);
+        if (val !== null && (!isFinite(val) || val < 0 || val > 240)) {
+          msg.textContent = 'Rate must be 0–240 planes/hr.'; msg.style.color = '#f87171'; return;
+        }
+        var res = await spPostJson('/api/sector-plan/' + encodeURIComponent(window.SP.wf) + '/flow-rate', { flowRate: val });
+        if (res.ok) {
+          window.SP.depFlowRate = val;
+          spRenderFlowRateTotal();
+          spSetMsg(msg, val == null ? 'Cleared' : 'Saved', true);
+        } else spSetMsg(msg, res.data.error || 'Failed', false);
+      });
+
+      spRenderFlowRateTotal();
+
+      // Arr flow request
+      var arrFlowBtn = document.getElementById('spArrFlowSave');
+      if (arrFlowBtn) arrFlowBtn.addEventListener('click', async function() {
+        var val = document.getElementById('spArrFlowReq').value;
+        var msg = document.getElementById('spArrFlowMsg');
+        var res = await spPostJson('/api/sector-plan/' + encodeURIComponent(window.SP.wf) + '/flow-request', { request: val });
+        if (res.ok) spSetMsg(msg, 'Saved', true);
+        else spSetMsg(msg, res.data.error || 'Failed', false);
+      });
+
+      spRenderComparison();
+
+      // ===== ROUTE ISSUES =====
+      function spRenderIssues() {
+        var list = document.getElementById('spIssuesList');
+        var arr = window.SP.issues || [];
+        if (!arr.length) {
+          list.innerHTML = '<div style="padding:14px 12px;text-align:center;color:var(--muted);font-size:12px;border:1px dashed var(--border);border-radius:8px;">No issues raised on this route.</div>';
+          return;
+        }
+        list.innerHTML = arr.map(function(it) {
+          var when = new Date(it.createdAt).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+          var author = it.raisedByName ? it.raisedByName + ' (' + it.raisedByCid + ')' : ('CID ' + it.raisedByCid);
+          var firTag = it.raisedByFir
+            ? '<span style="display:inline-flex;align-items:center;padding:1px 7px;background:rgba(96,165,250,0.14);color:#60a5fa;border:1px solid rgba(96,165,250,0.4);border-radius:4px;font-size:10px;font-weight:700;letter-spacing:0.04em;">'+ it.raisedByFir +'</span>'
+            : '';
+          var statusTag = it.status === 'RESOLVED'
+            ? '<span style="display:inline-flex;align-items:center;padding:1px 7px;background:rgba(74,222,128,0.16);color:#4ade80;border:1px solid rgba(74,222,128,0.4);border-radius:4px;font-size:10px;font-weight:700;letter-spacing:0.04em;">RESOLVED</span>'
+            : '<span style="display:inline-flex;align-items:center;padding:1px 7px;background:rgba(239,68,68,0.16);color:#f87171;border:1px solid rgba(239,68,68,0.4);border-radius:4px;font-size:10px;font-weight:700;letter-spacing:0.04em;">OPEN</span>';
+          return '<div style="padding:12px 14px;margin-bottom:8px;background:rgba(255,255,255,0.02);border:1px solid var(--border);border-left:3px solid ' + (it.status === 'RESOLVED' ? '#4ade80' : '#f87171') + ';border-radius:8px;">'
+            + '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px;">'
+            + '  <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">' + firTag + statusTag + '<span style="font-size:12px;font-weight:600;">' + author + '</span></div>'
+            + '  <span style="font-size:11px;color:var(--muted);">' + when + '</span>'
+            + '</div>'
+            + '<div style="font-size:13px;color:var(--text);white-space:pre-wrap;word-break:break-word;">' + (it.notes || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</div>'
+            + '</div>';
+        }).join('');
+      }
+
+      function spRefreshIssueButton() {
+        var btn = document.getElementById('spRaiseIssueBtn');
+        if (!btn) return;
+        var canRaise = window.SP.canRaiseIssue && window.SP.routeComparison.status === 'GREEN';
+        btn.style.display = canRaise ? '' : 'none';
+      }
+
+      var raiseBtn = document.getElementById('spRaiseIssueBtn');
+      var formWrap = document.getElementById('spIssueFormWrap');
+      var cancelBtn = document.getElementById('spIssueCancel');
+      var submitBtn = document.getElementById('spIssueSubmit');
+      var notesEl = document.getElementById('spIssueNotes');
+      var issueMsg = document.getElementById('spIssueMsg');
+
+      if (raiseBtn) raiseBtn.addEventListener('click', function() {
+        formWrap.style.display = '';
+        notesEl.focus();
+      });
+      if (cancelBtn) cancelBtn.addEventListener('click', function() {
+        formWrap.style.display = 'none';
+        notesEl.value = '';
+        issueMsg.textContent = '';
+      });
+      if (submitBtn) submitBtn.addEventListener('click', async function() {
+        var notes = notesEl.value.trim();
+        if (!notes) { issueMsg.textContent = 'Please describe the issue.'; issueMsg.style.color = '#f87171'; return; }
+        submitBtn.disabled = true;
+        var res = await spPostJson('/api/sector-plan/' + encodeURIComponent(window.SP.wf) + '/issue', { notes: notes });
+        submitBtn.disabled = false;
+        if (res.ok) {
+          window.SP.issues = res.data.issues || window.SP.issues;
+          notesEl.value = '';
+          formWrap.style.display = 'none';
+          issueMsg.textContent = '';
+          spRenderIssues();
+        } else {
+          issueMsg.textContent = res.data.error || 'Failed to submit issue';
+          issueMsg.style.color = '#f87171';
+        }
+      });
+
+      spRefreshIssueButton();
+      spRenderIssues();
+
+      // ===== MAP — same colour-coded transit FIR style as by-sector =====
+      // Leaflet loads with the defer attribute, so wait for DOMContentLoaded
+      // before touching L. If we are already past that point, run immediately.
+      function spInitMap() {
+        var palette = ['#f59e0b','#ef4444','#22c55e','#3b82f6','#a855f7','#ec4899','#14b8a6','#f97316','#06b6d4','#eab308','#8b5cf6','#10b981','#e11d48','#0ea5e9'];
+        var firLegs = window.SP.sectorFirLegs;
+        var colorByFir = {};
+        firLegs.forEach(function(fl, i) { if (!colorByFir[fl.fir]) colorByFir[fl.fir] = palette[Object.keys(colorByFir).length % palette.length]; });
+
+        var map = L.map('spMap', { zoomControl: true, worldCopyJump: true }).setView([30, 0], 3);
+        wfAddTileLayer(map, { maxZoom: 10 });
+
+        function hexToRgba(hex, alpha) {
+          var h = hex.replace('#',''); if (h.length === 3) h = h.split('').map(function(c){return c+c;}).join('');
+          return 'rgba(' + parseInt(h.slice(0,2),16) + ',' + parseInt(h.slice(2,4),16) + ',' + parseInt(h.slice(4,6),16) + ',' + alpha + ')';
+        }
+
+        function displayFir(c) { return /^K[A-Z]{3}$/.test(c) ? c.slice(1) : c; }
+
+        var transitedFirIds = firLegs.map(function(fl) { return fl.fir; });
+
+        fetch('/api/fir-merged.geojson')
+          .then(function(r) { return r.json(); })
+          .then(function(geo) {
+            var firFeatures = {};
+            var layers = [];
+            geo.features.forEach(function(f) {
+              if (!f.properties || transitedFirIds.indexOf(f.properties.id) === -1) return;
+              firFeatures[f.properties.id] = f;
+              var color = colorByFir[f.properties.id] || '#6366f1';
+              var layer = L.geoJSON(f, { style: { color: color, weight: 2, fillColor: hexToRgba(color, 0.18), fillOpacity: 0.32 } }).addTo(map);
+              layer.bindTooltip(displayFir(f.properties.id), { sticky: true, className: 'fir-tooltip' });
+              layers.push(layer);
+            });
+
+            function ptInFir(lat, lon) {
+              for (var fid in firFeatures) {
+                var geom = firFeatures[fid].geometry;
+                var polys = geom.type === 'MultiPolygon' ? geom.coordinates : geom.type === 'Polygon' ? [geom.coordinates] : [];
+                for (var p = 0; p < polys.length; p++) {
+                  var ring = polys[p][0]; if (!ring) continue;
+                  var inside = false;
+                  for (var i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+                    var yi = ring[i][0], xi = ring[i][1];
+                    var yj = ring[j][0], xj = ring[j][1];
+                    if (((yi > lon) !== (yj > lon)) && (lat < (xj - xi) * (lon - yi) / (yj - yi) + xi)) inside = !inside;
+                  }
+                  if (inside) return true;
+                }
+              }
+              return false;
+            }
+            function cross(a, b, steps) {
+              for (var s = 0; s < (steps || 12); s++) {
+                var m = [(a[0]+b[0])/2, (a[1]+b[1])/2];
+                if (ptInFir(m[0], m[1])) a = m; else b = m;
+              }
+              return [(a[0]+b[0])/2, (a[1]+b[1])/2];
+            }
+
+            fetch('/api/resolve-route?from=' + window.SP.fromIcao + '&to=' + window.SP.toIcao + '&route=' + encodeURIComponent(window.SP.scheduleRoute || '') + '&depTime=&blockTime=')
+              .then(function(r) { return r.json(); })
+              .then(function(rd) {
+                if (!rd.points || rd.points.length < 2) {
+                  if (layers.length) map.fitBounds(L.featureGroup(layers).getBounds(), { padding: [30, 30], maxZoom: 7 });
+                  return;
+                }
+                var pts = rd.points.map(function(p) { return { lat: p.lat, lon: p.lon, inFir: ptInFir(p.lat, p.lon) }; });
+                var all = pts.map(function(p) { return [p.lat, p.lon]; });
+                var dim = L.polyline(all, { color: '#ffffff', weight: 2, opacity: 0.5 }).addTo(map);
+                if (L.polylineDecorator) {
+                  L.polylineDecorator(dim, { patterns: [{ offset: 30, endOffset: 30, repeat: '80px', symbol: L.Symbol.arrowHead({ pixelSize: 9, polygon: false, pathOptions: { color: '#ffffff', weight: 2, opacity: 0.85 } }) }] }).addTo(map);
+                }
+                L.circleMarker(all[0], { radius: 5, color: '#0f172a', fillColor: '#ffffff', fillOpacity: 1, weight: 2 }).bindTooltip(window.SP.fromIcao + ' (Dep)').addTo(map);
+                L.circleMarker(all[all.length-1], { radius: 5, color: '#0f172a', fillColor: '#ffffff', fillOpacity: 1, weight: 2 }).bindTooltip(window.SP.toIcao + ' (Arr)').addTo(map);
+                for (var i = 0; i < pts.length - 1; i++) {
+                  var a = pts[i], b = pts[i+1], seg = null;
+                  if (a.inFir && b.inFir) seg = [[a.lat,a.lon],[b.lat,b.lon]];
+                  else if (a.inFir && !b.inFir) { var c1 = cross([a.lat,a.lon],[b.lat,b.lon]); seg = [[a.lat,a.lon], c1]; }
+                  else if (!a.inFir && b.inFir) { var c2 = cross([b.lat,b.lon],[a.lat,a.lon]); seg = [c2, [b.lat,b.lon]]; }
+                  if (seg) L.polyline(seg, { color: '#ffffff', weight: 3, opacity: 1 }).addTo(map);
+                }
+                map.fitBounds(all, { padding: [30, 30], maxZoom: 6 });
+              })
+              .catch(function() { if (layers.length) map.fitBounds(L.featureGroup(layers).getBounds(), { padding: [30, 30], maxZoom: 7 }); });
+          });
+      }
+
+      if (typeof L !== 'undefined') spInitMap();
+      else if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', spInitMap);
+      else window.addEventListener('load', spInitMap);
+    </script>
+  `;
+
+  res.send(renderLayout({
+    title: wf + ' — Sector Planning',
+    user,
+    isAdmin,
+    content,
+    layoutClass: 'dashboard-full'
+  }));
+});
+
+app.post('/api/sector-plan/:wf/route', requireLogin, async (req, res) => {
+  try {
+    const cid = Number(req.session?.user?.data?.cid);
+    const wf = String(req.params.wf || '').toUpperCase();
+    const side = String(req.body?.side || '').toUpperCase();
+    const route = String(req.body?.route || '').trim();
+    if (side !== 'DEP' && side !== 'ARR') return res.status(400).json({ error: 'side must be DEP or ARR' });
+    const sched = (adminSheetCache || []).find(r => r?.number === wf);
+    if (!sched) return res.status(404).json({ error: 'WF not found' });
+    if (!(await canEditPlanSide(cid, side, sched.from, sched.to))) return res.status(403).json({ error: 'No edit access to this side' });
+
+    const plan = await getOrCreateSectorPlan(wf, sched.from, sched.to);
+    const data = side === 'DEP'
+      ? { depRouteSuggestion: route || null, depUpdatedBy: cid, depUpdatedAt: new Date() }
+      : { arrRouteSuggestion: route || null, arrUpdatedBy: cid, arrUpdatedAt: new Date() };
+    const updated = await prisma.sectorPlan.update({ where: { id: plan.id }, data });
+    const cmp = compareRoutes(updated.depRouteSuggestion, updated.arrRouteSuggestion);
+    res.json({ success: true, routeComparison: cmp });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/sector-plan/:wf/flow-type', requireLogin, async (req, res) => {
+  try {
+    const cid = Number(req.session?.user?.data?.cid);
+    const wf = String(req.params.wf || '').toUpperCase();
+    const ft = String(req.body?.flowType || '').toUpperCase();
+    if (!['NONE','BOOKING_REQUIRED'].includes(ft)) return res.status(400).json({ error: 'invalid flowType' });
+    const sched = (adminSheetCache || []).find(r => r?.number === wf);
+    if (!sched) return res.status(404).json({ error: 'WF not found' });
+    if (!(await canEditPlanSide(cid, 'DEP', sched.from, sched.to))) return res.status(403).json({ error: 'No edit access' });
+    const plan = await getOrCreateSectorPlan(wf, sched.from, sched.to);
+    // When flipping to NONE, also clear the rate so it doesn't read as a stale config.
+    const data = ft === 'NONE'
+      ? { depFlowType: 'NONE', depFlowRate: null, depUpdatedBy: cid, depUpdatedAt: new Date() }
+      : { depFlowType: ft, depUpdatedBy: cid, depUpdatedAt: new Date() };
+    await prisma.sectorPlan.update({ where: { id: plan.id }, data });
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/sector-plan/:wf/flow-rate', requireLogin, async (req, res) => {
+  try {
+    const cid = Number(req.session?.user?.data?.cid);
+    const wf = String(req.params.wf || '').toUpperCase();
+    const raw = req.body?.flowRate;
+    const rate = raw === null || raw === '' ? null : Number(raw);
+    if (rate !== null && (!Number.isFinite(rate) || rate < 0 || rate > 240)) return res.status(400).json({ error: 'flowRate must be 0–240 planes/hr (or null to clear)' });
+    const sched = (adminSheetCache || []).find(r => r?.number === wf);
+    if (!sched) return res.status(404).json({ error: 'WF not found' });
+    if (!(await canEditPlanSide(cid, 'DEP', sched.from, sched.to))) return res.status(403).json({ error: 'No edit access' });
+    const plan = await getOrCreateSectorPlan(wf, sched.from, sched.to);
+    await prisma.sectorPlan.update({
+      where: { id: plan.id },
+      data: { depFlowRate: rate === null ? null : Math.round(rate), depUpdatedBy: cid, depUpdatedAt: new Date() }
+    });
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Enroute FIR manager raises an issue with the agreed route. Only allowed
+// when the user owns one of the transited (non-dep/arr) FIRs AND the
+// dep/arr routes are GREEN-agreed. Issues are public — everyone viewing
+// the sector plan sees them.
+app.post('/api/sector-plan/:wf/issue', requireLogin, async (req, res) => {
+  try {
+    const cid = Number(req.session?.user?.data?.cid);
+    if (!cid) return res.status(401).json({ error: 'not signed in' });
+    const wf = String(req.params.wf || '').toUpperCase();
+    const notes = String(req.body?.notes || '').trim();
+    if (!notes) return res.status(400).json({ error: 'notes required' });
+    if (notes.length > 4000) return res.status(400).json({ error: 'notes too long (max 4000 chars)' });
+
+    const sched = (adminSheetCache || []).find(r => r?.number === wf);
+    if (!sched) return res.status(404).json({ error: 'WF not found' });
+
+    const plan = await getOrCreateSectorPlan(wf, sched.from, sched.to);
+    const routeComparison = compareRoutes(plan.depRouteSuggestion, plan.arrRouteSuggestion);
+    if (routeComparison.status !== 'GREEN') return res.status(400).json({ error: 'Routes are not agreed yet — issues can only be raised against an agreed route.' });
+
+    // Determine the enroute FIR this user owns for this sector
+    const [allFirs, depFir, arrFir, owned] = await Promise.all([
+      buildFirAnalysis().catch(() => []),
+      resolveAirportFir(sched.from),
+      resolveAirportFir(sched.to),
+      getUserOwnedFirs(cid)
+    ]);
+    const transitedFirIds = [];
+    for (const fir of allFirs) {
+      if (fir.legs && fir.legs.some(l => l.wf === wf)) transitedFirIds.push(fir.fir);
+    }
+    const enrouteFirIds = transitedFirIds.filter(f => f !== depFir && f !== arrFir);
+    const userEnrouteFirs = enrouteFirIds.filter(f => owned.has(f));
+
+    // Admins can raise without an FIR. Non-admins need at least one enroute FIR.
+    if (!isAdminUser(cid) && userEnrouteFirs.length === 0) return res.status(403).json({ error: 'You must own a transited FIR to raise an issue.' });
+    const raisedByFir = userEnrouteFirs[0] || null;
+
+    await prisma.sectorPlanIssue.create({
+      data: { sectorPlanId: plan.id, wf, raisedByCid: cid, raisedByFir, notes, status: 'OPEN' }
+    });
+
+    // Return the updated issues list with author names
+    const issues = await prisma.sectorPlanIssue.findMany({
+      where: { sectorPlanId: plan.id },
+      orderBy: { createdAt: 'desc' }
+    });
+    const cids = [...new Set(issues.map(i => i.raisedByCid))];
+    const nameMap = {};
+    if (cids.length) {
+      const users = await prisma.user.findMany({ where: { cid: { in: cids } }, select: { cid: true, name: true } }).catch(() => []);
+      users.forEach(u => { if (u.name) nameMap[u.cid] = u.name; });
+    }
+    const enriched = issues.map(i => ({
+      id: i.id,
+      raisedByCid: i.raisedByCid,
+      raisedByName: nameMap[i.raisedByCid] || null,
+      raisedByFir: i.raisedByFir,
+      notes: i.notes,
+      status: i.status,
+      createdAt: i.createdAt
+    }));
+    res.json({ success: true, issues: enriched });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/sector-plan/:wf/flow-request', requireLogin, async (req, res) => {
+  try {
+    const cid = Number(req.session?.user?.data?.cid);
+    const wf = String(req.params.wf || '').toUpperCase();
+    const request = String(req.body?.request || '').trim();
+    const sched = (adminSheetCache || []).find(r => r?.number === wf);
+    if (!sched) return res.status(404).json({ error: 'WF not found' });
+    if (!(await canEditPlanSide(cid, 'ARR', sched.from, sched.to))) return res.status(403).json({ error: 'No edit access' });
+    const plan = await getOrCreateSectorPlan(wf, sched.from, sched.to);
+    await prisma.sectorPlan.update({
+      where: { id: plan.id },
+      data: { arrFlowRequest: request || null, arrFlowRequestedBy: cid, arrFlowRequestedAt: new Date(), arrUpdatedBy: cid, arrUpdatedAt: new Date() }
+    });
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 app.get('/airspace', requirePageEnabled('airspace'), async (req, res) => {
