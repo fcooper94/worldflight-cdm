@@ -259,7 +259,10 @@
       "Bash(node --check start.js)",
       "Bash(node _patch_grouped_table.mjs)",
       "Bash(node _patch_cols.mjs)",
-      "Bash(node _patch_remove_popup.mjs)"
+      "Bash(node _patch_remove_popup.mjs)",
+      "Bash(DATABASE_URL=\"file:./dev.db\" npx --package=prisma@5 prisma db push --schema=prisma/schema.dev.prisma --skip-generate)",
+      "Bash(DATABASE_URL=\"postgresql://postgres:eqlaWvnIHoAflvdngKPhZtHNWwojqXnv@mainline.proxy.rlwy.net:28655/railway\" npx prisma db push --schema=prisma/schema.prisma --skip-generate)",
+      "Bash(npx --package=prisma@5 prisma generate)"
     ]
   }
 }

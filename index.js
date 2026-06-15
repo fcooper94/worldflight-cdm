@@ -662,7 +662,7 @@ io.use((socket, next) => {
 
 
 /* ===== PAGE VISIBILITY (GLOBAL) ===== */
-const PAGE_KEYS = ['schedule', 'world-map', 'my-slots', 'atc', 'suggest-airport', 'arrival-info', 'departure-info', 'airspace', 'fake-pilots', 'wf-portal-banner', 'flow-restrictions', 'atc-route', 'worldflight-challenge'];
+const PAGE_KEYS = ['schedule', 'world-map', 'my-slots', 'atc', 'suggest-airport', 'arrival-info', 'departure-info', 'airspace', 'sector-planning', 'fake-pilots', 'wf-portal-banner', 'flow-restrictions', 'atc-route', 'worldflight-challenge'];
 
 // Per-key default mode used when no DB row exists yet. Most keys default to
 // 'visible'; ATC Route defaults to 'hidden' because routes are typically
@@ -10649,6 +10649,30 @@ app.get('/admin/access-management', requireAdmin, (req, res) => {
       <div id="permAddMsg" style="display:none;margin-top:8px;font-size:12px;"></div>
     </div>
 
+    <div id="firEventsAccessSection" style="display:none;margin-top:16px;padding:14px;background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:8px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+        <div>
+          <div style="font-weight:700;font-size:13px;">FIR Events Access</div>
+          <div style="font-size:11px;color:var(--muted);">Controls which WF sectors this user sees on the Sector Planning page. Grant individual FIRs or whole divisions.</div>
+        </div>
+      </div>
+
+      <div id="firEventsGrants" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;min-height:18px;">
+        <span style="font-size:12px;color:var(--muted);" id="firEventsEmptyMsg">No FIR or division grants yet.</span>
+      </div>
+
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+        <select id="firEventsScope" style="padding:8px 12px;background:var(--panel);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;">
+          <option value="FIR">FIR</option>
+          <option value="DIVISION">Division</option>
+        </select>
+        <input type="text" id="firEventsValue" list="firEventsValueList" placeholder="Type FIR code (e.g. KZNY)" style="padding:8px 12px;background:var(--panel);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;width:240px;text-transform:uppercase;" />
+        <datalist id="firEventsValueList"></datalist>
+        <button class="action-btn primary" id="firEventsAddBtn">Add</button>
+      </div>
+      <div id="firEventsAddMsg" style="display:none;margin-top:8px;font-size:12px;"></div>
+    </div>
+
     <div id="globalAccessSection" style="display:none;margin-top:16px;padding:12px;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:8px;">
       <div style="display:flex;justify-content:space-between;align-items:center;">
         <div>
@@ -11367,6 +11391,9 @@ document.addEventListener('DOMContentLoaded', function () {
 
           var html = '';
 
+          // Show and load FIR Events Access grants for this user
+          renderFirEventsAccess(Number(data.cid));
+
           // Show and configure global access dropdown
           var globalSection = document.getElementById('globalAccessSection');
           var globalSelect = document.getElementById('globalAccessSelect');
@@ -11847,6 +11874,115 @@ document.addEventListener('DOMContentLoaded', function () {
   });
 })();
 
+// ===== FIR EVENTS ACCESS (admin grants per-user FIR / division) =====
+(function() {
+  var section = document.getElementById('firEventsAccessSection');
+  if (!section) return;
+  var grantsEl = document.getElementById('firEventsGrants');
+  var emptyMsg = document.getElementById('firEventsEmptyMsg');
+  var scopeEl = document.getElementById('firEventsScope');
+  var valueEl = document.getElementById('firEventsValue');
+  var datalist = document.getElementById('firEventsValueList');
+  var addBtn = document.getElementById('firEventsAddBtn');
+  var addMsg = document.getElementById('firEventsAddMsg');
+  var currentCid = null;
+  var options = { firs: [], divisions: [] };
+  var optionsLoaded = false;
+
+  function loadOptions() {
+    if (optionsLoaded) return Promise.resolve();
+    return fetch('/admin/api/fir-events-options', { credentials: 'same-origin' })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        options = { firs: data.firs || [], divisions: data.divisions || [] };
+        optionsLoaded = true;
+        refreshDatalist();
+      });
+  }
+
+  function refreshDatalist() {
+    var scope = scopeEl.value;
+    var items = scope === 'DIVISION'
+      ? options.divisions
+      : options.firs.map(function(f) { return f.fir + (f.division ? ' — ' + f.division : ''); });
+    datalist.innerHTML = items.map(function(v) { return '<option value="' + v.split(' ')[0] + '">' + v + '</option>'; }).join('');
+    valueEl.placeholder = scope === 'DIVISION' ? 'Type division (e.g. VATUSA)' : 'Type FIR code (e.g. KZNY)';
+  }
+
+  scopeEl.addEventListener('change', refreshDatalist);
+
+  function renderGrants(grants) {
+    if (!grants.length) {
+      grantsEl.innerHTML = '<span style="font-size:12px;color:var(--muted);">No FIR or division grants yet.</span>';
+      return;
+    }
+    grantsEl.innerHTML = grants.map(function(g) {
+      var color = g.scope === 'DIVISION' ? '#a78bfa' : '#60a5fa';
+      var bg = g.scope === 'DIVISION' ? 'rgba(139,92,246,0.12)' : 'rgba(96,165,250,0.12)';
+      return '<span style="display:inline-flex;align-items:center;gap:6px;padding:4px 10px;background:' + bg + ';color:' + color + ';border:1px solid ' + color + ';border-radius:6px;font-size:12px;font-weight:600;">'
+        + '<span style="font-size:10px;font-weight:700;opacity:0.7;text-transform:uppercase;letter-spacing:0.05em;">' + g.scope + '</span>'
+        + g.value
+        + '<button data-grant-id="' + g.id + '" class="fir-events-revoke-btn" title="Revoke" style="background:none;border:none;color:inherit;cursor:pointer;font-size:14px;line-height:1;padding:0 0 0 2px;opacity:0.7;">&times;</button>'
+        + '</span>';
+    }).join('');
+
+    grantsEl.querySelectorAll('.fir-events-revoke-btn').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        if (!confirm('Revoke this grant?')) return;
+        fetch('/admin/api/fir-events-access/' + btn.dataset.grantId, {
+          method: 'DELETE', credentials: 'same-origin'
+        }).then(function() { window.renderFirEventsAccess(currentCid); });
+      });
+    });
+  }
+
+  window.renderFirEventsAccess = function(cid) {
+    currentCid = cid;
+    section.style.display = '';
+    loadOptions();
+    fetch('/admin/api/fir-events-access/' + cid, { credentials: 'same-origin' })
+      .then(function(r) { return r.json(); })
+      .then(function(data) { renderGrants(data.grants || []); })
+      .catch(function() { renderGrants([]); });
+  };
+
+  addBtn.addEventListener('click', async function() {
+    addMsg.style.display = 'none';
+    if (!currentCid) {
+      addMsg.textContent = 'Search a user first.'; addMsg.style.color = '#f87171'; addMsg.style.display = '';
+      return;
+    }
+    var scope = scopeEl.value;
+    var value = valueEl.value.trim().toUpperCase();
+    if (!value) {
+      addMsg.textContent = 'Enter a ' + (scope === 'DIVISION' ? 'division name' : 'FIR code');
+      addMsg.style.color = '#f87171'; addMsg.style.display = '';
+      return;
+    }
+    try {
+      var res = await fetch('/admin/api/fir-events-access', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ cid: currentCid, scope: scope, value: value })
+      });
+      var d = await res.json();
+      if (res.ok) {
+        valueEl.value = '';
+        addMsg.textContent = 'Granted ' + scope + ': ' + value;
+        addMsg.style.color = '#4ade80'; addMsg.style.display = '';
+        window.renderFirEventsAccess(currentCid);
+      } else {
+        addMsg.textContent = d.error || 'Failed to grant';
+        addMsg.style.color = '#f87171'; addMsg.style.display = '';
+      }
+    } catch (e) {
+      addMsg.textContent = 'Error';
+      addMsg.style.color = '#f87171'; addMsg.style.display = '';
+    }
+  });
+})();
+
 // ===== FIR ACCESS REQUESTS =====
 (function() {
   var allRequests = [];
@@ -12202,6 +12338,65 @@ app.delete('/admin/api/documentation/:id', requireAdmin, async (req, res) => {
   });
 
   res.json({ success: true });
+});
+
+// FIR Events Access — admin grants per-user access to specific FIRs or entire
+// divisions. Used by the Sector Planning page to compute which WF sectors a
+// user is "participating in" (dep airport, arr airport, or enroute FIR).
+app.get('/admin/api/fir-events-access/:cid', requireAdmin, async (req, res) => {
+  const cid = Number(req.params.cid);
+  if (!cid) return res.status(400).json({ error: 'cid required' });
+  try {
+    const rows = await prisma.firEventAccess.findMany({
+      where: { cid },
+      orderBy: [{ scope: 'asc' }, { value: 'asc' }]
+    });
+    res.json({ cid, grants: rows });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/admin/api/fir-events-access', requireAdmin, async (req, res) => {
+  const cid = Number(req.body?.cid);
+  const scope = String(req.body?.scope || '').toUpperCase();
+  const value = String(req.body?.value || '').trim().toUpperCase();
+  const grantedBy = Number(req.session?.user?.data?.cid) || null;
+  if (!cid || !value) return res.status(400).json({ error: 'cid and value required' });
+  if (scope !== 'FIR' && scope !== 'DIVISION') return res.status(400).json({ error: 'scope must be FIR or DIVISION' });
+  try {
+    const row = await prisma.firEventAccess.upsert({
+      where: { cid_scope_value: { cid, scope, value } },
+      update: {},
+      create: { cid, scope, value, createdBy: grantedBy }
+    });
+    res.json({ success: true, grant: row });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.delete('/admin/api/fir-events-access/:id', requireAdmin, async (req, res) => {
+  try {
+    await prisma.firEventAccess.delete({ where: { id: Number(req.params.id) } });
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Autocomplete data: all FIRs known to the active event + the standard
+// division list. Used by the admin grant form.
+app.get('/admin/api/fir-events-options', requireAdmin, async (req, res) => {
+  try {
+    const firs = await buildFirAnalysis().catch(() => []);
+    const firOptions = firs.map(f => ({ fir: f.fir, division: f.division || '' }))
+      .sort((a, b) => a.fir.localeCompare(b.fir));
+    const divisionOptions = Object.keys(DIVISION_ICAO_MAP).sort();
+    res.json({ firs: firOptions, divisions: divisionOptions });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 app.get('/admin/api/documentation-access-requests', requireAdmin, async (req, res) => {
@@ -24836,7 +25031,8 @@ app.get('/admin/settings', requireAdmin, async (req, res) => {
         { key: 'my-slots',        label: 'My Slots / Bookings', icon: '✈️', desc: 'Personal slot and booking overview' },
         { key: 'atc',             label: 'WF Flow Control',     icon: '🎧', desc: 'Controller departure management view' },
         { key: 'suggest-airport', label: 'Suggest Airport',     icon: '💡', desc: 'Community airport suggestions' },
-        { key: 'airspace',        label: 'Staffing Overview', icon: '🌐', desc: 'FIR staffing requirements and timelines' }
+        { key: 'airspace',        label: 'Staffing Overview', icon: '🌐', desc: 'FIR staffing requirements and timelines' },
+        { key: 'sector-planning', label: 'Sector Planning',   icon: '📋', desc: 'Per-user sector list. Shows WF sectors the user is participating in (Dep/Arr/Enroute) based on their FIR Events Access grants.' }
       ]
     },
     {
@@ -28012,6 +28208,174 @@ app.get('/atc', requirePageEnabled('atc'), (req, res) => {
 
 // ===== AIRSPACE MANAGEMENT PAGE =====
 // Landing picker: choose between viewing staffing by sector or by area.
+// Cache airport ICAO → base FIR code (geographic point-in-polygon resolve)
+const airportFirCache = new Map();
+async function resolveAirportFir(icao) {
+  if (!icao) return null;
+  if (airportFirCache.has(icao)) return airportFirCache.get(icao);
+  try {
+    const ap = await prisma.airport.findUnique({ where: { icao }, select: { lat: true, lon: true } });
+    if (!ap) { airportFirCache.set(icao, null); return null; }
+    const firs = getFirsForPoint(ap.lat, ap.lon);
+    const result = firs[0] || null;
+    airportFirCache.set(icao, result);
+    return result;
+  } catch (e) { return null; }
+}
+
+// Resolve a user's expanded set of "owned" FIR codes given their FirEventAccess
+// grants. Division grants expand to every FIR currently transited in that
+// division (sourced from buildFirAnalysis).
+async function getUserOwnedFirs(cid) {
+  if (!cid) return new Set();
+  const grants = await prisma.firEventAccess.findMany({ where: { cid } }).catch(() => []);
+  if (!grants.length) return new Set();
+  const firs = await buildFirAnalysis().catch(() => []);
+  const firsByDivision = {};
+  firs.forEach(f => {
+    const d = f.division || '';
+    if (!firsByDivision[d]) firsByDivision[d] = new Set();
+    firsByDivision[d].add(f.fir);
+  });
+  const owned = new Set();
+  for (const g of grants) {
+    if (g.scope === 'FIR') owned.add(g.value);
+    else if (g.scope === 'DIVISION' && firsByDivision[g.value]) {
+      firsByDivision[g.value].forEach(f => owned.add(f));
+    }
+  }
+  return owned;
+}
+
+app.get('/sector-planning', requirePageEnabled('sector-planning'), async (req, res) => {
+  const user = req.session?.user?.data || null;
+  const cid = Number(user?.cid) || null;
+  const isAdmin = isAdminUser(cid);
+
+  let owned = new Set();
+  let participations = [];
+  if (cid) {
+    owned = await getUserOwnedFirs(cid);
+    if (owned.size) {
+      const firs = await buildFirAnalysis().catch(() => []);
+      // Build sector → roles map
+      const sectorRoles = new Map(); // key: wf:from:to -> {wf, from, to, date, roles: Set, reasons: []}
+      function bump(wf, from, to, date, role) {
+        const key = `${wf}:${from}:${to}`;
+        if (!sectorRoles.has(key)) sectorRoles.set(key, { wf, from, to, date, roles: new Set() });
+        sectorRoles.get(key).roles.add(role);
+      }
+      // Enroute matches — every FIR analysis leg whose FIR is owned counts
+      for (const fir of firs) {
+        if (!owned.has(fir.fir)) continue;
+        for (const leg of (fir.legs || [])) {
+          bump(leg.wf, leg.from, leg.to, leg.date, 'Enroute ' + fir.fir);
+        }
+      }
+      // Dep / Arr — geographic airport→FIR lookup
+      const allLegs = (adminSheetCache || []).filter(r => r?.from && r?.to && r?.number);
+      const uniqIcaos = new Set();
+      for (const r of allLegs) { uniqIcaos.add(r.from); uniqIcaos.add(r.to); }
+      const icaoToFir = {};
+      for (const icao of uniqIcaos) icaoToFir[icao] = await resolveAirportFir(icao);
+      for (const r of allLegs) {
+        const fromFir = icaoToFir[r.from];
+        const toFir = icaoToFir[r.to];
+        const date = r.date_utc || '';
+        if (fromFir && owned.has(fromFir)) bump(r.number, r.from, r.to, date, 'Departure (' + fromFir + ')');
+        if (toFir && owned.has(toFir))     bump(r.number, r.from, r.to, date, 'Arrival (' + toFir + ')');
+      }
+      // Materialise + sort by WF number ascending
+      participations = [...sectorRoles.values()]
+        .map(s => ({ ...s, roles: [...s.roles] }))
+        .sort((a, b) => {
+          const an = parseInt(String(a.wf || '').replace(/\D/g, ''), 10);
+          const bn = parseInt(String(b.wf || '').replace(/\D/g, ''), 10);
+          if (isFinite(an) && isFinite(bn) && an !== bn) return an - bn;
+          return String(a.wf || '').localeCompare(String(b.wf || ''));
+        });
+    }
+  }
+
+  const noAccess = !cid;
+  const noGrants = cid && owned.size === 0;
+  const noMatches = owned.size > 0 && participations.length === 0;
+
+  const pillsHtml = participations.map(s => {
+    const roleChips = s.roles.map(r => {
+      const isDep = r.startsWith('Departure');
+      const isArr = r.startsWith('Arrival');
+      const color = isDep ? '#f59e0b' : isArr ? '#10b981' : '#60a5fa';
+      const bg = isDep ? 'rgba(245,158,11,0.14)' : isArr ? 'rgba(16,185,129,0.14)' : 'rgba(96,165,250,0.14)';
+      return `<span style="display:inline-flex;align-items:center;padding:2px 7px;background:${bg};color:${color};border:1px solid ${color};border-radius:4px;font-size:10px;font-weight:700;letter-spacing:0.04em;">${r}</span>`;
+    }).join('');
+    return `<a href="/airspace/by-sector?wf=${encodeURIComponent(s.wf)}" class="sp-pill" style="display:flex;flex-direction:column;gap:8px;padding:14px 16px;background:rgba(255,255,255,0.025);border:1px solid var(--border);border-radius:10px;text-decoration:none;color:var(--text);min-width:260px;flex:1 1 260px;max-width:340px;transition:border-color .15s, transform .15s;">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+        <span style="font-weight:800;font-size:15px;color:var(--accent);">${s.wf}</span>
+        <span style="font-size:11px;color:var(--muted);">${s.date || ''}</span>
+      </div>
+      <div style="font-family:monospace;font-size:13px;color:var(--text);">${s.from} <span style="color:var(--muted);">→</span> ${s.to}</div>
+      <div style="display:flex;flex-wrap:wrap;gap:4px;">${roleChips}</div>
+    </a>`;
+  }).join('');
+
+  const grantsBadgesHtml = [...owned].sort().map(f =>
+    `<span class="fir-badge" style="font-size:11px;padding:2px 8px;">${f}</span>`
+  ).join(' ');
+
+  const content = `
+    <style>
+      .sp-pill:hover { border-color: var(--accent) !important; transform: translateY(-1px); }
+      .sp-empty { padding:48px 16px;text-align:center;color:var(--muted);border:1px dashed var(--border);border-radius:10px; }
+    </style>
+
+    <section class="card card-full">
+      <h2 style="margin:0 0 4px;">Sector Planning</h2>
+      <p style="color:var(--muted);margin:0 0 16px;">WorldFlight sectors you're participating in — either departing/arriving in one of your FIRs or transiting through.</p>
+
+      ${noAccess ? `
+        <div class="sp-empty">
+          <div style="font-size:14px;color:var(--text);margin-bottom:4px;">Sign in to see your sectors.</div>
+        </div>
+      ` : ''}
+
+      ${noGrants ? `
+        <div class="sp-empty">
+          <div style="font-size:14px;color:var(--text);margin-bottom:6px;">No FIR or division grants on your account yet.</div>
+          <div style="font-size:13px;">Ask an admin to grant you FIR access from the Access Management panel.</div>
+        </div>
+      ` : ''}
+
+      ${owned.size > 0 ? `
+        <div style="margin-bottom:18px;padding:10px 12px;background:rgba(56,189,248,0.06);border:1px solid rgba(56,189,248,0.25);border-radius:8px;">
+          <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;">Your FIR Access</div>
+          <div style="display:flex;flex-wrap:wrap;gap:4px;">${grantsBadgesHtml}</div>
+        </div>
+      ` : ''}
+
+      ${noMatches ? `
+        <div class="sp-empty">
+          <div style="font-size:14px;color:var(--text);margin-bottom:4px;">No sectors match your FIR access yet.</div>
+          <div style="font-size:13px;">Either the route hasn't been released, or none of your FIRs are on it.</div>
+        </div>
+      ` : ''}
+
+      ${participations.length ? `
+        <div style="font-size:13px;color:var(--muted);margin-bottom:12px;">${participations.length} sector${participations.length === 1 ? '' : 's'} you're part of.</div>
+        <div style="display:flex;flex-wrap:wrap;gap:10px;">${pillsHtml}</div>
+      ` : ''}
+    </section>
+  `;
+
+  res.send(renderLayout({
+    title: 'Sector Planning',
+    user,
+    isAdmin,
+    content,
+    layoutClass: 'dashboard-full'
+  }));
+});
+
 app.get('/airspace', requirePageEnabled('airspace'), async (req, res) => {
   const user = req.session?.user?.data || null;
   const cid = Number(user?.cid) || null;
@@ -28342,6 +28706,19 @@ app.get('/airspace/by-sector', requirePageEnabled('airspace'), async (req, res) 
 
       var ROUTE_COLORS = ['#f59e0b','#ef4444','#22c55e','#3b82f6','#a855f7','#ec4899','#14b8a6','#f97316','#06b6d4','#eab308','#8b5cf6','#10b981','#e11d48','#0ea5e9'];
 
+      function combinedIcon(combinedWith) {
+        if (!combinedWith || !combinedWith.length) return '';
+        var listText = combinedWith.join(', ');
+        var titleText = 'Includes ' + listText + ' staffing';
+        return ' <span class="combined-icon" title="' + titleText.replace(/"/g, '&quot;')
+          + '" style="display:inline-flex;align-items:center;color:#60a5fa;cursor:help;vertical-align:middle;margin-left:6px;">'
+          + '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+          + '<circle cx="12" cy="12" r="10"></circle>'
+          + '<line x1="12" y1="16" x2="12" y2="12"></line>'
+          + '<line x1="12" y1="8" x2="12.01" y2="8"></line>'
+          + '</svg></span>';
+      }
+
       function formatDuration(mins) {
         if (!mins && mins !== 0) return '-';
         var h = Math.floor(mins / 60);
@@ -28567,7 +28944,7 @@ app.get('/airspace/by-sector', requirePageEnabled('airspace'), async (req, res) 
             + '<td style="border-left:3px solid ' + firColor + ';padding-left:10px;">'
               + '<span class="fir-badge fir-badge-link" data-view-fir="' + l._fir + '" style="' + badgeStyle + '">'
               + displayFir(l._fir) + '</span></td>'
-            + '<td class="staff-window">' + (l.staffStart && l.staffEnd ? l.staffStart + ' – ' + l.staffEnd : '-') + '</td>'
+            + '<td class="staff-window">' + (l.staffStart && l.staffEnd ? l.staffStart + ' – ' + l.staffEnd : '-') + combinedIcon(l.combinedWith) + '</td>'
             + '<td class="staff-window" style="color:var(--muted);">' + (l.staffStartLocal && l.staffEndLocal ? l.staffStartLocal + ' – ' + l.staffEndLocal : '-') + '</td>'
             + '<td>' + formatDuration(l.staffMins) + '</td>'
             + '<td>' + (l.depFlow || '-') + '</td>'
@@ -29643,6 +30020,21 @@ app.get('/airspace/by-area', requirePageEnabled('airspace'), async (req, res) =>
       if (!code) return 'Unknown';
       return /^K[A-Z]{3}$/.test(code) ? code.slice(1) : code;
     }
+
+    // Blue info icon shown next to a staff window when it has been extended
+    // to include another sector's window. Hover gives the WF list.
+    function combinedIcon(combinedWith) {
+      if (!combinedWith || !combinedWith.length) return '';
+      var listText = combinedWith.join(', ');
+      var titleText = 'Includes ' + listText + ' staffing';
+      return ' <span class="combined-icon" title="' + titleText.replace(/"/g, '&quot;')
+        + '" style="display:inline-flex;align-items:center;color:#60a5fa;cursor:help;vertical-align:middle;margin-left:6px;">'
+        + '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+        + '<circle cx="12" cy="12" r="10"></circle>'
+        + '<line x1="12" y1="16" x2="12" y2="12"></line>'
+        + '<line x1="12" y1="8" x2="12.01" y2="8"></line>'
+        + '</svg></span>';
+    }
     var summaryLoaded = false;
 
     function disableInactiveBtns() {
@@ -30097,9 +30489,6 @@ app.get('/airspace/by-area', requirePageEnabled('airspace'), async (req, res) =>
           tbody.innerHTML = data.legs.map(function(l, idx) {
             var flowClass = l.flowType === 'SLOTTED' ? 'slotted' : (l.flowType === 'BOOKING_ONLY' ? 'booking' : 'none');
             var flowLabel = l.flowType === 'BOOKING_ONLY' ? 'Booking' : (l.flowType === 'SLOTTED' ? 'Slotted' : 'None');
-            var combinedBadge = (l.combinedWith && l.combinedWith.length)
-              ? ' <span class="combined-badge" title="Staff window combined with ' + l.combinedWith.join(', ') + '">+ ' + l.combinedWith.join(', ') + '</span>'
-              : '';
             var wfColor = SINGLE_ROUTE_COLORS[idx % SINGLE_ROUTE_COLORS.length];
             return '<tr>'
               + '<td style="font-weight:700;color:' + wfColor + ';border-left:3px solid ' + wfColor + ';padding-left:10px;">' + l.wf + '</td>'
@@ -30107,7 +30496,7 @@ app.get('/airspace/by-area', requirePageEnabled('airspace'), async (req, res) =>
               + '<td>' + l.to + '</td>'
               + '<td>' + (l.date || '-') + '</td>'
               + '<td><span class="fir-badge">' + displayFir(data.fir) + '</span></td>'
-              + '<td class="staff-window">' + (l.staffStart && l.staffEnd ? l.staffStart + ' – ' + l.staffEnd : '-') + combinedBadge + '</td>'
+              + '<td class="staff-window">' + (l.staffStart && l.staffEnd ? l.staffStart + ' – ' + l.staffEnd : '-') + combinedIcon(l.combinedWith) + '</td>'
               + '<td class="staff-window" style="color:var(--muted);">' + (l.staffStartLocal && l.staffEndLocal ? l.staffStartLocal + ' – ' + l.staffEndLocal : '-') + '</td>'
               + '<td class="">' + (l.staffMins ? l.staffMins + ' min' : '-') + '</td>'
               + '<td class="">' + (l.depFlow || '-') + '</td>'
@@ -30221,7 +30610,7 @@ app.get('/airspace/by-area', requirePageEnabled('airspace'), async (req, res) =>
             sectorMap[key] = { leg: l, firLegs: [], idx: idx };
             sectorOrder.push(key);
           }
-          sectorMap[key].firLegs.push({ fir: l._fir, staffStart: l.staffStart, staffEnd: l.staffEnd, staffStartLocal: l.staffStartLocal, staffEndLocal: l.staffEndLocal, staffMins: l.staffMins, flowType: l.flowType, depFlow: l.depFlow, idx: idx });
+          sectorMap[key].firLegs.push({ fir: l._fir, staffStart: l.staffStart, staffEnd: l.staffEnd, staffStartLocal: l.staffStartLocal, staffEndLocal: l.staffEndLocal, staffMins: l.staffMins, flowType: l.flowType, depFlow: l.depFlow, combinedWith: l.combinedWith, idx: idx });
         });
 
         // Per-sector colour, matching the map legend at the top so the WF
@@ -30259,7 +30648,7 @@ app.get('/airspace/by-area', requirePageEnabled('airspace'), async (req, res) =>
                 + '<td rowspan="' + firCount + '" style="vertical-align:top;">' + (l.date || '-') + '</td>';
             }
             html += '<td><span class="fir-badge fir-badge-link" data-view-fir="' + fl.fir + '" style="cursor:pointer;">' + displayFir(fl.fir) + '</span></td>'
-              + '<td class="staff-window">' + (fl.staffStart && fl.staffEnd ? fl.staffStart + ' \u2013 ' + fl.staffEnd : '-') + '</td>'
+              + '<td class="staff-window">' + (fl.staffStart && fl.staffEnd ? fl.staffStart + ' \u2013 ' + fl.staffEnd : '-') + combinedIcon(fl.combinedWith) + '</td>'
               + '<td class="staff-window" style="color:var(--muted);">' + (fl.staffStartLocal && fl.staffEndLocal ? fl.staffStartLocal + ' \u2013 ' + fl.staffEndLocal : '-') + '</td>'
               + '<td>' + (fl.staffMins ? fl.staffMins + ' min' : '-') + '</td>'
               + '<td>' + (fl.depFlow || '-') + '</td>'

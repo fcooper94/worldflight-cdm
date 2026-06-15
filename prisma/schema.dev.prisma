@@ -202,6 +202,18 @@ model StaffAccessRequest {
   @@index([status])
 }
 
+model FirEventAccess {
+  id        Int      @id @default(autoincrement())
+  cid       Int
+  scope     String   // 'FIR' | 'DIVISION'
+  value     String   // FIR code (e.g. "KZNY") or division name (e.g. "VATUSA")
+  createdAt DateTime @default(now())
+  createdBy Int?
+
+  @@unique([cid, scope, value])
+  @@index([cid])
+}
+
 model MasterToken {
   id        Int      @id @default(autoincrement())
   token     String   @unique

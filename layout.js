@@ -89,7 +89,7 @@ export default function renderLayout({
       </a>` : ''}
     </div>
 
-    ${pv('atc') || pv('airspace') ? `<div class="nav-section">
+    ${pv('atc') || pv('airspace') || pv('sector-planning') ? `<div class="nav-section">
       <div class="nav-title">Planning</div>
       ${pv('atc') ? `<a href="/atc" class="nav-item" data-tooltip="WF Flow Control">
         <span class="icon">${icons.headphones}</span>
@@ -98,6 +98,10 @@ export default function renderLayout({
       ${pv('airspace') ? `<a href="/airspace" class="nav-item" data-tooltip="Staffing Overview">
         <span class="icon">${icons.globe}</span>
         <span class="label">Staffing Overview</span>
+      </a>` : ''}
+      ${pv('sector-planning') ? `<a href="/sector-planning" class="nav-item" data-tooltip="Sector Planning">
+        <span class="icon">${icons.clipboard}</span>
+        <span class="label">Sector Planning</span>
       </a>` : ''}
     </div>` : ''}
 
