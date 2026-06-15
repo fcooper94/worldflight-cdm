@@ -53,7 +53,6 @@ export default function renderLayout({
 
   <nav class="sidebar-nav">
     <div class="nav-section">
-      <div class="nav-title">Pilots</div>
       <a href="/" class="nav-item" data-tooltip="Dashboard">
         <span class="icon">${icons.home}</span>
         <span class="label">Dashboard</span>
@@ -72,7 +71,7 @@ export default function renderLayout({
         <span class="label">Airport Portal</span>
       </a>
 
-      ${pv('world-map') ? `<a href="/wf/world-map" class="nav-item" data-tooltip="Route Map">
+      ${pv('world-map') ? `<a href="/route-map" class="nav-item" data-tooltip="Route Map">
         <span class="icon">${icons.map}</span>
         <span class="label">Route Map</span>
       </a>` : ''}
@@ -91,14 +90,14 @@ export default function renderLayout({
     </div>
 
     ${pv('atc') || pv('airspace') ? `<div class="nav-section">
-      <div class="nav-title">Controllers</div>
+      <div class="nav-title">Planning</div>
       ${pv('atc') ? `<a href="/atc" class="nav-item" data-tooltip="WF Flow Control">
         <span class="icon">${icons.headphones}</span>
         <span class="label">WF Flow Control</span>
       </a>` : ''}
-      ${pv('airspace') ? `<a href="/airspace" class="nav-item" data-tooltip="Airspace Management">
+      ${pv('airspace') ? `<a href="/airspace" class="nav-item" data-tooltip="Staffing Overview">
         <span class="icon">${icons.globe}</span>
-        <span class="label">Airspace Management</span>
+        <span class="label">Staffing Overview</span>
       </a>` : ''}
     </div>` : ''}
 

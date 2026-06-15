@@ -255,7 +255,11 @@
       "Bash(node scripts/backfill-airport-iata.js)",
       "Bash(node --input-type=module -e ':*)",
       "Bash(git pull *)",
-      "Bash(node -e \"JSON.parse\\(require\\('fs'\\).readFileSync\\('.claude/settings.local.json', 'utf8'\\)\\); console.log\\('JSON valid'\\)\")"
+      "Bash(node -e \"JSON.parse\\(require\\('fs'\\).readFileSync\\('.claude/settings.local.json', 'utf8'\\)\\); console.log\\('JSON valid'\\)\")",
+      "Bash(node --check start.js)",
+      "Bash(node _patch_grouped_table.mjs)",
+      "Bash(node _patch_cols.mjs)",
+      "Bash(node _patch_remove_popup.mjs)"
     ]
   }
 }

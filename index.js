@@ -354,6 +354,7 @@ import vatsimCallback from './auth/callback.js';
 import cron from 'node-cron';
 import nodemailer from 'nodemailer';
 import tzLookup from 'tz-lookup';
+import polygonClipping from 'polygon-clipping';
 import _renderLayout from './layout.js';
 import { getAirportGround, detectStandOccupancy } from './lib/osm-ground.mjs';
 function renderLayout(opts) {
@@ -1310,7 +1311,8 @@ function isCoveringUkCtr(callsign, icao) {
 
 
 function isUsCtr(callsign) {
-  return /^[A-Z]{2,3}(?:_\d{1,2})?_CTR$/.test(
+  // Allows 3-digit sector numbers too (e.g. LAX_251_CTR, ZNY_134_CTR).
+  return /^[A-Z]{2,3}(?:_\d{1,3})?_CTR$/.test(
     callsign.toUpperCase()
   );
 }
@@ -7041,16 +7043,15 @@ app.get('/', async (req, res) => {
       icon: '<path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7c.7.6 1 1.5 1 2.3v1h6v-1c0-.8.3-1.7 1-2.3A7 7 0 0 0 12 2Z"/>' },
     { key: 'atc', href: '/atc', label: 'WF Flow Control', desc: 'Manage departure flow restrictions and rates for controllers',
       icon: '<path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3Z"/><path d="M3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3Z"/>' },
-    { key: 'airspace', href: '/airspace', label: 'Airspace Management', desc: 'See which FIRs the route crosses and coordinate coverage',
+    { key: 'airspace', href: '/airspace', label: 'Staffing Overview', desc: 'See which FIRs the route crosses and coordinate coverage',
       icon: '<circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10Z"/>' },
-    { key: 'world-map', href: '/wf/world-map', label: 'Route Map', desc: 'Explore the full WorldFlight route on an interactive world map',
+    { key: 'world-map', href: '/route-map', label: 'Route Map', desc: 'Explore the full WorldFlight route on an interactive world map',
       icon: '<polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21 3 6"/><line x1="9" y1="3" x2="9" y2="18"/><line x1="15" y1="6" x2="15" y2="21"/>' }
   ];
-  const visibleTiles = heroTilePool
+  const heroTiles = heroTilePool
     .filter(t => !t.key || isPageVisibleTo(t.key, isAdmin))
-    .sort(() => Math.random() - 0.5);
-  // Render up to 3 to seed the grid; the carousel will reshuffle from the full set.
-  const heroTiles = visibleTiles.slice(0, 3);
+    .sort(() => Math.random() - 0.5)
+    .slice(0, 3);
 
   const content = `
     <div class="db-page">
@@ -7063,8 +7064,8 @@ app.get('/', async (req, res) => {
         ${activeEvent.startDateUtc ? `<div class="db-hero-date">${activeEvent.startDateUtc}</div>` : ''}
       </div>
 
-      <div class="db-stats" id="dbHeroTiles">
-        ${heroTiles.map((t, i) => `<a href="${t.href}" class="db-stat db-stat-link" data-slot="${i}">
+      <div class="db-stats">
+        ${heroTiles.map(t => `<a href="${t.href}" class="db-stat db-stat-link">
           <div class="db-stat-icon">
             <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${t.icon}</svg>
           </div>
@@ -7072,9 +7073,6 @@ app.get('/', async (req, res) => {
           <div class="db-stat-desc">${t.desc}</div>
         </a>`).join('')}
       </div>
-      <script>
-        window.WF_HERO_POOL = ${JSON.stringify(visibleTiles)};
-      </script>
 
       ${adminSheetCache.length > 0 && (isAdmin || isPageEnabled('schedule')) ? `
       <div class="db-section">
@@ -7260,66 +7258,13 @@ app.get('/', async (req, res) => {
         color: var(--muted, #94a3b8);
       }
 
-      /* Hero-tile carousel: each slot fades when its content swaps. */
-      .db-stat-link { transition: opacity .35s ease, border-color 0.2s, background 0.2s, transform 0.15s; }
-      .db-stat-link.is-fading { opacity: 0; }
-
       @media (max-width: 600px) {
         .db-hero { flex-direction: column; align-items: flex-start; }
         .db-greeting { font-size: 20px; }
         .db-page { padding: 24px 16px; }
         .db-stats { grid-template-columns: 1fr; }
       }
-    </style>
-
-    <script>
-      // Hero-tile carousel — rotates one slot at a time to a pool entry not
-      // currently visible. Skips entirely if the pool has nothing extra to
-      // show beyond what's already on screen.
-      (function () {
-        const pool = window.WF_HERO_POOL || [];
-        const container = document.getElementById('dbHeroTiles');
-        if (!container || pool.length === 0) return;
-        const slots = Array.from(container.querySelectorAll('.db-stat-link'));
-        if (slots.length === 0) return;
-        if (pool.length <= slots.length) return;  // nothing to cycle to
-
-        // Track which pool index each slot is currently showing.
-        // Initial state: assume first N pool entries match first N slots
-        // (server renders them in the same shuffled order).
-        const current = slots.map((_, i) => i);
-
-        function nextPoolIndex() {
-          // Pick a pool entry not currently visible in any slot
-          const visible = new Set(current);
-          const candidates = pool.map((_, i) => i).filter(i => !visible.has(i));
-          if (candidates.length === 0) return null;
-          return candidates[Math.floor(Math.random() * candidates.length)];
-        }
-
-        function paint(slot, tile) {
-          slot.setAttribute('href', tile.href);
-          slot.querySelector('.db-stat-icon svg').innerHTML = tile.icon;
-          slot.querySelector('.db-stat-label').textContent = tile.label;
-          slot.querySelector('.db-stat-desc').textContent = tile.desc;
-        }
-
-        let rrIdx = 0;
-        setInterval(function () {
-          const slotIdx = rrIdx % slots.length;
-          rrIdx++;
-          const newPoolIdx = nextPoolIndex();
-          if (newPoolIdx == null) return;
-          const slot = slots[slotIdx];
-          slot.classList.add('is-fading');
-          setTimeout(function () {
-            paint(slot, pool[newPoolIdx]);
-            current[slotIdx] = newPoolIdx;
-            slot.classList.remove('is-fading');
-          }, 360);
-        }, 5000);
-      })();
-    </script>`;
+    </style>`;
 
   return res.send(renderLayout({
     title: 'WorldFlight Planning',
@@ -7863,7 +7808,14 @@ app.get('/api/wf/world-map', async (req, res) => {
 
 
 
-app.get('/wf/world-map', requirePageEnabled('world-map'), (req, res) => {
+// Old URL kept as a 301 redirect so existing bookmarks / external links
+// don't break. New canonical URL is /route-map.
+app.get('/wf/world-map', (req, res) => {
+  const qs = req.originalUrl.includes('?') ? req.originalUrl.slice(req.originalUrl.indexOf('?')) : '';
+  res.redirect(301, '/route-map' + qs);
+});
+
+app.get('/route-map', requirePageEnabled('world-map'), (req, res) => {
   const user = req.session.user?.data || null;
   const isAdmin = isAdminUser(user?.cid);
 
@@ -8630,6 +8582,47 @@ app.get('/sector/:wf/:from/:to', async (req, res) => {
   // Find the leg in the schedule
   const leg = adminSheetCache.find(r => r.number === wfNum && r.from === fromIcao && r.to === toIcao);
   const sectorKey = `${fromIcao}-${toIcao}`;
+
+  // Resolve coords for the dep + arr airports so we can show local-time
+  // windows alongside the UTC ones. One query, two rows.
+  const _sectorAirports = await prisma.airport.findMany({
+    where: { icao: { in: [fromIcao, toIcao] } },
+    select: { icao: true, lat: true, lon: true }
+  }).catch(() => []);
+  const _sectorCoords = {};
+  for (const a of _sectorAirports) _sectorCoords[a.icao] = { lat: a.lat, lon: a.lon };
+
+  function _windowAtAirport(icao, dateUtc, baseTimeUtc, baseShift = 0) {
+    const info = _sectorCoords[icao];
+    if (!info || info.lat == null) return null;
+    const m = /^(\d{2}):(\d{2})$/.exec(baseTimeUtc || '');
+    if (!m) return null;
+    const baseMins = Number(m[1]) * 60 + Number(m[2]);
+    function fmtEdge(totalMins) {
+      let shift = baseShift;
+      if (totalMins < 0)         { shift -= 1; totalMins += 1440; }
+      else if (totalMins >= 1440) { shift +=  1; totalMins -= 1440; }
+      const hh = String(Math.floor(totalMins / 60)).padStart(2, '0');
+      const mm = String(totalMins % 60).padStart(2, '0');
+      return formatLocalAtAirport(info.lat, info.lon, dateUtc, `${hh}:${mm}`, shift);
+    }
+    const lo = fmtEdge(baseMins - 60);
+    const hi = fmtEdge(baseMins + 60);
+    if (!lo || !hi) return null;
+    return `${lo.time}–${hi.time}`;
+  }
+
+  const _depWindowLocal = leg && leg.dep_time_utc
+    ? _windowAtAirport(fromIcao, leg.date_utc, leg.dep_time_utc)
+    : null;
+  let _arrBaseShift = 0;
+  if (leg && /^\d{2}:\d{2}$/.test(leg.arr_time_utc || '') && /^\d{2}:\d{2}$/.test(leg.dep_time_utc || '')) {
+    const toMins = s => Number(s.slice(0,2)) * 60 + Number(s.slice(3,5));
+    if (toMins(leg.arr_time_utc) < toMins(leg.dep_time_utc)) _arrBaseShift = 1;
+  }
+  const _arrWindowLocal = leg && leg.arr_time_utc
+    ? _windowAtAirport(toIcao, leg.date_utc, leg.arr_time_utc, _arrBaseShift)
+    : null;
   const flowType = sharedFlowTypes[sectorKey] || 'NONE';
   const depFlow = sharedDepFlows[sectorKey] || 0;
   const bookingCap = flowType === 'BOOKING_ONLY' ? getBookingOnlyCapacity(fromIcao, toIcao) : null;
@@ -8699,7 +8692,23 @@ app.get('/sector/:wf/:from/:to', async (req, res) => {
             </div>
             <div style="display:flex;align-items:center;gap:8px;">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-              <div><div style="font-size:9px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);">Dep Window</div><div style="font-size:15px;font-weight:600;color:var(--text);">${leg && leg.dep_time_utc ? buildTimeWindow(leg.dep_time_utc) : '-'}</div></div>
+              <div><div style="font-size:9px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);">Dep Window UTC</div><div style="font-size:15px;font-weight:600;color:var(--text);">${leg && leg.dep_time_utc ? buildTimeWindow(leg.dep_time_utc) : '-'}</div></div>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/><path d="M2 12h1M21 12h1M12 2v1M12 21v1"/></svg>
+              <div><div style="font-size:9px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);">Dep Window Local</div><div style="font-size:14px;font-weight:500;color:var(--muted);">${_depWindowLocal || '-'}</div></div>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 8 14"/></svg>
+              <div><div style="font-size:9px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);">Arr Window UTC</div><div style="font-size:15px;font-weight:600;color:var(--text);">${leg && leg.arr_time_utc ? buildTimeWindow(leg.arr_time_utc) : '-'}</div></div>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 8 14"/><path d="M2 12h1M21 12h1M12 2v1M12 21v1"/></svg>
+              <div><div style="font-size:9px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);">Arr Window Local</div><div style="font-size:14px;font-weight:500;color:var(--muted);">${_arrWindowLocal || '-'}</div></div>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/></svg>
+              <div><div style="font-size:9px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);">Flight Time</div><div style="font-size:15px;font-weight:600;color:var(--text);">${leg && leg.flight_time ? leg.flight_time : '-'}</div></div>
             </div>
             <div style="display:flex;align-items:center;gap:8px;">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 8 14"/></svg>
@@ -9165,6 +9174,92 @@ app.get('/schedule', requirePageEnabled('schedule'), async (req, res) => {
   const showAtcRoute = isAdmin || isPageEnabled('atc-route');
   const showWfChallenge = isPageVisibleTo('worldflight-challenge', isAdmin);
 
+  // Resolve full airport names + coords for every from/to ICAO so the ICAO
+  // cells can render a styled tooltip with the name on hover and the Dep
+  // Window cell can show a UTC + local-time tooltip. One Airport query per
+  // page load.
+  const _scheduleIcaoSet = new Set();
+  adminSheetCache.forEach(r => {
+    if (r.from) _scheduleIcaoSet.add(String(r.from).toUpperCase());
+    if (r.to)   _scheduleIcaoSet.add(String(r.to).toUpperCase());
+  });
+  const _scheduleAirports = _scheduleIcaoSet.size
+    ? await prisma.airport.findMany({
+        where: { icao: { in: [..._scheduleIcaoSet] } },
+        select: { icao: true, name: true, lat: true, lon: true }
+      }).catch(() => [])
+    : [];
+  const airportNameByIcao = {};
+  const airportInfoByIcao = {};
+  for (const a of _scheduleAirports) {
+    if (a.name) airportNameByIcao[a.icao] = a.name;
+    airportInfoByIcao[a.icao] = { lat: a.lat, lon: a.lon };
+  }
+
+  // Local-time window for the Dep cell tooltip. Computes the ±1h window
+  // ends at the departure airport's local timezone. Edges that cross UTC
+  // midnight use dayShift = ±1 so the right DST instant is picked.
+  function depWindowAtAirport(icao, dateUtc, depTimeUtc) {
+    const info = airportInfoByIcao[icao];
+    if (!info || info.lat == null) return null;
+    const m = /^(\d{2}):(\d{2})$/.exec(depTimeUtc || '');
+    if (!m) return null;
+    const depMins = Number(m[1]) * 60 + Number(m[2]);
+    function fmtEdge(totalMins) {
+      let dayShift = 0;
+      if (totalMins < 0)        { dayShift = -1; totalMins += 1440; }
+      else if (totalMins >= 1440) { dayShift =  1; totalMins -= 1440; }
+      const hh = String(Math.floor(totalMins / 60)).padStart(2, '0');
+      const mm = String(totalMins % 60).padStart(2, '0');
+      return formatLocalAtAirport(info.lat, info.lon, dateUtc, `${hh}:${mm}`, dayShift);
+    }
+    const lo = fmtEdge(depMins - 60);
+    const hi = fmtEdge(depMins + 60);
+    if (!lo || !hi) return null;
+    return { lo: lo.time, hi: hi.time, zone: lo.zone };
+  }
+  const depWindowLocalByKey = {};
+  for (const r of adminSheetCache) {
+    if (!r.number || !r.from || !r.dep_time_utc) continue;
+    const w = depWindowAtAirport(String(r.from).toUpperCase(), r.date_utc, r.dep_time_utc);
+    if (w) depWindowLocalByKey[r.number] = w;
+  }
+
+  // Same idea for the arrival window at the destination airport. Adds a
+  // baseShift = 1 day when arr_time_utc < dep_time_utc (arrival on the next
+  // UTC day) before the edge-crossing adjustment.
+  function arrWindowAtAirport(icao, dateUtc, depTimeUtc, arrTimeUtc) {
+    const info = airportInfoByIcao[icao];
+    if (!info || info.lat == null) return null;
+    const am = /^(\d{2}):(\d{2})$/.exec(arrTimeUtc || '');
+    if (!am) return null;
+    const arrMins = Number(am[1]) * 60 + Number(am[2]);
+    let baseShift = 0;
+    const dm = /^(\d{2}):(\d{2})$/.exec(depTimeUtc || '');
+    if (dm) {
+      const depMins = Number(dm[1]) * 60 + Number(dm[2]);
+      if (arrMins < depMins) baseShift = 1;
+    }
+    function fmtEdge(totalMins) {
+      let dayShift = baseShift;
+      if (totalMins < 0)        { dayShift -= 1; totalMins += 1440; }
+      else if (totalMins >= 1440) { dayShift += 1; totalMins -= 1440; }
+      const hh = String(Math.floor(totalMins / 60)).padStart(2, '0');
+      const mm = String(totalMins % 60).padStart(2, '0');
+      return formatLocalAtAirport(info.lat, info.lon, dateUtc, `${hh}:${mm}`, dayShift);
+    }
+    const lo = fmtEdge(arrMins - 60);
+    const hi = fmtEdge(arrMins + 60);
+    if (!lo || !hi) return null;
+    return { lo: lo.time, hi: hi.time, zone: lo.zone };
+  }
+  const arrWindowLocalByKey = {};
+  for (const r of adminSheetCache) {
+    if (!r.number || !r.to || !r.arr_time_utc) continue;
+    const w = arrWindowAtAirport(String(r.to).toUpperCase(), r.date_utc, r.dep_time_utc, r.arr_time_utc);
+    if (w) arrWindowLocalByKey[r.number] = w;
+  }
+
   // Team-booking context for booking-only flow (same resolution as /sector)
   let teamBookingContext = null;
   if (cid && isTeamMember(cid)) {
@@ -9202,8 +9297,9 @@ app.get('/schedule', requirePageEnabled('schedule'), async (req, res) => {
             <th class="col-to">Arr</th>
             <th class="col-date">Date</th>
             <th class="col-window">Dep Window <span class="col-help" title="There is no published departure time.&#10;Please aim to depart within this window." style="cursor:help;color:var(--muted);">?</span></th>
-            <th class="col-flight">Flight Time</th>
-            <th class="col-block">Block</th>
+            <th class="col-window">Arr Window <span class="col-help" title="Approximate arrival window based on dep time + block.&#10;Actual arrival depends on routing and conditions." style="cursor:help;color:var(--muted);">?</span></th>
+            <th class="col-flight">Flight Time <span class="col-help" title="All flights planned at fixed mach .78" style="cursor:help;color:var(--muted);">?</span></th>
+            <th class="col-block">Block Time <span class="col-help" title="Flight time + 20 minutes" style="cursor:help;color:var(--muted);">?</span></th>
             ${showAtcRoute ? '<th class="col-route">ATC Route</th>' : ''}
             ${showBookSlot ? '<th class="col-book">Book</th>' : ''}
             <th class="col-details"></th>
@@ -9227,29 +9323,55 @@ app.get('/schedule', requirePageEnabled('schedule'), async (req, res) => {
               <td class="col-wf-sector"><button class="sector-details-btn${r.is_wf_challenge && showWfChallenge ? ' wf-challenge-btn' : ''}"${r.is_wf_challenge && showWfChallenge ? ' title="WorldFlight Challenge sector"' : ''} data-from="${r.from}" data-to="${r.to}" data-wf="${r.number}" data-date="${r.date_utc}" data-dep="${r.dep_time_utc}" data-block="${r.block_time}" data-route="${showAtcRoute ? escapeHtml(r.atc_route) : ''}">${r.is_wf_challenge && showWfChallenge ? '<svg class="wf-challenge-star" viewBox="0 0 24 24" width="13" height="13" fill="currentColor" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>' : ''}${r.number}</button></td>
 
               <td class="col-from">
-                <a href="/icao/${r.from}">${r.from}</a>
+                <span class="icao-tt">
+                  <a href="/icao/${r.from}">${r.from}</a>
+                  ${airportNameByIcao[r.from] ? '<span class="icao-tt-bubble">' + escapeHtml(airportNameByIcao[r.from]) + '</span>' : ''}
+                </span>
               </td>
 
               <td class="col-to">
-                <a href="/icao/${r.to}">${r.to}</a>
+                <span class="icao-tt">
+                  <a href="/icao/${r.to}">${r.to}</a>
+                  ${airportNameByIcao[r.to] ? '<span class="icao-tt-bubble">' + escapeHtml(airportNameByIcao[r.to]) + '</span>' : ''}
+                </span>
               </td>
 
               <td class="col-date">${r.date_utc}</td>
-              <td class="col-window">${buildTimeWindow(r.dep_time_utc)}</td>
+              <td class="col-window">${(() => {
+                const utcStr = buildTimeWindow(r.dep_time_utc);
+                const lw = depWindowLocalByKey[r.number];
+                if (!lw) return utcStr;
+                return '<span class="window-tt">' + utcStr +
+                  '<span class="window-tt-bubble">' +
+                    '<div class="window-tt-row"><span class="window-tt-label">UTC</span><span class="window-tt-value">' + utcStr + '</span></div>' +
+                    '<div class="window-tt-row"><span class="window-tt-label">Local</span><span class="window-tt-value">' + escapeHtml(lw.lo) + '–' + escapeHtml(lw.hi) + '</span></div>' +
+                  '</span>' +
+                '</span>';
+              })()}</td>
+              <td class="col-window">${(() => {
+                if (!r.arr_time_utc) return '-';
+                const utcStr = buildTimeWindow(r.arr_time_utc);
+                const lw = arrWindowLocalByKey[r.number];
+                if (!lw) return utcStr;
+                return '<span class="window-tt">' + utcStr +
+                  '<span class="window-tt-bubble">' +
+                    '<div class="window-tt-row"><span class="window-tt-label">UTC</span><span class="window-tt-value">' + utcStr + '</span></div>' +
+                    '<div class="window-tt-row"><span class="window-tt-label">Local</span><span class="window-tt-value">' + escapeHtml(lw.lo) + '–' + escapeHtml(lw.hi) + '</span></div>' +
+                  '</span>' +
+                '</span>';
+              })()}</td>
               <td class="col-flight">${r.flight_time || '-'}</td>
               <td class="col-block">${r.block_time}</td>
 
-              ${showAtcRoute ? `
-              <td class="col-route">
-                <div class="route-collapsible">
-                  <span class="route-text collapsed">
-                    ${escapeHtml(r.atc_route)}
-                  </span>
-                  <button type="button" class="route-toggle" aria-expanded="false">
-                    Expand
-                  </button>
-                </div>
-              </td>` : ''}
+              ${showAtcRoute ? (() => {
+                const hasRoute = r.atc_route && r.atc_route !== '-';
+                const routeAttr = hasRoute
+                  ? String(r.atc_route).replace(/&/g, '&amp;').replace(/"/g, '&quot;')
+                  : '';
+                return '<td class="col-route">' + (hasRoute
+                  ? '<button type="button" class="show-route-btn" data-route="' + routeAttr + '">Show Route</button>'
+                  : '<span style="color:var(--muted);">—</span>') + '</td>';
+              })() : ''}
 
               <!-- ✅ BOOK (combined booking type + action) -->
               ${showBookSlot ? (() => {
@@ -9672,6 +9794,96 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 });
+</script>
+
+<div id="routeModal" class="route-modal" hidden>
+  <div class="route-modal-backdrop"></div>
+  <div class="route-modal-card" role="dialog" aria-modal="true" aria-labelledby="routeModalTitle">
+    <div class="route-modal-header">
+      <div id="routeModalTitle" style="font-weight:700;font-size:14px;">ATC Route</div>
+      <button type="button" id="routeModalClose" class="route-modal-close" aria-label="Close">&times;</button>
+    </div>
+    <div id="routeModalBody" class="route-modal-body"></div>
+    <div class="route-modal-actions">
+      <button type="button" id="routeModalCloseAction" class="route-modal-copy route-modal-secondary">Close</button>
+      <button type="button" id="routeModalCopy" class="route-modal-copy">Copy</button>
+    </div>
+  </div>
+</div>
+
+<style>
+  .show-route-btn {
+    padding: 4px 10px;
+    background: rgba(56,189,248,0.08);
+    border: 1px solid rgba(56,189,248,0.25);
+    color: var(--accent);
+    border-radius: 6px;
+    font-size: 12px;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .show-route-btn:hover { background: rgba(56,189,248,0.16); }
+  .route-modal[hidden] { display: none; }
+  .route-modal { position: fixed; inset: 0; z-index: 500; display: flex; align-items: center; justify-content: center; }
+  .route-modal-backdrop { position: absolute; inset: 0; background: rgba(0,0,0,0.6); }
+  .route-modal-card {
+    position: relative; background: var(--panel); border: 1px solid var(--border);
+    border-radius: 10px; padding: 16px; width: min(640px, 92vw); max-height: 80vh;
+    display: flex; flex-direction: column; gap: 12px;
+  }
+  .route-modal-header { display: flex; align-items: center; justify-content: space-between; }
+  .route-modal-close {
+    background: none; border: none; color: var(--muted); font-size: 22px; cursor: pointer;
+    line-height: 1; padding: 0 4px;
+  }
+  .route-modal-close:hover { color: var(--text); }
+  .route-modal-body {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 13px; line-height: 1.5; color: var(--text);
+    background: rgba(255,255,255,0.03); border: 1px solid var(--border);
+    border-radius: 8px; padding: 12px; overflow: auto; word-break: break-word; white-space: pre-wrap;
+  }
+  .route-modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
+  .route-modal-copy {
+    padding: 6px 14px; background: var(--accent); color: #0b1220; border: none; border-radius: 6px;
+    font-weight: 600; cursor: pointer; font-family: inherit;
+  }
+  .route-modal-copy.route-modal-secondary {
+    background: transparent; color: var(--text); border: 1px solid var(--border);
+  }
+  .route-modal-copy.route-modal-secondary:hover { background: rgba(255,255,255,0.04); }
+</style>
+
+<script>
+(function() {
+  var modal = document.getElementById('routeModal');
+  if (!modal) return;
+  var body = document.getElementById('routeModalBody');
+  var closeBtn = document.getElementById('routeModalClose');
+  var copyBtn = document.getElementById('routeModalCopy');
+  var closeActionBtn = document.getElementById('routeModalCloseAction');
+  var backdrop = modal.querySelector('.route-modal-backdrop');
+
+  function open(route) { body.textContent = route; modal.hidden = false; }
+  function close() { modal.hidden = true; }
+
+  document.addEventListener('click', function(e) {
+    var btn = e.target.closest('.show-route-btn');
+    if (btn) { open(btn.getAttribute('data-route') || ''); }
+  });
+  closeBtn.addEventListener('click', close);
+  if (closeActionBtn) closeActionBtn.addEventListener('click', close);
+  backdrop.addEventListener('click', close);
+  document.addEventListener('keydown', function(e) { if (!modal.hidden && e.key === 'Escape') close(); });
+  copyBtn.addEventListener('click', async function() {
+    try {
+      await navigator.clipboard.writeText(body.textContent || '');
+      var prev = copyBtn.textContent;
+      copyBtn.textContent = 'Copied';
+      setTimeout(function() { copyBtn.textContent = prev; }, 1200);
+    } catch (e) {}
+  });
+})();
 </script>
 
   `;
@@ -19037,7 +19249,8 @@ app.get('/team/bookings', requireLogin, requireTeamMember, async (req, res) => {
         </div>
         <div id="routeModalBody" class="route-modal-body"></div>
         <div class="route-modal-actions">
-          <button type="button" id="routeModalCopy" class="route-modal-copy">Copy</button>
+          <button type="button" id="routeModalCloseAction" class="route-modal-copy route-modal-secondary">Close</button>
+      <button type="button" id="routeModalCopy" class="route-modal-copy">Copy</button>
         </div>
       </div>
     </div>
@@ -19101,11 +19314,15 @@ app.get('/team/bookings', requireLogin, requireTeamMember, async (req, res) => {
         background: rgba(255,255,255,0.03); border: 1px solid var(--border);
         border-radius: 8px; padding: 12px; overflow: auto; word-break: break-word; white-space: pre-wrap;
       }
-      .route-modal-actions { display: flex; justify-content: flex-end; }
+      .route-modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
       .route-modal-copy {
         padding: 6px 14px; background: var(--accent); color: #0b1220; border: none; border-radius: 6px;
         font-weight: 600; cursor: pointer; font-family: inherit;
       }
+      .route-modal-copy.route-modal-secondary {
+        background: transparent; color: var(--text); border: 1px solid var(--border);
+      }
+      .route-modal-copy.route-modal-secondary:hover { background: rgba(255,255,255,0.04); }
     </style>
 
     <script>
@@ -19114,6 +19331,7 @@ app.get('/team/bookings', requireLogin, requireTeamMember, async (req, res) => {
       var body = document.getElementById('routeModalBody');
       var closeBtn = document.getElementById('routeModalClose');
       var copyBtn = document.getElementById('routeModalCopy');
+      var closeActionBtn = document.getElementById('routeModalCloseAction');
       var backdrop = modal.querySelector('.route-modal-backdrop');
 
       function open(route) {
@@ -19127,6 +19345,7 @@ app.get('/team/bookings', requireLogin, requireTeamMember, async (req, res) => {
         if (btn) { open(btn.getAttribute('data-route') || ''); return; }
       });
       closeBtn.addEventListener('click', close);
+      if (closeActionBtn) closeActionBtn.addEventListener('click', close);
       backdrop.addEventListener('click', close);
       document.addEventListener('keydown', function(e) { if (!modal.hidden && e.key === 'Escape') close(); });
       copyBtn.addEventListener('click', async function() {
@@ -20870,6 +21089,23 @@ app.get('/wf-schedule', requireAdmin, async (req, res) => {
 // covers arrivals whose UTC hour wraps past midnight relative to dep.
 // Returns { time: "HH:MM", zone: "GMT+11" } or null. The caller renders the
 // time visibly and stashes the zone on a hover tooltip.
+// Format an absolute UTC timestamp as "HH:MM" in the given IANA timezone.
+// Used by the airspace FIR detail page to show Staff Window (Local).
+function formatAbsLocalHHMM(absMs, tz) {
+  if (absMs == null || !tz) return null;
+  try {
+    const parts = new Intl.DateTimeFormat('en-GB', {
+      timeZone: tz,
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23'
+    }).formatToParts(new Date(absMs));
+    const hh = parts.find(p => p.type === 'hour')?.value || '';
+    const mm = parts.find(p => p.type === 'minute')?.value || '';
+    return hh && mm ? `${hh}:${mm}` : null;
+  } catch { return null; }
+}
+
 function formatLocalAtAirport(lat, lon, dateUtc, timeUtc, dayShift = 0) {
   if (lat == null || lon == null) return null;
   const m = /^(\d{2}):(\d{2})$/.exec(timeUtc || '');
@@ -22249,7 +22485,7 @@ function greatCircleArc(lat1, lon1, lat2, lon2, numPoints) {
               firSection.style.display = 'block';
               var firList = document.getElementById('addLegFirList');
               firList.innerHTML = data.firs.map(function(f) {
-                var label = f.fir;
+                var label = /^K[A-Z]{3}$/.test(f.fir) ? f.fir.slice(1) : f.fir;
                 if (f.staffStart && f.staffEnd) {
                   label += ' <span class="fir-time">' + f.staffStart + ' – ' + f.staffEnd + '</span>';
                 }
@@ -23143,41 +23379,68 @@ res.send(
 
 });
 
-app.get('/api/fir-merged.geojson', (req, res) => {
-  const merged = {};
+// Merged FIR geojson: one feature per base FIR id (LFRR, KZNY, …) with the
+// sub-sector polygons geometrically UNIONED so adjacent sub-sectors share
+// edges and the outer boundary draws as a single outline. Cached on first
+// build — the FIR file is static so we only pay the union cost once.
+let _firMergedCache = null;
+function buildFirMergedFeatureCollection() {
+  if (_firMergedCache) return _firMergedCache;
 
+  // Group raw sub-features by base id.
+  const polysByBase = {};
+  const propsByBase = {};
   for (const f of firFeatures) {
     const rawId = f.properties?.id;
     if (!rawId) continue;
     const base = rawId.split('-')[0];
-
-    if (!merged[base]) {
-      merged[base] = {
-        type: 'Feature',
-        properties: {
-          id: base,
-          region: f.properties?.region || '',
-          division: f.properties?.division || '',
-          label_lat: f.properties?.label_lat,
-          label_lon: f.properties?.label_lon
-        },
-        geometry: { type: 'MultiPolygon', coordinates: [] }
+    if (!propsByBase[base]) {
+      propsByBase[base] = {
+        id: base,
+        region: f.properties?.region || '',
+        division: f.properties?.division || '',
+        label_lat: f.properties?.label_lat,
+        label_lon: f.properties?.label_lon
       };
     }
-
     const geom = f.geometry;
     if (!geom) continue;
-    if (geom.type === 'MultiPolygon') {
-      for (const poly of geom.coordinates) merged[base].geometry.coordinates.push(poly);
-    } else if (geom.type === 'Polygon') {
-      merged[base].geometry.coordinates.push(geom.coordinates);
+    if (!polysByBase[base]) polysByBase[base] = [];
+    // Normalise everything to an array of Polygon coordinate arrays.
+    if (geom.type === 'Polygon') {
+      polysByBase[base].push(geom.coordinates);
+    } else if (geom.type === 'MultiPolygon') {
+      for (const poly of geom.coordinates) polysByBase[base].push(poly);
     }
   }
 
-  res.json({
-    type: 'FeatureCollection',
-    features: Object.values(merged)
-  });
+  // Union per base id. polygon-clipping accepts (poly1, poly2, ...) where
+  // each "poly" is a list of rings. Returns a MultiPolygon coordinates array.
+  const features = [];
+  for (const base of Object.keys(polysByBase)) {
+    const polys = polysByBase[base];
+    let unioned;
+    try {
+      unioned = polys.length === 1 ? [polys[0]] : polygonClipping.union(...polys);
+    } catch (e) {
+      // If clipping fails on a malformed polygon, fall back to the raw stack.
+      console.warn('[FIR MERGE] union failed for', base, '-', e.message);
+      unioned = polys.map(p => p);
+    }
+    features.push({
+      type: 'Feature',
+      properties: propsByBase[base],
+      geometry: { type: 'MultiPolygon', coordinates: unioned }
+    });
+  }
+
+  _firMergedCache = { type: 'FeatureCollection', features };
+  console.log(`[FIR MERGE] built ${features.length} unioned FIR features`);
+  return _firMergedCache;
+}
+
+app.get('/api/fir-merged.geojson', (req, res) => {
+  res.json(buildFirMergedFeatureCollection());
 });
 
 app.get('/api/airport-coords/:icao', async (req, res) => {
@@ -23459,12 +23722,24 @@ async function _buildFirAnalysisInner() {
 
     for (const seg of legFirSegments) {
       if (!firMap[seg.fir]) {
-        // Look up FIR metadata (match base code)
+        // Look up FIR metadata (match base code). Resolve an IANA timezone
+        // from the FIR's label position so we can render staff windows in
+        // the FIR's local time alongside UTC.
         const firFeature = firFeatures.find(f => f.properties?.id && f.properties.id.split('-')[0] === seg.fir);
+        let tz = null;
+        if (firFeature?.properties?.label_lat != null && firFeature?.properties?.label_lon != null) {
+          try {
+            tz = tzLookup(
+              parseFloat(firFeature.properties.label_lat),
+              parseFloat(firFeature.properties.label_lon)
+            );
+          } catch {}
+        }
         firMap[seg.fir] = {
           fir: seg.fir,
           region: firFeature?.properties?.region || '',
           division: firFeature?.properties?.division || '',
+          tz,
           legs: []
         };
       }
@@ -23495,12 +23770,20 @@ async function _buildFirAnalysisInner() {
         legEntry.staffEnd = fmt(staffEnd);
         legEntry.staffMins = Math.round((staffEnd - staffStart));
 
-        // Absolute timestamps for weekly timeline
+        // Absolute timestamps + per-FIR local-zone formatting for the Staff
+        // Window (Local) column. tz comes from the FIR centroid resolved
+        // above; if it's missing we leave the local strings undefined and
+        // the client renders "-".
         const dateObj = parseServerDate(leg.date_utc);
         if (dateObj) {
           const dayBase = dateObj.getTime();
           legEntry.staffStartAbs = dayBase + staffStart * 60000;
           legEntry.staffEndAbs = dayBase + staffEnd * 60000;
+          const tz = firMap[seg.fir]?.tz;
+          if (tz) {
+            legEntry.staffStartLocal = formatAbsLocalHHMM(legEntry.staffStartAbs, tz);
+            legEntry.staffEndLocal   = formatAbsLocalHHMM(legEntry.staffEndAbs,   tz);
+          }
         }
       }
 
@@ -23533,9 +23816,82 @@ async function _buildFirAnalysisInner() {
     }
     fir.legs = merged;
 
-    // Sort by date then entry time
+    // Pair consecutive legs at the same airport: when leg A arrives at the
+    // same airport leg B departs from, and BOTH transit this FIR, their
+    // separate staffing windows (arrival of A and departure of B) are
+    // really one continuous block of work for the FIR's controller cover.
+    // Combine min(start) → max(end) across the pair and reflect the merged
+    // window on BOTH rows so coordinators see the full block. Iterates
+    // until stable so a chain A→B→C collapses to one window across all
+    // three.
+    function absToClock(abs) {
+      const d = new Date(abs);
+      return String(d.getUTCHours()).padStart(2, '0') + ':' + String(d.getUTCMinutes()).padStart(2, '0');
+    }
+    // Max gap between the earlier leg's window end and the later leg's
+    // window start. Anything longer and they aren't realistically the
+    // same controller cover — they're two unrelated visits to the same
+    // airport (e.g. WF2601 YSSY→… and the final WFxxxx …→YSSY a week later).
+    const PAIR_GAP_MAX_MS = 6 * 60 * 60 * 1000; // 6 hours
+    let changed = true;
+    let guard = 0;
+    while (changed && guard++ < 20) {
+      changed = false;
+      for (let i = 0; i < fir.legs.length; i++) {
+        const a = fir.legs[i];
+        if (!a.staffStartAbs || !a.staffEndAbs) continue;
+        for (let j = i + 1; j < fir.legs.length; j++) {
+          const b = fir.legs[j];
+          if (!b.staffStartAbs || !b.staffEndAbs) continue;
+          // Order them: `earlier` starts first.
+          const earlier = a.staffStartAbs <= b.staffStartAbs ? a : b;
+          const later   = earlier === a ? b : a;
+          // Pair iff the earlier leg ARRIVES at the airport the later leg
+          // DEPARTS from (continuous cover for one airport stop).
+          if (earlier.to !== later.from) continue;
+          // …and they're temporally close (typical turn ≤ 6 hours).
+          const gap = later.staffStartAbs - earlier.staffEndAbs;
+          if (gap > PAIR_GAP_MAX_MS) continue;
+          const combinedStart = Math.min(a.staffStartAbs, b.staffStartAbs);
+          const combinedEnd   = Math.max(a.staffEndAbs,   b.staffEndAbs);
+          if (combinedStart === a.staffStartAbs && combinedEnd === a.staffEndAbs &&
+              combinedStart === b.staffStartAbs && combinedEnd === b.staffEndAbs) continue;
+          a.staffStartAbs = b.staffStartAbs = combinedStart;
+          a.staffEndAbs   = b.staffEndAbs   = combinedEnd;
+          a.staffStart = b.staffStart = absToClock(combinedStart);
+          a.staffEnd   = b.staffEnd   = absToClock(combinedEnd);
+          const mins = Math.round((combinedEnd - combinedStart) / 60000);
+          a.staffMins = b.staffMins = mins;
+          // Refresh local strings — the combined abs values are new.
+          if (fir.tz) {
+            const localStart = formatAbsLocalHHMM(combinedStart, fir.tz);
+            const localEnd   = formatAbsLocalHHMM(combinedEnd,   fir.tz);
+            a.staffStartLocal = b.staffStartLocal = localStart;
+            a.staffEndLocal   = b.staffEndLocal   = localEnd;
+          }
+          // Track which sector this row's window was combined with (excluding self)
+          const setA = new Set(a.combinedWith || []);
+          const setB = new Set(b.combinedWith || []);
+          setA.add(b.wf); setB.add(a.wf);
+          (b.combinedWith || []).forEach(x => setA.add(x));
+          (a.combinedWith || []).forEach(x => setB.add(x));
+          setA.delete(a.wf); setB.delete(b.wf);
+          a.combinedWith = [...setA];
+          b.combinedWith = [...setB];
+          changed = true;
+        }
+      }
+    }
+
+    // Sort by WF number ascending (WF2601, WF2602, …). Falls back to
+    // chronological date if WF numbers are missing/equal, then to entry time.
     fir.legs.sort((a, b) => {
-      if (a.date !== b.date) return (a.date || '').localeCompare(b.date || '');
+      const an = parseInt(String(a.wf || '').replace(/\D/g, ''), 10);
+      const bn = parseInt(String(b.wf || '').replace(/\D/g, ''), 10);
+      if (Number.isFinite(an) && Number.isFinite(bn) && an !== bn) return an - bn;
+      const ad = parseServerDate(a.date)?.getTime() || 0;
+      const bd = parseServerDate(b.date)?.getTime() || 0;
+      if (ad !== bd) return ad - bd;
       return (a.entryTime || '').localeCompare(b.entryTime || '');
     });
   }
@@ -24480,7 +24836,7 @@ app.get('/admin/settings', requireAdmin, async (req, res) => {
         { key: 'my-slots',        label: 'My Slots / Bookings', icon: '✈️', desc: 'Personal slot and booking overview' },
         { key: 'atc',             label: 'WF Flow Control',     icon: '🎧', desc: 'Controller departure management view' },
         { key: 'suggest-airport', label: 'Suggest Airport',     icon: '💡', desc: 'Community airport suggestions' },
-        { key: 'airspace',        label: 'Airspace Management', icon: '🌐', desc: 'FIR staffing requirements and timelines' }
+        { key: 'airspace',        label: 'Staffing Overview', icon: '🌐', desc: 'FIR staffing requirements and timelines' }
       ]
     },
     {
@@ -27655,7 +28011,647 @@ app.get('/atc', requirePageEnabled('atc'), (req, res) => {
 });
 
 // ===== AIRSPACE MANAGEMENT PAGE =====
+// Landing picker: choose between viewing staffing by sector or by area.
 app.get('/airspace', requirePageEnabled('airspace'), async (req, res) => {
+  const user = req.session?.user?.data || null;
+  const cid = Number(user?.cid) || null;
+  const isAdmin = isAdminUser(cid);
+
+  const content = `
+    <section class="card card-full">
+      <h2 style="margin:0 0 4px;">Staffing Overview</h2>
+      <p style="color:var(--muted);margin:0 0 24px;">Pick how you want to look at the active schedule's staffing windows.</p>
+
+      <div class="staffing-picker">
+        <a href="/airspace/by-sector" class="staffing-picker-tile">
+          <div class="staffing-picker-icon">
+            <svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="4" width="18" height="18" rx="2"/>
+              <line x1="16" y1="2" x2="16" y2="6"/>
+              <line x1="8" y1="2" x2="8" y2="6"/>
+              <line x1="3" y1="10" x2="21" y2="10"/>
+              <line x1="3" y1="14" x2="21" y2="14"/>
+              <line x1="3" y1="18" x2="21" y2="18"/>
+            </svg>
+          </div>
+          <div class="staffing-picker-title">View by Sector</div>
+          <div class="staffing-picker-desc">Browse every WF leg with the FIRs it transits — open a FIR to see its full staff window.</div>
+        </a>
+
+        <a href="/airspace/by-area" class="staffing-picker-tile">
+          <div class="staffing-picker-icon">
+            <svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"/>
+              <path d="M2 12h20"/>
+              <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10Z"/>
+            </svg>
+          </div>
+          <div class="staffing-picker-title">View by Area</div>
+          <div class="staffing-picker-desc">Pick a FIR, Division, vACC or ARTCC — see the staff windows for every sector that transits it.</div>
+        </a>
+      </div>
+    </section>
+
+    <style>
+      .staffing-picker {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 400px));
+        gap: 24px;
+        margin-top: 16px;
+        justify-content: start;
+      }
+      @media (max-width: 880px) {
+        .staffing-picker { grid-template-columns: minmax(0, 400px); }
+      }
+      .staffing-picker-tile {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 18px;
+        padding: 38px 34px;
+        aspect-ratio: 1 / 1;
+        border-radius: 16px;
+        border: 1px solid var(--border);
+        background: rgba(255,255,255,0.02);
+        text-decoration: none;
+        color: var(--text);
+        cursor: pointer;
+        transition: border-color .15s, background .15s, transform .1s;
+      }
+      .staffing-picker-tile:hover {
+        border-color: var(--accent);
+        background: rgba(56,189,248,0.06);
+        transform: translateY(-2px);
+      }
+      .staffing-picker-icon {
+        width: 80px;
+        height: 80px;
+        border-radius: 18px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: color-mix(in srgb, var(--accent) 14%, transparent);
+        color: var(--accent);
+        border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+      }
+      .staffing-picker-icon svg { width: 48px; height: 48px; }
+      .staffing-picker-title {
+        font-size: 22px;
+        font-weight: 700;
+        color: var(--text);
+      }
+      .staffing-picker-desc {
+        font-size: 14px;
+        color: var(--muted);
+        line-height: 1.55;
+      }
+    </style>
+  `;
+
+  res.send(renderLayout({
+    title: 'Staffing Overview',
+    user,
+    isAdmin,
+    content,
+    layoutClass: 'dashboard-full'
+  }));
+});
+
+// By-Sector view: schedule rows with the FIRs each leg transits as clickable
+// badges that deep-link into /airspace/by-area?fir=XXX.
+app.get('/airspace/by-sector', requirePageEnabled('airspace'), async (req, res) => {
+  const user = req.session?.user?.data || null;
+  const cid = Number(user?.cid) || null;
+  const isAdmin = isAdminUser(cid);
+
+  // Build flat [{wf, from, to, date, atcRoute, _fir, staff*, flow*, ...}] list
+  // by walking buildFirAnalysis() — same shape loadGroupDetail uses in by-area.
+  const allFirs = await buildFirAnalysis().catch(() => []);
+  const allLegs = [];
+  for (const fir of allFirs) {
+    for (const leg of (fir.legs || [])) {
+      allLegs.push(Object.assign({}, leg, { _fir: fir.fir }));
+    }
+  }
+
+  // Unique sectors for dropdown options. Sort by WF number ascending.
+  const seen = new Map();
+  for (const l of allLegs) {
+    const key = `${l.wf}:${l.from}:${l.to}`;
+    if (!seen.has(key)) seen.set(key, { wf: l.wf, from: l.from, to: l.to, date: l.date });
+  }
+  const sectors = [...seen.values()].sort((a, b) => {
+    const an = parseInt(String(a.wf || '').replace(/\D/g, ''), 10);
+    const bn = parseInt(String(b.wf || '').replace(/\D/g, ''), 10);
+    if (isFinite(an) && isFinite(bn) && an !== bn) return an - bn;
+    return String(a.wf || '').localeCompare(String(b.wf || ''));
+  });
+
+  const optionsHtml = sectors.map(s =>
+    `<option value="${s.wf}">${s.wf} — ${s.from} → ${s.to}${s.date ? ' · ' + s.date : ''}</option>`
+  ).join('');
+
+  const content = `
+    <style>
+      .sector-picker-card {
+        margin-bottom: 20px;
+        padding: 28px 32px;
+        background: linear-gradient(135deg, rgba(139,92,246,0.06), rgba(56,189,248,0.04));
+        border: 1px solid rgba(139,92,246,0.25);
+        border-radius: 14px;
+      }
+      .sector-picker-head {
+        display: flex; align-items: center; gap: 12px;
+        margin-bottom: 18px; flex-wrap: wrap;
+      }
+      .sector-picker-head h2 { margin: 0; font-size: 20px; }
+      .sector-picker-back {
+        text-decoration: none; padding: 6px 12px; font-size: 12px;
+        background: rgba(139,92,246,0.12); border: 1px solid rgba(139,92,246,0.35);
+        color: #c4b5fd; border-radius: 6px;
+      }
+      .sector-picker-back:hover { background: rgba(139,92,246,0.2); }
+      .sector-picker-sub {
+        color: var(--muted); margin: 0 0 16px; font-size: 13px;
+      }
+      .sector-picker-control { display: flex; flex-direction: column; gap: 8px; }
+      .sector-picker-label {
+        font-size: 11px; font-weight: 700; letter-spacing: 0.06em;
+        text-transform: uppercase; color: var(--muted);
+      }
+      .sector-picker-select {
+        width: 100%; padding: 16px 20px;
+        font-size: 17px; font-weight: 600;
+        background: rgba(0,0,0,0.35); color: var(--text);
+        border: 2px solid rgba(139,92,246,0.4);
+        border-radius: 10px; cursor: pointer;
+        appearance: none;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23a78bfa' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 18px center;
+        padding-right: 48px;
+        transition: border-color .15s, box-shadow .15s;
+      }
+      .sector-picker-select:hover, .sector-picker-select:focus {
+        border-color: #a78bfa;
+        box-shadow: 0 0 0 3px rgba(139,92,246,0.18);
+        outline: none;
+      }
+      .sector-picker-select option { background: #0f172a; color: var(--text); }
+
+      #sectorRouteMap path:focus { outline: none; }
+      #sectorRouteMap .leaflet-interactive:focus { outline: none; }
+      .leaflet-tooltip.fir-tooltip {
+        background: rgba(15,23,42,0.92);
+        border: 1px solid rgba(99,102,241,0.5);
+        color: #c7d2fe;
+        font-weight: 700;
+        font-size: 11px;
+        letter-spacing: 0.04em;
+        padding: 3px 8px;
+        border-radius: 4px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+      }
+      .leaflet-tooltip.fir-tooltip::before { display: none; }
+
+      #firDetailTable { border-collapse: collapse; width: max-content; min-width: 100%; }
+      #firDetailTable th, #firDetailTable td { padding: 6px 10px; text-align: left; border-top: 1px solid var(--border); white-space: nowrap; }
+      #firDetailTable th { font-size: 13px; font-weight: 600; color: var(--muted); }
+      #firDetailTable td { font-size: 13px; }
+      .staff-window { font-family: monospace; font-size: 12px; }
+      .fir-badge {
+        display: inline-block; padding: 3px 8px; font-size: 11px; font-weight: 700;
+        letter-spacing: 0.04em; background: rgba(56,189,248,0.12);
+        color: var(--accent); border: 1px solid rgba(56,189,248,0.3); border-radius: 4px;
+      }
+      .fir-badge-link:hover { filter: brightness(1.2); }
+      .flow-badge {
+        display: inline-block; padding: 2px 8px; font-size: 11px; font-weight: 600;
+        border-radius: 4px;
+      }
+      .flow-badge.slotted { background: rgba(244,114,182,0.15); color: #f472b6; border: 1px solid rgba(244,114,182,0.35); }
+      .flow-badge.booking { background: rgba(56,189,248,0.12); color: var(--accent); border: 1px solid rgba(56,189,248,0.3); }
+      .flow-badge.none { background: rgba(255,255,255,0.04); color: var(--muted); border: 1px solid var(--border); }
+      .fir-view-btn {
+        background: rgba(56,189,248,0.12); color: var(--accent);
+        border: 1px solid rgba(56,189,248,0.3); border-radius: 4px;
+        cursor: pointer; font-weight: 600;
+      }
+      .fir-view-btn:hover { background: rgba(56,189,248,0.2); }
+
+      .show-route-btn {
+        display: inline-flex; align-items: center; gap: 6px;
+        padding: 4px 10px; font-size: 12px; font-weight: 600;
+        background: rgba(56,189,248,0.1); color: var(--accent);
+        border: 1px solid rgba(56,189,248,0.3); border-radius: 6px;
+        cursor: pointer;
+      }
+      .show-route-btn:hover { background: rgba(56,189,248,0.16); }
+
+      .route-modal { position: fixed; inset: 0; z-index: 9999; display: flex; align-items: center; justify-content: center; padding: 20px; }
+      .route-modal[hidden] { display: none; }
+      .route-modal-backdrop { position: absolute; inset: 0; background: rgba(0,0,0,0.65); backdrop-filter: blur(2px); }
+      .route-modal-card { position: relative; max-width: 760px; width: 100%; max-height: 80vh; display: flex; flex-direction: column; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+      .route-modal-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; border-bottom: 1px solid var(--border); }
+      .route-modal-close { background: none; border: none; color: var(--muted); font-size: 22px; cursor: pointer; line-height: 1; }
+      .route-modal-close:hover { color: var(--text); }
+      .route-modal-body { padding: 18px; overflow-y: auto; font-family: monospace; font-size: 13px; line-height: 1.6; color: var(--text); white-space: pre-wrap; word-break: break-all; }
+      .route-modal-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 18px; border-top: 1px solid var(--border); }
+      .route-modal-copy { padding: 6px 14px; background: var(--accent); color: #020617; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; }
+      .route-modal-copy:hover { filter: brightness(1.05); }
+      .route-modal-secondary { background: rgba(255,255,255,0.05); color: var(--text); border: 1px solid var(--border); }
+
+      .sector-empty-state {
+        padding: 60px 20px;
+        text-align: center;
+        color: var(--muted);
+      }
+      .sector-empty-state svg {
+        opacity: 0.4;
+        margin-bottom: 12px;
+      }
+    </style>
+
+    <section class="card card-full sector-picker-card">
+      <div class="sector-picker-head">
+        <a href="/airspace" class="sector-picker-back">← Back</a>
+        <h2>Staffing — By Sector</h2>
+      </div>
+      <p class="sector-picker-sub">Pick a WorldFlight sector to see every FIR it transits along with staff windows, durations and flow info.</p>
+      <div class="sector-picker-control">
+        <span class="sector-picker-label">Select Sector</span>
+        <select id="sectorPicker" class="sector-picker-select">
+          <option value="">— Choose a sector —</option>
+          ${optionsHtml}
+        </select>
+      </div>
+    </section>
+
+    <section id="sectorDetailSection" class="card card-full" hidden>
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:16px;">
+        <div>
+          <h2 id="sectorDetailTitle" style="margin:0;"></h2>
+          <div id="sectorDetailMeta" style="font-size:13px;color:var(--muted);margin-top:4px;"></div>
+        </div>
+        <div id="sectorDetailActions"></div>
+      </div>
+
+      <div id="sectorRouteMapContainer" style="margin-bottom:16px;">
+        <div id="sectorRouteMap" style="width:100%;height:400px;border-radius:8px;border:1px solid var(--border);background:#0b1220;"></div>
+        <div id="sectorRouteFirChips" style="margin-top:10px;display:flex;flex-wrap:wrap;gap:6px;font-size:11px;"></div>
+      </div>
+
+      <div style="overflow-x:auto;">
+        <table id="firDetailTable">
+          <thead id="firDetailHead"></thead>
+          <tbody id="firDetailBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="sectorEmptyState" class="card card-full">
+      <div class="sector-empty-state">
+        <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 6v6l4 2"></path></svg>
+        <div style="font-size:15px;color:var(--text);margin-bottom:4px;">Choose a sector to view its airspace</div>
+        <div style="font-size:13px;">${sectors.length} WorldFlight sectors available.</div>
+      </div>
+    </section>
+
+    <div id="routeModal" class="route-modal" hidden>
+      <div class="route-modal-backdrop"></div>
+      <div class="route-modal-card" role="dialog" aria-modal="true" aria-labelledby="routeModalTitle">
+        <div class="route-modal-head">
+          <div id="routeModalTitle" style="font-weight:700;font-size:14px;">ATC Route</div>
+          <button type="button" id="routeModalClose" class="route-modal-close" aria-label="Close">&times;</button>
+        </div>
+        <div id="routeModalBody" class="route-modal-body"></div>
+        <div class="route-modal-foot">
+          <button type="button" id="routeModalCloseAction" class="route-modal-copy route-modal-secondary">Close</button>
+          <button type="button" id="routeModalCopy" class="route-modal-copy">Copy</button>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      window._ALL_LEGS = ${JSON.stringify(allLegs)};
+
+      function displayFir(code) {
+        if (!code) return 'Unknown';
+        return /^K[A-Z]{3}$/.test(code) ? code.slice(1) : code;
+      }
+
+      var ROUTE_COLORS = ['#f59e0b','#ef4444','#22c55e','#3b82f6','#a855f7','#ec4899','#14b8a6','#f97316','#06b6d4','#eab308','#8b5cf6','#10b981','#e11d48','#0ea5e9'];
+
+      function formatDuration(mins) {
+        if (!mins && mins !== 0) return '-';
+        var h = Math.floor(mins / 60);
+        var m = mins % 60;
+        if (h <= 0) return m + 'm';
+        if (m === 0) return h + 'h';
+        return h + 'h ' + m + 'm';
+      }
+
+      function hexToRgba(hex, alpha) {
+        var h = hex.replace('#', '');
+        if (h.length === 3) h = h.split('').map(function(c) { return c + c; }).join('');
+        var r = parseInt(h.slice(0, 2), 16);
+        var g = parseInt(h.slice(2, 4), 16);
+        var b = parseInt(h.slice(4, 6), 16);
+        return 'rgba(' + r + ',' + g + ',' + b + ',' + alpha + ')';
+      }
+
+      var routeMapInstance = null;
+      function clearSectorMap() {
+        if (routeMapInstance) { routeMapInstance.remove(); routeMapInstance = null; }
+        var chips = document.getElementById('sectorRouteFirChips');
+        if (chips) chips.innerHTML = '';
+      }
+
+      function renderSectorRouteMap(leg, firLegs, color, colorByFir) {
+        clearSectorMap();
+        routeMapInstance = L.map('sectorRouteMap', { zoomControl: true, worldCopyJump: true }).setView([30, 0], 3);
+        wfAddTileLayer(routeMapInstance, { maxZoom: 10 });
+
+        colorByFir = colorByFir || {};
+        var transitedFirIds = firLegs.map(function(fl) { return fl.fir; });
+
+        // Load merged FIR boundaries, highlight transited ones
+        fetch('/api/fir-merged.geojson')
+          .then(function(r) { return r.json(); })
+          .then(function(geoData) {
+            var firFeatures = {};
+            var transitLayers = [];
+            geoData.features.forEach(function(f) {
+              if (f.properties && transitedFirIds.indexOf(f.properties.id) !== -1) {
+                firFeatures[f.properties.id] = f;
+                var firColor = colorByFir[f.properties.id] || '#6366f1';
+                var layer = L.geoJSON(f, {
+                  style: { color: firColor, weight: 2, fillColor: hexToRgba(firColor, 0.18), fillOpacity: 0.32 }
+                }).addTo(routeMapInstance);
+                layer.bindTooltip(displayFir(f.properties.id), { sticky: true, className: 'fir-tooltip' });
+                transitLayers.push(layer);
+              }
+            });
+
+            // FIR chips below the map (clickable, colour matches map polygon + table badge)
+            var chipsHtml = firLegs.map(function(fl) {
+              var firColor = colorByFir[fl.fir] || '#6366f1';
+              return '<span class="fir-badge fir-badge-link" data-view-fir="' + fl.fir
+                + '" style="cursor:pointer;background:' + hexToRgba(firColor, 0.15)
+                + ';color:' + firColor + ';border:1px solid ' + hexToRgba(firColor, 0.45) + ';">'
+                + displayFir(fl.fir) + '</span>';
+            }).join('');
+            var chipsEl = document.getElementById('sectorRouteFirChips');
+            chipsEl.innerHTML = '<span style="color:var(--muted);align-self:center;margin-right:4px;">Transited FIRs:</span>' + chipsHtml;
+            chipsEl.querySelectorAll('[data-view-fir]').forEach(function(el) {
+              el.addEventListener('click', function() {
+                location.href = '/airspace/by-area?fir=' + encodeURIComponent(el.dataset.viewFir);
+              });
+            });
+
+            // Point-in-any-FIR helper
+            function pointInTransitedFirs(lat, lon) {
+              for (var fid in firFeatures) {
+                var geom = firFeatures[fid].geometry;
+                var polys = geom.type === 'MultiPolygon' ? geom.coordinates : geom.type === 'Polygon' ? [geom.coordinates] : [];
+                for (var p = 0; p < polys.length; p++) {
+                  var ring = polys[p][0]; if (!ring) continue;
+                  var inside = false;
+                  for (var i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+                    var yi = ring[i][0], xi = ring[i][1];
+                    var yj = ring[j][0], xj = ring[j][1];
+                    if (((yi > lon) !== (yj > lon)) && (lat < (xj - xi) * (lon - yi) / (yj - yi) + xi)) inside = !inside;
+                  }
+                  if (inside) return true;
+                }
+              }
+              return false;
+            }
+            function findCrossing(insidePt, outsidePt, steps) {
+              var a = [insidePt[0], insidePt[1]], b = [outsidePt[0], outsidePt[1]];
+              for (var s = 0; s < (steps || 12); s++) {
+                var mid = [(a[0]+b[0])/2, (a[1]+b[1])/2];
+                if (pointInTransitedFirs(mid[0], mid[1])) a = mid; else b = mid;
+              }
+              return [(a[0]+b[0])/2, (a[1]+b[1])/2];
+            }
+
+            // Fetch and draw the route
+            fetch('/api/resolve-route?from=' + leg.from + '&to=' + leg.to + '&route=' + encodeURIComponent(leg.atcRoute || '') + '&depTime=&blockTime=')
+              .then(function(r) { return r.json(); })
+              .then(function(routeData) {
+                if (!routeData.points || routeData.points.length < 2) {
+                  if (transitLayers.length) {
+                    routeMapInstance.fitBounds(L.featureGroup(transitLayers).getBounds(), { padding: [30, 30], maxZoom: 7 });
+                  }
+                  return;
+                }
+                var pts = routeData.points.map(function(p) {
+                  return { lat: p.lat, lon: p.lon, inDiv: pointInTransitedFirs(p.lat, p.lon) };
+                });
+
+                var allCoords = pts.map(function(p) { return [p.lat, p.lon]; });
+                var ROUTE_LINE = '#ffffff';
+
+                // Full dimmed route in white so the per-FIR colour fills stay the visual focus
+                var dim = L.polyline(allCoords, { color: ROUTE_LINE, weight: 2, opacity: 0.5 }).addTo(routeMapInstance);
+                if (L.polylineDecorator) {
+                  L.polylineDecorator(dim, {
+                    patterns: [{
+                      offset: 30, endOffset: 30, repeat: '80px',
+                      symbol: L.Symbol.arrowHead({ pixelSize: 9, polygon: false, pathOptions: { color: ROUTE_LINE, weight: 2, opacity: 0.85 } })
+                    }]
+                  }).addTo(routeMapInstance);
+                }
+
+                // Dep/Arr markers (white-filled with darker stroke so they read on any FIR colour)
+                L.circleMarker(allCoords[0], { radius: 5, color: '#0f172a', fillColor: ROUTE_LINE, fillOpacity: 1, weight: 2 })
+                  .bindTooltip(leg.from + ' (Dep)', { permanent: false }).addTo(routeMapInstance);
+                L.circleMarker(allCoords[allCoords.length - 1], { radius: 5, color: '#0f172a', fillColor: ROUTE_LINE, fillOpacity: 1, weight: 2 })
+                  .bindTooltip(leg.to + ' (Arr)', { permanent: false }).addTo(routeMapInstance);
+
+                // Brighter in-FIR segments still in white, just slightly heavier
+                var bounds = [];
+                for (var i = 0; i < pts.length - 1; i++) {
+                  var a = pts[i], b = pts[i + 1];
+                  var seg = null;
+                  if (a.inDiv && b.inDiv) { seg = [[a.lat, a.lon], [b.lat, b.lon]]; bounds.push([a.lat, a.lon], [b.lat, b.lon]); }
+                  else if (a.inDiv && !b.inDiv) { var c1 = findCrossing([a.lat, a.lon], [b.lat, b.lon]); seg = [[a.lat, a.lon], c1]; bounds.push([a.lat, a.lon], c1); }
+                  else if (!a.inDiv && b.inDiv) { var c2 = findCrossing([b.lat, b.lon], [a.lat, a.lon]); seg = [c2, [b.lat, b.lon]]; bounds.push(c2, [b.lat, b.lon]); }
+                  if (seg) {
+                    L.polyline(seg, { color: ROUTE_LINE, weight: 3, opacity: 1 }).addTo(routeMapInstance);
+                  }
+                }
+
+                // Fit to whole route (so users see Dep, transit, and Arr)
+                routeMapInstance.fitBounds(allCoords, { padding: [30, 30], maxZoom: 6 });
+              })
+              .catch(function() {
+                if (transitLayers.length) {
+                  routeMapInstance.fitBounds(L.featureGroup(transitLayers).getBounds(), { padding: [30, 30], maxZoom: 7 });
+                }
+              });
+          });
+      }
+
+      function renderSector(wf) {
+        var legs = window._ALL_LEGS.filter(function(l) { return l.wf === wf; });
+        // Order by transit time so the row order, colour assignment, FIR chips
+        // and map polygons all match the order the flight enters each FIR.
+        // Fall back to the staffStart "HH:MM" string when absolute ms missing.
+        legs.sort(function(a, b) {
+          var aa = a.staffStartAbs, bb = b.staffStartAbs;
+          if (aa && bb) return aa - bb;
+          if (aa) return -1;
+          if (bb) return 1;
+          return String(a.staffStart || '').localeCompare(String(b.staffStart || ''));
+        });
+        var empty = document.getElementById('sectorEmptyState');
+        var section = document.getElementById('sectorDetailSection');
+
+        if (!legs.length) {
+          section.hidden = true;
+          empty.hidden = false;
+          return;
+        }
+        empty.hidden = true;
+        section.hidden = false;
+
+        var first = legs[0];
+        document.getElementById('sectorDetailTitle').textContent = wf + ' — ' + first.from + ' → ' + first.to;
+        document.getElementById('sectorDetailMeta').textContent =
+          (first.date || '') + ' · ' + legs.length + ' FIR' + (legs.length !== 1 ? 's' : '') + ' transited';
+
+        // Per-FIR colour assignments, shared across map polygons, FIR chips
+        // under the map, and the FIR badge stripes in the table.
+        var colorByFir = {};
+        legs.forEach(function(l, i) {
+          if (!colorByFir[l._fir]) colorByFir[l._fir] = ROUTE_COLORS[Object.keys(colorByFir).length % ROUTE_COLORS.length];
+        });
+
+        // ATC Route action button next to the sector title (sector-level, so
+        // pulled out of the per-FIR table).
+        var actionsEl = document.getElementById('sectorDetailActions');
+        actionsEl.innerHTML = (first.atcRoute && first.atcRoute !== '-')
+          ? '<button type="button" class="show-route-btn" data-route="'
+              + String(first.atcRoute).replace(/&/g, '&amp;').replace(/"/g, '&quot;')
+              + '" style="font-size:13px;padding:8px 14px;">Show ATC Route</button>'
+          : '';
+
+        // Map: full route + highlighted transit FIRs, each FIR in its own colour
+        var firLegsForMap = legs.map(function(l) {
+          return { fir: l._fir, staffStart: l.staffStart, staffEnd: l.staffEnd, staffMins: l.staffMins, flowType: l.flowType };
+        });
+        renderSectorRouteMap(first, firLegsForMap, ROUTE_COLORS[0], colorByFir);
+
+        // Header: FIR-only columns. WF/From/To/Date redundant with title,
+        // ATC Route now lives in the title bar action button above.
+        document.getElementById('firDetailHead').innerHTML =
+          '<tr><th>FIR</th>' +
+          '<th>Staff Window <span class="col-help" title="Recommended staffing window:&#10;+/- 1 hour of the scheduled FIR entry and exit times" style="cursor:help;color:var(--muted);">?</span></th>' +
+          '<th>Local <span class="col-help" title="Same window in the FIR local timezone" style="cursor:help;color:var(--muted);">?</span></th>' +
+          '<th>Staff Duration</th><th>Dep Flow</th><th>Flow Type</th><th></th></tr>';
+
+        // Flat row per FIR transited by this sector
+        var tbody = document.getElementById('firDetailBody');
+        var html = '';
+        legs.forEach(function(l) {
+          var firColor = colorByFir[l._fir] || 'var(--accent)';
+          var flowClass = l.flowType === 'SLOTTED' ? 'slotted' : (l.flowType === 'BOOKING_ONLY' ? 'booking' : 'none');
+          var flowLabel = l.flowType === 'BOOKING_ONLY' ? 'Booking' : (l.flowType === 'SLOTTED' ? 'Slotted' : 'None');
+          var badgeStyle = 'background:' + hexToRgba(firColor, 0.15)
+            + ';color:' + firColor
+            + ';border:1px solid ' + hexToRgba(firColor, 0.45)
+            + ';cursor:pointer;';
+          html += '<tr>'
+            + '<td style="border-left:3px solid ' + firColor + ';padding-left:10px;">'
+              + '<span class="fir-badge fir-badge-link" data-view-fir="' + l._fir + '" style="' + badgeStyle + '">'
+              + displayFir(l._fir) + '</span></td>'
+            + '<td class="staff-window">' + (l.staffStart && l.staffEnd ? l.staffStart + ' – ' + l.staffEnd : '-') + '</td>'
+            + '<td class="staff-window" style="color:var(--muted);">' + (l.staffStartLocal && l.staffEndLocal ? l.staffStartLocal + ' – ' + l.staffEndLocal : '-') + '</td>'
+            + '<td>' + formatDuration(l.staffMins) + '</td>'
+            + '<td>' + (l.depFlow || '-') + '</td>'
+            + '<td><span class="flow-badge ' + flowClass + '">' + flowLabel + '</span></td>'
+            + '<td><button class="fir-view-btn" data-view-fir="' + l._fir + '" style="font-size:11px;padding:2px 6px;background:' + hexToRgba(firColor, 0.12) + ';color:' + firColor + ';border:1px solid ' + hexToRgba(firColor, 0.35) + ';">Open ' + displayFir(l._fir) + '</button></td>'
+            + '</tr>';
+        });
+        tbody.innerHTML = html;
+
+        // FIR badge / Open button → deep-link into by-area
+        tbody.querySelectorAll('[data-view-fir]').forEach(function(el) {
+          el.addEventListener('click', function() {
+            location.href = '/airspace/by-area?fir=' + encodeURIComponent(el.dataset.viewFir);
+          });
+        });
+
+        window.scrollTo({ top: document.getElementById('sectorDetailSection').offsetTop - 16, behavior: 'smooth' });
+      }
+
+      document.getElementById('sectorPicker').addEventListener('change', function(e) {
+        var wf = e.target.value;
+        if (wf) renderSector(wf);
+        else {
+          document.getElementById('sectorDetailSection').hidden = true;
+          document.getElementById('sectorEmptyState').hidden = false;
+        }
+      });
+
+      // Restore selection from URL (?wf=WF2601)
+      (function() {
+        var params = new URLSearchParams(location.search);
+        var wf = params.get('wf');
+        if (wf) {
+          var sel = document.getElementById('sectorPicker');
+          for (var i = 0; i < sel.options.length; i++) {
+            if (sel.options[i].value === wf) { sel.selectedIndex = i; break; }
+          }
+          renderSector(wf);
+        }
+      })();
+
+      // ===== ATC ROUTE MODAL =====
+      (function() {
+        var modal = document.getElementById('routeModal');
+        if (!modal) return;
+        var body = document.getElementById('routeModalBody');
+        var closeBtn = document.getElementById('routeModalClose');
+        var copyBtn = document.getElementById('routeModalCopy');
+        var closeActionBtn = document.getElementById('routeModalCloseAction');
+        var backdrop = modal.querySelector('.route-modal-backdrop');
+
+        function open(route) { body.textContent = route; modal.hidden = false; }
+        function close() { modal.hidden = true; }
+
+        document.addEventListener('click', function(e) {
+          var btn = e.target.closest('.show-route-btn');
+          if (btn) open(btn.getAttribute('data-route') || '');
+        });
+        closeBtn.addEventListener('click', close);
+        if (closeActionBtn) closeActionBtn.addEventListener('click', close);
+        backdrop.addEventListener('click', close);
+        document.addEventListener('keydown', function(e) { if (!modal.hidden && e.key === 'Escape') close(); });
+        copyBtn.addEventListener('click', async function() {
+          try {
+            await navigator.clipboard.writeText(body.textContent || '');
+            var prev = copyBtn.textContent;
+            copyBtn.textContent = 'Copied';
+            setTimeout(function() { copyBtn.textContent = prev; }, 1200);
+          } catch (e) {}
+        });
+      })();
+    </script>
+  `;
+
+  res.send(renderLayout({
+    title: 'Staffing — By Sector',
+    user,
+    isAdmin,
+    content,
+    layoutClass: 'dashboard-full'
+  }));
+});
+
+app.get('/airspace/by-area', requirePageEnabled('airspace'), async (req, res) => {
   const user = req.session?.user?.data || null;
   const cid = Number(user?.cid) || null;
   const isAdmin = isAdminUser(cid);
@@ -27726,11 +28722,290 @@ app.get('/airspace', requirePageEnabled('airspace'), async (req, res) => {
     .fir-detail-header h2 { margin: 0; }
     .fir-detail-meta { font-size: 13px; color: var(--muted); }
     .fir-detail-header .back-link { color: var(--accent); text-decoration: none; font-size: 13px; }
-    #firDetailTable { border-collapse: collapse; width: 100%; }
+    /* Table fits to content with a 100% min so the parent's overflow-x: auto
+       actually kicks in when columns would otherwise be clipped. */
+    #firDetailTable { border-collapse: collapse; width: max-content; min-width: 100%; }
     #firDetailTable th, #firDetailTable td { padding: 6px 10px; text-align: left; border-top: 1px solid var(--border); white-space: nowrap; }
     #firDetailTable th { font-size: 13px; font-weight: 600; color: var(--muted); }
     #firDetailTable td { font-size: 13px; }
     .staff-window { font-family: monospace; font-size: 12px; }
+
+    /* Airspace Management — three numbered steps */
+    .airspace-step {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px 18px;
+      background: rgba(255,255,255,0.015);
+    }
+    .airspace-step + .airspace-step { margin-top: 14px; }
+    .airspace-step-head {
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+      margin-bottom: 12px;
+    }
+    .airspace-step-num {
+      flex-shrink: 0;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: color-mix(in srgb, var(--accent) 16%, transparent);
+      color: var(--accent);
+      border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+      font-weight: 700;
+      font-size: 13px;
+      line-height: 1;
+    }
+    .airspace-step-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 3px;
+    }
+    .airspace-step-desc {
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+    .airspace-step-body {
+      padding-left: 42px;     /* line up with the title (28px badge + 14px gap) */
+    }
+    @media (max-width: 600px) {
+      .airspace-step-body { padding-left: 0; }
+    }
+
+    /* VATUSA ARTCC picker modal */
+    .vatusa-modal[hidden] { display: none; }
+    .vatusa-modal {
+      position: fixed; inset: 0; z-index: 600;
+      display: flex; align-items: flex-start; justify-content: center;
+      /* Leave room for the site topbar at the top so the modal header
+         isn't hidden behind it. */
+      padding: calc(var(--topbar-h, 120px) + 60px) 16px 24px;
+      overflow-y: auto;
+    }
+    .vatusa-modal-backdrop {
+      position: absolute; inset: 0;
+      background: rgba(0,0,0,0.6);
+    }
+    .vatusa-modal-card {
+      position: relative;
+      background: var(--panel); border: 1px solid var(--border);
+      border-radius: 12px; padding: 22px;
+      width: min(720px, 92vw);
+      display: flex; flex-direction: column; gap: 16px;
+      box-shadow: 0 16px 40px rgba(0,0,0,0.45);
+    }
+    .vatusa-modal-header {
+      display: flex; align-items: flex-start; justify-content: space-between;
+      gap: 16px;
+    }
+    .vatusa-modal-title {
+      font-size: 18px; font-weight: 700; color: var(--text);
+      margin-bottom: 4px;
+    }
+    .vatusa-modal-sub {
+      font-size: 12px; color: var(--muted); line-height: 1.5;
+    }
+    .vatusa-modal-close {
+      background: none; border: none; color: var(--muted); font-size: 24px;
+      cursor: pointer; line-height: 1; padding: 0 4px;
+    }
+    .vatusa-modal-close:hover { color: var(--text); }
+    .vatusa-modal-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+      gap: 8px;
+    }
+    .vatusa-artcc-btn {
+      display: flex; flex-direction: column; align-items: flex-start;
+      gap: 2px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      background: rgba(56,189,248,0.06);
+      border: 1px solid rgba(56,189,248,0.25);
+      color: var(--text);
+      cursor: pointer;
+      font-family: inherit;
+      transition: background .15s, border-color .15s, transform .1s;
+      text-align: left;
+    }
+    .vatusa-artcc-btn:hover {
+      background: rgba(56,189,248,0.16);
+      border-color: var(--accent);
+      transform: translateY(-1px);
+    }
+    .vatusa-artcc-code {
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+      font-weight: 700;
+      font-size: 14px;
+      color: var(--accent);
+      letter-spacing: 0.04em;
+    }
+    .vatusa-artcc-name {
+      font-size: 11px;
+      color: var(--muted);
+      line-height: 1.3;
+    }
+    .vatusa-modal-empty {
+      grid-column: 1 / -1;
+      padding: 24px;
+      text-align: center;
+      color: var(--muted);
+      font-size: 13px;
+      border: 1px dashed var(--border);
+      border-radius: 8px;
+    }
+    /* "View ALL of VATUSA" button — sits above the ARTCC grid in a
+       different colour (green) so it reads as the "broad" option. */
+    .vatusa-all-btn {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 3px;
+      padding: 14px 16px;
+      border-radius: 10px;
+      background: rgba(74,222,128,0.08);
+      border: 1px solid rgba(74,222,128,0.32);
+      color: var(--text);
+      cursor: pointer;
+      font-family: inherit;
+      text-align: left;
+      transition: background .15s, border-color .15s, transform .1s;
+    }
+    .vatusa-all-btn:hover {
+      background: rgba(74,222,128,0.18);
+      border-color: #4ade80;
+      transform: translateY(-1px);
+    }
+    .vatusa-all-code {
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+      font-weight: 700;
+      font-size: 15px;
+      color: #4ade80;
+      letter-spacing: 0.04em;
+    }
+    .vatusa-all-name {
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.3;
+    }
+    .vatusa-modal-divider {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin: 4px 0;
+    }
+    .vatusa-modal-divider::before,
+    .vatusa-modal-divider::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+
+    /* ATC Route button + modal — same look as on /schedule, /team/bookings, /my-slots */
+    .show-route-btn {
+      padding: 4px 10px;
+      background: rgba(56,189,248,0.08);
+      border: 1px solid rgba(56,189,248,0.25);
+      color: var(--accent);
+      border-radius: 6px;
+      font-size: 12px;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    .show-route-btn:hover { background: rgba(56,189,248,0.16); }
+    .route-modal[hidden] { display: none; }
+    .route-modal { position: fixed; inset: 0; z-index: 700; display: flex; align-items: center; justify-content: center; }
+    .route-modal-backdrop { position: absolute; inset: 0; background: rgba(0,0,0,0.6); }
+    .route-modal-card {
+      position: relative; background: var(--panel); border: 1px solid var(--border);
+      border-radius: 10px; padding: 16px; width: min(640px, 92vw); max-height: 80vh;
+      display: flex; flex-direction: column; gap: 12px;
+    }
+    .route-modal-header { display: flex; align-items: center; justify-content: space-between; }
+    .route-modal-close {
+      background: none; border: none; color: var(--muted); font-size: 22px; cursor: pointer;
+      line-height: 1; padding: 0 4px;
+    }
+    .route-modal-close:hover { color: var(--text); }
+    .route-modal-body {
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+      font-size: 13px; line-height: 1.5; color: var(--text);
+      background: rgba(255,255,255,0.03); border: 1px solid var(--border);
+      border-radius: 8px; padding: 12px; overflow: auto; word-break: break-word; white-space: pre-wrap;
+    }
+    .route-modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
+    .route-modal-copy {
+      padding: 6px 14px; background: var(--accent); color: #0b1220; border: none; border-radius: 6px;
+      font-weight: 600; cursor: pointer; font-family: inherit;
+    }
+    .route-modal-copy.route-modal-secondary {
+      background: transparent; color: var(--text); border: 1px solid var(--border);
+    }
+    .route-modal-copy.route-modal-secondary:hover { background: rgba(255,255,255,0.04); }
+
+    /* "View <Division> Overview" shortcut on the single-FIR header */
+    .division-overview-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 18px;
+      border-radius: 12px;
+      background: color-mix(in srgb, var(--accent) 12%, transparent);
+      border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+      color: var(--text);
+      cursor: pointer;
+      font-family: inherit;
+      transition: background .15s, border-color .15s, transform .1s;
+    }
+    .division-overview-btn:hover {
+      background: color-mix(in srgb, var(--accent) 22%, transparent);
+      border-color: var(--accent);
+      transform: translateY(-1px);
+    }
+    .division-overview-btn-label {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .division-overview-btn-name {
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      color: var(--accent);
+    }
+    .division-overview-btn svg {
+      color: var(--accent);
+    }
+
+    .combined-badge {
+      display: inline-flex;
+      align-items: center;
+      margin-left: 6px;
+      padding: 1px 7px;
+      border-radius: 999px;
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      background: color-mix(in srgb, var(--accent) 14%, transparent);
+      color: var(--accent);
+      border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+      cursor: help;
+    }
     .div-route-tooltip {
       background: rgba(15,23,42,0.97) !important;
       border: 1px solid rgba(56,189,248,0.3) !important;
@@ -27753,7 +29028,7 @@ app.get('/airspace', requirePageEnabled('airspace'), async (req, res) => {
     .fir-sub-row td {
       padding-top: 4px !important;
       padding-bottom: 4px !important;
-      border-top: 1px dashed rgba(255,255,255,0.08) !important;
+      border-top: 1px solid rgba(255,255,255,0.05) !important;
       font-size: 12px;
     }
     .fir-detail-header-box {
@@ -27948,42 +29223,94 @@ app.get('/airspace', requirePageEnabled('airspace'), async (req, res) => {
   <main class="dashboard-full airspace-page">
     <!-- Search / Select Section -->
     <section class="card" id="airspaceSearchSection">
-      <h2>Airspace Management</h2>
-      <p style="color:var(--muted);margin-bottom:12px;">Enter an FIR code or click one on the map to view staffing requirements for the active schedule.</p>
+      <h2>Staffing Overview</h2>
+      <p style="color:var(--muted);margin-bottom:20px;">Pick a FIR to view staffing windows for the active schedule. Three ways to do it:</p>
 
-      <div class="airspace-search-row" style="margin-bottom:12px;">
-        <div>
-          <label class="airspace-filter-label">FIR Code</label>
-          <input type="text" id="firSearchInput" placeholder="e.g. EGTT" maxlength="10" />
+      <!-- Step 1: search by code -->
+      <div class="airspace-step">
+        <div class="airspace-step-head">
+          <span class="airspace-step-num">1</span>
+          <div>
+            <div class="airspace-step-title">Search by FIR code</div>
+            <div class="airspace-step-desc">Type the 4-letter ICAO code (e.g. EGTT, EHAA, KZNY) and hit Load.</div>
+          </div>
         </div>
-        <button id="firSearchBtn" style="align-self:flex-end;">Load FIR</button>
-      </div>
-
-      <!-- Hidden selects for JS compat -->
-      <select id="firFilterRegion" style="display:none;"><option value="">All Regions</option></select>
-      <select id="firFilterDivision" style="display:none;"><option value="">All Divisions</option></select>
-
-      <div id="regionBtns" style="display:none;"></div>
-
-      <div id="yourDivisionsSection" style="margin-bottom:12px;${userDivisions.length ? '' : 'display:none;'}">
-        <label class="airspace-filter-label" style="margin-bottom:6px;display:block;">Your Division(s) <span class="col-help" title="Divisions you have staff access for" style="cursor:help;color:var(--muted);">?</span></label>
-        <div id="yourDivisionBtns" class="filter-btn-group">
-          ${userDivisions.map(d => '<button class="filter-btn division-btn your-division-btn" data-value="' + d + '">' + d + '</button>').join('')}
+        <div class="airspace-step-body">
+          <div class="airspace-search-row">
+            <input type="text" id="firSearchInput" placeholder="e.g. EGTT" maxlength="10" />
+            <button id="firSearchBtn">Load FIR</button>
+          </div>
         </div>
       </div>
 
-      <div style="margin-bottom:12px;">
-        <label class="airspace-filter-label" style="margin-bottom:6px;display:block;" id="otherDivisionsLabel">${userDivisions.length ? 'Other Division(s)' : 'Division(s)'}</label>
-        <div id="divisionBtns" class="filter-btn-group">
+      <!-- Step 2: pick a Division/vACC -->
+      <div class="airspace-step">
+        <div class="airspace-step-head">
+          <span class="airspace-step-num">2</span>
+          <div>
+            <div class="airspace-step-title">Pick a Division / vACC</div>
+            <div class="airspace-step-desc">Pills below filter the map to that division's FIRs — then click an FIR to open it.</div>
+          </div>
+        </div>
+        <div class="airspace-step-body">
+          <!-- Hidden selects for JS compat -->
+          <select id="firFilterRegion" style="display:none;"><option value="">All Regions</option></select>
+          <select id="firFilterDivision" style="display:none;"><option value="">All Divisions</option></select>
+          <div id="regionBtns" style="display:none;"></div>
+
+          <div id="yourDivisionsSection" style="${userDivisions.length ? '' : 'display:none;'}margin-bottom:10px;">
+            <label class="airspace-filter-label" style="margin-bottom:6px;display:block;">Your Division(s) <span class="col-help" title="Divisions you have staff access for" style="cursor:help;color:var(--muted);">?</span></label>
+            <div id="yourDivisionBtns" class="filter-btn-group">
+              ${userDivisions.map(d => '<button class="filter-btn division-btn your-division-btn" data-value="' + d + '">' + d + '</button>').join('')}
+            </div>
+          </div>
+
+          <div>
+            <label class="airspace-filter-label" style="margin-bottom:6px;display:block;" id="otherDivisionsLabel">${userDivisions.length ? 'Other Division(s)' : 'All Divisions'}</label>
+            <div id="divisionBtns" class="filter-btn-group">
+            </div>
+          </div>
         </div>
       </div>
 
-      <div id="airspaceFirMap"></div>
+      <!-- Step 3: click on the map -->
+      <div class="airspace-step">
+        <div class="airspace-step-head">
+          <span class="airspace-step-num">3</span>
+          <div>
+            <div class="airspace-step-title">Click directly on the map</div>
+            <div class="airspace-step-desc">Highlighted FIRs are clickable. Use the pills above to filter what's visible.</div>
+          </div>
+        </div>
+        <div class="airspace-step-body">
+          <div id="airspaceFirMap"></div>
+        </div>
+      </div>
 
       <div id="firChipContainer" style="display:none;">
         <div class="fir-summary-grid" id="firSummaryGrid"></div>
       </div>
     </section>
+
+    <!-- VATUSA ARTCC picker modal -->
+    <div id="vatusaModal" class="vatusa-modal" hidden>
+      <div class="vatusa-modal-backdrop"></div>
+      <div class="vatusa-modal-card" role="dialog" aria-modal="true" aria-labelledby="vatusaModalTitle">
+        <div class="vatusa-modal-header">
+          <div>
+            <div id="vatusaModalTitle" class="vatusa-modal-title">Choose an ARTCC</div>
+            <div class="vatusa-modal-sub">VATUSA covers ~24 Air Route Traffic Control Centers. Pick one to view its FIR.</div>
+          </div>
+          <button type="button" class="vatusa-modal-close" aria-label="Close">&times;</button>
+        </div>
+        <button type="button" class="vatusa-all-btn" id="vatusaAllBtn">
+          <span class="vatusa-all-code">VATUSA</span>
+          <span class="vatusa-all-name">View ALL of VATUSA at once</span>
+        </button>
+        <div class="vatusa-modal-divider"><span>or pick one ARTCC</span></div>
+        <div class="vatusa-modal-grid"></div>
+      </div>
+    </div>
 
     <!-- Detail Section (hidden until FIR selected) -->
     <section class="card fir-detail-card" id="firDetailSection" style="display:none;">
@@ -27993,7 +29320,6 @@ app.get('/airspace', requirePageEnabled('airspace'), async (req, res) => {
           <h2 id="firDetailTitle"></h2>
           <div class="fir-detail-meta" id="firDetailMeta"></div>
         </div>
-        <div id="requestStaffAccessBtn" style="display:none;white-space:nowrap;margin-top:8px;"></div>
       </div>
 
       <!-- Division Route Map -->
@@ -28004,19 +29330,6 @@ app.get('/airspace', requirePageEnabled('airspace'), async (req, res) => {
         </div>
         <div id="divisionRouteLegend" style="margin-top:8px;display:flex;flex-wrap:wrap;gap:8px;font-size:11px;"></div>
       </div>
-
-      <!-- Timeline -->
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;gap:8px;" id="tlToggleRow" class="hidden">
-        <span style="font-size:13px;font-weight:600;">Staffing Timeline</span>
-        <div style="display:flex;align-items:center;gap:12px;">
-          <div class="filter-btn-group" id="tlDaySelector" style="display:none;"></div>
-          <div class="filter-btn-group">
-            <button class="filter-btn active" data-view="weekly" id="tlWeeklyBtn">Weekly</button>
-            <button class="filter-btn" data-view="daily" id="tlDailyBtn">Daily</button>
-          </div>
-        </div>
-      </div>
-      <div class="fir-timeline" id="firTimeline"></div>
 
       <!-- Desktop table -->
       <div class="fir-desktop-table" style="overflow-x:auto;margin-top:16px;">
@@ -28041,6 +29354,22 @@ app.get('/airspace', requirePageEnabled('airspace'), async (req, res) => {
       <!-- Mobile cards -->
       <div class="fir-leg-cards" id="firDetailCards"></div>
     </section>
+
+    <!-- ATC Route view modal — reused from /schedule, /team/bookings, /my-slots -->
+    <div id="routeModal" class="route-modal" hidden>
+      <div class="route-modal-backdrop"></div>
+      <div class="route-modal-card" role="dialog" aria-modal="true" aria-labelledby="routeModalTitle">
+        <div class="route-modal-header">
+          <div id="routeModalTitle" style="font-weight:700;font-size:14px;">ATC Route</div>
+          <button type="button" id="routeModalClose" class="route-modal-close" aria-label="Close">&times;</button>
+        </div>
+        <div id="routeModalBody" class="route-modal-body"></div>
+        <div class="route-modal-actions">
+          <button type="button" id="routeModalCloseAction" class="route-modal-copy route-modal-secondary">Close</button>
+          <button type="button" id="routeModalCopy" class="route-modal-copy">Copy</button>
+        </div>
+      </div>
+    </div>
 
     <!-- Staff Access Request Modal -->
     <div id="staffAccessModal" class="modal hidden">
@@ -28104,6 +29433,24 @@ app.get('/airspace', requirePageEnabled('airspace'), async (req, res) => {
     var firGeoLayer = null;
     var highlightLayer = null;
     var currentHoveredLayer = null;
+    // Highlight set + helpers for FIRs we transit. Declared at the top
+    // scope so both the geojson loader and the summary loader (sibling
+    // .then callbacks) can read/write them.
+    var transitedFirs = new Set();
+    var transitedStyle = { color: 'rgba(56,189,248,0.55)', weight: 1, fillColor: 'rgba(56,189,248,0.10)', fillOpacity: 1 };
+    var defaultStyle  = { color: 'rgba(255,255,255,0.12)', weight: 1, fillOpacity: 0 };
+    var hoverStyle    = { color: '#38bdf8', weight: 2, fillColor: 'rgba(56,189,248,0.15)', fillOpacity: 0.25 };
+    function styleForLayer(layer) {
+      return layer && layer._firId && transitedFirs.has(layer._firId)
+        ? transitedStyle : defaultStyle;
+    }
+    function applyTransitHighlight() {
+      if (!firGeoLayer) return;
+      firGeoLayer.eachLayer(function(layer) {
+        if (currentHoveredLayer === layer || highlightLayer === layer) return;
+        layer.setStyle(styleForLayer(layer));
+      });
+    }
     var currentTlView = 'weekly';
     var currentTlDay = 0; // index into event days
     var currentTlData = null;
@@ -28279,22 +29626,6 @@ app.get('/airspace', requirePageEnabled('airspace'), async (req, res) => {
       timeline.innerHTML = html;
     }
 
-    // Toggle handlers
-    document.getElementById('tlWeeklyBtn').addEventListener('click', function() {
-      currentTlView = 'weekly';
-      if (currentTlData) renderTimeline(currentTlData.legs, currentTlData.mode, 'weekly');
-    });
-    document.getElementById('tlDailyBtn').addEventListener('click', function() {
-      currentTlView = 'daily';
-      if (currentTlData) renderTimeline(currentTlData.legs, currentTlData.mode, 'daily');
-    });
-    document.getElementById('tlDaySelector').addEventListener('click', function(e) {
-      var btn = e.target.closest('.filter-btn');
-      if (!btn || !btn.dataset.day) return;
-      currentTlDay = Number(btn.dataset.day);
-      if (currentTlData) renderTimeline(currentTlData.legs, currentTlData.mode, 'daily');
-    });
-
     // Init map
     map = L.map('airspaceFirMap', { zoomControl: true }).setView([30, 0], 2);
     wfAddTileLayer(map, { maxZoom: 8, noWrap: true });
@@ -28346,8 +29677,6 @@ app.get('/airspace', requirePageEnabled('airspace'), async (req, res) => {
     fetch('/api/fir-merged.geojson')
       .then(function(r) { return r.json(); })
       .then(function(data) {
-        var defaultStyle = { color: 'rgba(255,255,255,0.12)', weight: 1, fillOpacity: 0 };
-        var hoverStyle = { color: '#38bdf8', weight: 2, fillColor: 'rgba(56,189,248,0.15)', fillOpacity: 0.25 };
 
         // FIRs that belong to additional divisions beyond what's in the geojson
         var extraDivisions = {
@@ -28358,6 +29687,38 @@ app.get('/airspace', requirePageEnabled('airspace'), async (req, res) => {
           'LPPO': ['NATFSS'],
           'ENOB': ['NATFSS']
         };
+
+        // VATUSA splits into individual ARTCCs. Keep VATUSA as a single pill,
+        // but when clicked we open a sub-picker modal listing every ARTCC.
+        // Map keys are FIR base ids in the geojson; values are the friendly
+        // ARTCC labels shown in the modal.
+        var VATUSA_ARTCC_BY_FIR = {
+          'KZAB': 'ZAB Albuquerque',
+          'KZAU': 'ZAU Chicago',
+          'KZBW': 'ZBW Boston',
+          'KZDC': 'ZDC Washington',
+          'KZDV': 'ZDV Denver',
+          'KZFW': 'ZFW Fort Worth',
+          'KZHU': 'ZHU Houston',
+          'KZID': 'ZID Indianapolis',
+          'KZJX': 'ZJX Jacksonville',
+          'KZKC': 'ZKC Kansas City',
+          'KZLA': 'ZLA Los Angeles',
+          'KZLC': 'ZLC Salt Lake',
+          'KZMA': 'ZMA Miami',
+          'KZME': 'ZME Memphis',
+          'KZMP': 'ZMP Minneapolis',
+          'KZNY': 'ZNY New York',
+          'KZOA': 'ZOA Oakland',
+          'KZOB': 'ZOB Cleveland',
+          'KZSE': 'ZSE Seattle',
+          'KZTL': 'ZTL Atlanta',
+          'KZAK': 'ZAK Oakland Oceanic',
+          'PAZA': 'ZAN Anchorage',
+          'PGZU': 'ZUA Guam CERAP',
+          'PHZH': 'HCF Honolulu'
+        };
+        window.__VATUSA_ARTCC_BY_FIR = VATUSA_ARTCC_BY_FIR;
 
         // Build metadata + populate dropdowns (use base FIR codes)
         var regions = new Set(), divisions = new Set();
@@ -28408,6 +29769,12 @@ app.get('/airspace', requirePageEnabled('airspace'), async (req, res) => {
           });
         }
 
+        // Defensive: clear any pre-applied .active state from division /
+        // region pills so nothing looks "pre-selected" on first render.
+        document.querySelectorAll(
+          '#divisionBtns .filter-btn, #yourDivisionBtns .filter-btn, #regionBtns .filter-btn'
+        ).forEach(function(b) { b.classList.remove('active'); });
+
         // Also populate hidden selects for backward compat
         var regionSel = document.getElementById('firFilterRegion');
         Array.from(regions).sort().forEach(function(r) {
@@ -28434,14 +29801,13 @@ app.get('/airspace', requirePageEnabled('airspace'), async (req, res) => {
           if (matching.length) loadGroupDetail(matching, val, '');
         });
 
-        // Division click handler (shared for Your + Other divisions)
-        function handleDivisionClick(btn) {
-          divBtns.querySelectorAll('.filter-btn').forEach(function(b) { b.classList.remove('active'); });
-          regionBtns.querySelectorAll('.filter-btn').forEach(function(b) { b.classList.remove('active'); });
-          var yourBtns = document.getElementById('yourDivisionBtns');
-          if (yourBtns) yourBtns.querySelectorAll('.filter-btn').forEach(function(b) { b.classList.remove('active'); });
-          btn.classList.add('active');
-          var val = btn.dataset.value;
+        // Open the grouped view for a division (every FIR carrying that
+        // division tag). Extracted from handleDivisionClick so the VATUSA
+        // modal's "View ALL of VATUSA" button can also call it directly.
+        // Exposed on window so the single-FIR view's "Division Overview"
+        // button (defined in an outer scope) can reach it too.
+        window.loadDivisionFn = loadDivision;
+        function loadDivision(val) {
           if (!val) return;
           var matching = allFirSummary.filter(function(f) {
             var meta = firMeta[f.fir] || {};
@@ -28449,6 +29815,79 @@ app.get('/airspace', requirePageEnabled('airspace'), async (req, res) => {
           });
           if (matching.length) loadGroupDetail(matching, '', val);
         }
+
+        // Division click handler (shared for Your + Other divisions)
+        function handleDivisionClick(btn) {
+          var val = btn.dataset.value;
+          if (val === 'VATUSA') { openVatusaModal(); return; }
+          divBtns.querySelectorAll('.filter-btn').forEach(function(b) { b.classList.remove('active'); });
+          regionBtns.querySelectorAll('.filter-btn').forEach(function(b) { b.classList.remove('active'); });
+          var yourBtns = document.getElementById('yourDivisionBtns');
+          if (yourBtns) yourBtns.querySelectorAll('.filter-btn').forEach(function(b) { b.classList.remove('active'); });
+          btn.classList.add('active');
+          loadDivision(val);
+        }
+
+        // VATUSA ARTCC picker: VATUSA covers ~24 ARTCCs. Rather than a single
+        // pill that loads everything, open a modal letting the user drill in
+        // to one ARTCC at a time. The list is built from VATUSA_ARTCC_BY_FIR
+        // (declared above), intersected with the FIRs actually in this year's
+        // schedule so we don't surface ARTCCs the route never crosses.
+        function openVatusaModal() {
+          var modal = document.getElementById('vatusaModal');
+          if (!modal) return;
+          var grid = modal.querySelector('.vatusa-modal-grid');
+          var artccs = window.__VATUSA_ARTCC_BY_FIR || {};
+          // Which ARTCCs actually appear in this schedule?
+          var transitedFirs = {};
+          allFirSummary.forEach(function(f) { transitedFirs[f.fir] = true; });
+          var entries = Object.keys(artccs)
+            .filter(function(firId) { return transitedFirs[firId]; })
+            .map(function(firId) { return { firId: firId, label: artccs[firId] }; })
+            .sort(function(a, b) { return a.label.localeCompare(b.label); });
+          if (entries.length === 0) {
+            grid.innerHTML = '<div class="vatusa-modal-empty">No VATUSA ARTCCs on the current route.</div>';
+          } else {
+            grid.innerHTML = entries.map(function(e) {
+              return '<button type="button" class="vatusa-artcc-btn" data-fir="' + e.firId + '">' +
+                '<span class="vatusa-artcc-code">' + e.label.split(' ')[0] + '</span>' +
+                '<span class="vatusa-artcc-name">' + e.label.replace(/^\S+\s/, '') + '</span>' +
+                '</button>';
+            }).join('');
+          }
+          modal.hidden = false;
+          // Always show the header on open, even if a previous use scrolled
+          // within the modal or the viewport.
+          modal.scrollTop = 0;
+        }
+        function closeVatusaModal() {
+          var modal = document.getElementById('vatusaModal');
+          if (modal) modal.hidden = true;
+        }
+        (function wireVatusaModal() {
+          var modal = document.getElementById('vatusaModal');
+          if (!modal) return;
+          var backdrop = modal.querySelector('.vatusa-modal-backdrop');
+          var closeBtn = modal.querySelector('.vatusa-modal-close');
+          if (backdrop) backdrop.addEventListener('click', closeVatusaModal);
+          if (closeBtn) closeBtn.addEventListener('click', closeVatusaModal);
+          document.addEventListener('keydown', function(e) {
+            if (!modal.hidden && e.key === 'Escape') closeVatusaModal();
+          });
+          modal.querySelector('.vatusa-modal-grid').addEventListener('click', function(e) {
+            var btn = e.target.closest('.vatusa-artcc-btn');
+            if (!btn) return;
+            var firId = btn.dataset.fir;
+            if (!firId) return;
+            closeVatusaModal();
+            if (window.loadFirDetailFn) window.loadFirDetailFn(firId);
+          });
+          var allBtn = document.getElementById('vatusaAllBtn');
+          if (allBtn) allBtn.addEventListener('click', function() {
+            closeVatusaModal();
+            loadDivision('VATUSA');
+          });
+        })();
 
         divBtns.addEventListener('click', function(e) {
           var btn = e.target.closest('.filter-btn');
@@ -28466,7 +29905,13 @@ app.get('/airspace', requirePageEnabled('airspace'), async (req, res) => {
         }
 
         firGeoLayer = L.geoJSON(data, {
-          style: defaultStyle,
+          // Per-feature style so FIRs on the schedule get the transit highlight
+          // from the moment they render (no flash to default-then-highlight).
+          style: function(feature) {
+            var rawId = feature.properties && feature.properties.id;
+            var firId = rawId ? rawId.split('-')[0] : null;
+            return firId && transitedFirs.has(firId) ? transitedStyle : defaultStyle;
+          },
           onEachFeature: function(feature, layer) {
             var rawId = feature.properties && feature.properties.id;
             var firId = rawId ? rawId.split('-')[0] : null;
@@ -28476,13 +29921,13 @@ app.get('/airspace', requirePageEnabled('airspace'), async (req, res) => {
               layer._firDivision = (feature.properties.division || '');
               layer.on('mouseover', function() {
                 if (currentHoveredLayer && currentHoveredLayer !== layer) {
-                  firGeoLayer.resetStyle(currentHoveredLayer);
+                  currentHoveredLayer.setStyle(styleForLayer(currentHoveredLayer));
                 }
                 currentHoveredLayer = layer;
                 layer.setStyle(hoverStyle);
               });
               layer.on('mouseout', function() {
-                firGeoLayer.resetStyle(layer);
+                layer.setStyle(styleForLayer(layer));
                 if (currentHoveredLayer === layer) currentHoveredLayer = null;
               });
               layer.on('click', function() {
@@ -28491,7 +29936,7 @@ app.get('/airspace', requirePageEnabled('airspace'), async (req, res) => {
                 setTimeout(function() { layer.setStyle({ color: '#38bdf8', weight: 3, fillColor: 'rgba(56,189,248,0.35)', fillOpacity: 0.4 }); }, 300);
                 setTimeout(function() { loadFirDetail(firId); }, 500);
               });
-              layer.bindTooltip(firId, { sticky: true, className: 'fir-tooltip' });
+              layer.bindTooltip(displayFir(firId), { sticky: true, className: 'fir-tooltip' });
             }
           }
         }).addTo(map);
@@ -28510,6 +29955,10 @@ app.get('/airspace', requirePageEnabled('airspace'), async (req, res) => {
           return;
         }
         allFirSummary = data.firs;
+        // Refresh the transited-FIR set + apply the subtle highlight. Works
+        // whether the geojson loaded before or after this summary fetch.
+        transitedFirs = new Set(data.firs.map(function(f) { return f.fir; }));
+        applyTransitHighlight();
         grid.innerHTML = data.firs.map(function(f) {
           var meta = firMeta[f.fir] || {};
           return '<div class="fir-chip" data-fir="' + f.fir + '" data-region="' + (meta.region || f.region || '') + '" data-division="' + (meta.division || f.division || '') + '">'
@@ -28550,18 +29999,54 @@ app.get('/airspace', requirePageEnabled('airspace'), async (req, res) => {
     });
 
     window.loadFirDetailFn = loadFirDetail;
+
+    // Deep-link: /airspace/by-area?fir=KZNY auto-opens that FIR.
+    (function() {
+      var params = new URLSearchParams(window.location.search);
+      var firParam = (params.get('fir') || '').toUpperCase().trim();
+      if (firParam) {
+        // Defer slightly so the search input + map have settled.
+        setTimeout(function() { loadFirDetail(firParam); }, 50);
+      }
+    })();
+
     function loadFirDetail(firId) {
       fetch('/api/airspace-management?fir=' + encodeURIComponent(firId), { credentials: 'same-origin' })
         .then(function(r) { return r.json(); })
         .then(function(data) {
           document.getElementById('airspaceSearchSection').style.display = 'none';
           document.getElementById('firDetailSection').style.display = '';
+          window.scrollTo({ top: 0, behavior: 'instant' });
 
           var divLabel = data.division ? ' <span style="font-size:11px;color:var(--muted);margin-left:4px;">' + data.division + '</span>' : '';
           document.getElementById('firDetailTitle').innerHTML = '<div class="fir-detail-header-box"><span class="fir-detail-header-name">' + displayFir(data.fir) + '</span><span class="fir-detail-header-label">FIR Airspace</span>' + divLabel + '</div>';
           var metaParts = [];
           metaParts.push(data.legs.length + ' leg' + (data.legs.length !== 1 ? 's' : '') + ' transiting');
           document.getElementById('firDetailMeta').textContent = metaParts.join(' \u2014 ');
+
+          // Prominent shortcut to the parent Division/vACC overview so a user
+          // who lands on a single FIR can jump back up to "see everything this
+          // division owns" in one click.
+          var hostId = 'divisionOverviewBtnHost';
+          var host = document.getElementById(hostId);
+          if (!host) {
+            host = document.createElement('div');
+            host.id = hostId;
+            host.style.marginTop = '14px';
+            document.getElementById('firDetailMeta').parentNode.appendChild(host);
+          }
+          if (data.division) {
+            host.innerHTML = '<button type="button" class="division-overview-btn" data-division="' + data.division.replace(/"/g, '&quot;') + '">' +
+              '<span class="division-overview-btn-label">View Division Overview</span>' +
+              '<span class="division-overview-btn-name">' + data.division + '</span>' +
+              '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-left:auto;"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>' +
+              '</button>';
+            host.querySelector('.division-overview-btn').addEventListener('click', function() {
+              if (window.loadDivisionFn) window.loadDivisionFn(data.division);
+            });
+          } else {
+            host.innerHTML = '';
+          }
           showStaffBtn(data.division || '');
 
           // Highlight FIR on map
@@ -28578,11 +30063,19 @@ app.get('/airspace', requirePageEnabled('airspace'), async (req, res) => {
           }
 
           // Set single-FIR table header
-          document.getElementById('firDetailHead').innerHTML = '<tr><th>WF</th><th>FIR</th><th>From</th><th>To</th><th>Date</th><th>Staff Window <span class="col-help" title="Recommended staffing window:&#10;+/- 1 hour of the scheduled FIR entry and exit times" style="cursor:help;color:var(--muted);">?</span></th><th>Staff Duration</th><th>ATC Route</th><th>Dep Flow</th><th>Flow Type</th><th></th></tr>';
+          document.getElementById('firDetailHead').innerHTML = '<tr><th>WF</th><th>From</th><th>To</th><th>Date</th><th>FIR</th><th>Staff Window <span class="col-help" title="Recommended staffing window:&#10;+/- 1 hour of the scheduled FIR entry and exit times" style="cursor:help;color:var(--muted);">?</span></th><th>Staff Window (Local) <span class="col-help" title="Same window in the FIR local timezone" style="cursor:help;color:var(--muted);">?</span></th><th>Staff Duration</th><th>Dep Flow</th><th>Flow Type</th><th></th><th>ATC Route</th></tr>';
+
+          // Defensive client-side sort by WF number ascending. Even if the
+          // server returns stale (pre-fix) ordering, the table renders right.
+          data.legs.sort(function(a, b) {
+            var an = parseInt(String(a.wf || '').replace(/\D/g, ''), 10);
+            var bn = parseInt(String(b.wf || '').replace(/\D/g, ''), 10);
+            if (isFinite(an) && isFinite(bn) && an !== bn) return an - bn;
+            return String(a.wf || '').localeCompare(String(b.wf || ''));
+          });
 
           // Build timeline for single FIR
           currentTlData = { legs: data.legs, mode: 'single' };
-          renderTimeline(data.legs, 'single', currentTlView);
 
           // Render route map for this FIR
           var firLegsWithFir = data.legs.map(function(l) { return Object.assign({}, l, { _fir: data.fir }); });
@@ -28591,28 +30084,38 @@ app.get('/airspace', requirePageEnabled('airspace'), async (req, res) => {
           // Build table
           var tbody = document.getElementById('firDetailBody');
           if (!data.legs.length) {
-            tbody.innerHTML = '<tr><td colspan="10" style="color:var(--muted);text-align:center;padding:20px;">No WorldFlight legs transit this FIR.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="12" style="color:var(--muted);text-align:center;padding:20px;">No WorldFlight legs transit this FIR.</td></tr>';
             return;
           }
           // Store legs for modal use
           window._firLegs = data.legs;
           window._firId = data.fir;
 
+          // Per-leg colour matching the route map legend at the top of the
+          // page so the WF cell ties visually to its route line.
+          var SINGLE_ROUTE_COLORS = ['#f59e0b','#ef4444','#22c55e','#3b82f6','#a855f7','#ec4899','#14b8a6','#f97316','#06b6d4','#eab308','#8b5cf6','#10b981','#e11d48','#0ea5e9'];
           tbody.innerHTML = data.legs.map(function(l, idx) {
             var flowClass = l.flowType === 'SLOTTED' ? 'slotted' : (l.flowType === 'BOOKING_ONLY' ? 'booking' : 'none');
             var flowLabel = l.flowType === 'BOOKING_ONLY' ? 'Booking' : (l.flowType === 'SLOTTED' ? 'Slotted' : 'None');
+            var combinedBadge = (l.combinedWith && l.combinedWith.length)
+              ? ' <span class="combined-badge" title="Staff window combined with ' + l.combinedWith.join(', ') + '">+ ' + l.combinedWith.join(', ') + '</span>'
+              : '';
+            var wfColor = SINGLE_ROUTE_COLORS[idx % SINGLE_ROUTE_COLORS.length];
             return '<tr>'
-              + '<td style="font-weight:600;color:var(--accent);">' + l.wf + '</td>'
-              + '<td><span class="fir-badge">' + displayFir(data.fir) + '</span></td>'
+              + '<td style="font-weight:700;color:' + wfColor + ';border-left:3px solid ' + wfColor + ';padding-left:10px;">' + l.wf + '</td>'
               + '<td>' + l.from + '</td>'
               + '<td>' + l.to + '</td>'
               + '<td>' + (l.date || '-') + '</td>'
-              + '<td class="staff-window">' + (l.staffStart && l.staffEnd ? l.staffStart + ' – ' + l.staffEnd : '-') + '</td>'
+              + '<td><span class="fir-badge">' + displayFir(data.fir) + '</span></td>'
+              + '<td class="staff-window">' + (l.staffStart && l.staffEnd ? l.staffStart + ' – ' + l.staffEnd : '-') + combinedBadge + '</td>'
+              + '<td class="staff-window" style="color:var(--muted);">' + (l.staffStartLocal && l.staffEndLocal ? l.staffStartLocal + ' – ' + l.staffEndLocal : '-') + '</td>'
               + '<td class="">' + (l.staffMins ? l.staffMins + ' min' : '-') + '</td>'
-              + '<td class="fir-route-col"><div class="route-text">' + (l.atcRoute || '-') + '</div></td>'
               + '<td class="">' + (l.depFlow || '-') + '</td>'
               + '<td class=""><span class="flow-badge ' + flowClass + '">' + flowLabel + '</span></td>'
               + '<td></td>'
+              + '<td>' + (l.atcRoute && l.atcRoute !== '-'
+                  ? '<button type="button" class="show-route-btn" data-route="' + String(l.atcRoute).replace(/&/g, '&amp;').replace(/"/g, '&quot;') + '">Show Route</button>'
+                  : '<span style="color:var(--muted);">—</span>') + '</td>'
               + '</tr>';
           }).join('');
 
@@ -28627,11 +30130,15 @@ app.get('/airspace', requirePageEnabled('airspace'), async (req, res) => {
             cards.innerHTML = data.legs.map(function(l, idx) {
               var flowClass = l.flowType === 'SLOTTED' ? 'slotted' : (l.flowType === 'BOOKING_ONLY' ? 'booking' : 'none');
               var flowLabel = l.flowType === 'BOOKING_ONLY' ? 'Booking' : (l.flowType === 'SLOTTED' ? 'Slotted' : 'None');
+              var combinedBadge = (l.combinedWith && l.combinedWith.length)
+                ? ' <span class="combined-badge">+ ' + l.combinedWith.join(', ') + '</span>'
+                : '';
               return '<div class="fir-leg-card">'
                 + '<div class="fir-leg-card-header"><span class="wf">' + l.wf + '</span><span class="fir">' + displayFir(data.fir) + '</span></div>'
                 + '<div class="fir-leg-card-route"><span>' + l.from + '</span><span>→</span><span>' + l.to + '</span></div>'
                 + '<div class="fir-leg-card-row">Date: <b>' + (l.date || '-') + '</b></div>'
-                + '<div class="fir-leg-card-row">Staff Window: <b>' + (l.staffStart && l.staffEnd ? l.staffStart + ' – ' + l.staffEnd : '-') + '</b></div>'
+                + '<div class="fir-leg-card-row">Staff Window: <b>' + (l.staffStart && l.staffEnd ? l.staffStart + ' – ' + l.staffEnd : '-') + '</b>' + combinedBadge + '</div>'
+                + (l.staffStartLocal && l.staffEndLocal ? '<div class="fir-leg-card-row" style="color:var(--muted);">Local: <b>' + l.staffStartLocal + ' – ' + l.staffEndLocal + '</b></div>' : '')
                 + '<div class="fir-leg-card-row">Duration: <b>' + (l.staffMins ? l.staffMins + ' min' : '-') + '</b></div>'
                 + '<div class="fir-leg-card-row">Flow: <b>' + flowLabel + '</b></div>'
                 + ''
@@ -28660,10 +30167,14 @@ app.get('/airspace', requirePageEnabled('airspace'), async (req, res) => {
       Promise.all(fetches).then(function(results) {
         document.getElementById('airspaceSearchSection').style.display = 'none';
         document.getElementById('firDetailSection').style.display = '';
+        window.scrollTo({ top: 0, behavior: 'instant' });
 
         var label = division || region || 'Filtered';
         document.getElementById('firDetailTitle').innerHTML = '<div class="division-overview-header"><span class="division-overview-name">' + label + '</span><span class="division-overview-label">Division Overview</span></div>';
         document.getElementById('firDetailMeta').textContent = results.length + ' FIR' + (results.length !== 1 ? 's' : '') + ' \u2014 ' + results.reduce(function(sum, r) { return sum + (r.legs || []).length; }, 0) + ' total leg transits';
+        // Hide the "View Division Overview" shortcut \u2014 we're already on it.
+        var _divBtnHost = document.getElementById('divisionOverviewBtnHost');
+        if (_divBtnHost) _divBtnHost.innerHTML = '';
         showStaffBtn(division || '');
 
         // Clear highlight
@@ -28681,19 +30192,21 @@ app.get('/airspace', requirePageEnabled('airspace'), async (req, res) => {
           });
         });
 
-        // Sort by date then staff start
+        // Sort by WF number ascending (WF2601, WF2602, …). Same comparator
+        // as the single-FIR table for a consistent ordering across views.
         allLegs.sort(function(a, b) {
-          if (a.date !== b.date) return (a.date || '').localeCompare(b.date || '');
-          return (a.staffStart || '').localeCompare(b.staffStart || '');
+          var an = parseInt(String(a.wf || '').replace(/\D/g, ''), 10);
+          var bn = parseInt(String(b.wf || '').replace(/\D/g, ''), 10);
+          if (isFinite(an) && isFinite(bn) && an !== bn) return an - bn;
+          return String(a.wf || '').localeCompare(String(b.wf || ''));
         });
 
         // Build timeline grouped by FIR
         currentTlData = { legs: allLegs, mode: 'grouped' };
-        renderTimeline(allLegs, 'grouped', currentTlView);
         renderDivisionRouteMap(allLegs, firIds, division || '');
 
         // Set division table header
-        document.getElementById('firDetailHead').innerHTML = '<tr><th>WF</th><th>From</th><th>To</th><th>Date</th><th>ATC Route</th><th>FIRs</th><th>Staff Window <span class="col-help" title="Recommended staffing window:&#10;+/- 1 hour of the scheduled FIR entry and exit times" style="cursor:help;color:var(--muted);">?</span></th><th>Duration</th><th></th></tr>';
+        document.getElementById('firDetailHead').innerHTML = '<tr><th>WF</th><th>From</th><th>To</th><th>Date</th><th>FIR</th><th>Staff Window <span class="col-help" title="Recommended staffing window:&#10;+/- 1 hour of the scheduled FIR entry and exit times" style="cursor:help;color:var(--muted);">?</span></th><th>Local <span class="col-help" title="Same window in the FIR local timezone" style="cursor:help;color:var(--muted);">?</span></th><th>Staff Duration</th><th>Dep Flow</th><th>Flow Type</th><th></th><th>ATC Route</th></tr>';
 
         // Build table — group by sector
         window._firLegs = allLegs;
@@ -28708,7 +30221,15 @@ app.get('/airspace', requirePageEnabled('airspace'), async (req, res) => {
             sectorMap[key] = { leg: l, firLegs: [], idx: idx };
             sectorOrder.push(key);
           }
-          sectorMap[key].firLegs.push({ fir: l._fir, staffStart: l.staffStart, staffEnd: l.staffEnd, staffMins: l.staffMins, flowType: l.flowType, depFlow: l.depFlow, idx: idx });
+          sectorMap[key].firLegs.push({ fir: l._fir, staffStart: l.staffStart, staffEnd: l.staffEnd, staffStartLocal: l.staffStartLocal, staffEndLocal: l.staffEndLocal, staffMins: l.staffMins, flowType: l.flowType, depFlow: l.depFlow, idx: idx });
+        });
+
+        // Per-sector colour, matching the map legend at the top so the WF
+        // cell ties visually to its route line.
+        var ROUTE_COLORS_TBL = ['#f59e0b','#ef4444','#22c55e','#3b82f6','#a855f7','#ec4899','#14b8a6','#f97316','#06b6d4','#eab308','#8b5cf6','#10b981','#e11d48','#0ea5e9'];
+        var colorBySectorKey = {};
+        sectorOrder.forEach(function(key, i) {
+          colorBySectorKey[key] = ROUTE_COLORS_TBL[i % ROUTE_COLORS_TBL.length];
         });
 
         var tbody = document.getElementById('firDetailBody');
@@ -28716,27 +30237,38 @@ app.get('/airspace', requirePageEnabled('airspace'), async (req, res) => {
         sectorOrder.forEach(function(key) {
           var s = sectorMap[key];
           var l = s.leg;
+          var wfColor = colorBySectorKey[key] || 'var(--accent)';
           var firCount = s.firLegs.length;
-          html += '<tr style="border-bottom:none;">'
-            + '<td rowspan="' + (firCount + 1) + '" style="font-weight:600;color:var(--accent);vertical-align:top;padding-top:12px;">' + l.wf + '</td>'
-            + '<td rowspan="' + (firCount + 1) + '" style="vertical-align:top;padding-top:12px;">' + l.from + '</td>'
-            + '<td rowspan="' + (firCount + 1) + '" style="vertical-align:top;padding-top:12px;">' + l.to + '</td>'
-            + '<td rowspan="' + (firCount + 1) + '" style="vertical-align:top;padding-top:12px;">' + (l.date || '-') + '</td>'
-            + '<td rowspan="' + (firCount + 1) + '" style="vertical-align:top;padding-top:12px;" class="fir-route-col"><div class="route-text">' + (l.atcRoute || '-') + '</div></td>'
-            + '<td colspan="4" style="padding:0;"></td>'
-            + '</tr>';
-          s.firLegs.forEach(function(fl) {
+          var routeHtml = (l.atcRoute && l.atcRoute !== '-')
+            ? '<button type="button" class="show-route-btn" data-route="' + String(l.atcRoute).replace(/&/g, '&amp;').replace(/"/g, '&quot;') + '">Show Route</button>'
+            : '<span style="color:var(--muted);">—</span>';
+          // Sector-level cells (WF / From / To / Date / ATC Route) render once on
+          // the first FIR row with rowspan; later rows carry only FIR-specific
+          // cells. The coloured WF stripe runs down the rowspan'd WF cell.
+          s.firLegs.forEach(function(fl, idx) {
             var flowClass = fl.flowType === 'SLOTTED' ? 'slotted' : (fl.flowType === 'BOOKING_ONLY' ? 'booking' : 'none');
             var flowLabel = fl.flowType === 'BOOKING_ONLY' ? 'Booking' : (fl.flowType === 'SLOTTED' ? 'Slotted' : 'None');
-            html += '<tr class="fir-sub-row">'
-              + '<td><span class="fir-badge fir-badge-link" data-view-fir="' + fl.fir + '" style="cursor:pointer;">' + displayFir(fl.fir) + '</span></td>'
+            var isFirst = idx === 0;
+            var isLast = idx === firCount - 1;
+            var rowStyle = isLast ? '' : ' style="border-bottom:1px dashed rgba(255,255,255,0.05);"';
+            html += '<tr' + rowStyle + '>';
+            if (isFirst) {
+              html += '<td rowspan="' + firCount + '" style="font-weight:700;color:' + wfColor + ';border-left:3px solid ' + wfColor + ';padding-left:10px;vertical-align:top;">' + l.wf + '</td>'
+                + '<td rowspan="' + firCount + '" style="vertical-align:top;">' + l.from + '</td>'
+                + '<td rowspan="' + firCount + '" style="vertical-align:top;">' + l.to + '</td>'
+                + '<td rowspan="' + firCount + '" style="vertical-align:top;">' + (l.date || '-') + '</td>';
+            }
+            html += '<td><span class="fir-badge fir-badge-link" data-view-fir="' + fl.fir + '" style="cursor:pointer;">' + displayFir(fl.fir) + '</span></td>'
               + '<td class="staff-window">' + (fl.staffStart && fl.staffEnd ? fl.staffStart + ' \u2013 ' + fl.staffEnd : '-') + '</td>'
+              + '<td class="staff-window" style="color:var(--muted);">' + (fl.staffStartLocal && fl.staffEndLocal ? fl.staffStartLocal + ' \u2013 ' + fl.staffEndLocal : '-') + '</td>'
               + '<td>' + (fl.staffMins ? fl.staffMins + ' min' : '-') + '</td>'
-              + '<td style="white-space:nowrap;display:flex;align-items:center;justify-content:space-between;gap:4px;">'
-              + '<span class="flow-badge ' + flowClass + '">' + flowLabel + '</span>'
-              + '<button class="fir-view-btn" data-view-fir="' + fl.fir + '" style="font-size:11px;padding:2px 6px;">Open ' + displayFir(fl.fir) + '</button>'
-              + '</td>'
-              + '</tr>';
+              + '<td>' + (fl.depFlow || '-') + '</td>'
+              + '<td><span class="flow-badge ' + flowClass + '">' + flowLabel + '</span></td>'
+              + '<td><button class="fir-view-btn" data-view-fir="' + fl.fir + '" style="font-size:11px;padding:2px 6px;">Open ' + displayFir(fl.fir) + '</button></td>';
+            if (isFirst) {
+              html += '<td rowspan="' + firCount + '" style="vertical-align:top;">' + routeHtml + '</td>';
+            }
+            html += '</tr>';
           });
         });
         tbody.innerHTML = html;
@@ -28762,6 +30294,7 @@ app.get('/airspace', requirePageEnabled('airspace'), async (req, res) => {
               + '<div class="fir-leg-card-route"><span>' + l.from + '</span><span>→</span><span>' + l.to + '</span></div>'
               + '<div class="fir-leg-card-row">Date: <b>' + (l.date || '-') + '</b></div>'
               + '<div class="fir-leg-card-row">Staff Window: <b>' + (l.staffStart && l.staffEnd ? l.staffStart + ' – ' + l.staffEnd : '-') + '</b></div>'
+              + (l.staffStartLocal && l.staffEndLocal ? '<div class="fir-leg-card-row" style="color:var(--muted);">Local: <b>' + l.staffStartLocal + ' – ' + l.staffEndLocal + '</b></div>' : '')
               + '<div class="fir-leg-card-row">Duration: <b>' + (l.staffMins ? l.staffMins + ' min' : '-') + '</b></div>'
               + '<div class="fir-leg-card-row">Flow: <b>' + flowLabel + '</b></div>'
               + '<div class="fir-leg-card-actions">'
@@ -29161,6 +30694,37 @@ app.get('/airspace', requirePageEnabled('airspace'), async (req, res) => {
         });
     }
 
+    // ===== ATC ROUTE MODAL =====
+    (function() {
+      var modal = document.getElementById('routeModal');
+      if (!modal) return;
+      var body = document.getElementById('routeModalBody');
+      var closeBtn = document.getElementById('routeModalClose');
+      var copyBtn = document.getElementById('routeModalCopy');
+      var closeActionBtn = document.getElementById('routeModalCloseAction');
+      var backdrop = modal.querySelector('.route-modal-backdrop');
+
+      function open(route) { body.textContent = route; modal.hidden = false; }
+      function close() { modal.hidden = true; }
+
+      document.addEventListener('click', function(e) {
+        var btn = e.target.closest('.show-route-btn');
+        if (btn) { open(btn.getAttribute('data-route') || ''); }
+      });
+      closeBtn.addEventListener('click', close);
+      if (closeActionBtn) closeActionBtn.addEventListener('click', close);
+      backdrop.addEventListener('click', close);
+      document.addEventListener('keydown', function(e) { if (!modal.hidden && e.key === 'Escape') close(); });
+      copyBtn.addEventListener('click', async function() {
+        try {
+          await navigator.clipboard.writeText(body.textContent || '');
+          var prev = copyBtn.textContent;
+          copyBtn.textContent = 'Copied';
+          setTimeout(function() { copyBtn.textContent = prev; }, 1200);
+        } catch (e) {}
+      });
+    })();
+
     // ===== STAFF ACCESS REQUEST =====
     var currentDivision = '';
     var staffBtn = document.getElementById('requestStaffAccessBtn');
@@ -29265,7 +30829,7 @@ app.get('/airspace', requirePageEnabled('airspace'), async (req, res) => {
 
   res.send(
     renderLayout({
-      title: 'Airspace Management',
+      title: 'Staffing Overview',
       user,
       isAdmin,
       layoutClass: 'dashboard-full',
@@ -30010,7 +31574,8 @@ app.get('/my-slots', requireLogin, requirePageEnabled('my-slots'), (req, res) =>
         </div>
         <div id="routeModalBody" class="route-modal-body"></div>
         <div class="route-modal-actions">
-          <button type="button" id="routeModalCopy" class="route-modal-copy">Copy</button>
+          <button type="button" id="routeModalCloseAction" class="route-modal-copy route-modal-secondary">Close</button>
+      <button type="button" id="routeModalCopy" class="route-modal-copy">Copy</button>
         </div>
       </div>
     </div>
@@ -30047,11 +31612,15 @@ app.get('/my-slots', requireLogin, requirePageEnabled('my-slots'), (req, res) =>
         background: rgba(255,255,255,0.03); border: 1px solid var(--border);
         border-radius: 8px; padding: 12px; overflow: auto; word-break: break-word; white-space: pre-wrap;
       }
-      .route-modal-actions { display: flex; justify-content: flex-end; }
+      .route-modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
       .route-modal-copy {
         padding: 6px 14px; background: var(--accent); color: #0b1220; border: none; border-radius: 6px;
         font-weight: 600; cursor: pointer; font-family: inherit;
       }
+      .route-modal-copy.route-modal-secondary {
+        background: transparent; color: var(--text); border: 1px solid var(--border);
+      }
+      .route-modal-copy.route-modal-secondary:hover { background: rgba(255,255,255,0.04); }
     </style>
 
     <script>
@@ -30060,6 +31629,7 @@ app.get('/my-slots', requireLogin, requirePageEnabled('my-slots'), (req, res) =>
       var body = document.getElementById('routeModalBody');
       var closeBtn = document.getElementById('routeModalClose');
       var copyBtn = document.getElementById('routeModalCopy');
+      var closeActionBtn = document.getElementById('routeModalCloseAction');
       var backdrop = modal.querySelector('.route-modal-backdrop');
 
       function open(route) {
@@ -30073,6 +31643,7 @@ app.get('/my-slots', requireLogin, requirePageEnabled('my-slots'), (req, res) =>
         if (btn) { open(btn.getAttribute('data-route') || ''); return; }
       });
       closeBtn.addEventListener('click', close);
+      if (closeActionBtn) closeActionBtn.addEventListener('click', close);
       backdrop.addEventListener('click', close);
       document.addEventListener('keydown', function(e) { if (!modal.hidden && e.key === 'Escape') close(); });
       copyBtn.addEventListener('click', async function() {
