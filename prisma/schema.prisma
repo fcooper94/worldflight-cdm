@@ -254,6 +254,7 @@ model SectorPlanIssue {
   status        String    @default("OPEN")   // 'OPEN' | 'RESOLVED'
   resolvedByCid Int?
   resolvedAt    DateTime?
+  replies       String    @default("[]")     // JSON-encoded array of { cid, name?, fir?, side, notes, createdAt }
   createdAt     DateTime  @default(now())
 
   @@index([sectorPlanId])

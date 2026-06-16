@@ -28277,7 +28277,21 @@ app.get('/sector-planning', requirePageEnabled('sector-planning'), async (req, r
       const uniqIcaos = new Set();
       for (const r of allLegs) { uniqIcaos.add(r.from); uniqIcaos.add(r.to); }
       const icaoToFir = {};
-      for (const icao of uniqIcaos) icaoToFir[icao] = await resolveAirportFir(icao);
+      const missing = [...uniqIcaos].filter(i => !airportFirCache.has(i));
+      if (missing.length) {
+        const aps = await prisma.airport.findMany({
+          where: { icao: { in: missing } },
+          select: { icao: true, lat: true, lon: true }
+        }).catch(() => []);
+        const apMap = Object.fromEntries(aps.map(a => [a.icao, a]));
+        for (const icao of missing) {
+          const ap = apMap[icao];
+          if (!ap) { airportFirCache.set(icao, null); continue; }
+          const firs = getFirsForPoint(ap.lat, ap.lon);
+          airportFirCache.set(icao, firs[0] || null);
+        }
+      }
+      for (const icao of uniqIcaos) icaoToFir[icao] = airportFirCache.get(icao) ?? null;
       for (const r of allLegs) {
         const fromFir = icaoToFir[r.from];
         const toFir = icaoToFir[r.to];
@@ -28305,8 +28319,8 @@ app.get('/sector-planning', requirePageEnabled('sector-planning'), async (req, r
     const roleChips = s.roles.map(r => {
       const isDep = r.startsWith('Departure');
       const isArr = r.startsWith('Arrival');
-      const color = isDep ? '#f59e0b' : isArr ? '#10b981' : '#60a5fa';
-      const bg = isDep ? 'rgba(245,158,11,0.14)' : isArr ? 'rgba(16,185,129,0.14)' : 'rgba(96,165,250,0.14)';
+      const color = isDep ? '#818cf8' : isArr ? '#f472b6' : '#cbd5e1';
+      const bg = isDep ? 'rgba(129,140,248,0.14)' : isArr ? 'rgba(244,114,182,0.14)' : 'rgba(148,163,184,0.18)';
       return `<span style="display:inline-flex;align-items:center;padding:2px 7px;background:${bg};color:${color};border:1px solid ${color};border-radius:4px;font-size:10px;font-weight:700;letter-spacing:0.04em;">${r}</span>`;
     }).join('');
     return `<a href="/sector-planning/${encodeURIComponent(s.wf)}" class="sp-pill" style="display:flex;flex-direction:column;gap:8px;padding:14px 16px;background:rgba(255,255,255,0.025);border:1px solid var(--border);border-radius:10px;text-decoration:none;color:var(--text);min-width:260px;flex:1 1 260px;max-width:340px;transition:border-color .15s, transform .15s;">
@@ -28402,7 +28416,7 @@ async function getOrCreateSectorPlan(wf, fromIcao, toIcao) {
 // otherwise they need FIR Events Access for the airport's geographic FIR.
 async function canEditPlanSide(cid, side, fromIcao, toIcao) {
   if (!cid) return false;
-  if (isAdminUser(cid)) return true;
+  if (isSuperAdmin(cid)) return true;
   const owned = await getUserOwnedFirs(cid);
   if (!owned.size) return false;
   const icao = side === 'DEP' ? fromIcao : toIcao;
@@ -28498,24 +28512,7 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
   // Show the "raise issue" button only once a route is agreed.
   const canRaiseIssue = !!cid && userEnrouteFirs.length > 0 && routeComparison.status === 'GREEN';
 
-  // Build name lookup for issue authors
-  const allIssueCids = [...new Set(issues.map(i => i.raisedByCid))];
-  const issueAuthorNames = {};
-  if (allIssueCids.length) {
-    try {
-      const users = await prisma.user.findMany({ where: { cid: { in: allIssueCids } }, select: { cid: true, name: true } });
-      users.forEach(u => { if (u.name) issueAuthorNames[u.cid] = u.name; });
-    } catch (e) {}
-  }
-  const issuesWithNames = issues.map(i => ({
-    id: i.id,
-    raisedByCid: i.raisedByCid,
-    raisedByName: issueAuthorNames[i.raisedByCid] || null,
-    raisedByFir: i.raisedByFir,
-    notes: i.notes,
-    status: i.status,
-    createdAt: i.createdAt
-  }));
+  const issuesWithNames = await enrichIssues(issues);
 
   // Checklist auto-detect
   const checklist = {
@@ -28534,6 +28531,7 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
     blockTime: sched.blockTime || '',
     depFir, arrFir,
     canEditDep, canEditArr, isAdmin,
+    canModerateIssues: canEditDep || canEditArr,
     canRaiseIssue,
     userEnrouteFirs,
     depRouteSuggestion: plan.depRouteSuggestion || '',
@@ -28565,9 +28563,11 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
       .sp-side {
         background: rgba(255,255,255,0.02); border:1px solid var(--border);
         border-radius:10px; padding:12px;
+        display: flex; flex-direction: column;
       }
-      .sp-side.dep { border-top:3px solid #f59e0b; }
-      .sp-side.arr { border-top:3px solid #10b981; }
+      .sp-side .sp-side-body { flex: 1 1 auto; }
+      .sp-side.dep { border-top:3px solid #818cf8; }
+      .sp-side.arr { border-top:3px solid #f472b6; }
       .sp-side-head { display:flex;justify-content:space-between;align-items:flex-start;gap:6px;margin-bottom:8px; }
       .sp-side-head h3 { margin:0; font-size:14px; }
       .sp-side-head .sp-side-sub { font-size:10px; color:var(--muted); margin-top:1px; }
@@ -28586,8 +28586,8 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
         background: rgba(255,255,255,0.04); border:1px solid var(--border);
         border-radius:6px; cursor:pointer; transition: all .12s;
       }
-      .sp-flow-option:hover { border-color:#f59e0b; color:#f59e0b; }
-      .sp-flow-option.active { background:#f59e0b; color:#0f172a; border-color:#f59e0b; font-weight:700; }
+      .sp-flow-option:hover { border-color:#818cf8; color:#818cf8; }
+      .sp-flow-option.active { background:#818cf8; color:#0f172a; border-color:#818cf8; font-weight:700; }
       .sp-flow-option:disabled, .sp-flow-option.disabled { opacity:0.6; cursor:not-allowed; }
       .sp-comparison {
         margin-top:8px; padding:10px 12px;
@@ -28601,8 +28601,8 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
       .sp-cmp-status { display:inline-flex;align-items:center;gap:6px;font-weight:700;font-size:13px; }
       .sp-cmp-pill { padding:2px 8px;border-radius:999px;font-size:10px;letter-spacing:0.04em;text-transform:uppercase; }
       .sp-token { display:inline-block;font-family:monospace;font-size:11px;padding:1px 5px;background:rgba(255,255,255,0.06);border-radius:3px;margin:1px; }
-      .sp-token.dep-only { background:rgba(245,158,11,0.18); color:#fbbf24; }
-      .sp-token.arr-only { background:rgba(16,185,129,0.18); color:#34d399; }
+      .sp-token.dep-only { background:rgba(129,140,248,0.18); color:#a5b4fc; }
+      .sp-token.arr-only { background:rgba(244,114,182,0.18); color:#fbcfe8; }
       .sp-token.shared   { background:rgba(74,222,128,0.16); color:#86efac; }
       .sp-msg-ok    { color:#4ade80; font-size:12px; }
       .sp-msg-err   { color:#f87171; font-size:12px; }
@@ -28628,8 +28628,65 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
       }
       .sp-check-tag.required    { background: rgba(239,68,68,0.16); color:#f87171; border:1px solid rgba(239,68,68,0.35); }
       .sp-check-tag.recommended { background: rgba(96,165,250,0.14); color:#60a5fa; border:1px solid rgba(96,165,250,0.35); }
+      .sp-check.done .sp-check-tag { display: none; }
+      .sp-textarea-wrap { position: relative; }
+      .sp-textarea.sp-textarea-prompt {
+        border-color: #f59e0b !important;
+        box-shadow: 0 0 0 2px rgba(245,158,11,0.18);
+        background: rgba(245,158,11,0.04);
+      }
+      .sp-textarea-tooltip {
+        position: absolute;
+        top: -8px; left: 12px;
+        transform: translateY(-100%);
+        background: #f59e0b; color: #1f1500;
+        font-size: 11px; font-weight: 700;
+        padding: 4px 10px; border-radius: 6px;
+        white-space: nowrap;
+        box-shadow: 0 4px 14px rgba(0,0,0,0.4);
+        pointer-events: none;
+      }
+      .sp-textarea-tooltip::after {
+        content: '';
+        position: absolute; left: 18px; bottom: -5px;
+        width: 0; height: 0;
+        border-left: 5px solid transparent;
+        border-right: 5px solid transparent;
+        border-top: 5px solid #f59e0b;
+      }
+      .sp-top-row {
+        display: flex; gap: 16px; align-items: stretch;
+        margin: 0 0 16px;
+      }
+      .sp-top-map.sp-map-card { flex: 0 0 calc(70% - 8px); min-width: 0; height: auto; min-height: 320px; display: flex; }
+      .sp-top-map #spMap { flex: 1 1 auto; width: 100%; height: 100%; min-height: 320px; }
+      .sp-top-checklist { flex: 1 1 calc(30% - 8px); min-width: 0; display: flex; flex-direction: column; }
+      .sp-checklist-stack { display: flex !important; flex-direction: column; gap: 8px; flex: 1 1 auto; }
+      @media (max-width: 900px) {
+        .sp-top-row { flex-direction: column; }
+        .sp-top-map.sp-map-card, .sp-top-checklist { flex: 1 1 auto; }
+      }
       .sp-check-sub   { font-size:10px; color:var(--muted); margin-top:1px; }
-      .sp-readonly-note { font-size:11px;color:var(--muted);margin-top:8px;font-style:italic; }
+      .sp-readonly-note {
+        display: flex; align-items: flex-start; gap: 10px;
+        margin: 14px 0 0; padding: 10px 12px;
+        background: rgba(245, 158, 11, 0.10);
+        border: 1px solid rgba(245, 158, 11, 0.45);
+        border-left: 3px solid #f59e0b;
+        border-radius: 6px;
+        color: #fcd34d;
+        font-size: 12px; font-weight: 600;
+        line-height: 1.4;
+      }
+      .sp-readonly-note .sp-readonly-icon {
+        flex: 0 0 16px;
+        width: 16px; height: 16px;
+        margin-top: 1px;
+        color: #f59e0b;
+      }
+      .sp-readonly-note strong { color: #fde68a; font-weight: 700; }
+      .sp-side.readonly .sp-side-body { opacity: 0.5; pointer-events: none; filter: saturate(0.5); }
+      .sp-side.readonly .sp-readonly-note { opacity: 1; }
       .sp-details {
         display:flex; flex-wrap:wrap; gap:10px;
         margin: 2px 0 10px;
@@ -28664,27 +28721,81 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
       </div>
     </section>
 
-    <section class="card card-full sp-map-card">
-      <div id="spMap"></div>
-    </section>
+    <div class="sp-top-row">
+      <section class="card sp-map-card sp-top-map">
+        <div id="spMap"></div>
+      </section>
+      <section class="card sp-top-checklist">
+        <h3 style="margin:0 0 8px;font-size:14px;">Sector Readiness Checklist</h3>
+        <div class="sp-checklist sp-checklist-stack">
+          <div class="sp-check ${checklist.atcRouteAgreed ? 'done' : 'missing-required'}" id="spChkAtcRoute">
+            <div class="sp-check-icon">${checklist.atcRouteAgreed ? '✓' : '—'}</div>
+            <div class="sp-check-body">
+              <div class="sp-check-title">ATC Route Agreed <span class="sp-check-tag required">Required</span></div>
+              <div class="sp-check-sub">${checklist.atcRouteAgreed ? 'Dep and Arr have proposed the same route.' : 'Routes don’t match yet — coordinate with the other side.'}</div>
+            </div>
+          </div>
+          <div class="sp-check ${checklist.scenery.dep ? 'done' : 'missing-required'}">
+            <div class="sp-check-icon">${checklist.scenery.dep ? '✓' : '—'}</div>
+            <div class="sp-check-body">
+              <div class="sp-check-title">${fromIcao} Scenery on Portal <span class="sp-check-tag required">Required</span></div>
+              <div class="sp-check-sub"><a href="/icao/${fromIcao}#scenery" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline dotted;">${checklist.scenery.dep ? 'Scenery uploaded' : 'No scenery uploaded yet — open ' + fromIcao + ' portal'}</a></div>
+            </div>
+          </div>
+          <div class="sp-check ${checklist.scenery.arr ? 'done' : 'missing-required'}">
+            <div class="sp-check-icon">${checklist.scenery.arr ? '✓' : '—'}</div>
+            <div class="sp-check-body">
+              <div class="sp-check-title">${toIcao} Scenery on Portal <span class="sp-check-tag required">Required</span></div>
+              <div class="sp-check-sub"><a href="/icao/${toIcao}#scenery" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline dotted;">${checklist.scenery.arr ? 'Scenery uploaded' : 'No scenery uploaded yet — open ' + toIcao + ' portal'}</a></div>
+            </div>
+          </div>
+          <div class="sp-check ${(checklist.docs.dep || checklist.docs.arr) ? 'done' : ''}">
+            <div class="sp-check-icon">${(checklist.docs.dep || checklist.docs.arr) ? '✓' : '—'}</div>
+            <div class="sp-check-body">
+              <div class="sp-check-title">Pilot Brief / Documents <span class="sp-check-tag recommended">Recommended</span></div>
+              <div class="sp-check-sub"><a href="/icao/${fromIcao}#documents" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline dotted;">${fromIcao}</a>: ${checklist.docs.dep ? '✓' : '—'} · <a href="/icao/${toIcao}#documents" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline dotted;">${toIcao}</a>: ${checklist.docs.arr ? '✓' : '—'}</div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
 
     <section class="card card-full">
-      <div class="sp-side-label">Proposed ATC Routes</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px;">
+        <div class="sp-side-label" style="margin-bottom:0;">Proposed ATC Routes</div>
+        <button type="button" class="action-btn sp-raise-issue-btn" style="display:none;font-size:12px;padding:6px 14px;background:rgba(239,68,68,0.15);color:#f87171;border:1px solid rgba(239,68,68,0.4);">⚠ We${userEnrouteFirs.length ? ' (' + userEnrouteFirs.join('/') + ')' : ''} have an issue with this route</button>
+      </div>
       <div id="spComparisonBox" class="sp-comparison sp-cmp-${routeComparison.status.toLowerCase()}">
         <!-- comparison rendered client-side -->
+      </div>
+      <div id="spDepAgreePrompt" class="sp-agree-prompt" style="display:${canEditDep && !plan.depRouteSuggestion && plan.arrRouteSuggestion ? '' : 'none'};margin-top:12px;padding:10px 12px;background:rgba(56,189,248,0.05);border:1px solid rgba(56,189,248,0.25);border-radius:8px;">
+        <div style="font-size:12px;color:var(--text);margin-bottom:8px;"><strong>${arrFir || toIcao}</strong> has proposed a route. What do you want to do?</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+          <button type="button" class="action-btn sp-agree-yes" data-side="DEP" style="font-size:12px;padding:5px 12px;background:rgba(74,222,128,0.15);color:#4ade80;border:1px solid rgba(74,222,128,0.4);">✓ We agree with the route proposed by ${arrFir || toIcao}</button>
+          <button type="button" class="action-btn sp-agree-alt" data-side="DEP" style="font-size:12px;padding:5px 12px;background:rgba(245,158,11,0.15);color:#fbbf24;border:1px solid rgba(245,158,11,0.4);">⚠ We have an alternative route to suggest</button>
+        </div>
+      </div>
+      <div id="spArrAgreePrompt" class="sp-agree-prompt" style="display:${canEditArr && !plan.arrRouteSuggestion && plan.depRouteSuggestion ? '' : 'none'};margin-top:12px;padding:10px 12px;background:rgba(56,189,248,0.05);border:1px solid rgba(56,189,248,0.25);border-radius:8px;">
+        <div style="font-size:12px;color:var(--text);margin-bottom:8px;"><strong>${depFir || fromIcao}</strong> has proposed a route. What do you want to do?</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+          <button type="button" class="action-btn sp-agree-yes" data-side="ARR" style="font-size:12px;padding:5px 12px;background:rgba(74,222,128,0.15);color:#4ade80;border:1px solid rgba(74,222,128,0.4);">✓ We agree with the route proposed by ${depFir || fromIcao}</button>
+          <button type="button" class="action-btn sp-agree-alt" data-side="ARR" style="font-size:12px;padding:5px 12px;background:rgba(245,158,11,0.15);color:#fbbf24;border:1px solid rgba(245,158,11,0.4);">⚠ We have an alternative route to suggest</button>
+        </div>
       </div>
     </section>
 
     <section class="card card-full">
       <div class="sp-sides">
-        <div class="sp-side dep" data-side="DEP">
+        <div class="sp-side dep ${canEditDep ? '' : 'readonly'}" data-side="DEP">
           <div class="sp-side-head">
             <div>
               <h3>Departure (${fromIcao})</h3>
               <div class="sp-side-sub">${depFir ? 'FIR: ' + depFir : ''}</div>
             </div>
-            <a href="/icao/${fromIcao}" target="_blank" rel="noopener" class="sp-portal-link" style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;background:rgba(245,158,11,0.12);color:#fbbf24;border:1px solid rgba(245,158,11,0.35);border-radius:6px;font-size:11px;font-weight:600;text-decoration:none;white-space:nowrap;">↗ ${fromIcao} portal</a>
+            <a href="/icao/${fromIcao}" target="_blank" rel="noopener" class="sp-portal-link" style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;background:rgba(129,140,248,0.12);color:#a5b4fc;border:1px solid rgba(129,140,248,0.35);border-radius:6px;font-size:11px;font-weight:600;text-decoration:none;white-space:nowrap;">↗ ${fromIcao} portal</a>
           </div>
+
+          <div class="sp-side-body">
 
           <div class="sp-details">
             <div class="sp-detail-item">
@@ -28702,7 +28813,9 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
           </div>
 
           <div class="sp-side-label">Submit your ATC route suggestion</div>
+          <div class="sp-textarea-wrap" id="spDepRouteWrap">
           <textarea id="spDepRoute" class="sp-textarea" ${canEditDep ? '' : 'disabled'} placeholder="${canEditDep ? 'Enter the route the departure team proposes…' : 'Read-only — no edit access to this side.'}">${(plan.depRouteSuggestion || '').replace(/</g, '&lt;')}</textarea>
+          </div>
           <div style="margin-top:6px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
             <span id="spDepRouteMsg" style="font-size:11px;color:var(--muted);"></span>
             ${canEditDep ? '<button class="action-btn primary" id="spDepRouteSave" style="font-size:12px;padding:5px 12px;">Save</button>' : ''}
@@ -28727,17 +28840,36 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
             <div id="spFlowRateTotal" style="font-size:12px;color:var(--text);margin-top:6px;padding-top:6px;border-top:1px dashed rgba(255,255,255,0.06);"></div>
           </div>
 
-          ${!canEditDep ? '<div class="sp-readonly-note">You need FIR Events Access for ' + (depFir || 'this airport') + ' to edit the departure side.</div>' : ''}
+          </div>
+          ${!canEditDep ? (userEnrouteFirs.length > 0 ? `
+          <div class="sp-readonly-note">
+            <svg class="sp-readonly-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+            <div>
+              <div style="font-size:13px;color:#fde68a;margin-bottom:2px;">Enroute view — view only</div>
+              As an enroute FIR (<strong>${userEnrouteFirs.join(', ')}</strong>) you can't edit departure data. If you have concerns once a route is agreed, raise an issue below.
+            </div>
+          </div>
+          ` : `
+          <div class="sp-readonly-note">
+            <svg class="sp-readonly-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+            <div>
+              <div style="font-size:13px;color:#fde68a;margin-bottom:2px;">Departure details — view only</div>
+              You can only edit your own side of this sector. The departure team at <strong>${depFir || fromIcao}</strong> manages this column.
+            </div>
+          </div>
+          `) : ''}
         </div>
 
-        <div class="sp-side arr" data-side="ARR">
+        <div class="sp-side arr ${canEditArr ? '' : 'readonly'}" data-side="ARR">
           <div class="sp-side-head">
             <div>
               <h3>Arrival (${toIcao})</h3>
               <div class="sp-side-sub">${arrFir ? 'FIR: ' + arrFir : ''}</div>
             </div>
-            <a href="/icao/${toIcao}" target="_blank" rel="noopener" class="sp-portal-link" style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;background:rgba(16,185,129,0.12);color:#34d399;border:1px solid rgba(16,185,129,0.35);border-radius:6px;font-size:11px;font-weight:600;text-decoration:none;white-space:nowrap;">↗ ${toIcao} portal</a>
+            <a href="/icao/${toIcao}" target="_blank" rel="noopener" class="sp-portal-link" style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;background:rgba(244,114,182,0.12);color:#fbcfe8;border:1px solid rgba(244,114,182,0.35);border-radius:6px;font-size:11px;font-weight:600;text-decoration:none;white-space:nowrap;">↗ ${toIcao} portal</a>
           </div>
+
+          <div class="sp-side-body">
 
           <div class="sp-details">
             <div class="sp-detail-item">
@@ -28755,7 +28887,9 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
           </div>
 
           <div class="sp-side-label">Submit your ATC route suggestion</div>
+          <div class="sp-textarea-wrap" id="spArrRouteWrap">
           <textarea id="spArrRoute" class="sp-textarea" ${canEditArr ? '' : 'disabled'} placeholder="${canEditArr ? 'Enter the route the arrival team proposes…' : 'Read-only — no edit access to this side.'}">${(plan.arrRouteSuggestion || '').replace(/</g, '&lt;')}</textarea>
+          </div>
           <div style="margin-top:6px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
             <span id="spArrRouteMsg" style="font-size:11px;color:var(--muted);"></span>
             ${canEditArr ? '<button class="action-btn primary" id="spArrRouteSave" style="font-size:12px;padding:5px 12px;">Save</button>' : ''}
@@ -28767,7 +28901,24 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
             <span id="spArrFlowMsg" style="font-size:11px;color:var(--muted);"></span>
             ${canEditArr ? '<button class="action-btn primary" id="spArrFlowSave" style="font-size:12px;padding:5px 12px;">Save</button>' : ''}
           </div>
-          ${!canEditArr ? '<div class="sp-readonly-note">You need FIR Events Access for ' + (arrFir || 'this airport') + ' to edit the arrival side.</div>' : ''}
+          </div>
+          ${!canEditArr ? (userEnrouteFirs.length > 0 ? `
+          <div class="sp-readonly-note">
+            <svg class="sp-readonly-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+            <div>
+              <div style="font-size:13px;color:#fde68a;margin-bottom:2px;">Enroute view — view only</div>
+              As an enroute FIR (<strong>${userEnrouteFirs.join(', ')}</strong>) you can't edit arrival data. If you have concerns once a route is agreed, raise an issue below.
+            </div>
+          </div>
+          ` : `
+          <div class="sp-readonly-note">
+            <svg class="sp-readonly-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+            <div>
+              <div style="font-size:13px;color:#fde68a;margin-bottom:2px;">Arrival details — view only</div>
+              You can only edit your own side of this sector. The arrival team at <strong>${arrFir || toIcao}</strong> manages this column.
+            </div>
+          </div>
+          `) : ''}
         </div>
       </div>
     </section>
@@ -28778,7 +28929,7 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
           <h3 style="margin:0;font-size:14px;">Route Issues</h3>
           <div style="font-size:11px;color:var(--muted);margin-top:2px;">Enroute FIR managers can flag issues with the agreed route here.</div>
         </div>
-        <button type="button" id="spRaiseIssueBtn" class="action-btn" style="display:none;font-size:12px;padding:6px 14px;background:rgba(239,68,68,0.15);color:#f87171;border:1px solid rgba(239,68,68,0.4);">⚠ We have an issue with this route</button>
+        <button type="button" class="action-btn sp-raise-issue-btn" style="display:none;font-size:12px;padding:6px 14px;background:rgba(239,68,68,0.15);color:#f87171;border:1px solid rgba(239,68,68,0.4);">⚠ We${userEnrouteFirs.length ? ' (' + userEnrouteFirs.join('/') + ')' : ''} have an issue with this route</button>
       </div>
 
       <div id="spIssueFormWrap" style="display:none;margin-bottom:12px;padding:12px;background:rgba(239,68,68,0.04);border:1px solid rgba(239,68,68,0.3);border-radius:8px;">
@@ -28792,33 +28943,6 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
       </div>
 
       <div id="spIssuesList"><!-- rendered client-side --></div>
-    </section>
-
-    <section class="card card-full">
-      <h3 style="margin:0 0 8px;font-size:14px;">Sector Readiness Checklist</h3>
-      <div class="sp-checklist">
-        <div class="sp-check ${checklist.atcRouteAgreed ? 'done' : 'missing-required'}" id="spChkAtcRoute">
-          <div class="sp-check-icon">${checklist.atcRouteAgreed ? '✓' : '—'}</div>
-          <div class="sp-check-body">
-            <div class="sp-check-title">ATC Route Agreed <span class="sp-check-tag required">Required</span></div>
-            <div class="sp-check-sub">${checklist.atcRouteAgreed ? 'Dep and Arr have proposed the same route.' : 'Routes don’t match yet — coordinate with the other side.'}</div>
-          </div>
-        </div>
-        <div class="sp-check ${(checklist.scenery.dep && checklist.scenery.arr) ? 'done' : 'missing-required'}">
-          <div class="sp-check-icon">${(checklist.scenery.dep && checklist.scenery.arr) ? '✓' : '—'}</div>
-          <div class="sp-check-body">
-            <div class="sp-check-title">Scenery on Portal <span class="sp-check-tag required">Required</span></div>
-            <div class="sp-check-sub"><a href="/icao/${fromIcao}#scenery" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline dotted;">${fromIcao}</a>: ${checklist.scenery.dep ? '✓' : '—'} · <a href="/icao/${toIcao}#scenery" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline dotted;">${toIcao}</a>: ${checklist.scenery.arr ? '✓' : '—'}</div>
-          </div>
-        </div>
-        <div class="sp-check ${(checklist.docs.dep || checklist.docs.arr) ? 'done' : ''}">
-          <div class="sp-check-icon">${(checklist.docs.dep || checklist.docs.arr) ? '✓' : '—'}</div>
-          <div class="sp-check-body">
-            <div class="sp-check-title">Pilot Brief / Documents <span class="sp-check-tag recommended">Recommended</span></div>
-            <div class="sp-check-sub"><a href="/icao/${fromIcao}#documents" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline dotted;">${fromIcao}</a>: ${checklist.docs.dep ? '✓' : '—'} · <a href="/icao/${toIcao}#documents" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline dotted;">${toIcao}</a>: ${checklist.docs.arr ? '✓' : '—'}</div>
-          </div>
-        </div>
-      </div>
     </section>
 
     </div><!-- /spDetailWrap -->
@@ -28868,22 +28992,25 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
 
         var sharedSet = new Set(c.shared || []);
 
-        var depRouteHtml = renderRoutePlain(window.SP.depRouteSuggestion, sharedSet, '#fbbf24');
-        var arrRouteHtml = renderRoutePlain(window.SP.arrRouteSuggestion, sharedSet, '#34d399');
+        var depRouteHtml = renderRoutePlain(window.SP.depRouteSuggestion, sharedSet, '#a5b4fc');
+        var arrRouteHtml = renderRoutePlain(window.SP.arrRouteSuggestion, sharedSet, '#fbcfe8');
+
+        var depBy = window.SP.depFir || window.SP.fromIcao;
+        var arrBy = window.SP.arrFir || window.SP.toIcao;
 
         var stackedHtml = ''
           + '<div style="display:flex;flex-direction:column;gap:10px;margin-top:12px;">'
           + '  <div>'
           + '    <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">'
-          + '      <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#f59e0b;"></span>'
-          + '      <span style="font-size:11px;font-weight:700;color:#fbbf24;letter-spacing:0.04em;text-transform:uppercase;">Dep route</span>'
+          + '      <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#818cf8;"></span>'
+          + '      <span style="font-size:11px;font-weight:700;color:#a5b4fc;letter-spacing:0.04em;text-transform:uppercase;">ATC route — proposed by ' + depBy + '</span>'
           + '    </div>'
           + '    <div style="font-family:monospace;font-size:13px;line-height:1.7;padding:8px 10px;background:rgba(0,0,0,0.22);border-radius:6px;word-break:break-word;">' + depRouteHtml + '</div>'
           + '  </div>'
           + '  <div>'
           + '    <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">'
-          + '      <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#10b981;"></span>'
-          + '      <span style="font-size:11px;font-weight:700;color:#34d399;letter-spacing:0.04em;text-transform:uppercase;">Arr route</span>'
+          + '      <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#f472b6;"></span>'
+          + '      <span style="font-size:11px;font-weight:700;color:#fbcfe8;letter-spacing:0.04em;text-transform:uppercase;">ATC route — proposed by ' + arrBy + '</span>'
           + '    </div>'
           + '    <div style="font-family:monospace;font-size:13px;line-height:1.7;padding:8px 10px;background:rgba(0,0,0,0.22);border-radius:6px;word-break:break-word;">' + arrRouteHtml + '</div>'
           + '  </div>'
@@ -28894,8 +29021,8 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
         if (c.status === 'AMBER' || c.status === 'RED') {
           validationHtml = ''
             + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px;padding-top:12px;border-top:1px dashed rgba(255,255,255,0.08);font-size:12px;">'
-            + '<div><div style="color:var(--muted);font-size:11px;margin-bottom:4px;">Only on Dep route</div>' + (c.depOnly.length ? tokens(c.depOnly, 'dep-only') : '<span style="color:var(--muted);">—</span>') + '</div>'
-            + '<div><div style="color:var(--muted);font-size:11px;margin-bottom:4px;">Only on Arr route</div>' + (c.arrOnly.length ? tokens(c.arrOnly, 'arr-only') : '<span style="color:var(--muted);">—</span>') + '</div>'
+            + '<div><div style="color:var(--muted);font-size:11px;margin-bottom:4px;">Only on ' + depBy + '’s route</div>' + (c.depOnly.length ? tokens(c.depOnly, 'dep-only') : '<span style="color:var(--muted);">—</span>') + '</div>'
+            + '<div><div style="color:var(--muted);font-size:11px;margin-bottom:4px;">Only on ' + arrBy + '’s route</div>' + (c.arrOnly.length ? tokens(c.arrOnly, 'arr-only') : '<span style="color:var(--muted);">—</span>') + '</div>'
             + '</div>';
         }
 
@@ -28937,6 +29064,21 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
         setTimeout(function() { el.textContent = ''; el.style.color = ''; }, 3000);
       }
 
+      // Force route textareas to uppercase as the user types
+      ['spDepRoute', 'spArrRoute'].forEach(function(id) {
+        var ta = document.getElementById(id);
+        if (!ta) return;
+        ta.style.textTransform = 'uppercase';
+        ta.addEventListener('input', function() {
+          var pos = ta.selectionStart, end = ta.selectionEnd;
+          var upper = ta.value.toUpperCase();
+          if (upper !== ta.value) {
+            ta.value = upper;
+            try { ta.setSelectionRange(pos, end); } catch (e) {}
+          }
+        });
+      });
+
       // Wire dep route save
       var depBtn = document.getElementById('spDepRouteSave');
       if (depBtn) depBtn.addEventListener('click', async function() {
@@ -28947,6 +29089,7 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
           window.SP.depRouteSuggestion = val;
           window.SP.routeComparison = res.data.routeComparison;
           spRenderComparison();
+          if (typeof spRefreshAgreePrompts === 'function') spRefreshAgreePrompts();
           spSetMsg(msg, 'Saved', true);
         } else spSetMsg(msg, res.data.error || 'Failed', false);
       });
@@ -28960,9 +29103,75 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
           window.SP.arrRouteSuggestion = val;
           window.SP.routeComparison = res.data.routeComparison;
           spRenderComparison();
+          spRefreshAgreePrompts();
           spSetMsg(msg, 'Saved', true);
         } else spSetMsg(msg, res.data.error || 'Failed', false);
       });
+
+      function spRefreshAgreePrompts() {
+        var dep = document.getElementById('spDepAgreePrompt');
+        var arr = document.getElementById('spArrAgreePrompt');
+        if (dep) dep.style.display = (window.SP.canEditDep && !window.SP.depRouteSuggestion && window.SP.arrRouteSuggestion) ? '' : 'none';
+        if (arr) arr.style.display = (window.SP.canEditArr && !window.SP.arrRouteSuggestion && window.SP.depRouteSuggestion) ? '' : 'none';
+      }
+
+      document.querySelectorAll('.sp-agree-yes').forEach(function(btn) {
+        btn.addEventListener('click', async function() {
+          var side = btn.dataset.side;
+          var other = side === 'DEP' ? window.SP.arrRouteSuggestion : window.SP.depRouteSuggestion;
+          if (!other) return;
+          var taId = side === 'DEP' ? 'spDepRoute' : 'spArrRoute';
+          var msgId = side === 'DEP' ? 'spDepRouteMsg' : 'spArrRouteMsg';
+          btn.disabled = true;
+          var res = await spPostJson('/api/sector-plan/' + encodeURIComponent(window.SP.wf) + '/route', { side: side, route: other });
+          btn.disabled = false;
+          if (res.ok) {
+            document.getElementById(taId).value = other;
+            window.SP[side === 'DEP' ? 'depRouteSuggestion' : 'arrRouteSuggestion'] = other;
+            window.SP.routeComparison = res.data.routeComparison;
+            spRenderComparison();
+            spRefreshAgreePrompts();
+            spSetMsg(document.getElementById(msgId), 'Saved — route agreed', true);
+          } else {
+            spSetMsg(document.getElementById(msgId), res.data.error || 'Failed', false);
+          }
+        });
+      });
+
+      document.querySelectorAll('.sp-agree-alt').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          var side = btn.dataset.side;
+          var wrapId = side === 'DEP' ? 'spDepRouteWrap' : 'spArrRouteWrap';
+          var taId = side === 'DEP' ? 'spDepRoute' : 'spArrRoute';
+          var wrap = document.getElementById(wrapId);
+          var ta = document.getElementById(taId);
+          if (!wrap || !ta) return;
+          ta.classList.add('sp-textarea-prompt');
+          if (!wrap.querySelector('.sp-textarea-tooltip')) {
+            var tip = document.createElement('div');
+            tip.className = 'sp-textarea-tooltip';
+            tip.textContent = 'Enter your proposed route here';
+            wrap.appendChild(tip);
+          }
+          // Hide the agree-prompt card
+          var prompt = btn.closest('.sp-agree-prompt');
+          if (prompt) prompt.style.display = 'none';
+          ta.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          setTimeout(function() { ta.focus(); }, 300);
+          // Remove highlight + tooltip once the user types or blurs with content
+          var clear = function() {
+            ta.classList.remove('sp-textarea-prompt');
+            var t = wrap.querySelector('.sp-textarea-tooltip');
+            if (t) t.remove();
+            ta.removeEventListener('input', clear);
+            ta.removeEventListener('blur', clear);
+          };
+          ta.addEventListener('input', clear);
+          ta.addEventListener('blur', clear);
+        });
+      });
+
+      spRefreshAgreePrompts();
 
       // Flow type
       // Departure window is buildTimeWindow(±60min) = 2h.
@@ -29045,6 +29254,9 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
       spRenderComparison();
 
       // ===== ROUTE ISSUES =====
+      function spEsc(s) { return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+      function spFmtTime(t) { return new Date(t).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }); }
+
       function spRenderIssues() {
         var list = document.getElementById('spIssuesList');
         var arr = window.SP.issues || [];
@@ -29052,42 +29264,187 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
           list.innerHTML = '<div style="padding:14px 12px;text-align:center;color:var(--muted);font-size:12px;border:1px dashed var(--border);border-radius:8px;">No issues raised on this route.</div>';
           return;
         }
+        var canModerate = !!window.SP.canModerateIssues;
         list.innerHTML = arr.map(function(it) {
-          var when = new Date(it.createdAt).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+          var when = spFmtTime(it.createdAt);
           var author = it.raisedByName ? it.raisedByName + ' (' + it.raisedByCid + ')' : ('CID ' + it.raisedByCid);
           var firTag = it.raisedByFir
-            ? '<span style="display:inline-flex;align-items:center;padding:1px 7px;background:rgba(96,165,250,0.14);color:#60a5fa;border:1px solid rgba(96,165,250,0.4);border-radius:4px;font-size:10px;font-weight:700;letter-spacing:0.04em;">'+ it.raisedByFir +'</span>'
+            ? '<span style="display:inline-flex;align-items:center;padding:1px 7px;background:rgba(96,165,250,0.14);color:#60a5fa;border:1px solid rgba(96,165,250,0.4);border-radius:4px;font-size:10px;font-weight:700;letter-spacing:0.04em;">'+ spEsc(it.raisedByFir) +'</span>'
             : '';
           var statusTag = it.status === 'RESOLVED'
             ? '<span style="display:inline-flex;align-items:center;padding:1px 7px;background:rgba(74,222,128,0.16);color:#4ade80;border:1px solid rgba(74,222,128,0.4);border-radius:4px;font-size:10px;font-weight:700;letter-spacing:0.04em;">RESOLVED</span>'
             : '<span style="display:inline-flex;align-items:center;padding:1px 7px;background:rgba(239,68,68,0.16);color:#f87171;border:1px solid rgba(239,68,68,0.4);border-radius:4px;font-size:10px;font-weight:700;letter-spacing:0.04em;">OPEN</span>';
+
+          var isAdmin = !!window.SP.isAdmin;
+          var repliesHtml = (it.replies || []).map(function(r, idx) {
+            var rWhen = spFmtTime(r.createdAt);
+            var rAuthor = r.name ? r.name + ' (' + r.cid + ')' : ('CID ' + r.cid);
+            var sideColor = r.side === 'DEP' ? '#818cf8' : r.side === 'ARR' ? '#f472b6' : '#94a3b8';
+            var sideBg    = r.side === 'DEP' ? 'rgba(129,140,248,0.14)' : r.side === 'ARR' ? 'rgba(244,114,182,0.14)' : 'rgba(148,163,184,0.14)';
+            var sideLabel = r.side ? (r.side + (r.fir ? ' · ' + r.fir : '')) : '';
+            var delBtn = isAdmin
+              ? '<button type="button" class="sp-reply-del" data-issue-id="' + it.id + '" data-reply-idx="' + idx + '" title="Delete reply (admin)" style="background:none;border:none;cursor:pointer;color:#f87171;font-size:14px;line-height:1;padding:2px 6px;border-radius:4px;">✕</button>'
+              : '';
+            return '<div style="margin-top:8px;margin-left:18px;padding:10px 12px;background:rgba(255,255,255,0.025);border:1px solid var(--border);border-left:3px solid ' + sideColor + ';border-radius:6px;">'
+              + '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px;">'
+              + '  <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">'
+              + (sideLabel ? '<span style="display:inline-flex;align-items:center;padding:1px 7px;background:' + sideBg + ';color:' + sideColor + ';border:1px solid ' + sideColor + ';border-radius:4px;font-size:10px;font-weight:700;letter-spacing:0.04em;">' + spEsc(sideLabel) + '</span>' : '')
+              + '    <span style="font-size:12px;font-weight:600;">' + spEsc(rAuthor) + '</span>'
+              + '  </div>'
+              + '  <div style="display:flex;align-items:center;gap:6px;">'
+              + '    <span style="font-size:11px;color:var(--muted);">' + rWhen + '</span>'
+              + delBtn
+              + '  </div>'
+              + '</div>'
+              + '<div style="font-size:13px;color:var(--text);white-space:pre-wrap;word-break:break-word;">' + spEsc(r.notes || '') + '</div>'
+              + '</div>';
+          }).join('');
+
+          var actionsHtml = '';
+          if (canModerate || isAdmin) {
+            var replyForm = canModerate ? '<div class="sp-reply-form" data-issue-id="' + it.id + '" style="display:none;margin-top:8px;margin-left:18px;padding:10px;background:rgba(56,189,248,0.04);border:1px solid rgba(56,189,248,0.25);border-radius:6px;">'
+              + '<textarea class="sp-textarea sp-reply-text" placeholder="Write a reply…" style="min-height:60px;"></textarea>'
+              + '<div style="display:flex;justify-content:flex-end;gap:6px;margin-top:6px;">'
+              + '<button type="button" class="action-btn sp-reply-cancel" style="font-size:12px;padding:4px 10px;background:rgba(255,255,255,0.04);color:var(--muted);border:1px solid var(--border);">Cancel</button>'
+              + '<button type="button" class="action-btn primary sp-reply-submit" style="font-size:12px;padding:4px 10px;">Send Reply</button>'
+              + '</div>'
+              + '<div class="sp-reply-msg" style="font-size:11px;margin-top:4px;"></div>'
+              + '</div>' : '';
+            var btns = '';
+            if (canModerate) {
+              btns += '<button type="button" class="action-btn sp-reply-open" data-issue-id="' + it.id + '" style="font-size:12px;padding:4px 10px;background:rgba(56,189,248,0.10);color:#7dd3fc;border:1px solid rgba(56,189,248,0.4);">Reply</button>';
+              if (it.status === 'OPEN') {
+                btns += '<button type="button" class="action-btn sp-close-issue" data-issue-id="' + it.id + '" style="font-size:12px;padding:4px 10px;background:rgba(74,222,128,0.12);color:#4ade80;border:1px solid rgba(74,222,128,0.4);">✓ Mark Resolved</button>';
+              }
+            }
+            if (isAdmin) {
+              btns += '<button type="button" class="action-btn sp-issue-del" data-issue-id="' + it.id + '" title="Delete issue (admin)" style="font-size:12px;padding:4px 10px;background:rgba(239,68,68,0.10);color:#f87171;border:1px solid rgba(239,68,68,0.4);margin-left:auto;">🗑 Delete Issue</button>';
+            }
+            actionsHtml = '<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;align-items:center;">' + btns + '</div>' + replyForm;
+          }
+
+          var resolvedMeta = (it.status === 'RESOLVED' && it.resolvedAt)
+            ? '<div style="margin-top:6px;font-size:11px;color:var(--muted);font-style:italic;">Resolved by ' + spEsc(it.resolvedByName || ('CID ' + it.resolvedByCid)) + ' on ' + spFmtTime(it.resolvedAt) + '</div>'
+            : '';
+
           return '<div style="padding:12px 14px;margin-bottom:8px;background:rgba(255,255,255,0.02);border:1px solid var(--border);border-left:3px solid ' + (it.status === 'RESOLVED' ? '#4ade80' : '#f87171') + ';border-radius:8px;">'
             + '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px;">'
-            + '  <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">' + firTag + statusTag + '<span style="font-size:12px;font-weight:600;">' + author + '</span></div>'
+            + '  <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">' + firTag + statusTag + '<span style="font-size:12px;font-weight:600;">' + spEsc(author) + '</span></div>'
             + '  <span style="font-size:11px;color:var(--muted);">' + when + '</span>'
             + '</div>'
-            + '<div style="font-size:13px;color:var(--text);white-space:pre-wrap;word-break:break-word;">' + (it.notes || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</div>'
+            + '<div style="font-size:13px;color:var(--text);white-space:pre-wrap;word-break:break-word;">' + spEsc(it.notes || '') + '</div>'
+            + resolvedMeta
+            + repliesHtml
+            + actionsHtml
             + '</div>';
         }).join('');
+
+        // Wire up reply / close actions
+        list.querySelectorAll('.sp-reply-open').forEach(function(btn) {
+          btn.addEventListener('click', function() {
+            var id = btn.dataset.issueId;
+            var form = list.querySelector('.sp-reply-form[data-issue-id="' + id + '"]');
+            if (!form) return;
+            form.style.display = '';
+            form.querySelector('.sp-reply-text').focus();
+          });
+        });
+        list.querySelectorAll('.sp-reply-cancel').forEach(function(btn) {
+          btn.addEventListener('click', function() {
+            var form = btn.closest('.sp-reply-form');
+            form.style.display = 'none';
+            form.querySelector('.sp-reply-text').value = '';
+            form.querySelector('.sp-reply-msg').textContent = '';
+          });
+        });
+        list.querySelectorAll('.sp-reply-submit').forEach(function(btn) {
+          btn.addEventListener('click', async function() {
+            var form = btn.closest('.sp-reply-form');
+            var id = form.dataset.issueId;
+            var ta = form.querySelector('.sp-reply-text');
+            var msg = form.querySelector('.sp-reply-msg');
+            var notes = ta.value.trim();
+            if (!notes) { msg.textContent = 'Please write a reply.'; msg.style.color = '#f87171'; return; }
+            btn.disabled = true;
+            var res = await spPostJson('/api/sector-plan/' + encodeURIComponent(window.SP.wf) + '/issue/' + id + '/reply', { notes: notes });
+            btn.disabled = false;
+            if (res.ok) {
+              window.SP.issues = res.data.issues || window.SP.issues;
+              spRenderIssues();
+            } else {
+              msg.textContent = res.data.error || 'Failed to reply';
+              msg.style.color = '#f87171';
+            }
+          });
+        });
+        list.querySelectorAll('.sp-close-issue').forEach(function(btn) {
+          btn.addEventListener('click', async function() {
+            if (!confirm('Mark this issue as resolved?')) return;
+            var id = btn.dataset.issueId;
+            btn.disabled = true;
+            var res = await spPostJson('/api/sector-plan/' + encodeURIComponent(window.SP.wf) + '/issue/' + id + '/close', {});
+            btn.disabled = false;
+            if (res.ok) {
+              window.SP.issues = res.data.issues || window.SP.issues;
+              spRenderIssues();
+            } else {
+              alert(res.data.error || 'Failed to close issue');
+            }
+          });
+        });
+        list.querySelectorAll('.sp-reply-del').forEach(function(btn) {
+          btn.addEventListener('click', async function() {
+            if (!confirm('Delete this reply? This cannot be undone.')) return;
+            var id = btn.dataset.issueId;
+            var idx = Number(btn.dataset.replyIdx);
+            btn.disabled = true;
+            var res = await spPostJson('/api/sector-plan/' + encodeURIComponent(window.SP.wf) + '/issue/' + id + '/reply/delete', { index: idx });
+            btn.disabled = false;
+            if (res.ok) {
+              window.SP.issues = res.data.issues || window.SP.issues;
+              spRenderIssues();
+            } else {
+              alert(res.data.error || 'Failed to delete reply');
+            }
+          });
+        });
+        list.querySelectorAll('.sp-issue-del').forEach(function(btn) {
+          btn.addEventListener('click', async function() {
+            if (!confirm('Delete this entire issue and all its replies? This cannot be undone.')) return;
+            var id = btn.dataset.issueId;
+            btn.disabled = true;
+            var res = await spPostJson('/api/sector-plan/' + encodeURIComponent(window.SP.wf) + '/issue/' + id + '/delete', {});
+            btn.disabled = false;
+            if (res.ok) {
+              window.SP.issues = res.data.issues || window.SP.issues;
+              spRenderIssues();
+            } else {
+              alert(res.data.error || 'Failed to delete issue');
+            }
+          });
+        });
       }
 
       function spRefreshIssueButton() {
-        var btn = document.getElementById('spRaiseIssueBtn');
-        if (!btn) return;
+        var btns = document.querySelectorAll('.sp-raise-issue-btn');
+        if (!btns.length) return;
         var canRaise = window.SP.canRaiseIssue && window.SP.routeComparison.status === 'GREEN';
-        btn.style.display = canRaise ? '' : 'none';
+        btns.forEach(function(b) { b.style.display = canRaise ? '' : 'none'; });
       }
 
-      var raiseBtn = document.getElementById('spRaiseIssueBtn');
+      var raiseBtns = document.querySelectorAll('.sp-raise-issue-btn');
       var formWrap = document.getElementById('spIssueFormWrap');
       var cancelBtn = document.getElementById('spIssueCancel');
       var submitBtn = document.getElementById('spIssueSubmit');
       var notesEl = document.getElementById('spIssueNotes');
       var issueMsg = document.getElementById('spIssueMsg');
 
-      if (raiseBtn) raiseBtn.addEventListener('click', function() {
-        formWrap.style.display = '';
-        notesEl.focus();
+      raiseBtns.forEach(function(b) {
+        b.addEventListener('click', function() {
+          formWrap.style.display = '';
+          formWrap.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          notesEl.focus();
+        });
       });
       if (cancelBtn) cancelBtn.addEventListener('click', function() {
         formWrap.style.display = 'none';
@@ -29325,27 +29682,167 @@ app.post('/api/sector-plan/:wf/issue', requireLogin, async (req, res) => {
       data: { sectorPlanId: plan.id, wf, raisedByCid: cid, raisedByFir, notes, status: 'OPEN' }
     });
 
-    // Return the updated issues list with author names
-    const issues = await prisma.sectorPlanIssue.findMany({
-      where: { sectorPlanId: plan.id },
-      orderBy: { createdAt: 'desc' }
+    await reloadAndSendIssues(plan, res);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+async function enrichIssues(issues) {
+  const cids = new Set();
+  const parsed = issues.map(i => {
+    let replies = [];
+    try { replies = JSON.parse(i.replies || '[]') || []; } catch { replies = []; }
+    cids.add(i.raisedByCid);
+    replies.forEach(r => { if (r?.cid) cids.add(Number(r.cid)); });
+    return { issue: i, replies };
+  });
+  const nameMap = {};
+  if (cids.size) {
+    const users = await prisma.user.findMany({ where: { cid: { in: [...cids] } }, select: { cid: true, name: true } }).catch(() => []);
+    users.forEach(u => { if (u.name) nameMap[u.cid] = u.name; });
+  }
+  return parsed.map(({ issue: i, replies }) => ({
+    id: i.id,
+    raisedByCid: i.raisedByCid,
+    raisedByName: nameMap[i.raisedByCid] || null,
+    raisedByFir: i.raisedByFir,
+    notes: i.notes,
+    status: i.status,
+    createdAt: i.createdAt,
+    resolvedByCid: i.resolvedByCid || null,
+    resolvedByName: i.resolvedByCid ? (nameMap[i.resolvedByCid] || null) : null,
+    resolvedAt: i.resolvedAt || null,
+    replies: replies.map(r => ({
+      cid: r.cid,
+      name: nameMap[r.cid] || r.name || null,
+      fir: r.fir || null,
+      side: r.side || null,
+      notes: r.notes || '',
+      createdAt: r.createdAt
+    }))
+  }));
+}
+
+async function reloadAndSendIssues(plan, res) {
+  const issues = await prisma.sectorPlanIssue.findMany({
+    where: { sectorPlanId: plan.id },
+    orderBy: { createdAt: 'desc' }
+  });
+  res.json({ success: true, issues: await enrichIssues(issues) });
+}
+
+// Reply to an issue (sub-comment). Allowed for users with DEP or ARR edit
+// permission on this sector.
+app.post('/api/sector-plan/:wf/issue/:id/reply', requireLogin, async (req, res) => {
+  try {
+    const cid = Number(req.session?.user?.data?.cid);
+    if (!cid) return res.status(401).json({ error: 'not signed in' });
+    const wf = String(req.params.wf || '').toUpperCase();
+    const issueId = Number(req.params.id);
+    const notes = String(req.body?.notes || '').trim();
+    if (!notes) return res.status(400).json({ error: 'notes required' });
+    if (notes.length > 4000) return res.status(400).json({ error: 'notes too long (max 4000 chars)' });
+
+    const sched = (adminSheetCache || []).find(r => r?.number === wf);
+    if (!sched) return res.status(404).json({ error: 'WF not found' });
+    const canDep = await canEditPlanSide(cid, 'DEP', sched.from, sched.to);
+    const canArr = await canEditPlanSide(cid, 'ARR', sched.from, sched.to);
+    if (!canDep && !canArr) return res.status(403).json({ error: 'Only departure or arrival controllers can reply.' });
+
+    const issue = await prisma.sectorPlanIssue.findUnique({ where: { id: issueId } });
+    if (!issue || issue.wf !== wf) return res.status(404).json({ error: 'issue not found' });
+
+    let replies = [];
+    try { replies = JSON.parse(issue.replies || '[]') || []; } catch { replies = []; }
+    const side = canDep ? 'DEP' : 'ARR';
+    const fir = side === 'DEP' ? await resolveAirportFir(sched.from) : await resolveAirportFir(sched.to);
+    replies.push({ cid, fir, side, notes, createdAt: new Date().toISOString() });
+    await prisma.sectorPlanIssue.update({ where: { id: issueId }, data: { replies: JSON.stringify(replies) } });
+
+    const plan = await getOrCreateSectorPlan(wf, sched.from, sched.to);
+    await reloadAndSendIssues(plan, res);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Delete a reply by index. Admin only.
+app.post('/api/sector-plan/:wf/issue/:id/reply/delete', requireLogin, async (req, res) => {
+  try {
+    const cid = Number(req.session?.user?.data?.cid);
+    if (!isAdminUser(cid)) return res.status(403).json({ error: 'Admin only' });
+    const wf = String(req.params.wf || '').toUpperCase();
+    const issueId = Number(req.params.id);
+    const index = Number(req.body?.index);
+    if (!Number.isInteger(index) || index < 0) return res.status(400).json({ error: 'invalid index' });
+
+    const sched = (adminSheetCache || []).find(r => r?.number === wf);
+    if (!sched) return res.status(404).json({ error: 'WF not found' });
+
+    const issue = await prisma.sectorPlanIssue.findUnique({ where: { id: issueId } });
+    if (!issue || issue.wf !== wf) return res.status(404).json({ error: 'issue not found' });
+
+    let replies = [];
+    try { replies = JSON.parse(issue.replies || '[]') || []; } catch { replies = []; }
+    if (index >= replies.length) return res.status(400).json({ error: 'index out of range' });
+    replies.splice(index, 1);
+    await prisma.sectorPlanIssue.update({ where: { id: issueId }, data: { replies: JSON.stringify(replies) } });
+
+    const plan = await getOrCreateSectorPlan(wf, sched.from, sched.to);
+    await reloadAndSendIssues(plan, res);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Delete an issue entirely. Admin only.
+app.post('/api/sector-plan/:wf/issue/:id/delete', requireLogin, async (req, res) => {
+  try {
+    const cid = Number(req.session?.user?.data?.cid);
+    if (!isAdminUser(cid)) return res.status(403).json({ error: 'Admin only' });
+    const wf = String(req.params.wf || '').toUpperCase();
+    const issueId = Number(req.params.id);
+
+    const sched = (adminSheetCache || []).find(r => r?.number === wf);
+    if (!sched) return res.status(404).json({ error: 'WF not found' });
+
+    const issue = await prisma.sectorPlanIssue.findUnique({ where: { id: issueId } });
+    if (!issue || issue.wf !== wf) return res.status(404).json({ error: 'issue not found' });
+
+    await prisma.sectorPlanIssue.delete({ where: { id: issueId } });
+
+    const plan = await getOrCreateSectorPlan(wf, sched.from, sched.to);
+    await reloadAndSendIssues(plan, res);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Close an issue (mark RESOLVED). Same permission scope as reply.
+app.post('/api/sector-plan/:wf/issue/:id/close', requireLogin, async (req, res) => {
+  try {
+    const cid = Number(req.session?.user?.data?.cid);
+    if (!cid) return res.status(401).json({ error: 'not signed in' });
+    const wf = String(req.params.wf || '').toUpperCase();
+    const issueId = Number(req.params.id);
+
+    const sched = (adminSheetCache || []).find(r => r?.number === wf);
+    if (!sched) return res.status(404).json({ error: 'WF not found' });
+    const canDep = await canEditPlanSide(cid, 'DEP', sched.from, sched.to);
+    const canArr = await canEditPlanSide(cid, 'ARR', sched.from, sched.to);
+    if (!canDep && !canArr) return res.status(403).json({ error: 'Only departure or arrival controllers can close issues.' });
+
+    const issue = await prisma.sectorPlanIssue.findUnique({ where: { id: issueId } });
+    if (!issue || issue.wf !== wf) return res.status(404).json({ error: 'issue not found' });
+    if (issue.status === 'RESOLVED') return res.status(400).json({ error: 'already resolved' });
+
+    await prisma.sectorPlanIssue.update({
+      where: { id: issueId },
+      data: { status: 'RESOLVED', resolvedByCid: cid, resolvedAt: new Date() }
     });
-    const cids = [...new Set(issues.map(i => i.raisedByCid))];
-    const nameMap = {};
-    if (cids.length) {
-      const users = await prisma.user.findMany({ where: { cid: { in: cids } }, select: { cid: true, name: true } }).catch(() => []);
-      users.forEach(u => { if (u.name) nameMap[u.cid] = u.name; });
-    }
-    const enriched = issues.map(i => ({
-      id: i.id,
-      raisedByCid: i.raisedByCid,
-      raisedByName: nameMap[i.raisedByCid] || null,
-      raisedByFir: i.raisedByFir,
-      notes: i.notes,
-      status: i.status,
-      createdAt: i.createdAt
-    }));
-    res.json({ success: true, issues: enriched });
+    const plan = await getOrCreateSectorPlan(wf, sched.from, sched.to);
+    await reloadAndSendIssues(plan, res);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

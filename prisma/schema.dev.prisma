@@ -248,6 +248,7 @@ model SectorPlanIssue {
   status        String    @default("OPEN")
   resolvedByCid Int?
   resolvedAt    DateTime?
+  replies       String    @default("[]")
   createdAt     DateTime  @default(now())
 
   @@index([sectorPlanId])
