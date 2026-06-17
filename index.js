@@ -357,6 +357,7 @@ import tzLookup from 'tz-lookup';
 import polygonClipping from 'polygon-clipping';
 import _renderLayout from './layout.js';
 import { getAirportGround, detectStandOccupancy } from './lib/osm-ground.mjs';
+import { fetchAndParseFirManagement } from './lib/fir-management.mjs';
 function renderLayout(opts) {
   const cid = Number(opts.user?.cid);
   const active = wfEvents.find(e => e.id === activeEventId) || null;
@@ -8420,16 +8421,43 @@ if (process.env.DEV_MODE === 'true') {
     }
   ];
 
-  app.get('/dev-login', requireSiteGate, (req, res) => {
+  app.get('/dev-login', requireSiteGate, async (req, res) => {
     const next = req.query.next || '/';
 
     // If a user was selected via query param, log them in
     const selectedCid = req.query.cid;
     if (selectedCid) {
-      const user = DEV_USERS.find(u => u.cid === Number(selectedCid));
-      if (user) {
-        const { _label, ...data } = user;
+      const cidNum = Number(selectedCid);
+      const preset = DEV_USERS.find(u => u.cid === cidNum);
+      if (preset) {
+        const { _label, ...data } = preset;
         req.session.user = { data };
+        return req.session.save(() => res.redirect(next));
+      }
+      // Custom CID — log in with a minimal session user. Try to look up the
+      // name from the local User table for a friendlier display.
+      if (Number.isFinite(cidNum) && cidNum > 0) {
+        let displayName = `User ${cidNum}`;
+        try {
+          const u = await prisma.user.findUnique({ where: { cid: cidNum }, select: { name: true } });
+          if (u?.name) displayName = u.name;
+        } catch {}
+        const parts = displayName.trim().split(/\s+/);
+        req.session.user = { data: {
+          cid: cidNum,
+          personal: {
+            name_first: parts[0] || displayName,
+            name_last: parts.slice(1).join(' '),
+            name_full: displayName
+          },
+          vatsim: {
+            rating: { id: 1, short: 'OBS', long: 'Observer' },
+            pilotrating: { id: 0, short: 'NEW', long: 'Basic Member' },
+            division: { id: '', name: '' },
+            region: { id: '', name: '' }
+          },
+          oauth: { token_valid: true }
+        } };
         return req.session.save(() => res.redirect(next));
       }
     }
@@ -8497,6 +8525,29 @@ if (process.env.DEV_MODE === 'true') {
       font-size:10px; font-weight:600; text-transform:uppercase;
       letter-spacing:0.8px; flex-shrink:0;
     }
+    .dev-custom {
+      margin-top:22px; padding:14px 16px;
+      background:rgba(30,41,59,0.4); border:1px solid rgba(51,65,85,0.5);
+      border-radius:12px; text-align:left;
+    }
+    .dev-custom-label {
+      font-size:11px; font-weight:700; color:#94a3b8;
+      text-transform:uppercase; letter-spacing:0.8px; margin-bottom:8px;
+    }
+    .dev-custom-row { display:flex; gap:8px; }
+    .dev-custom input {
+      flex:1; padding:10px 12px;
+      background:rgba(15,23,42,0.7); border:1px solid rgba(71,85,105,0.6);
+      border-radius:8px; color:#f1f5f9; font-size:14px;
+      font-family:'SF Mono',monospace; outline:none;
+    }
+    .dev-custom input:focus { border-color:#60a5fa; box-shadow:0 0 0 2px rgba(96,165,250,0.18); }
+    .dev-custom button {
+      padding:10px 16px; border:none; border-radius:8px;
+      background:linear-gradient(135deg, #3b82f6, #8b5cf6); color:#fff;
+      font-size:13px; font-weight:600; cursor:pointer;
+    }
+    .dev-custom button:hover { filter:brightness(1.08); }
   </style>
 </head><body>
   <div class="picker">
@@ -8510,6 +8561,14 @@ if (process.env.DEV_MODE === 'true') {
     <div class="dev-users">
       ${buttons}
     </div>
+    <form class="dev-custom" method="GET" action="/dev-login">
+      <input type="hidden" name="next" value="${String(next).replace(/"/g, '&quot;')}" />
+      <div class="dev-custom-label">Or log in as any CID</div>
+      <div class="dev-custom-row">
+        <input type="number" name="cid" min="1" placeholder="e.g. 1681670" required />
+        <button type="submit">Log in</button>
+      </div>
+    </form>
   </div>
 </body></html>`);
   });
@@ -10562,6 +10621,27 @@ app.get('/admin/documentation-access', requireAdmin, (req, res) => {
   res.redirect('/admin/access-management');
 });
 
+// Read-only directory of WF Event Directors pulled from the published CSV.
+// Refreshed at startup, hourly via cron, and on-demand via the POST below.
+app.get('/admin/api/fir-management', requireAdmin, (req, res) => {
+  res.json({
+    data: firManagementState.data,
+    lastSync: firManagementState.lastSync,
+    lastError: firManagementState.lastError,
+    refreshing: firManagementState.refreshing
+  });
+});
+
+app.post('/admin/api/fir-management/refresh', requireAdmin, async (req, res) => {
+  await refreshFirManagement();
+  res.json({
+    data: firManagementState.data,
+    lastSync: firManagementState.lastSync,
+    lastError: firManagementState.lastError,
+    refreshing: firManagementState.refreshing
+  });
+});
+
 app.get('/admin/access-management', requireAdmin, (req, res) => {
   const content = `
 <a href="/admin" class="back-link">&larr; Back to Admin</a>
@@ -10569,6 +10649,7 @@ app.get('/admin/access-management', requireAdmin, (req, res) => {
 <div class="access-mgmt-tabs">
   <button class="access-tab active" data-tab="requests">Pending Requests <span id="pendingBadge" class="tab-badge" style="display:none;">0</span></button>
   <button class="access-tab" data-tab="users">User Management</button>
+  <button class="access-tab" data-tab="fir-mgmt">FIR Management</button>
 </div>
 
 <!-- ====== TAB 1: PENDING REQUESTS ====== -->
@@ -10753,6 +10834,59 @@ app.get('/admin/access-management', requireAdmin, (req, res) => {
 
 </div>
 
+<!-- ====== TAB 3: FIR MANAGEMENT (read-only CSV mirror) ====== -->
+<div id="tab-fir-mgmt" class="access-tab-content">
+  <section class="card card-full">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:14px;">
+      <div>
+        <div style="font-weight:700;font-size:15px;margin-bottom:2px;">WF FIR Management — Event Director Directory</div>
+        <div style="font-size:12px;color:var(--muted);">
+          Pulled from the published WF Event Directors spreadsheet. Every CID listed here is auto-granted FIR access for the
+          FIRs against their row. The sheet refreshes hourly; manual grants in User Management still work alongside this.
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <div style="font-size:11px;color:var(--muted);text-align:right;">
+          <div>Last sync: <strong id="firMgmtLastSync" style="color:var(--text);">—</strong></div>
+          <div id="firMgmtCounts" style="margin-top:2px;"></div>
+        </div>
+        <button class="action-btn primary" id="firMgmtRefreshBtn" style="font-size:12px;padding:6px 14px;">↻ Force Refresh</button>
+      </div>
+    </div>
+    <div id="firMgmtError" style="display:none;padding:10px 12px;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.35);border-radius:6px;color:#f87171;font-size:12px;margin-bottom:12px;"></div>
+
+    <div style="margin-bottom:16px;">
+      <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted);margin-bottom:6px;">Division Directors</div>
+      <div style="overflow-x:auto;">
+        <table class="admin-table" style="font-size:12px;">
+          <thead><tr><th>Region</th><th>Division</th><th>FIRs</th><th>Event Director</th><th>CID</th><th>Discord</th><th>Email</th><th>Updated</th></tr></thead>
+          <tbody id="firMgmtDivisionsBody"><tr><td colspan="8" class="empty">Loading...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div style="margin-bottom:16px;">
+      <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted);margin-bottom:6px;">Sub-division Directors</div>
+      <div style="overflow-x:auto;">
+        <table class="admin-table" style="font-size:12px;">
+          <thead><tr><th>Division</th><th>FIRs</th><th>Sub-division</th><th>Event Director</th><th>CID</th><th>Discord</th><th>Email</th><th>Updated</th></tr></thead>
+          <tbody id="firMgmtSubDivBody"><tr><td colspan="8" class="empty">Loading...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div>
+      <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted);margin-bottom:6px;">Supplementary POC Grants <span style="font-weight:400;color:var(--muted);text-transform:none;letter-spacing:0;">(flat per-FIR sheet — merged into auto-grants)</span></div>
+      <div style="overflow-x:auto;">
+        <table class="admin-table" style="font-size:12px;">
+          <thead><tr><th>Region</th><th>Sub/Division</th><th>FIR</th><th>POC</th><th>CID</th></tr></thead>
+          <tbody id="firMgmtPocBody"><tr><td colspan="5" class="empty">Loading...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+</div>
+
 <!-- Hidden: old CID search elements (kept for script compatibility) -->
 <div style="display:none;">
   <form id="docAccessSearch"><input id="docAccessCid"><button type="submit"></button></form>
@@ -10885,7 +11019,105 @@ document.addEventListener('DOMContentLoaded', function () {
       document.querySelectorAll('.access-tab-content').forEach(function(c) { c.classList.remove('active'); });
       tab.classList.add('active');
       document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
+      if (tab.dataset.tab === 'fir-mgmt') loadFirManagement();
     });
+  });
+
+  // ===== FIR MANAGEMENT TAB =====
+  function escFm(s) { return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  function fmtFmTime(t) {
+    if (!t) return '—';
+    try { return new Date(t).toLocaleString('en-GB', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' }); }
+    catch { return '—'; }
+  }
+  function renderFirMgmt(state) {
+    var lastSyncEl = document.getElementById('firMgmtLastSync');
+    var countsEl = document.getElementById('firMgmtCounts');
+    var errEl = document.getElementById('firMgmtError');
+    if (lastSyncEl) lastSyncEl.textContent = fmtFmTime(state.lastSync);
+    var data = state.data || { divisions: [], subDivisions: [], pocRows: [], pocSummary: { count: 0, cids: 0, added: 0 }, cidToFirs: {} };
+    if (countsEl) {
+      var poc = data.pocSummary || {};
+      var pocBit = poc.count ? ' · ' + poc.count + ' POC rows (+' + (poc.added || 0) + ' new pairs)' : '';
+      countsEl.textContent = data.divisions.length + ' division rows · ' + data.subDivisions.length + ' sub-division rows' + pocBit + ' · ' + Object.keys(data.cidToFirs || {}).length + ' CIDs auto-granted';
+    }
+    if (errEl) {
+      if (state.lastError) { errEl.style.display = ''; errEl.textContent = 'Last refresh failed: ' + state.lastError; }
+      else { errEl.style.display = 'none'; errEl.textContent = ''; }
+    }
+    var divBody = document.getElementById('firMgmtDivisionsBody');
+    var subBody = document.getElementById('firMgmtSubDivBody');
+    if (divBody) {
+      divBody.innerHTML = data.divisions.length ? data.divisions.map(function(r) {
+        return '<tr>'
+          + '<td>' + escFm(r.region) + '</td>'
+          + '<td>' + escFm(r.division) + '</td>'
+          + '<td style="font-family:monospace;font-size:11px;">' + (r.firs.length ? r.firs.join(', ') : '<span style="color:var(--muted);">—</span>') + '</td>'
+          + '<td>' + escFm(r.eventDirector || '—') + '</td>'
+          + '<td>' + (r.cid ? '<span style="font-family:monospace;">' + r.cid + '</span>' : '<span style="color:var(--muted);">—</span>') + '</td>'
+          + '<td>' + escFm(r.discord || '—') + '</td>'
+          + '<td>' + (r.email ? '<a href="mailto:' + escFm(r.email) + '">' + escFm(r.email) + '</a>' : '<span style="color:var(--muted);">—</span>') + '</td>'
+          + '<td style="white-space:nowrap;">' + escFm(r.lastUpdated || '—') + '</td>'
+          + '</tr>';
+      }).join('') : '<tr><td colspan="8" class="empty">No data — try Force Refresh.</td></tr>';
+    }
+    if (subBody) {
+      subBody.innerHTML = data.subDivisions.length ? data.subDivisions.map(function(r) {
+        return '<tr>'
+          + '<td>' + escFm(r.division) + '</td>'
+          + '<td style="font-family:monospace;font-size:11px;">' + (r.firs.length ? r.firs.join(', ') : '<span style="color:var(--muted);">—</span>') + '</td>'
+          + '<td>' + escFm(r.subDivision || '—') + '</td>'
+          + '<td>' + escFm(r.eventDirector || '—') + '</td>'
+          + '<td>' + (r.cid ? '<span style="font-family:monospace;">' + r.cid + '</span>' : '<span style="color:var(--muted);">—</span>') + '</td>'
+          + '<td>' + escFm(r.discord || '—') + '</td>'
+          + '<td>' + (r.email ? '<a href="mailto:' + escFm(r.email) + '">' + escFm(r.email) + '</a>' : '<span style="color:var(--muted);">—</span>') + '</td>'
+          + '<td style="white-space:nowrap;">' + escFm(r.lastUpdated || '—') + '</td>'
+          + '</tr>';
+      }).join('') : '<tr><td colspan="8" class="empty">No data — try Force Refresh.</td></tr>';
+    }
+    var pocBody = document.getElementById('firMgmtPocBody');
+    if (pocBody) {
+      var rows = data.pocRows || [];
+      pocBody.innerHTML = rows.length ? rows.map(function(r) {
+        return '<tr>'
+          + '<td>' + escFm(r.region) + '</td>'
+          + '<td>' + escFm(r.subDivision) + '</td>'
+          + '<td style="font-family:monospace;font-size:11px;">' + escFm(r.fir) + '</td>'
+          + '<td>' + escFm(r.eventDirector || '—') + '</td>'
+          + '<td>' + (r.cid ? '<span style="font-family:monospace;">' + r.cid + '</span>' : '<span style="color:var(--muted);">—</span>') + '</td>'
+          + '</tr>';
+      }).join('') : '<tr><td colspan="5" class="empty">No POC rows.</td></tr>';
+    }
+  }
+  var _firMgmtLoaded = false;
+  async function loadFirManagement(force) {
+    if (_firMgmtLoaded && !force) return;
+    _firMgmtLoaded = true;
+    try {
+      var r = await fetch('/admin/api/fir-management', { credentials: 'same-origin' });
+      var state = await r.json();
+      renderFirMgmt(state);
+    } catch (e) {
+      var errEl = document.getElementById('firMgmtError');
+      if (errEl) { errEl.style.display = ''; errEl.textContent = 'Failed to load: ' + e.message; }
+    }
+  }
+  var refreshBtn = document.getElementById('firMgmtRefreshBtn');
+  if (refreshBtn) refreshBtn.addEventListener('click', async function() {
+    refreshBtn.disabled = true;
+    var prevText = refreshBtn.textContent;
+    refreshBtn.textContent = 'Refreshing...';
+    try {
+      var r = await fetch('/admin/api/fir-management/refresh', { method: 'POST', credentials: 'same-origin' });
+      var state = await r.json();
+      renderFirMgmt(state);
+    } catch (e) {
+      var errEl = document.getElementById('firMgmtError');
+      if (errEl) { errEl.style.display = ''; errEl.textContent = 'Refresh failed: ' + e.message; }
+    } finally {
+      refreshBtn.disabled = false;
+      refreshBtn.textContent = prevText;
+    }
   });
 
   document.querySelectorAll('.requests-subtab').forEach(function(tab) {
@@ -28226,10 +28458,42 @@ async function resolveAirportFir(icao) {
 // Resolve a user's expanded set of "owned" FIR codes given their FirEventAccess
 // grants. Division grants expand to every FIR currently transited in that
 // division (sourced from buildFirAnalysis).
+// In-memory state for the FIR Management CSV sync. Populated at startup and
+// refreshed hourly. Exposed to admins via /admin/api/fir-management.
+let firManagementState = {
+  data: null,
+  lastSync: null,
+  lastError: null,
+  refreshing: false
+};
+
+async function refreshFirManagement() {
+  if (firManagementState.refreshing) return firManagementState;
+  firManagementState.refreshing = true;
+  try {
+    const data = await fetchAndParseFirManagement();
+    firManagementState.data = data;
+    firManagementState.lastSync = new Date().toISOString();
+    firManagementState.lastError = null;
+    console.log('[FIR-MGMT] Sync complete:', data.divisions.length, 'division rows,', data.subDivisions.length, 'sub-division rows,', Object.keys(data.cidToFirs).length, 'CIDs with grants');
+  } catch (e) {
+    firManagementState.lastError = e.message;
+    console.warn('[FIR-MGMT] Sync failed:', e.message);
+  } finally {
+    firManagementState.refreshing = false;
+  }
+  return firManagementState;
+}
+
+// Kick off the first sync after boot (don't block startup) and run hourly.
+refreshFirManagement().catch(() => {});
+setInterval(() => { refreshFirManagement().catch(() => {}); }, 60 * 60 * 1000);
+
 async function getUserOwnedFirs(cid) {
   if (!cid) return new Set();
   const grants = await prisma.firEventAccess.findMany({ where: { cid } }).catch(() => []);
-  if (!grants.length) return new Set();
+  const csvFirs = firManagementState.data?.cidToFirs?.[cid] || [];
+  if (!grants.length && !csvFirs.length) return new Set();
   const firs = await buildFirAnalysis().catch(() => []);
   const firsByDivision = {};
   firs.forEach(f => {
@@ -28244,6 +28508,8 @@ async function getUserOwnedFirs(cid) {
       firsByDivision[g.value].forEach(f => owned.add(f));
     }
   }
+  // Merge in the FIR codes auto-granted via the WF FIR Management CSV.
+  csvFirs.forEach(f => owned.add(f));
   return owned;
 }
 
@@ -28308,6 +28574,27 @@ app.get('/sector-planning', requirePageEnabled('sector-planning'), async (req, r
           if (isFinite(an) && isFinite(bn) && an !== bn) return an - bn;
           return String(a.wf || '').localeCompare(String(b.wf || ''));
         });
+
+      // Hide sectors where the only reason the user appears is enroute-FIR
+      // ownership AND the dep/arr teams haven't agreed a route yet — the
+      // transit FIRs derived from the schedule placeholder route can be
+      // misleading before agreement.
+      const wfs = participations.map(p => p.wf);
+      const plansByWf = {};
+      if (wfs.length) {
+        const plans = await prisma.sectorPlan.findMany({
+          where: { wf: { in: wfs }, eventId: activeEventId || undefined },
+          select: { wf: true, depRouteSuggestion: true, arrRouteSuggestion: true }
+        }).catch(() => []);
+        plans.forEach(p => { plansByWf[p.wf] = p; });
+      }
+      participations = participations.filter(p => {
+        const hasDepArr = p.roles.some(r => r.startsWith('Departure') || r.startsWith('Arrival'));
+        if (hasDepArr || isAdmin) return true;
+        const plan = plansByWf[p.wf];
+        const agreed = plan && compareRoutes(plan.depRouteSuggestion, plan.arrRouteSuggestion).status === 'GREEN';
+        return !!agreed;
+      });
     }
   }
 
@@ -28503,6 +28790,47 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
 
   const routeComparison = compareRoutes(plan.depRouteSuggestion, plan.arrRouteSuggestion);
 
+  // Gate: enroute-only viewers (no DEP/ARR edit, not admin) can't see the
+  // sector detail until the dep + arr teams have agreed a route. They are
+  // only invited to flag issues *after* a route is locked in.
+  const transitedFirIdsForGate = [];
+  for (const fir of allFirs) {
+    if (fir.legs && fir.legs.some(l => l.wf === wf)) transitedFirIdsForGate.push(fir.fir);
+  }
+  const enrouteFirIdsForGate = transitedFirIdsForGate.filter(f => f !== depFir && f !== arrFir);
+  const userEnrouteFirsForGate = enrouteFirIdsForGate.filter(f => ownedFirs.has(f));
+  const isEnrouteOnly = !isAdmin && !canEditDep && !canEditArr && userEnrouteFirsForGate.length > 0;
+  if (isEnrouteOnly && routeComparison.status !== 'GREEN') {
+    return res.status(200).send(renderLayout({
+      title: 'Sector Pending Agreement',
+      user, isAdmin,
+      content: `
+        <section class="card card-full">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px;">
+            <a href="/sector-planning" style="font-size:11px;color:var(--accent);text-decoration:none;">← Sector Planning</a>
+            <h2 style="margin:0;font-size:17px;">${wf} — ${fromIcao} → ${toIcao}</h2>
+          </div>
+          <div style="margin-top:18px;padding:18px 20px;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.35);border-left:3px solid #f59e0b;border-radius:10px;display:flex;gap:12px;align-items:flex-start;">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:1px;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            <div>
+              <div style="font-size:15px;font-weight:700;color:#fde68a;margin-bottom:6px;">Sector not open for enroute review yet</div>
+              <div style="font-size:13px;color:var(--text);line-height:1.5;">
+                The departure team at <strong>${depFir || fromIcao}</strong> and the arrival team at <strong>${arrFir || toIcao}</strong>
+                haven't agreed on a route for this sector yet.
+              </div>
+              <div style="font-size:12px;color:var(--muted);margin-top:8px;">
+                You'll be able to view this sector and raise any concerns once both sides have agreed.
+                Your enroute FIRs for this sector: <strong style="color:var(--text);">${userEnrouteFirsForGate.join(', ')}</strong>.
+              </div>
+              <a href="/sector-planning" class="action-btn primary" style="display:inline-block;margin-top:14px;font-size:12px;padding:6px 14px;">← Back to my sectors</a>
+            </div>
+          </div>
+        </section>
+      `,
+      layoutClass: 'dashboard-full'
+    }));
+  }
+
   // Enroute FIRs = transited FIRs minus dep/arr airport FIRs. A user is an
   // "enroute manager" for this sector if they own one of those FIRs and
   // can't already edit either side.
@@ -28515,9 +28843,13 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
   const issuesWithNames = await enrichIssues(issues);
 
   // Checklist auto-detect
+  const depFlowConfirmed = !!plan.depFlowType && (plan.depFlowType !== 'BOOKING_REQUIRED' || (plan.depFlowRate != null && plan.depFlowRate > 0));
   const checklist = {
     // "Agreed" = both sides proposed a route and the comparison is GREEN.
     atcRouteAgreed: routeComparison.status === 'GREEN',
+    depFlowSet: depFlowConfirmed,
+    depFlowType: plan.depFlowType || null,
+    depFlowRate: plan.depFlowRate != null ? plan.depFlowRate : null,
     scenery: { dep: scenery.some(s => s.icao === fromIcao), arr: scenery.some(s => s.icao === toIcao) },
     docs:    { dep: docs.some(d => d.icao === fromIcao), arr: docs.some(d => d.icao === toIcao) }
   };
@@ -28531,7 +28863,7 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
     blockTime: sched.blockTime || '',
     depFir, arrFir,
     canEditDep, canEditArr, isAdmin,
-    canModerateIssues: canEditDep || canEditArr,
+    canModerateIssues: canEditDep || canEditArr || isAdmin,
     canRaiseIssue,
     userEnrouteFirs,
     depRouteSuggestion: plan.depRouteSuggestion || '',
@@ -28546,11 +28878,43 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
     issues: issuesWithNames
   };
 
-  const FLOW_LABELS = { 'NONE': 'No Flow', 'BOOKING_REQUIRED': 'Booking Required' };
+  const FLOW_LABELS = { 'NONE': 'No Restrictions', 'BOOKING_REQUIRED': 'Booking Required', 'TIME_SLOT_REQUIRED': 'Time Slot Required' };
+  const FLOW_TOOLTIPS = {
+    'NONE': 'Any pilot can take part without restrictions.',
+    'BOOKING_REQUIRED': 'To depart within the departure window, pilots must have a booking.',
+    'TIME_SLOT_REQUIRED': 'Pilots must hold a TOBT slot at the departure airport to depart.'
+  };
+  const TIME_SLOT_AIRPORT = 'YSSY';
   const depWindowUtc = sched.dep_time_utc ? buildTimeWindow(sched.dep_time_utc) : '';
   const arrWindowUtc = sched.arr_time_utc ? buildTimeWindow(sched.arr_time_utc) : '';
   // Departure window is fixed at ±60min = 2h via buildTimeWindow().
   const depWindowHours = 2;
+
+  // Local-time window for dep/arr — uses the airport's IANA timezone derived
+  // from its lat/lon. Returns e.g. "08:30–10:30 Anchorage" (city only).
+  const airportsForTz = await prisma.airport.findMany({
+    where: { icao: { in: [fromIcao, toIcao] } },
+    select: { icao: true, lat: true, lon: true }
+  }).catch(() => []);
+  const apByIcao = Object.fromEntries(airportsForTz.map(a => [a.icao, a]));
+  function localWindow(icao, timeUtc) {
+    if (!timeUtc) return '';
+    const ap = apByIcao[icao];
+    if (!ap || ap.lat == null || ap.lon == null) return '';
+    let tz; try { tz = tzLookup(ap.lat, ap.lon); } catch { return ''; }
+    const dateObj = parseServerDate(sched.date_utc);
+    if (!dateObj) return '';
+    const m = /^(\d{2}):(\d{2})$/.exec(timeUtc);
+    if (!m) return '';
+    const baseMs = dateObj.getTime() + (Number(m[1]) * 60 + Number(m[2])) * 60000;
+    const start = formatAbsLocalHHMM(baseMs - 60 * 60000, tz);
+    const end   = formatAbsLocalHHMM(baseMs + 60 * 60000, tz);
+    if (!start || !end) return '';
+    const city = (tz.split('/').pop() || tz).replace(/_/g, ' ');
+    return `${start}–${end} ${city}`;
+  }
+  const depWindowLocal = localWindow(fromIcao, sched.dep_time_utc);
+  const arrWindowLocal = localWindow(toIcao, sched.arr_time_utc);
 
   const content = `
     <style>
@@ -28582,13 +28946,14 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
       .sp-row { display:flex;gap:8px;align-items:center;flex-wrap:wrap; }
       .sp-flow-options { display:flex; flex-wrap:wrap; gap:6px; }
       .sp-flow-option {
-        padding:4px 10px; font-size:11px; font-weight:600;
-        background: rgba(255,255,255,0.04); border:1px solid var(--border);
+        padding:5px 12px; font-size:12px; font-weight:600;
+        background: rgba(255,255,255,0.06); color: var(--text);
+        border:1px solid var(--border);
         border-radius:6px; cursor:pointer; transition: all .12s;
       }
-      .sp-flow-option:hover { border-color:#818cf8; color:#818cf8; }
+      .sp-flow-option:hover:not(:disabled):not(.disabled) { border-color:#818cf8; color:#a5b4fc; background: rgba(129,140,248,0.10); }
       .sp-flow-option.active { background:#818cf8; color:#0f172a; border-color:#818cf8; font-weight:700; }
-      .sp-flow-option:disabled, .sp-flow-option.disabled { opacity:0.6; cursor:not-allowed; }
+      .sp-flow-option:disabled, .sp-flow-option.disabled { opacity:0.45; cursor:not-allowed; color: var(--muted); }
       .sp-comparison {
         margin-top:8px; padding:10px 12px;
         border-radius:8px; border:1px solid var(--border);
@@ -28687,6 +29052,65 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
       .sp-readonly-note strong { color: #fde68a; font-weight: 700; }
       .sp-side.readonly .sp-side-body { opacity: 0.5; pointer-events: none; filter: saturate(0.5); }
       .sp-side.readonly .sp-readonly-note { opacity: 1; }
+
+      .sp-fixed-details { padding-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,0.06); margin-bottom: 4px; }
+      .sp-task { margin-top: 14px; padding-top: 14px; border-top: 1px dashed rgba(255,255,255,0.08); }
+      .sp-task:first-of-type { margin-top: 8px; padding-top: 0; border-top: none; }
+      .sp-task-header { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+      .sp-task-num {
+        display: inline-flex; align-items: center; justify-content: center;
+        width: 22px; height: 22px; border-radius: 50%;
+        background: rgba(129,140,248,0.18); color: #a5b4fc;
+        border: 1px solid rgba(129,140,248,0.45);
+        font-size: 11px; font-weight: 700; flex-shrink: 0;
+      }
+      .sp-side.arr .sp-task-num {
+        background: rgba(244,114,182,0.18); color: #fbcfe8;
+        border-color: rgba(244,114,182,0.45);
+      }
+      .sp-task-title {
+        font-size: 12px; font-weight: 700; color: var(--text);
+        text-transform: uppercase; letter-spacing: 0.05em;
+      }
+      .route-modal[hidden] { display: none; }
+      .route-modal {
+        position: fixed; inset: 0; z-index: 1000;
+        display: flex; align-items: center; justify-content: center;
+        padding: 16px;
+      }
+      .route-modal-backdrop {
+        position: absolute; inset: 0; background: rgba(0,0,0,0.65);
+        backdrop-filter: blur(2px);
+      }
+      .route-modal-card {
+        position: relative;
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 18px 20px;
+        width: min(440px, 92vw);
+        max-height: 80vh;
+        display: flex; flex-direction: column; gap: 12px;
+        box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+      }
+      .route-modal-header {
+        display: flex; align-items: center; justify-content: space-between;
+      }
+      .route-modal-close {
+        background: none; border: none; color: var(--muted);
+        font-size: 22px; cursor: pointer; line-height: 1; padding: 0 4px;
+      }
+      .route-modal-close:hover { color: var(--text); }
+      .route-modal-actions {
+        display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px;
+      }
+      .route-modal-copy {
+        padding: 8px 16px; background: var(--accent); color: #0b1220;
+        border: none; border-radius: 6px;
+        font-weight: 600; cursor: pointer; font-family: inherit;
+        font-size: 13px;
+      }
+      .route-modal-copy:hover { filter: brightness(1.05); }
       .sp-details {
         display:flex; flex-wrap:wrap; gap:10px;
         margin: 2px 0 10px;
@@ -28735,6 +29159,28 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
               <div class="sp-check-sub">${checklist.atcRouteAgreed ? 'Dep and Arr have proposed the same route.' : 'Routes don’t match yet — coordinate with the other side.'}</div>
             </div>
           </div>
+          <div class="sp-check ${checklist.depFlowSet ? 'done' : 'missing-required'}" id="spChkDepFlow">
+            <div class="sp-check-icon">${checklist.depFlowSet ? '✓' : '—'}</div>
+            <div class="sp-check-body">
+              <div class="sp-check-title">Departure Flow Restriction <span class="sp-check-tag required">Required</span></div>
+              <div class="sp-check-sub">${(() => {
+                if (!checklist.depFlowSet) {
+                  if (checklist.depFlowType === 'BOOKING_REQUIRED') {
+                    return '<span style="color:#fbbf24;font-weight:600;">Booking Required selected — enter a flow rate to activate.</span>';
+                  }
+                  return 'Departure team needs to pick a flow restriction option.';
+                }
+                const isRestricted = checklist.depFlowType === 'BOOKING_REQUIRED' || checklist.depFlowType === 'TIME_SLOT_REQUIRED';
+                const rateHtml = (checklist.depFlowType === 'BOOKING_REQUIRED' && checklist.depFlowRate != null)
+                  ? ' · <strong style="color:#fbbf24;">' + checklist.depFlowRate + ' planes/hr</strong>'
+                  : '';
+                const warning = isRestricted
+                  ? '<div style="margin-top:8px;"><span style="display:inline-flex;align-items:center;gap:3px;padding:2px 8px;background:rgba(245,158,11,0.18);color:#fbbf24;border:1px solid rgba(245,158,11,0.45);border-radius:4px;font-size:10px;font-weight:700;letter-spacing:0.04em;">⚠ FLOW IN EFFECT</span></div>'
+                  : '';
+                return (FLOW_LABELS[checklist.depFlowType] || checklist.depFlowType) + ' for ' + fromIcao + rateHtml + warning;
+              })()}</div>
+            </div>
+          </div>
           <div class="sp-check ${checklist.scenery.dep ? 'done' : 'missing-required'}">
             <div class="sp-check-icon">${checklist.scenery.dep ? '✓' : '—'}</div>
             <div class="sp-check-body">
@@ -28768,18 +29214,26 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
       <div id="spComparisonBox" class="sp-comparison sp-cmp-${routeComparison.status.toLowerCase()}">
         <!-- comparison rendered client-side -->
       </div>
-      <div id="spDepAgreePrompt" class="sp-agree-prompt" style="display:${canEditDep && !plan.depRouteSuggestion && plan.arrRouteSuggestion ? '' : 'none'};margin-top:12px;padding:10px 12px;background:rgba(56,189,248,0.05);border:1px solid rgba(56,189,248,0.25);border-radius:8px;">
+      <div id="spDepAgreePrompt" class="sp-agree-prompt" style="display:${canEditDep && plan.arrRouteSuggestion && routeComparison.status !== 'GREEN' ? '' : 'none'};margin-top:12px;padding:10px 12px;background:rgba(56,189,248,0.05);border:1px solid rgba(56,189,248,0.25);border-radius:8px;">
         <div style="font-size:12px;color:var(--text);margin-bottom:8px;"><strong>${arrFir || toIcao}</strong> has proposed a route. What do you want to do?</div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;">
           <button type="button" class="action-btn sp-agree-yes" data-side="DEP" style="font-size:12px;padding:5px 12px;background:rgba(74,222,128,0.15);color:#4ade80;border:1px solid rgba(74,222,128,0.4);">✓ We agree with the route proposed by ${arrFir || toIcao}</button>
           <button type="button" class="action-btn sp-agree-alt" data-side="DEP" style="font-size:12px;padding:5px 12px;background:rgba(245,158,11,0.15);color:#fbbf24;border:1px solid rgba(245,158,11,0.4);">⚠ We have an alternative route to suggest</button>
         </div>
       </div>
-      <div id="spArrAgreePrompt" class="sp-agree-prompt" style="display:${canEditArr && !plan.arrRouteSuggestion && plan.depRouteSuggestion ? '' : 'none'};margin-top:12px;padding:10px 12px;background:rgba(56,189,248,0.05);border:1px solid rgba(56,189,248,0.25);border-radius:8px;">
+      <div id="spArrAgreePrompt" class="sp-agree-prompt" style="display:${canEditArr && plan.depRouteSuggestion && routeComparison.status !== 'GREEN' ? '' : 'none'};margin-top:12px;padding:10px 12px;background:rgba(56,189,248,0.05);border:1px solid rgba(56,189,248,0.25);border-radius:8px;">
         <div style="font-size:12px;color:var(--text);margin-bottom:8px;"><strong>${depFir || fromIcao}</strong> has proposed a route. What do you want to do?</div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;">
           <button type="button" class="action-btn sp-agree-yes" data-side="ARR" style="font-size:12px;padding:5px 12px;background:rgba(74,222,128,0.15);color:#4ade80;border:1px solid rgba(74,222,128,0.4);">✓ We agree with the route proposed by ${depFir || fromIcao}</button>
           <button type="button" class="action-btn sp-agree-alt" data-side="ARR" style="font-size:12px;padding:5px 12px;background:rgba(245,158,11,0.15);color:#fbbf24;border:1px solid rgba(245,158,11,0.4);">⚠ We have an alternative route to suggest</button>
+        </div>
+      </div>
+      <div id="spProposedFirsBox" style="display:none;margin-top:14px;padding-top:14px;border-top:1px dashed rgba(255,255,255,0.08);">
+        <div class="sp-side-label" style="margin-bottom:8px;">FIRs Each Proposal Would Transit</div>
+        <div id="spProposedFirsContent" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;"></div>
+        <div style="margin-top:10px;padding:8px 10px;background:rgba(56,189,248,0.06);border:1px solid rgba(56,189,248,0.22);border-radius:6px;font-size:11px;color:#7dd3fc;display:flex;align-items:flex-start;gap:8px;">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:1px;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+          <span>Once a route is agreed, the above FIRs will be notified so their controllers can flag any concerns before the event.</span>
         </div>
       </div>
     </section>
@@ -28795,37 +29249,59 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
             <a href="/icao/${fromIcao}" target="_blank" rel="noopener" class="sp-portal-link" style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;background:rgba(129,140,248,0.12);color:#a5b4fc;border:1px solid rgba(129,140,248,0.35);border-radius:6px;font-size:11px;font-weight:600;text-decoration:none;white-space:nowrap;">↗ ${fromIcao} portal</a>
           </div>
 
+          <div class="sp-fixed-details">
+            <div class="sp-details" style="margin:0;">
+              <div class="sp-detail-item">
+                <span class="sp-detail-label">Date</span>
+                <span class="sp-detail-value">${sched.date_utc || '-'}</span>
+              </div>
+              <div class="sp-detail-item">
+                <span class="sp-detail-label">Departure Window (UTC)</span>
+                <span class="sp-detail-value">${depWindowUtc || '-'}</span>
+              </div>
+              ${depWindowLocal ? `
+              <div class="sp-detail-item">
+                <span class="sp-detail-label">Departure Window (Local)</span>
+                <span class="sp-detail-value">${depWindowLocal}</span>
+              </div>
+              ` : ''}
+            </div>
+          </div>
+
           <div class="sp-side-body">
 
-          <div class="sp-details">
-            <div class="sp-detail-item">
-              <span class="sp-detail-label">Date</span>
-              <span class="sp-detail-value">${sched.date_utc || '-'}</span>
+          <div class="sp-task">
+            <div class="sp-task-header">
+              <span class="sp-task-num">1</span>
+              <span class="sp-task-title">Propose ATC Route</span>
             </div>
-            <div class="sp-detail-item">
-              <span class="sp-detail-label">Departure Window (UTC)</span>
-              <span class="sp-detail-value">${depWindowUtc || '-'}</span>
+            <div class="sp-textarea-wrap" id="spDepRouteWrap">
+            <textarea id="spDepRoute" class="sp-textarea" ${canEditDep ? '' : 'disabled'} placeholder="${canEditDep ? 'Enter the route the departure team proposes…' : 'Read-only — no edit access to this side.'}">${(plan.depRouteSuggestion || '').replace(/</g, '&lt;')}</textarea>
             </div>
-            <div class="sp-detail-item">
-              <span class="sp-detail-label">Dep Time</span>
-              <span class="sp-detail-value">${sched.dep_time_utc ? sched.dep_time_utc + 'z' : '-'}</span>
+            <div style="margin-top:6px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+              <span id="spDepRouteMsg" style="font-size:11px;color:var(--muted);"></span>
+              ${canEditDep ? '<button class="action-btn primary" id="spDepRouteSave" style="font-size:12px;padding:5px 12px;">Save</button>' : ''}
             </div>
           </div>
 
-          <div class="sp-side-label">Submit your ATC route suggestion</div>
-          <div class="sp-textarea-wrap" id="spDepRouteWrap">
-          <textarea id="spDepRoute" class="sp-textarea" ${canEditDep ? '' : 'disabled'} placeholder="${canEditDep ? 'Enter the route the departure team proposes…' : 'Read-only — no edit access to this side.'}">${(plan.depRouteSuggestion || '').replace(/</g, '&lt;')}</textarea>
-          </div>
-          <div style="margin-top:6px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
-            <span id="spDepRouteMsg" style="font-size:11px;color:var(--muted);"></span>
-            ${canEditDep ? '<button class="action-btn primary" id="spDepRouteSave" style="font-size:12px;padding:5px 12px;">Save</button>' : ''}
-          </div>
-
-          <div class="sp-side-label" style="margin-top:14px;">Flow Type</div>
+          <div class="sp-task">
+            <div class="sp-task-header">
+              <span class="sp-task-num">2</span>
+              <span class="sp-task-title">Set Flow Restrictions</span>
+            </div>
           <div class="sp-flow-options" id="spFlowOptions">
-            ${['NONE','BOOKING_REQUIRED'].map(ft => `
-              <button type="button" class="sp-flow-option ${plan.depFlowType === ft ? 'active' : ''} ${canEditDep ? '' : 'disabled'}" data-flow="${ft}" ${canEditDep ? '' : 'disabled'}>${FLOW_LABELS[ft]}</button>
-            `).join('')}
+            ${['NONE','BOOKING_REQUIRED','TIME_SLOT_REQUIRED'].map(ft => {
+              const isTimeSlot = ft === 'TIME_SLOT_REQUIRED';
+              const allowedAirport = fromIcao === TIME_SLOT_AIRPORT;
+              const disabledByAirport = isTimeSlot && !allowedAirport;
+              const disabledAttr = (!canEditDep || disabledByAirport) ? 'disabled' : '';
+              const tooltip = disabledByAirport
+                ? `Only available for ${TIME_SLOT_AIRPORT}`
+                : (FLOW_TOOLTIPS[ft] || '');
+              const titleAttr = tooltip ? ` title="${tooltip.replace(/"/g, '&quot;')}"` : '';
+              const classes = 'sp-flow-option ' + (plan.depFlowType === ft ? 'active ' : '') + ((!canEditDep || disabledByAirport) ? 'disabled' : '');
+              return `<button type="button" class="${classes}" data-flow="${ft}"${titleAttr} ${disabledAttr}>${FLOW_LABELS[ft]}</button>`;
+            }).join('')}
           </div>
           <div id="spFlowMsg" style="font-size:11px;color:var(--muted);margin-top:4px;"></div>
 
@@ -28838,6 +29314,7 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
             </div>
             <div id="spFlowRateMsg" style="font-size:10px;color:var(--muted);margin-top:4px;"></div>
             <div id="spFlowRateTotal" style="font-size:12px;color:var(--text);margin-top:6px;padding-top:6px;border-top:1px dashed rgba(255,255,255,0.06);"></div>
+          </div>
           </div>
 
           </div>
@@ -28869,37 +29346,51 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
             <a href="/icao/${toIcao}" target="_blank" rel="noopener" class="sp-portal-link" style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;background:rgba(244,114,182,0.12);color:#fbcfe8;border:1px solid rgba(244,114,182,0.35);border-radius:6px;font-size:11px;font-weight:600;text-decoration:none;white-space:nowrap;">↗ ${toIcao} portal</a>
           </div>
 
+          <div class="sp-fixed-details">
+            <div class="sp-details" style="margin:0;">
+              <div class="sp-detail-item">
+                <span class="sp-detail-label">Date</span>
+                <span class="sp-detail-value">${sched.date_utc || '-'}</span>
+              </div>
+              <div class="sp-detail-item">
+                <span class="sp-detail-label">Arrival Window (UTC)</span>
+                <span class="sp-detail-value">${arrWindowUtc || '-'}</span>
+              </div>
+              ${arrWindowLocal ? `
+              <div class="sp-detail-item">
+                <span class="sp-detail-label">Arrival Window (Local)</span>
+                <span class="sp-detail-value">${arrWindowLocal}</span>
+              </div>
+              ` : ''}
+            </div>
+          </div>
+
           <div class="sp-side-body">
 
-          <div class="sp-details">
-            <div class="sp-detail-item">
-              <span class="sp-detail-label">Date</span>
-              <span class="sp-detail-value">${sched.date_utc || '-'}</span>
+          <div class="sp-task">
+            <div class="sp-task-header">
+              <span class="sp-task-num">1</span>
+              <span class="sp-task-title">Propose ATC Route</span>
             </div>
-            <div class="sp-detail-item">
-              <span class="sp-detail-label">Arrival Window (UTC)</span>
-              <span class="sp-detail-value">${arrWindowUtc || '-'}</span>
+            <div class="sp-textarea-wrap" id="spArrRouteWrap">
+            <textarea id="spArrRoute" class="sp-textarea" ${canEditArr ? '' : 'disabled'} placeholder="${canEditArr ? 'Enter the route the arrival team proposes…' : 'Read-only — no edit access to this side.'}">${(plan.arrRouteSuggestion || '').replace(/</g, '&lt;')}</textarea>
             </div>
-            <div class="sp-detail-item">
-              <span class="sp-detail-label">Arr Time</span>
-              <span class="sp-detail-value">${sched.arr_time_utc ? sched.arr_time_utc + 'z' : '-'}</span>
+            <div style="margin-top:6px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+              <span id="spArrRouteMsg" style="font-size:11px;color:var(--muted);"></span>
+              ${canEditArr ? '<button class="action-btn primary" id="spArrRouteSave" style="font-size:12px;padding:5px 12px;">Save</button>' : ''}
             </div>
           </div>
 
-          <div class="sp-side-label">Submit your ATC route suggestion</div>
-          <div class="sp-textarea-wrap" id="spArrRouteWrap">
-          <textarea id="spArrRoute" class="sp-textarea" ${canEditArr ? '' : 'disabled'} placeholder="${canEditArr ? 'Enter the route the arrival team proposes…' : 'Read-only — no edit access to this side.'}">${(plan.arrRouteSuggestion || '').replace(/</g, '&lt;')}</textarea>
-          </div>
-          <div style="margin-top:6px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
-            <span id="spArrRouteMsg" style="font-size:11px;color:var(--muted);"></span>
-            ${canEditArr ? '<button class="action-btn primary" id="spArrRouteSave" style="font-size:12px;padding:5px 12px;">Save</button>' : ''}
-          </div>
-
-          <div class="sp-side-label" style="margin-top:18px;">Request Flow from Departure</div>
-          <textarea id="spArrFlowReq" class="sp-textarea" ${canEditArr ? '' : 'disabled'} placeholder="${canEditArr ? 'Describe any flow request for ' + fromIcao + ' to impose…' : ''}">${(plan.arrFlowRequest || '').replace(/</g, '&lt;')}</textarea>
-          <div style="margin-top:6px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
-            <span id="spArrFlowMsg" style="font-size:11px;color:var(--muted);"></span>
-            ${canEditArr ? '<button class="action-btn primary" id="spArrFlowSave" style="font-size:12px;padding:5px 12px;">Save</button>' : ''}
+          <div class="sp-task">
+            <div class="sp-task-header">
+              <span class="sp-task-num">2</span>
+              <span class="sp-task-title">Request Flow from Departure</span>
+            </div>
+            <textarea id="spArrFlowReq" class="sp-textarea" ${canEditArr ? '' : 'disabled'} placeholder="${canEditArr ? 'Describe any flow request for ' + fromIcao + ' to impose…' : ''}">${(plan.arrFlowRequest || '').replace(/</g, '&lt;')}</textarea>
+            <div style="margin-top:6px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+              <span id="spArrFlowMsg" style="font-size:11px;color:var(--muted);"></span>
+              ${canEditArr ? '<button class="action-btn primary" id="spArrFlowSave" style="font-size:12px;padding:5px 12px;">Save</button>' : ''}
+            </div>
           </div>
           </div>
           ${!canEditArr ? (userEnrouteFirs.length > 0 ? `
@@ -28944,6 +29435,21 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
 
       <div id="spIssuesList"><!-- rendered client-side --></div>
     </section>
+
+    <div id="spConfirmModal" class="route-modal" hidden>
+      <div class="route-modal-backdrop"></div>
+      <div class="route-modal-card" role="dialog" aria-modal="true" style="max-width:440px;">
+        <div class="route-modal-header">
+          <div id="spConfirmTitle" style="font-weight:700;font-size:15px;">Confirm</div>
+          <button type="button" id="spConfirmClose" class="route-modal-close" aria-label="Close">&times;</button>
+        </div>
+        <div id="spConfirmBody" style="font-size:13px;color:var(--text);line-height:1.5;"></div>
+        <div class="route-modal-actions" style="gap:8px;">
+          <button type="button" id="spConfirmCancel" class="route-modal-copy" style="background:transparent;color:var(--text);border:1px solid var(--border);">Cancel</button>
+          <button type="button" id="spConfirmOk" class="route-modal-copy">Confirm</button>
+        </div>
+      </div>
+    </div>
 
     </div><!-- /spDetailWrap -->
 
@@ -29090,6 +29596,7 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
           window.SP.routeComparison = res.data.routeComparison;
           spRenderComparison();
           if (typeof spRefreshAgreePrompts === 'function') spRefreshAgreePrompts();
+          if (window.SP._spMap) window.SP._spMap.drawProposedRoutes();
           spSetMsg(msg, 'Saved', true);
         } else spSetMsg(msg, res.data.error || 'Failed', false);
       });
@@ -29104,6 +29611,7 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
           window.SP.routeComparison = res.data.routeComparison;
           spRenderComparison();
           spRefreshAgreePrompts();
+          if (window.SP._spMap) window.SP._spMap.drawProposedRoutes();
           spSetMsg(msg, 'Saved', true);
         } else spSetMsg(msg, res.data.error || 'Failed', false);
       });
@@ -29111,8 +29619,10 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
       function spRefreshAgreePrompts() {
         var dep = document.getElementById('spDepAgreePrompt');
         var arr = document.getElementById('spArrAgreePrompt');
-        if (dep) dep.style.display = (window.SP.canEditDep && !window.SP.depRouteSuggestion && window.SP.arrRouteSuggestion) ? '' : 'none';
-        if (arr) arr.style.display = (window.SP.canEditArr && !window.SP.arrRouteSuggestion && window.SP.depRouteSuggestion) ? '' : 'none';
+        var status = (window.SP.routeComparison && window.SP.routeComparison.status) || 'EMPTY';
+        var notAgreed = status !== 'GREEN';
+        if (dep) dep.style.display = (window.SP.canEditDep && window.SP.arrRouteSuggestion && notAgreed) ? '' : 'none';
+        if (arr) arr.style.display = (window.SP.canEditArr && window.SP.depRouteSuggestion && notAgreed) ? '' : 'none';
       }
 
       document.querySelectorAll('.sp-agree-yes').forEach(function(btn) {
@@ -29131,6 +29641,7 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
             window.SP.routeComparison = res.data.routeComparison;
             spRenderComparison();
             spRefreshAgreePrompts();
+            if (window.SP._spMap) window.SP._spMap.drawProposedRoutes();
             spSetMsg(document.getElementById(msgId), 'Saved — route agreed', true);
           } else {
             spSetMsg(document.getElementById(msgId), res.data.error || 'Failed', false);
@@ -29198,25 +29709,67 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
         wrap.style.display = flowType === 'BOOKING_REQUIRED' ? 'block' : 'none';
       }
 
+      var FLOW_LABELS_CLIENT = { 'NONE': 'No Restrictions', 'BOOKING_REQUIRED': 'Booking Required', 'TIME_SLOT_REQUIRED': 'Time Slot Required' };
+      function spRefreshDepFlowCheck() {
+        var chk = document.getElementById('spChkDepFlow');
+        if (!chk) return;
+        var ft = window.SP.depFlowType;
+        var rate = window.SP.depFlowRate;
+        var done = !!ft && (ft !== 'BOOKING_REQUIRED' || (rate != null && rate > 0));
+        chk.classList.toggle('done', done);
+        chk.classList.toggle('missing-required', !done);
+        chk.querySelector('.sp-check-icon').textContent = done ? '✓' : '—';
+        var sub = chk.querySelector('.sp-check-sub');
+        if (!done) {
+          sub.innerHTML = ft === 'BOOKING_REQUIRED'
+            ? '<span style="color:#fbbf24;font-weight:600;">Booking Required selected — enter a flow rate to activate.</span>'
+            : 'Departure team needs to pick a flow restriction option.';
+          return;
+        }
+        var isRestricted = ft === 'BOOKING_REQUIRED' || ft === 'TIME_SLOT_REQUIRED';
+        var rateHtml = (ft === 'BOOKING_REQUIRED' && rate != null)
+          ? ' · <strong style="color:#fbbf24;">' + rate + ' planes/hr</strong>'
+          : '';
+        var warningChip = isRestricted
+          ? '<div style="margin-top:8px;"><span style="display:inline-flex;align-items:center;gap:3px;padding:2px 8px;background:rgba(245,158,11,0.18);color:#fbbf24;border:1px solid rgba(245,158,11,0.45);border-radius:4px;font-size:10px;font-weight:700;letter-spacing:0.04em;">⚠ FLOW IN EFFECT</span></div>'
+          : '';
+        sub.innerHTML = (FLOW_LABELS_CLIENT[ft] || ft) + ' for ' + window.SP.fromIcao + rateHtml + warningChip;
+      }
+
       var flowOpts = document.querySelectorAll('#spFlowOptions .sp-flow-option');
+      var pendingFlowType = null;
+      function spActivateFlowButton(ft) {
+        flowOpts.forEach(function(b) { b.classList.toggle('active', b.dataset.flow === ft); });
+      }
       flowOpts.forEach(function(btn) {
         btn.addEventListener('click', async function() {
           if (btn.classList.contains('disabled')) return;
           var ft = btn.dataset.flow;
           var msg = document.getElementById('spFlowMsg');
+          // BOOKING_REQUIRED needs a rate first. Open the rate wrap, focus the
+          // input, queue the activation so the rate save chains into it.
+          if (ft === 'BOOKING_REQUIRED' && (window.SP.depFlowRate == null || window.SP.depFlowRate <= 0)) {
+            pendingFlowType = 'BOOKING_REQUIRED';
+            spRefreshFlowRateWrap('BOOKING_REQUIRED');
+            var rateInput = document.getElementById('spFlowRate');
+            if (rateInput) { rateInput.focus(); rateInput.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
+            spSetMsg(msg, 'Enter a flow rate first, then this will activate.', false);
+            return;
+          }
           var res = await spPostJson('/api/sector-plan/' + encodeURIComponent(window.SP.wf) + '/flow-type', { flowType: ft });
           if (res.ok) {
             flowOpts.forEach(function(b) { b.classList.remove('active'); });
             btn.classList.add('active');
             window.SP.depFlowType = ft;
-            // When server clears the rate (on NONE), reflect it in the UI too.
-            if (ft === 'NONE') {
+            // When server clears the rate (anything other than BOOKING_REQUIRED), reflect it in the UI too.
+            if (ft !== 'BOOKING_REQUIRED') {
               window.SP.depFlowRate = null;
               var rateInput = document.getElementById('spFlowRate');
               if (rateInput) rateInput.value = '';
             }
             spRefreshFlowRateWrap(ft);
             spRenderFlowRateTotal();
+            spRefreshDepFlowCheck();
             spSetMsg(msg, 'Flow type set: ' + btn.textContent, true);
           } else spSetMsg(msg, res.data.error || 'Failed', false);
         });
@@ -29236,6 +29789,24 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
           window.SP.depFlowRate = val;
           spRenderFlowRateTotal();
           spSetMsg(msg, val == null ? 'Cleared' : 'Saved', true);
+          spRefreshDepFlowCheck();
+          // If the user was waiting on a rate to activate BOOKING_REQUIRED,
+          // chain the flow-type save now that a rate exists.
+          if (pendingFlowType && val != null && val > 0) {
+            var ft = pendingFlowType;
+            pendingFlowType = null;
+            var ftRes = await spPostJson('/api/sector-plan/' + encodeURIComponent(window.SP.wf) + '/flow-type', { flowType: ft });
+            var flowMsg = document.getElementById('spFlowMsg');
+            if (ftRes.ok) {
+              spActivateFlowButton(ft);
+              window.SP.depFlowType = ft;
+              spRefreshFlowRateWrap(ft);
+              spRefreshDepFlowCheck();
+              spSetMsg(flowMsg, 'Flow type activated: ' + (FLOW_LABELS_CLIENT[ft] || ft), true);
+            } else {
+              spSetMsg(flowMsg, ftRes.data.error || 'Failed to activate flow type', false);
+            }
+          }
         } else spSetMsg(msg, res.data.error || 'Failed', false);
       });
 
@@ -29256,6 +29827,83 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
       // ===== ROUTE ISSUES =====
       function spEsc(s) { return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
       function spFmtTime(t) { return new Date(t).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }); }
+
+      function spAlert(message, opts) {
+        opts = opts || {};
+        return new Promise(function(resolve) {
+          var m = document.getElementById('spConfirmModal');
+          var titleEl = document.getElementById('spConfirmTitle');
+          var bodyEl = document.getElementById('spConfirmBody');
+          var okBtn = document.getElementById('spConfirmOk');
+          var cancelBtn = document.getElementById('spConfirmCancel');
+          var closeBtn = document.getElementById('spConfirmClose');
+          var backdrop = m.querySelector('.route-modal-backdrop');
+          titleEl.textContent = opts.title || 'Notice';
+          bodyEl.textContent = message || '';
+          okBtn.textContent = opts.okText || 'OK';
+          okBtn.style.background = opts.color || 'var(--accent)';
+          okBtn.style.color = opts.textColor || '#0b1220';
+          okBtn.style.border = 'none';
+          cancelBtn.style.display = 'none';
+          m.hidden = false;
+          function cleanup() {
+            m.hidden = true;
+            cancelBtn.style.display = '';
+            okBtn.removeEventListener('click', onOk);
+            closeBtn.removeEventListener('click', onOk);
+            backdrop.removeEventListener('click', onOk);
+            document.removeEventListener('keydown', onKey);
+            resolve();
+          }
+          function onOk() { cleanup(); }
+          function onKey(e) { if (e.key === 'Escape' || e.key === 'Enter') onOk(); }
+          okBtn.addEventListener('click', onOk);
+          closeBtn.addEventListener('click', onOk);
+          backdrop.addEventListener('click', onOk);
+          document.addEventListener('keydown', onKey);
+          setTimeout(function() { okBtn.focus(); }, 0);
+        });
+      }
+
+      function spConfirm(opts) {
+        return new Promise(function(resolve) {
+          var m = document.getElementById('spConfirmModal');
+          var titleEl = document.getElementById('spConfirmTitle');
+          var bodyEl = document.getElementById('spConfirmBody');
+          var okBtn = document.getElementById('spConfirmOk');
+          var cancelBtn = document.getElementById('spConfirmCancel');
+          var closeBtn = document.getElementById('spConfirmClose');
+          var backdrop = m.querySelector('.route-modal-backdrop');
+          titleEl.textContent = opts.title || 'Confirm';
+          bodyEl.textContent = opts.message || '';
+          okBtn.textContent = opts.confirmText || 'Confirm';
+          okBtn.style.background = opts.confirmColor || 'var(--accent)';
+          okBtn.style.color = opts.confirmTextColor || '#0b1220';
+          okBtn.style.border = 'none';
+          m.hidden = false;
+          function cleanup(value) {
+            m.hidden = true;
+            okBtn.removeEventListener('click', onOk);
+            cancelBtn.removeEventListener('click', onCancel);
+            closeBtn.removeEventListener('click', onCancel);
+            backdrop.removeEventListener('click', onCancel);
+            document.removeEventListener('keydown', onKey);
+            resolve(value);
+          }
+          function onOk() { cleanup(true); }
+          function onCancel() { cleanup(false); }
+          function onKey(e) {
+            if (e.key === 'Escape') onCancel();
+            else if (e.key === 'Enter') onOk();
+          }
+          okBtn.addEventListener('click', onOk);
+          cancelBtn.addEventListener('click', onCancel);
+          closeBtn.addEventListener('click', onCancel);
+          backdrop.addEventListener('click', onCancel);
+          document.addEventListener('keydown', onKey);
+          setTimeout(function() { okBtn.focus(); }, 0);
+        });
+      }
 
       function spRenderIssues() {
         var list = document.getElementById('spIssuesList');
@@ -29279,9 +29927,9 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
           var repliesHtml = (it.replies || []).map(function(r, idx) {
             var rWhen = spFmtTime(r.createdAt);
             var rAuthor = r.name ? r.name + ' (' + r.cid + ')' : ('CID ' + r.cid);
-            var sideColor = r.side === 'DEP' ? '#818cf8' : r.side === 'ARR' ? '#f472b6' : '#94a3b8';
-            var sideBg    = r.side === 'DEP' ? 'rgba(129,140,248,0.14)' : r.side === 'ARR' ? 'rgba(244,114,182,0.14)' : 'rgba(148,163,184,0.14)';
-            var sideLabel = r.side ? (r.side + (r.fir ? ' · ' + r.fir : '')) : '';
+            var sideColor = r.side === 'DEP' ? '#818cf8' : r.side === 'ARR' ? '#f472b6' : r.side === 'ORG' ? '#fbbf24' : '#94a3b8';
+            var sideBg    = r.side === 'DEP' ? 'rgba(129,140,248,0.14)' : r.side === 'ARR' ? 'rgba(244,114,182,0.14)' : r.side === 'ORG' ? 'rgba(251,191,36,0.16)' : 'rgba(148,163,184,0.14)';
+            var sideLabel = r.side === 'ORG' ? 'WF Organiser' : (r.side ? (r.side + (r.fir ? ' · ' + r.fir : '')) : '');
             var delBtn = isAdmin
               ? '<button type="button" class="sp-reply-del" data-issue-id="' + it.id + '" data-reply-idx="' + idx + '" title="Delete reply (admin)" style="background:none;border:none;cursor:pointer;color:#f87171;font-size:14px;line-height:1;padding:2px 6px;border-radius:4px;">✕</button>'
               : '';
@@ -29379,7 +30027,13 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
         });
         list.querySelectorAll('.sp-close-issue').forEach(function(btn) {
           btn.addEventListener('click', async function() {
-            if (!confirm('Mark this issue as resolved?')) return;
+            var ok = await spConfirm({
+              title: 'Mark issue as resolved?',
+              message: 'This will close the issue. Existing replies stay visible as history.',
+              confirmText: '✓ Mark Resolved',
+              confirmColor: '#4ade80'
+            });
+            if (!ok) return;
             var id = btn.dataset.issueId;
             btn.disabled = true;
             var res = await spPostJson('/api/sector-plan/' + encodeURIComponent(window.SP.wf) + '/issue/' + id + '/close', {});
@@ -29388,7 +30042,7 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
               window.SP.issues = res.data.issues || window.SP.issues;
               spRenderIssues();
             } else {
-              alert(res.data.error || 'Failed to close issue');
+              spAlert(res.data.error || 'Failed to close issue', { title: 'Could not close', color: '#f87171', textColor: '#fff' });
             }
           });
         });
@@ -29404,7 +30058,7 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
               window.SP.issues = res.data.issues || window.SP.issues;
               spRenderIssues();
             } else {
-              alert(res.data.error || 'Failed to delete reply');
+              spAlert(res.data.error || 'Failed to delete reply', { title: 'Could not delete', color: '#f87171', textColor: '#fff' });
             }
           });
         });
@@ -29419,7 +30073,7 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
               window.SP.issues = res.data.issues || window.SP.issues;
               spRenderIssues();
             } else {
-              alert(res.data.error || 'Failed to delete issue');
+              spAlert(res.data.error || 'Failed to delete issue', { title: 'Could not delete', color: '#f87171', textColor: '#fff' });
             }
           });
         });
@@ -29472,6 +30126,134 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
       spRefreshIssueButton();
       spRenderIssues();
 
+      // Draw or refresh the per-side proposed-route overlays on the map and
+      // render which FIRs each proposal would transit beneath the comparison.
+      // FIR polygons are only painted on the map for the FIRs that the
+      // proposed routes actually transit — there are no enroute FIRs drawn
+      // before a route has been proposed by either side.
+      function spDrawProposedRoutes() {
+        var ctx = window.SP._spMap;
+        var box = document.getElementById('spProposedFirsBox');
+        var content = document.getElementById('spProposedFirsContent');
+        if (!ctx) return;
+        var map = ctx.map;
+
+        // Clear previous FIR polygons and route polylines
+        (ctx.proposedFirLayers || []).forEach(function(l) { try { map.removeLayer(l); } catch (e) {} });
+        ctx.proposedFirLayers = [];
+        ['DEP', 'ARR'].forEach(function(side) {
+          (ctx.proposedRouteLayers[side] || []).forEach(function(l) { try { map.removeLayer(l); } catch (e) {} });
+          ctx.proposedRouteLayers[side] = [];
+        });
+        ctx.drawnFirs = {};
+
+        var sides = [
+          { side: 'DEP', route: window.SP.depRouteSuggestion, label: window.SP.depFir || window.SP.fromIcao },
+          { side: 'ARR', route: window.SP.arrRouteSuggestion, label: window.SP.arrFir || window.SP.toIcao }
+        ];
+
+        var firCells = { DEP: '', ARR: '' };
+        var anyProposal = sides.some(function(s) { return s.route && s.route.trim(); });
+        var agreed = (window.SP.routeComparison && window.SP.routeComparison.status === 'GREEN');
+        if (box) box.style.display = anyProposal ? '' : 'none';
+
+        // Toggle the dim baseline schedule polyline: visible only when no
+        // side has proposed yet, hidden once a proposal arrives.
+        (ctx.baselineLayers || []).forEach(function(l) {
+          try {
+            if (anyProposal) map.removeLayer(l);
+            else if (!map.hasLayer(l)) l.addTo(map);
+          } catch (e) {}
+        });
+
+        if (!anyProposal) {
+          if (content) content.innerHTML = '';
+          return;
+        }
+
+        // Lazily assign a palette colour to any FIR we haven't coloured yet
+        var paletteFallback = ['#f59e0b','#ef4444','#22c55e','#3b82f6','#a855f7','#ec4899','#14b8a6','#f97316','#06b6d4','#eab308','#8b5cf6','#10b981','#e11d48','#0ea5e9'];
+        function colorForFir(firId) {
+          if (ctx.colorByFir[firId]) return ctx.colorByFir[firId];
+          var idx = Object.keys(ctx.colorByFir).length % paletteFallback.length;
+          ctx.colorByFir[firId] = paletteFallback[idx];
+          return ctx.colorByFir[firId];
+        }
+
+        function drawFirPolygons(firIds) {
+          firIds.forEach(function(firId) {
+            if (ctx.drawnFirs[firId]) return;
+            var feat = ctx.allShiftedFeatures[firId];
+            if (!feat) return;
+            ctx.drawnFirs[firId] = true;
+            var color = colorForFir(firId);
+            var layer = L.geoJSON(feat, { style: { color: color, weight: 2, fillColor: ctx.hexToRgba(color, 0.18), fillOpacity: 0.32 } }).addTo(map);
+            layer.bindTooltip(ctx.displayFir(firId), { sticky: true, className: 'fir-tooltip' });
+            ctx.proposedFirLayers.push(layer);
+          });
+        }
+
+        sides.forEach(function(s) {
+          if (!s.route || !s.route.trim()) {
+            firCells[s.side] = '<div style="font-size:11px;color:var(--muted);">No route proposed yet.</div>';
+            renderFirCells();
+            return;
+          }
+          fetch('/api/resolve-route?from=' + window.SP.fromIcao + '&to=' + window.SP.toIcao + '&route=' + encodeURIComponent(s.route) + '&depTime=&blockTime=')
+            .then(function(r) { return r.json(); })
+            .then(function(rd) {
+              if (!rd.points || rd.points.length < 2) {
+                firCells[s.side] = '<div style="font-size:11px;color:var(--muted);">Route could not be resolved.</div>';
+                renderFirCells();
+                return;
+              }
+
+              // Collect transited FIRs for this side, draw any not yet drawn
+              var firs = (rd.firs || []).map(function(f) { return f.fir; });
+              var seen = {}; var uniq = [];
+              firs.forEach(function(f) { if (!seen[f]) { seen[f] = 1; uniq.push(f); } });
+              drawFirPolygons(uniq);
+
+              // Draw the route polyline on top of the polygons. When the
+              // two sides agree, both polylines are identical — colour them
+              // green and tooltip "Agreed route" instead of per-side labels.
+              var sideColor = agreed ? '#4ade80' : ctx.colors[s.side];
+              var coords = rd.points.map(function(p) { return [p.lat, ctx.unwrapLon(p.lon, ctx.refLon)]; });
+              var line = L.polyline(coords, { color: sideColor, weight: 3, opacity: 0.95 }).addTo(map);
+              ctx.proposedRouteLayers[s.side].push(line);
+              if (L.polylineDecorator) {
+                var deco = L.polylineDecorator(line, {
+                  patterns: [{ offset: 40, endOffset: 40, repeat: '110px', symbol: L.Symbol.arrowHead({ pixelSize: 9, polygon: false, pathOptions: { color: sideColor, weight: 2, opacity: 1 } }) }]
+                }).addTo(map);
+                ctx.proposedRouteLayers[s.side].push(deco);
+              }
+              line.bindTooltip(agreed ? 'Agreed route' : (s.side + ' proposal by ' + s.label), { sticky: true, className: 'fir-tooltip' });
+
+              if (!uniq.length) {
+                firCells[s.side] = '<div style="font-size:11px;color:var(--muted);">No FIRs detected.</div>';
+              } else {
+                firCells[s.side] = '<div style="display:flex;flex-wrap:wrap;gap:4px;">'
+                  + uniq.map(function(f) {
+                      return '<span style="font-size:11px;font-weight:600;padding:2px 8px;background:' + (sideColor === '#818cf8' ? 'rgba(129,140,248,0.14)' : 'rgba(244,114,182,0.14)') + ';color:' + sideColor + ';border:1px solid ' + sideColor + ';border-radius:4px;">' + f + '</span>';
+                    }).join('')
+                  + '</div>';
+              }
+              renderFirCells();
+            })
+            .catch(function() {
+              firCells[s.side] = '<div style="font-size:11px;color:#f87171;">Failed to resolve route.</div>';
+              renderFirCells();
+            });
+        });
+
+        function renderFirCells() {
+          if (!content) return;
+          content.innerHTML = ''
+            + '<div><div style="font-size:10px;font-weight:700;color:#a5b4fc;letter-spacing:0.04em;text-transform:uppercase;margin-bottom:4px;">DEP proposal — ' + (window.SP.depFir || window.SP.fromIcao) + '</div>' + (firCells.DEP || '') + '</div>'
+            + '<div><div style="font-size:10px;font-weight:700;color:#fbcfe8;letter-spacing:0.04em;text-transform:uppercase;margin-bottom:4px;">ARR proposal — ' + (window.SP.arrFir || window.SP.toIcao) + '</div>' + (firCells.ARR || '') + '</div>';
+        }
+      }
+
       // ===== MAP — same colour-coded transit FIR style as by-sector =====
       // Leaflet loads with the defer attribute, so wait for DOMContentLoaded
       // before touching L. If we are already past that point, run immediately.
@@ -29491,73 +30273,119 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
 
         function displayFir(c) { return /^K[A-Z]{3}$/.test(c) ? c.slice(1) : c; }
 
-        var transitedFirIds = firLegs.map(function(fl) { return fl.fir; });
+        // Shift a longitude into the world-copy nearest to refLon. Used to
+        // collapse antimeridian-crossing FIR polygons and the route into a
+        // single contiguous lon window so Leaflet renders them together
+        // without the user having to pan to the next world copy.
+        function unwrapLon(lon, refLon) {
+          while (lon - refLon > 180) lon -= 360;
+          while (refLon - lon > 180) lon += 360;
+          return lon;
+        }
+        function shiftRing(ring, refLon) {
+          return ring.map(function(c) { return [unwrapLon(c[0], refLon), c[1]]; });
+        }
+        function shiftFeature(f, refLon) {
+          var g = f.geometry; if (!g) return f;
+          if (g.type === 'Polygon') {
+            return Object.assign({}, f, { geometry: Object.assign({}, g, { coordinates: g.coordinates.map(function(r) { return shiftRing(r, refLon); }) }) });
+          }
+          if (g.type === 'MultiPolygon') {
+            return Object.assign({}, f, { geometry: Object.assign({}, g, { coordinates: g.coordinates.map(function(poly) { return poly.map(function(r) { return shiftRing(r, refLon); }); }) }) });
+          }
+          return f;
+        }
 
-        fetch('/api/fir-merged.geojson')
-          .then(function(r) { return r.json(); })
-          .then(function(geo) {
-            var firFeatures = {};
-            var layers = [];
-            geo.features.forEach(function(f) {
-              if (!f.properties || transitedFirIds.indexOf(f.properties.id) === -1) return;
-              firFeatures[f.properties.id] = f;
-              var color = colorByFir[f.properties.id] || '#6366f1';
-              var layer = L.geoJSON(f, { style: { color: color, weight: 2, fillColor: hexToRgba(color, 0.18), fillOpacity: 0.32 } }).addTo(map);
-              layer.bindTooltip(displayFir(f.properties.id), { sticky: true, className: 'fir-tooltip' });
-              layers.push(layer);
-            });
+        // Fetch the FIR boundaries and the resolved schedule route in
+        // parallel. We need the schedule route only to decide a reference
+        // longitude (centre of the route) and to draw a baseline polyline.
+        // FIR polygons are NOT painted at init — they are only drawn for
+        // FIRs that a proposed route would transit, via spDrawProposedRoutes.
+        Promise.all([
+          fetch('/api/fir-merged.geojson').then(function(r) { return r.json(); }),
+          fetch('/api/resolve-route?from=' + window.SP.fromIcao + '&to=' + window.SP.toIcao + '&route=' + encodeURIComponent(window.SP.scheduleRoute || '') + '&depTime=&blockTime=').then(function(r) { return r.json(); })
+        ]).then(function(results) {
+          var geo = results[0];
+          var rd = results[1];
 
-            function ptInFir(lat, lon) {
-              for (var fid in firFeatures) {
-                var geom = firFeatures[fid].geometry;
-                var polys = geom.type === 'MultiPolygon' ? geom.coordinates : geom.type === 'Polygon' ? [geom.coordinates] : [];
-                for (var p = 0; p < polys.length; p++) {
-                  var ring = polys[p][0]; if (!ring) continue;
-                  var inside = false;
-                  for (var i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-                    var yi = ring[i][0], xi = ring[i][1];
-                    var yj = ring[j][0], xj = ring[j][1];
-                    if (((yi > lon) !== (yj > lon)) && (lat < (xj - xi) * (lon - yi) / (yj - yi) + xi)) inside = !inside;
-                  }
-                  if (inside) return true;
-                }
-              }
-              return false;
-            }
-            function cross(a, b, steps) {
-              for (var s = 0; s < (steps || 12); s++) {
-                var m = [(a[0]+b[0])/2, (a[1]+b[1])/2];
-                if (ptInFir(m[0], m[1])) a = m; else b = m;
-              }
-              return [(a[0]+b[0])/2, (a[1]+b[1])/2];
-            }
+          // Compute the route's lon centre. If no route, fall back to 0.
+          var routePts = (rd && rd.points && rd.points.length >= 2) ? rd.points : null;
+          var refLon = 0;
+          if (routePts) {
+            var minLon = Infinity, maxLon = -Infinity;
+            routePts.forEach(function(p) { if (p.lon < minLon) minLon = p.lon; if (p.lon > maxLon) maxLon = p.lon; });
+            refLon = (minLon + maxLon) / 2;
+          }
 
-            fetch('/api/resolve-route?from=' + window.SP.fromIcao + '&to=' + window.SP.toIcao + '&route=' + encodeURIComponent(window.SP.scheduleRoute || '') + '&depTime=&blockTime=')
-              .then(function(r) { return r.json(); })
-              .then(function(rd) {
-                if (!rd.points || rd.points.length < 2) {
-                  if (layers.length) map.fitBounds(L.featureGroup(layers).getBounds(), { padding: [30, 30], maxZoom: 7 });
-                  return;
-                }
-                var pts = rd.points.map(function(p) { return { lat: p.lat, lon: p.lon, inFir: ptInFir(p.lat, p.lon) }; });
-                var all = pts.map(function(p) { return [p.lat, p.lon]; });
-                var dim = L.polyline(all, { color: '#ffffff', weight: 2, opacity: 0.5 }).addTo(map);
-                if (L.polylineDecorator) {
-                  L.polylineDecorator(dim, { patterns: [{ offset: 30, endOffset: 30, repeat: '80px', symbol: L.Symbol.arrowHead({ pixelSize: 9, polygon: false, pathOptions: { color: '#ffffff', weight: 2, opacity: 0.85 } }) }] }).addTo(map);
-                }
-                L.circleMarker(all[0], { radius: 5, color: '#0f172a', fillColor: '#ffffff', fillOpacity: 1, weight: 2 }).bindTooltip(window.SP.fromIcao + ' (Dep)').addTo(map);
-                L.circleMarker(all[all.length-1], { radius: 5, color: '#0f172a', fillColor: '#ffffff', fillOpacity: 1, weight: 2 }).bindTooltip(window.SP.toIcao + ' (Arr)').addTo(map);
-                for (var i = 0; i < pts.length - 1; i++) {
-                  var a = pts[i], b = pts[i+1], seg = null;
-                  if (a.inFir && b.inFir) seg = [[a.lat,a.lon],[b.lat,b.lon]];
-                  else if (a.inFir && !b.inFir) { var c1 = cross([a.lat,a.lon],[b.lat,b.lon]); seg = [[a.lat,a.lon], c1]; }
-                  else if (!a.inFir && b.inFir) { var c2 = cross([b.lat,b.lon],[a.lat,a.lon]); seg = [c2, [b.lat,b.lon]]; }
-                  if (seg) L.polyline(seg, { color: '#ffffff', weight: 3, opacity: 1 }).addTo(map);
-                }
-                map.fitBounds(all, { padding: [30, 30], maxZoom: 6 });
-              })
-              .catch(function() { if (layers.length) map.fitBounds(L.featureGroup(layers).getBounds(), { padding: [30, 30], maxZoom: 7 }); });
+          // Cache every FIR feature in the route's world-copy so we can paint
+          // them on demand when proposals arrive — without re-fetching geojson.
+          var allShiftedFeatures = {};
+          geo.features.forEach(function(f) {
+            if (!f.properties || !f.properties.id) return;
+            allShiftedFeatures[f.properties.id] = shiftFeature(f, refLon);
           });
+
+          // Plot dep/arr airport markers as anchors, plus a baseline dim
+          // polyline showing the scheduled path. The baseline is hidden by
+          // spDrawProposedRoutes as soon as either side has proposed.
+          var depCoord = null, arrCoord = null;
+          var baselineLayers = [];
+          if (routePts) {
+            depCoord = [routePts[0].lat, routePts[0].lon];
+            arrCoord = [routePts[routePts.length - 1].lat, routePts[routePts.length - 1].lon];
+            var all = routePts.map(function(p) { return [p.lat, p.lon]; });
+            var dim = L.polyline(all, { color: '#ffffff', weight: 2, opacity: 0.45 }).addTo(map);
+            baselineLayers.push(dim);
+            if (L.polylineDecorator) {
+              var dimDeco = L.polylineDecorator(dim, { patterns: [{ offset: 30, endOffset: 30, repeat: '80px', symbol: L.Symbol.arrowHead({ pixelSize: 9, polygon: false, pathOptions: { color: '#ffffff', weight: 2, opacity: 0.7 } }) }] }).addTo(map);
+              baselineLayers.push(dimDeco);
+            }
+            L.circleMarker(depCoord, { radius: 5, color: '#0f172a', fillColor: '#ffffff', fillOpacity: 1, weight: 2 }).bindTooltip(window.SP.fromIcao + ' (Dep)').addTo(map);
+            L.circleMarker(arrCoord, { radius: 5, color: '#0f172a', fillColor: '#ffffff', fillOpacity: 1, weight: 2 }).bindTooltip(window.SP.toIcao + ' (Arr)').addTo(map);
+            map.fitBounds(all, { padding: [30, 30], maxZoom: 6 });
+          }
+
+          if (!routePts) return;
+
+          // Expose the map handles + helpers so route saves can paint the
+          // proposed FIRs and routes on demand without reinitialising.
+          window.SP._spMap = {
+            map: map,
+            refLon: refLon,
+            unwrapLon: unwrapLon,
+            allShiftedFeatures: allShiftedFeatures,
+            colorByFir: colorByFir,
+            hexToRgba: hexToRgba,
+            displayFir: displayFir,
+            baselineLayers: baselineLayers,
+            proposedFirLayers: [],
+            proposedRouteLayers: { DEP: [], ARR: [] },
+            drawnFirs: {},
+            colors: { DEP: '#818cf8', ARR: '#f472b6' },
+            drawProposedRoutes: spDrawProposedRoutes
+          };
+          spDrawProposedRoutes();
+
+          // If the route crosses the antimeridian, the FIR polygons have
+          // been shifted into a world copy outside [-180, 180]. Panning
+          // would take the user away from the shifted features and back
+          // into the raw [-180, 180] copy where polygons would clip — so
+          // lock the map to the fitted view.
+          var crossesDateline = routePts.some(function(p) { return p.lon < -180 || p.lon > 180; });
+          if (crossesDateline && depCoord && arrCoord) {
+            map.dragging.disable();
+            if (map.touchZoom && map.touchZoom.disable) map.touchZoom.disable();
+            map.setMaxBounds(L.latLngBounds([depCoord, arrCoord]).pad(0.25));
+            var hint = L.control({ position: 'topright' });
+            hint.onAdd = function() {
+              var div = L.DomUtil.create('div');
+              div.style.cssText = 'background:rgba(15,23,42,0.9);border:1px solid rgba(245,158,11,0.4);color:#fbbf24;font-size:11px;padding:4px 8px;border-radius:6px;font-weight:600;';
+              div.textContent = '⚠ Dateline route — panning disabled';
+              return div;
+            };
+            hint.addTo(map);
+          }
+        }).catch(function() {});
       }
 
       if (typeof L !== 'undefined') spInitMap();
@@ -29603,15 +30431,19 @@ app.post('/api/sector-plan/:wf/flow-type', requireLogin, async (req, res) => {
     const cid = Number(req.session?.user?.data?.cid);
     const wf = String(req.params.wf || '').toUpperCase();
     const ft = String(req.body?.flowType || '').toUpperCase();
-    if (!['NONE','BOOKING_REQUIRED'].includes(ft)) return res.status(400).json({ error: 'invalid flowType' });
+    if (!['NONE','BOOKING_REQUIRED','TIME_SLOT_REQUIRED'].includes(ft)) return res.status(400).json({ error: 'invalid flowType' });
     const sched = (adminSheetCache || []).find(r => r?.number === wf);
     if (!sched) return res.status(404).json({ error: 'WF not found' });
+    if (ft === 'TIME_SLOT_REQUIRED' && sched.from !== 'YSSY') return res.status(400).json({ error: 'Time Slot Required is only available for YSSY' });
     if (!(await canEditPlanSide(cid, 'DEP', sched.from, sched.to))) return res.status(403).json({ error: 'No edit access' });
     const plan = await getOrCreateSectorPlan(wf, sched.from, sched.to);
-    // When flipping to NONE, also clear the rate so it doesn't read as a stale config.
-    const data = ft === 'NONE'
-      ? { depFlowType: 'NONE', depFlowRate: null, depUpdatedBy: cid, depUpdatedAt: new Date() }
-      : { depFlowType: ft, depUpdatedBy: cid, depUpdatedAt: new Date() };
+    if (ft === 'BOOKING_REQUIRED' && (plan.depFlowRate == null || plan.depFlowRate <= 0)) {
+      return res.status(400).json({ error: 'Enter a flow rate before activating Booking Required.' });
+    }
+    // Only BOOKING_REQUIRED keeps a flow rate; clear it for NONE and TIME_SLOT_REQUIRED
+    const data = ft === 'BOOKING_REQUIRED'
+      ? { depFlowType: ft, depUpdatedBy: cid, depUpdatedAt: new Date() }
+      : { depFlowType: ft, depFlowRate: null, depUpdatedBy: cid, depUpdatedAt: new Date() };
     await prisma.sectorPlan.update({ where: { id: plan.id }, data });
     res.json({ success: true });
   } catch (e) {
@@ -29746,17 +30578,20 @@ app.post('/api/sector-plan/:wf/issue/:id/reply', requireLogin, async (req, res) 
 
     const sched = (adminSheetCache || []).find(r => r?.number === wf);
     if (!sched) return res.status(404).json({ error: 'WF not found' });
-    const canDep = await canEditPlanSide(cid, 'DEP', sched.from, sched.to);
-    const canArr = await canEditPlanSide(cid, 'ARR', sched.from, sched.to);
-    if (!canDep && !canArr) return res.status(403).json({ error: 'Only departure or arrival controllers can reply.' });
+    const isOrganiser = isAdminUser(cid);
+    const canDep = isOrganiser ? false : await canEditPlanSide(cid, 'DEP', sched.from, sched.to);
+    const canArr = isOrganiser ? false : await canEditPlanSide(cid, 'ARR', sched.from, sched.to);
+    if (!isOrganiser && !canDep && !canArr) return res.status(403).json({ error: 'Only departure or arrival controllers can reply.' });
 
     const issue = await prisma.sectorPlanIssue.findUnique({ where: { id: issueId } });
     if (!issue || issue.wf !== wf) return res.status(404).json({ error: 'issue not found' });
 
     let replies = [];
     try { replies = JSON.parse(issue.replies || '[]') || []; } catch { replies = []; }
-    const side = canDep ? 'DEP' : 'ARR';
-    const fir = side === 'DEP' ? await resolveAirportFir(sched.from) : await resolveAirportFir(sched.to);
+    const side = isOrganiser ? 'ORG' : (canDep ? 'DEP' : 'ARR');
+    const fir = isOrganiser
+      ? null
+      : (side === 'DEP' ? await resolveAirportFir(sched.from) : await resolveAirportFir(sched.to));
     replies.push({ cid, fir, side, notes, createdAt: new Date().toISOString() });
     await prisma.sectorPlanIssue.update({ where: { id: issueId }, data: { replies: JSON.stringify(replies) } });
 
@@ -29829,9 +30664,10 @@ app.post('/api/sector-plan/:wf/issue/:id/close', requireLogin, async (req, res) 
 
     const sched = (adminSheetCache || []).find(r => r?.number === wf);
     if (!sched) return res.status(404).json({ error: 'WF not found' });
-    const canDep = await canEditPlanSide(cid, 'DEP', sched.from, sched.to);
-    const canArr = await canEditPlanSide(cid, 'ARR', sched.from, sched.to);
-    if (!canDep && !canArr) return res.status(403).json({ error: 'Only departure or arrival controllers can close issues.' });
+    const isOrganiser = isAdminUser(cid);
+    const canDep = isOrganiser ? true : await canEditPlanSide(cid, 'DEP', sched.from, sched.to);
+    const canArr = isOrganiser ? true : await canEditPlanSide(cid, 'ARR', sched.from, sched.to);
+    if (!isOrganiser && !canDep && !canArr) return res.status(403).json({ error: 'Only departure, arrival controllers or WF Organisers can close issues.' });
 
     const issue = await prisma.sectorPlanIssue.findUnique({ where: { id: issueId } });
     if (!issue || issue.wf !== wf) return res.status(404).json({ error: 'issue not found' });
