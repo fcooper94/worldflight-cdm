@@ -1258,14 +1258,19 @@ ${isAdmin ? `
     name: '${user?.personal?.name_full || 'Unknown'}'
   });
 
-  sock.on('connectedUsersUpdate', function(users) {
-    if (!users.length) {
-      container.innerHTML = '<span class="label" style="color:var(--muted);font-size:11px;">No users online</span>';
-      return;
+  sock.on('connectedUsersUpdate', function(data) {
+    var users = data.users || [];
+    var guests = data.guests || 0;
+    var parts = [];
+    if (users.length) {
+      parts.push(users.map(function(u) {
+        return '<span class="cu-entry"><span class="cu-dot"></span>' + u.cid + ' — ' + (u.name || 'Unknown') + '</span>';
+      }).join(''));
     }
-    container.innerHTML = users.map(function(u) {
-      return '<span class="cu-entry"><span class="cu-dot"></span>' + u.cid + ' — ' + (u.name || 'Unknown') + '</span>';
-    }).join('');
+    if (guests > 0) {
+      parts.push('<span class="cu-entry" style="color:var(--muted);"><span class="cu-dot" style="background:var(--muted);"></span>' + guests + ' guest' + (guests !== 1 ? 's' : '') + '</span>');
+    }
+    container.innerHTML = parts.length ? parts.join('') : '<span class="label" style="color:var(--muted);font-size:11px;">No users online</span>';
   });
 })();
 </script>

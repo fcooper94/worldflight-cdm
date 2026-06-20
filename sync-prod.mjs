@@ -117,7 +117,7 @@ await pullTable({
 await pullTable({
   table: 'WfScheduleRow',
   cols: ['id', 'eventId', 'sortOrder', 'number', 'from', 'to', 'dateUtc',
-         'depTimeUtc', 'arrTimeUtc', 'blockTime', 'flightTime', 'atcRoute']
+         'depTimeUtc', 'arrTimeUtc', 'blockTime', 'flightTime', 'atcRoute', 'atcRoute2']
 });
 
 await pullTable({
@@ -157,7 +157,7 @@ await pullTable({
 await pullTable({
   table: 'TobtBooking',
   cols: ['id', 'slotKey', 'cid', 'callsign', 'from', 'to', 'dateUtc',
-         'depTimeUtc', 'tobtTimeUtc', 'manual', 'createdAt'],
+         'depTimeUtc', 'tobtTimeUtc', 'assignedRoute', 'manual', 'createdAt'],
   boolCols: ['manual'],
   dateCols: ['createdAt']
 });

@@ -75,6 +75,13 @@ window.loadSlotBanners = function (data) {
           '</div>'
         : '') +
 
+        (a.atcRoute2 ?
+          '<div class="slot-atc">' +
+            '<span class="slot-atc-label">Secondary Route</span>' +
+            '<span class="slot-atc-route" style="opacity:0.8;">' + a.atcRoute2 + '</span>' +
+          '</div>'
+        : '') +
+
         (
   !a.hasSlots
     ? '<span class="wf-book-btn disabled arrival">Bookings not yet available ✕</span>'
@@ -121,6 +128,13 @@ window.loadSlotBanners = function (data) {
           '<div class="slot-atc">' +
             '<span class="slot-atc-label">ATC Route</span>' +
             '<span class="slot-atc-route">' + d.atcRoute + '</span>' +
+          '</div>'
+        : '') +
+
+        (d.atcRoute2 ?
+          '<div class="slot-atc">' +
+            '<span class="slot-atc-label">Secondary Route</span>' +
+            '<span class="slot-atc-route" style="opacity:0.8;">' + d.atcRoute2 + '</span>' +
           '</div>'
         : '') +
 

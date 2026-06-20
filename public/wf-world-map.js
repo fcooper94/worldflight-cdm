@@ -186,6 +186,7 @@ document.addEventListener('DOMContentLoaded', () => {
           ${leg.localWindow ? `<span class="wf-time-local">${leg.localWindow} local (${leg.localZone || '?'})</span>` : ''}
         </div>
         ${leg.atcRoute ? `<span class="wf-airport-route">${leg.atcRoute}</span>` : ''}
+        ${leg.atcRoute2 ? `<span class="wf-airport-route" style="opacity:0.7;font-size:10px;">Secondary: ${leg.atcRoute2}</span>` : ''}
         <span class="wf-airport-portal-hint">View ${leg.wf} sector details ${ARROW_SVG}</span>
       </a>
     `;
@@ -343,7 +344,8 @@ document.addEventListener('DOMContentLoaded', () => {
         `<strong style="font-size:13px;">${leg.from} → ${leg.to}</strong><br>
          <div style="margin-top:6px;font-family:JetBrains Mono,monospace;font-size:12px;white-space:pre-wrap;">
            ${(leg.atc_route || '').replace(/</g, '&lt;')}
-         </div>`;
+         </div>
+         ${leg.atc_route2 ? `<div style="margin-top:6px;font-size:10px;color:#94a3b8;">Secondary Route</div><div style="font-family:JetBrains Mono,monospace;font-size:11px;white-space:pre-wrap;">${leg.atc_route2.replace(/</g, '&lt;')}</div>` : ''}`;
 
       WORLD_OFFSETS.forEach(offset => {
         const pts = basePts.map(p => [p[0], p[1] + offset]);

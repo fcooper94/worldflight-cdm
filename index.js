@@ -614,6 +614,7 @@ async function loadTobtBookingsFromDb() {
     dateUtc: b.dateUtc,
     depTimeUtc: b.depTimeUtc,
     tobtTimeUtc: b.tobtTimeUtc,
+    assignedRoute: b.assignedRoute || 'A',
     manual: !!b.manual,
     createdAtISO: b.createdAt.toISOString()
   };
@@ -5826,6 +5827,34 @@ socket.on('createBookingOnly', async ({ sector, callsign: enteredCid, teamBookin
     }
   }
 
+  // Determine route assignment (A = primary, B = secondary)
+  // WF teams and affiliates always get Route A (primary)
+  let assignedRoute = 'A';
+  const isTeamOrAffiliate = isTeamMember(bookingCid) || isAffiliate(bookingCid);
+  if (!isTeamOrAffiliate) {
+    // Check if there's an agreed split for this sector
+    const sectorPlan = await prisma.sectorPlan.findFirst({
+      where: { wf: row.number, eventId: activeEventId || undefined }
+    }).catch(() => null);
+    if (sectorPlan?.splitAgreed && sectorPlan.depSplitRoute && sectorPlan.depSplitPct != null) {
+      const splitPct = sectorPlan.depSplitPct; // % on Route A
+      // Count existing Route A vs B bookings for this sector
+      const sectorPrefix = `${from}-${to}|`;
+      let countA = 0, countB = 0;
+      for (const [k, b] of Object.entries(tobtBookingsByKey)) {
+        if (k.includes(':') && b.slotKey?.startsWith(sectorPrefix)) {
+          if (b.assignedRoute === 'B') countB++;
+          else countA++;
+        }
+      }
+      const total = countA + countB;
+      // Assign to whichever route is furthest below its target ratio
+      const targetA = splitPct / 100;
+      const currentRatioA = total > 0 ? countA / total : 1;
+      assignedRoute = currentRatioA > targetA ? 'B' : 'A';
+    }
+  }
+
   await prisma.tobtBooking.create({
     data: {
       slotKey,
@@ -5835,7 +5864,8 @@ socket.on('createBookingOnly', async ({ sector, callsign: enteredCid, teamBookin
       to,
       dateUtc: row.date_utc,
       depTimeUtc: row.dep_time_utc,
-      tobtTimeUtc: null
+      tobtTimeUtc: null,
+      assignedRoute
     }
   });
 
@@ -5848,6 +5878,7 @@ socket.on('createBookingOnly', async ({ sector, callsign: enteredCid, teamBookin
     dateUtc: row.date_utc,
     depTimeUtc: row.dep_time_utc,
     tobtTimeUtc: null,
+    assignedRoute,
     createdAtISO: new Date().toISOString()
   };
 
@@ -5860,7 +5891,7 @@ socket.on('createBookingOnly', async ({ sector, callsign: enteredCid, teamBookin
   }
   tobtBookingsByCid[bookingCid].add(bookingKey);
 
-  io.emit('bookingCreated', { slotKey });
+  io.emit('bookingCreated', { slotKey, assignedRoute });
 });
 
 
@@ -5869,14 +5900,24 @@ socket.on('createBookingOnly', async ({ sector, callsign: enteredCid, teamBookin
      CONNECTED USERS
      ========================================================= */
 
+  function emitConnectionCounts() {
+    const totalConnections = io.engine.clientsCount || 0;
+    const loggedInUsers = Object.values(connectedUsers);
+    const guestCount = Math.max(0, totalConnections - loggedInUsers.length);
+    io.emit('connectedUsersUpdate', { users: loggedInUsers, guests: guestCount, total: totalConnections });
+  }
+
   socket.on('registerUser', ({ cid, name }) => {
     connectedUsers[socket.id] = { cid, name };
-    io.emit('connectedUsersUpdate', Object.values(connectedUsers));
+    emitConnectionCounts();
   });
+
+  // Emit updated counts on connect (guest until registerUser fires)
+  emitConnectionCounts();
 
   socket.on('disconnect', () => {
     delete connectedUsers[socket.id];
-    io.emit('connectedUsersUpdate', Object.values(connectedUsers));
+    emitConnectionCounts();
     console.log('Client disconnected:', socket.id);
   });
 });
@@ -5980,7 +6021,8 @@ async function loadScheduleFromDb(eventId) {
     arr_time_utc: r.arrTimeUtc,
     block_time: r.blockTime,
     flight_time: r.flightTime,
-    atc_route: r.atcRoute,
+    atc_route: stripSidStar(r.atcRoute, r.from, r.to),
+    atc_route2: stripSidStar(r.atcRoute2, r.from, r.to),
     is_wf_challenge: r.isWfChallenge === true
   }));
 
@@ -6060,6 +6102,30 @@ function findFirstRouteMismatch(filedRoute, wfRoute) {
   return null;
 }
 
+
+// Strip SIDs and STARs from a route unless the sector involves US/Canada airports.
+// US: K-prefix (CONUS) or P-prefix (Pacific/Alaska). Canada: C-prefix.
+function isNorthAmericanIcao(icao) {
+  if (!icao) return false;
+  const c = icao.charAt(0);
+  return c === 'K' || c === 'C' || c === 'P';
+}
+
+function stripSidStar(route, fromIcao, toIcao) {
+  if (!route) return route;
+  // Keep SIDs/STARs for North American sectors
+  if (isNorthAmericanIcao(fromIcao) || isNorthAmericanIcao(toIcao)) return route;
+
+  const isSidStar = t => /\d[A-Z]$/.test(t) || /\d\d$/.test(t);
+  let tokens = route.trim().split(/\s+/).filter(Boolean);
+
+  // Strip leading SID(s) — but not departure ICAO (4-letter codes handled separately)
+  while (tokens.length && isSidStar(tokens[0])) tokens.shift();
+  // Strip trailing STAR(s)
+  while (tokens.length && isSidStar(tokens[tokens.length - 1])) tokens.pop();
+
+  return tokens.join(' ');
+}
 
 function normalizeRoute(route, adminRoute = null) {
   if (!route) return [];
@@ -6218,7 +6284,8 @@ function resolveWfStatusForPilot(pilot) {
     return {
       status: 'WF – ROUTE',
       filedRoute: pilot.flight_plan.route || '',
-      wfRoute: adminLeg.atc_route || ''
+      wfRoute: adminLeg.atc_route || '',
+      wfRoute2: adminLeg.atc_route2 || ''
     };
   }
 
@@ -7590,7 +7657,8 @@ async function buildWfWorldMapPayload({ a = '', b = '', c = '' } = {}) {
     : '',
   localWindow: depLocalWindow,
   localZone: depLocalZone,
-  atcRoute: (leg.atc_route && leg.atc_route !== '-') ? leg.atc_route : ''
+  atcRoute: (leg.atc_route && leg.atc_route !== '-') ? leg.atc_route : '',
+  atcRoute2: (leg.atc_route2 && leg.atc_route2 !== '-') ? leg.atc_route2 : ''
 };
 
 
@@ -7629,7 +7697,8 @@ airports[arrIcao].inbound = {
     : '',
   localWindow: arrLocalWindow,
   localZone: arrLocalZone,
-  atcRoute: (leg.atc_route && leg.atc_route !== '-') ? leg.atc_route : ''
+  atcRoute: (leg.atc_route && leg.atc_route !== '-') ? leg.atc_route : '',
+  atcRoute2: (leg.atc_route2 && leg.atc_route2 !== '-') ? leg.atc_route2 : ''
 };
 
 
@@ -7644,13 +7713,14 @@ airports[arrIcao].inbound = {
   const atcPolylines = await Promise.all(
     legs.map((leg) =>
       limitAtc(async () => {
-        const cacheKey = `${leg.from}-${leg.to}-${leg.atc_route || ''}`;
+        const cacheKey = `${leg.from}-${leg.to}-${leg.atc_route || ''}-${leg.atc_route2 || ''}`;
         const cached = cacheGet(cacheKey);
         if (cached) {
           return {
             from: leg.from,
             to: leg.to,
             atc_route: leg.atc_route || '',
+            atc_route2: leg.atc_route2 || '',
             dep_time_utc: leg.dep_time_utc || '',
             points: await Promise.resolve(cached)
           };
@@ -7670,6 +7740,7 @@ airports[arrIcao].inbound = {
             from: leg.from,
             to: leg.to,
             atc_route: leg.atc_route || '',
+            atc_route2: leg.atc_route2 || '',
             dep_time_utc: leg.dep_time_utc || '',
             points
           };
@@ -7747,14 +7818,14 @@ function stripWfMapAtcRoutes(payload) {
   for (const [k, ap] of Object.entries(payload.airports || {})) {
     airports[k] = {
       ...ap,
-      inbound: ap.inbound ? { ...ap.inbound, atcRoute: '' } : null,
-      outbound: ap.outbound ? { ...ap.outbound, atcRoute: '' } : null
+      inbound: ap.inbound ? { ...ap.inbound, atcRoute: '', atcRoute2: '' } : null,
+      outbound: ap.outbound ? { ...ap.outbound, atcRoute: '', atcRoute2: '' } : null
     };
   }
   return {
     ...payload,
     airports,
-    atcPolylines: (payload.atcPolylines || []).map(p => ({ ...p, atc_route: '' }))
+    atcPolylines: (payload.atcPolylines || []).map(p => ({ ...p, atc_route: '', atc_route2: '' }))
   };
 }
 
@@ -8685,6 +8756,16 @@ app.get('/sector/:wf/:from/:to', async (req, res) => {
   const flowType = sharedFlowTypes[sectorKey] || 'NONE';
   const depFlow = sharedDepFlows[sectorKey] || 0;
   const bookingCap = flowType === 'BOOKING_ONLY' ? getBookingOnlyCapacity(fromIcao, toIcao) : null;
+
+  // Load flow reason from SectorPlan
+  const FLOW_REASON_LABELS = { DEP_STAFFING: 'Departure staffing', DEP_SINGLE_RUNWAY: 'Single runway at departure', DEP_BACKTRACK: 'Backtrack delay at departure', DEP_RAMP_CONGESTION: 'Ramp congestion at departure', DEP_RUNWAY_CROSSING: 'Runway crossing at departure', DEP_AIRPORT_CAPACITY: 'Departure airport capacity', ARR_STAFFING: 'Destination staffing', ARR_SINGLE_RUNWAY: 'Single runway at destination', ARR_BACKTRACK: 'Backtrack delay at destination', ARR_RAMP_CONGESTION: 'Ramp congestion at destination', ARR_RUNWAY_CROSSING: 'Runway crossing at destination', ARR_AIRPORT_CAPACITY: 'Destination airport capacity', ENROUTE_STAFFING: 'Enroute sector staffing', OTHER: 'Other' };
+  let flowReasonText = '';
+  if (flowType !== 'NONE') {
+    const sectorPlan = await prisma.sectorPlan.findFirst({ where: { wf: wfNum, eventId: activeEventId || undefined } }).catch(() => null);
+    if (sectorPlan?.depFlowReason) {
+      flowReasonText = FLOW_REASON_LABELS[sectorPlan.depFlowReason] || sectorPlan.depFlowReason;
+    }
+  }
   const bookingsFull = bookingCap && bookingCap.total > 0 && bookingCap.remaining <= 0;
 
   // Count slots for slotted mode
@@ -8710,16 +8791,21 @@ app.get('/sector/:wf/:from/:to', async (req, res) => {
   // Check if user has a booking for this sector
   let userBooking = null;
   if (cid && leg) {
-    const bookingPrefix = `${fromIcao}-${toIcao}|${leg.date_utc}|${leg.dep_time_utc}`;
-    for (const [key, b] of Object.entries(tobtBookingsByKey)) {
-      if (key.startsWith(bookingPrefix) && b.cid === cid) {
-        userBooking = b;
-        break;
+    const sectorPrefix = `${fromIcao}-${toIcao}|${leg.date_utc}|${leg.dep_time_utc}`;
+    const myBookingKeys = tobtBookingsByCid[cid];
+    if (myBookingKeys) {
+      for (const bk of myBookingKeys) {
+        if (bk.includes(sectorPrefix)) {
+          userBooking = tobtBookingsByKey[bk];
+          break;
+        }
       }
     }
   }
   const hasBooking = !!userBooking;
   const bookingTobt = userBooking?.tobtTimeUtc || null;
+  const bookingRoute = userBooking?.assignedRoute || 'A';
+  const bookingRouteLabel = bookingRoute === 'B' ? 'Secondary Route' : 'Primary Route';
 
   const content = `
     <section class="card card-full">
@@ -8776,6 +8862,7 @@ app.get('/sector/:wf/:from/:to', async (req, res) => {
           </div>
           ${(isAdmin || isPageEnabled('atc-route')) && leg && leg.atc_route
             ? '<div style="border-top:1px solid var(--border);padding-top:12px;"><div style="font-size:9px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:6px;">ATC Route</div><div style="font-family:monospace;font-size:11px;line-height:1.6;color:var(--text);word-break:break-all;">' + leg.atc_route + '</div></div>'
+            + (leg.atc_route2 && leg.atc_route2 !== '-' ? '<div style="margin-top:8px;"><div style="font-size:9px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:6px;">Secondary ATC Route</div><div style="font-family:monospace;font-size:11px;line-height:1.6;color:var(--text);word-break:break-all;">' + leg.atc_route2 + '</div></div>' : '')
             : !(isAdmin || isPageEnabled('atc-route'))
               ? '<div style="border-top:1px solid var(--border);padding-top:12px;"><div style="font-size:9px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:6px;">ATC Route</div><div style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;background:rgba(251,191,36,0.06);border:1px solid rgba(251,191,36,0.25);border-radius:8px;">'
                 + '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:1px;"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>'
@@ -8803,7 +8890,7 @@ app.get('/sector/:wf/:from/:to', async (req, res) => {
             <div class="sector-banner-text" style="align-items:center;"><span class="sector-banner-label">Flow Restrictions</span><span class="sector-banner-icao">${flowLabel}</span>${remainingText ? '<span style="font-size:12px;color:inherit;opacity:0.7;margin-top:2px;">' + remainingText + '</span>' : ''}</div>
           </div>
           <div style="font-size:12px;text-align:center;font-style:italic;">
-            ${flowType !== 'NONE' ? '<span style="color:#94a3b8;">Reason:</span> <span style="color:inherit;opacity:0.8;">Congestion at departure airfield</span>' : ''}
+            ${flowType !== 'NONE' && flowReasonText ? '<span style="color:#94a3b8;">Reason:</span> <span style="color:inherit;opacity:0.8;">' + flowReasonText + '</span>' : ''}
           </div>
           ${flowType !== 'NONE' ? '<a href="' + (user
             ? (flowType === 'SLOTTED'
@@ -8813,6 +8900,7 @@ app.get('/sector/:wf/:from/:to', async (req, res) => {
             + (hasBooking
               ? 'background:rgba(74,222,128,0.1);color:#4ade80;cursor:default;position:relative;overflow:hidden;" onclick="event.preventDefault()">'
                 + (flowType === 'SLOTTED' && bookingTobt ? 'You have a Time Slot: <strong style="color:#fbbf24;">' + bookingTobt + ' UTC</strong> <span class="col-help" title="This is a TOBT (Target Off-Blocks Time).&#10;Please connect at least 30 minutes before this time.&#10;You should be ready to push at this time.&#10;The actual push time may differ depending on&#10;ramp and airfield congestion." style="cursor:help;color:var(--muted);font-style:normal;">?</span>' : 'You already have a Booking')
+                + (leg && leg.atc_route2 && leg.atc_route2 !== '-' ? ' <span style="font-size:11px;opacity:0.8;">(' + bookingRouteLabel + ')</span>' : '')
                 + '<span id="cancelBookingBtn" data-slotkey="' + (userBooking ? userBooking.slotKey : '').replace(/"/g, '&quot;') + '" style="position:absolute;right:0;top:0;bottom:0;display:flex;align-items:center;padding:0 16px;background:rgba(239,68,68,0.2);color:#f87171;font-size:12px;font-weight:600;cursor:pointer;border-left:1px solid rgba(239,68,68,0.3);border-radius:0 0 11px 0;animation:slideInRight 0.5s ease 0.3s both;white-space:nowrap;">' + (flowType === 'SLOTTED' ? 'Cancel Slot' : 'Cancel Booking') + '</span>'
               : !user
                 ? 'background:rgba(255,255,255,0.04);color:#fbbf24;">'
@@ -8835,7 +8923,7 @@ app.get('/sector/:wf/:from/:to', async (req, res) => {
             <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 22h20"/><path d="M21 16v-2l-8-5V3.5a1.5 1.5 0 00-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z"/></svg>
             <div class="sector-banner-text"><span class="sector-banner-label">Arrival</span><span class="sector-banner-icao">${toIcao} Portal</span></div>
           </a>
-          ${leg ? '<a href="https://dispatch.simbrief.com/options/custom?orig=' + fromIcao + '&dest=' + toIcao + '&route=' + encodeURIComponent((isAdmin || isPageEnabled('atc-route')) ? (leg.atc_route || '') : '') + '&manualrmk=' + encodeURIComponent('Route validated from www.worldflight.center') + '" target="_blank" rel="noopener" class="sector-banner sector-banner-sb"><svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg><div class="sector-banner-text"><span class="sector-banner-label">Flight Planning</span><span class="sector-banner-icao" style="color:#4ade80;">Plan with SimBrief</span></div></a>' : ''}
+          ${leg ? '<a href="https://dispatch.simbrief.com/options/custom?orig=' + fromIcao + '&dest=' + toIcao + '&route=' + encodeURIComponent((isAdmin || isPageEnabled('atc-route')) ? (hasBooking && bookingRoute === 'B' && leg.atc_route2 ? leg.atc_route2 : (leg.atc_route || '')) : '') + '&manualrmk=' + encodeURIComponent('Route validated from www.worldflight.center') + '" target="_blank" rel="noopener" class="sector-banner sector-banner-sb"><svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg><div class="sector-banner-text"><span class="sector-banner-label">Flight Planning</span><span class="sector-banner-icao" style="color:#4ade80;">Plan with SimBrief</span></div></a>' : ''}
         </div>
       </div>
 
@@ -8846,6 +8934,7 @@ app.get('/sector/:wf/:from/:to', async (req, res) => {
       var fromIcao = '${fromIcao}';
       var toIcao = '${toIcao}';
       var route = ${leg && (isAdmin || isPageEnabled('atc-route')) ? JSON.stringify(leg.atc_route || '') : "''"};
+      var route2 = ${leg && (isAdmin || isPageEnabled('atc-route')) ? JSON.stringify(leg.atc_route2 || '') : "''"};
 
       var map = L.map('sectorMap', {
         zoomControl: false,
@@ -9423,12 +9512,13 @@ app.get('/schedule', requirePageEnabled('schedule'), async (req, res) => {
               <td class="col-block">${r.block_time}</td>
 
               ${showAtcRoute ? (() => {
-                const hasRoute = r.atc_route && r.atc_route !== '-';
-                const routeAttr = hasRoute
+                const hasRoute = (r.atc_route && r.atc_route !== '-') || (r.atc_route2 && r.atc_route2 !== '-');
+                const routeAttr = r.atc_route && r.atc_route !== '-'
                   ? String(r.atc_route).replace(/&/g, '&amp;').replace(/"/g, '&quot;')
                   : '';
+                const route2Attr = r.atc_route2 && r.atc_route2 !== '-' ? String(r.atc_route2).replace(/&/g, '&amp;').replace(/"/g, '&quot;') : '';
                 return '<td class="col-route">' + (hasRoute
-                  ? '<button type="button" class="show-route-btn" data-route="' + routeAttr + '">Show Route</button>'
+                  ? '<button type="button" class="show-route-btn" data-route="' + routeAttr + '" data-route2="' + route2Attr + '">Show Route</button>'
                   : '<span style="color:var(--muted);">—</span>') + '</td>';
               })() : ''}
 
@@ -9923,12 +10013,31 @@ document.addEventListener('DOMContentLoaded', () => {
   var closeActionBtn = document.getElementById('routeModalCloseAction');
   var backdrop = modal.querySelector('.route-modal-backdrop');
 
-  function open(route) { body.textContent = route; modal.hidden = false; }
+  function open(route, route2) {
+    var html = route || '';
+    if (route2) {
+      html += '\\n\\n--- Secondary Route ---\\n' + route2;
+    }
+    body.textContent = '';
+    if (route) {
+      body.textContent = route;
+    }
+    if (route2) {
+      var sep = document.createElement('div');
+      sep.style.cssText = 'margin:12px 0 8px;padding-top:10px;border-top:1px solid var(--border);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted);font-family:inherit;';
+      sep.textContent = 'Secondary Route';
+      body.appendChild(sep);
+      var r2 = document.createElement('span');
+      r2.textContent = route2;
+      body.appendChild(r2);
+    }
+    modal.hidden = false;
+  }
   function close() { modal.hidden = true; }
 
   document.addEventListener('click', function(e) {
     var btn = e.target.closest('.show-route-btn');
-    if (btn) { open(btn.getAttribute('data-route') || ''); }
+    if (btn) { open(btn.getAttribute('data-route') || '', btn.getAttribute('data-route2') || ''); }
   });
   closeBtn.addEventListener('click', close);
   if (closeActionBtn) closeActionBtn.addEventListener('click', close);
@@ -15948,6 +16057,7 @@ app.get('/api/icao/:icao/wf-slots', (req, res) => {
       arr_time_utc: arrivalLeg.arr_time_utc,
       window: arrivalWindow,
       atcRoute: showAtcRoute ? arrivalLeg.atc_route : '',
+      atcRoute2: showAtcRoute ? (arrivalLeg.atc_route2 || '') : '',
 
       hasSlots: arrivalHasSlots,
       fullyBooked: arrivalFullyBooked,
@@ -15961,6 +16071,7 @@ app.get('/api/icao/:icao/wf-slots', (req, res) => {
       dep_time_utc: departureLeg.dep_time_utc,
       window: departureWindow,
       atcRoute: showAtcRoute ? departureLeg.atc_route : '',
+      atcRoute2: showAtcRoute ? (departureLeg.atc_route2 || '') : '',
 
       hasSlots: departureHasSlots,
       fullyBooked: departureFullyBooked,
@@ -17285,8 +17396,9 @@ app.get('/affiliates/hq', requireLogin, async (req, res) => {
                     ${showAtcRoute ? `<td>${(() => {
                       const sbUrl = buildAffiliateSimbriefUrl(r, affiliate, claimedCid, showAtcRoute);
                       const sbAttr = sbUrl.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+                      const r2Attr = r.atc_route2 && r.atc_route2 !== '-' ? String(r.atc_route2).replace(/&/g, '&amp;').replace(/"/g, '&quot;') : '';
                       return r.atc_route && r.atc_route !== '-'
-                        ? `<button type="button" class="aff-route-btn" data-route="${String(r.atc_route).replace(/&/g, '&amp;').replace(/"/g, '&quot;')}" data-simbrief="${sbAttr}" data-from="${escapeHtml(r.from)}" data-to="${escapeHtml(r.to)}">ATC Route</button>`
+                        ? `<button type="button" class="aff-route-btn" data-route="${String(r.atc_route).replace(/&/g, '&amp;').replace(/"/g, '&quot;')}" data-route2="${r2Attr}" data-simbrief="${sbAttr}" data-from="${escapeHtml(r.from)}" data-to="${escapeHtml(r.to)}">ATC Route</button>`
                         : `<span class="ot-muted">—</span>`;
                     })()}</td>` : ''}
                     <td><a class="aff-icao-link" href="/icao/${escapeHtml(r.from)}">${escapeHtml(r.from)}</a></td>
@@ -18189,10 +18301,20 @@ app.get('/affiliates/hq', requireLogin, async (req, res) => {
         var routeBackdrop = routeModal && routeModal.querySelector('.aff-route-modal-backdrop');
 
         var routeSimbrief = document.getElementById('affRouteModalSimbrief');
-        function openRouteModal(route, from, to, simbrief) {
+        function openRouteModal(route, from, to, simbrief, route2) {
           if (!routeModal) return;
-          routeBody.textContent = route || '';
-          routeSector.textContent = (from || '') + (to ? ' → ' + to : '');
+          routeBody.textContent = '';
+          if (route) { routeBody.textContent = route; }
+          if (route2) {
+            var sep = document.createElement('div');
+            sep.style.cssText = 'margin:12px 0 8px;padding-top:10px;border-top:1px solid var(--border);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted);font-family:inherit;';
+            sep.textContent = 'Secondary Route';
+            routeBody.appendChild(sep);
+            var r2 = document.createElement('span');
+            r2.textContent = route2;
+            routeBody.appendChild(r2);
+          }
+          routeSector.textContent = (from || '') + (to ? ' \u2192 ' + to : '');
           if (routeSimbrief) {
             if (simbrief) {
               routeSimbrief.href = simbrief;
@@ -18215,7 +18337,8 @@ app.get('/affiliates/hq', requireLogin, async (req, res) => {
             btn.getAttribute('data-route') || '',
             btn.getAttribute('data-from') || '',
             btn.getAttribute('data-to') || '',
-            btn.getAttribute('data-simbrief') || ''
+            btn.getAttribute('data-simbrief') || '',
+            btn.getAttribute('data-route2') || ''
           );
         });
         if (routeClose) routeClose.addEventListener('click', closeRouteModal);
@@ -19478,6 +19601,7 @@ app.get('/team/bookings', requireLogin, requireTeamMember, async (req, res) => {
       );
       const wfSector = wfRow?.number || '-';
       const atcRoute = showAtcRoute ? (wfRow?.atc_route || '-') : '-';
+      const atcRoute2 = showAtcRoute ? (wfRow?.atc_route2 || '') : '';
       const tobt = typeof booking.tobtTimeUtc === 'string' ? booking.tobtTimeUtc : null;
       const callsign = booking.callsign;
       const aircraftType = callsignAircraftType[String(callsign || '').toUpperCase()] || '';
@@ -19528,6 +19652,7 @@ app.get('/team/bookings', requireLogin, requireTeamMember, async (req, res) => {
         depWindow,
         tobt,
         atcRoute,
+        atcRoute2,
         aircraftType,
         simbriefUrl,
         slotKey,
@@ -19629,6 +19754,7 @@ app.get('/team/bookings', requireLogin, requireTeamMember, async (req, res) => {
                 const routeAttr = hasRoute
                   ? String(r.atcRoute).replace(/&/g, '&amp;').replace(/"/g, '&quot;')
                   : '';
+                const route2Attr = r.atcRoute2 && r.atcRoute2 !== '-' ? String(r.atcRoute2).replace(/&/g, '&amp;').replace(/"/g, '&quot;') : '';
                 return `
                 <tr>
                   <td><button class="sector-details-btn" data-from="${r.from}" data-to="${r.to}" data-wf="${r.wfSector}">${r.wfSector}</button></td>
@@ -19645,7 +19771,7 @@ app.get('/team/bookings', requireLogin, requireTeamMember, async (req, res) => {
                     ? `Slotted - <span style="color:#4ade80;font-weight:600;">${r.tobt.replace(':','')}z</span> <span class="tobt-help">?<span class="tobt-tooltip">This is a TOBT (Target Off-Blocks Time).<br>Please connect at least 30 minutes before this time.<br>You should be ready to push at this time.<br><b>The actual push time may differ depending on<br>ramp and airfield congestion.</b></span></span>`
                     : `<span style="color:#4ade80;font-weight:600;">Booking Confirmed</span> <span class="tobt-help">?<span class="tobt-tooltip">You have a booking for this sector. Slots are not required.<br><b>Plan to depart within the Dep Window.</b></span></span>`}</td>
                   ${showAtcRoute ? `<td>${hasRoute
-                    ? `<button type="button" class="show-route-btn" data-route="${routeAttr}">Show Route</button>`
+                    ? `<button type="button" class="show-route-btn" data-route="${routeAttr}" data-route2="${route2Attr}">Show Route</button>`
                     : '<span style="color:var(--muted);">—</span>'}</td>` : ''}
                   <td>
                     <a class="simbrief-btn" href="${r.simbriefUrl}" target="_blank" rel="noopener">
@@ -19761,15 +19887,27 @@ app.get('/team/bookings', requireLogin, requireTeamMember, async (req, res) => {
       var closeActionBtn = document.getElementById('routeModalCloseAction');
       var backdrop = modal.querySelector('.route-modal-backdrop');
 
-      function open(route) {
-        body.textContent = route;
+      function open(route, route2) {
+        body.textContent = '';
+        if (route) {
+          body.textContent = route;
+        }
+        if (route2) {
+          var sep = document.createElement('div');
+          sep.style.cssText = 'margin:12px 0 8px;padding-top:10px;border-top:1px solid var(--border);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted);font-family:inherit;';
+          sep.textContent = 'Secondary Route';
+          body.appendChild(sep);
+          var r2 = document.createElement('span');
+          r2.textContent = route2;
+          body.appendChild(r2);
+        }
         modal.hidden = false;
       }
       function close() { modal.hidden = true; }
 
       document.addEventListener('click', function(e) {
         var btn = e.target.closest('.show-route-btn');
-        if (btn) { open(btn.getAttribute('data-route') || ''); return; }
+        if (btn) { open(btn.getAttribute('data-route') || '', btn.getAttribute('data-route2') || ''); return; }
       });
       closeBtn.addEventListener('click', close);
       if (closeActionBtn) closeActionBtn.addEventListener('click', close);
@@ -24179,6 +24317,7 @@ async function _buildFirAnalysisInner() {
         depTime: leg.dep_time_utc || '',
         arrTime: leg.arr_time_utc || '',
         atcRoute: leg.atc_route || '',
+        atcRoute2: leg.atc_route2 || '',
         entryFrac: seg.entryFrac,
         exitFrac: seg.exitFrac,
         depFlow: sharedDepFlows[sectorKey] || 0,
@@ -24364,7 +24503,7 @@ function parseNavLatLon(token) {
 app.post('/admin/api/schedule-row/update', requireAdmin, async (req, res) => {
   const { eventId, number, field, value } = req.body;
 
-  const allowed = ['number', 'from', 'to', 'dateUtc', 'depTimeUtc', 'arrTimeUtc', 'blockTime', 'flightTime', 'atcRoute'];
+  const allowed = ['number', 'from', 'to', 'dateUtc', 'depTimeUtc', 'arrTimeUtc', 'blockTime', 'flightTime', 'atcRoute', 'atcRoute2'];
   if (!allowed.includes(field)) {
     return res.status(400).json({ error: 'Invalid field' });
   }
@@ -24416,7 +24555,7 @@ app.post('/admin/api/schedule/wf-challenge', requireAdmin, async (req, res) => {
 });
 
 app.post('/admin/api/schedule-row/add', requireAdmin, async (req, res) => {
-  const { eventId, from, to, depFlow, flowType, atcRoute, blockTime, flightTime } = req.body;
+  const { eventId, from, to, depFlow, flowType, atcRoute, atcRoute2, blockTime, flightTime } = req.body;
 
   // Find next WF number
   const existing = await prisma.wfScheduleRow.findMany({
@@ -24464,7 +24603,8 @@ app.post('/admin/api/schedule-row/add', requireAdmin, async (req, res) => {
       arrTimeUtc: '',
       blockTime: (blockTime || '').trim(),
       flightTime: (flightTime || '').trim(),
-      atcRoute: (atcRoute || '').trim()
+      atcRoute: (atcRoute || '').trim(),
+      atcRoute2: (atcRoute2 || '').trim()
     }
   });
 
@@ -26785,7 +26925,7 @@ const filedRoute = p.flight_plan.route || '';
       const sector = r.from + '-' + r.to;
       const ft = sharedFlowTypes[sector] || 'NONE';
       const rate = sharedDepFlows[sector] || 0;
-      return { to: r.to, flowType: ft, rate, wf: r.number, atcRoute: showAtcRoute ? (r.atc_route || '') : '', dateUtc: r.date_utc || '', depTimeUtc: r.dep_time_utc || '', arrTimeUtc: r.arr_time_utc || '' };
+      return { to: r.to, flowType: ft, rate, wf: r.number, atcRoute: showAtcRoute ? (r.atc_route || '') : '', atcRoute2: showAtcRoute ? (r.atc_route2 || '') : '', dateUtc: r.date_utc || '', depTimeUtc: r.dep_time_utc || '', arrTimeUtc: r.arr_time_utc || '' };
     });
 
  const content = `
@@ -26825,6 +26965,7 @@ const filedRoute = p.flight_plan.route || '';
                 return ' — Dep Window ' + fmt(fromMins) + ' - ' + fmt(toMins) + ' UTC';
               })() : '') + '</div>' : '')
               + (f.atcRoute ? '<div class="dep-flow-banner-atc">' + f.atcRoute + '</div>' : '')
+              + (f.atcRoute2 ? '<div class="dep-flow-banner-atc" style="margin-top:2px;"><span style="font-size:9px;text-transform:uppercase;letter-spacing:0.5px;color:var(--muted);font-family:inherit;">Secondary:</span> ' + f.atcRoute2 + '</div>' : '')
               + '</div>';
           }).join('')}
         </div>
@@ -28631,8 +28772,13 @@ app.get('/sector-planning', requirePageEnabled('sector-planning'), async (req, r
     </style>
 
     <section class="card card-full">
-      <h2 style="margin:0 0 4px;">Sector Planning</h2>
-      <p style="color:var(--muted);margin:0 0 16px;">WorldFlight sectors you're participating in — either departing/arriving in one of your FIRs or transiting through.</p>
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap;">
+        <div>
+          <h2 style="margin:0 0 4px;">Sector Planning</h2>
+          <p style="color:var(--muted);margin:0 0 16px;">WorldFlight sectors you're participating in — either departing/arriving in one of your FIRs or transiting through.</p>
+        </div>
+        ${isAdmin ? '<a href="/sector-planning/admin" class="action-btn" style="font-size:12px;padding:6px 14px;white-space:nowrap;">Admin Overview</a>' : ''}
+      </div>
 
       ${noAccess ? `
         <div class="sp-empty">
@@ -28675,6 +28821,302 @@ app.get('/sector-planning', requirePageEnabled('sector-planning'), async (req, r
     content,
     layoutClass: 'dashboard-full'
   }));
+});
+
+// ============================================================
+// Sector Planning — Admin Overview
+// ============================================================
+
+app.get('/sector-planning/admin', requireAdmin, async (req, res) => {
+  const user = req.session?.user || null;
+  const cid = user?.data?.cid;
+  const isAdmin = isAdminUser(cid);
+  const rows = adminSheetCache || [];
+  if (!rows.length) {
+    return res.send(renderLayout({
+      title: 'Sector Planning — Admin Overview',
+      user, isAdmin,
+      content: '<section class="card card-full"><h2>Sector Planning — Admin Overview</h2><p style="color:var(--muted);">No schedule loaded for the active event.</p></section>',
+      layoutClass: 'dashboard-full'
+    }));
+  }
+
+  // Load all sector plans + scenery + docs in bulk
+  const eventId = activeEventId || null;
+  const plans = await prisma.sectorPlan.findMany({ where: { eventId } });
+  const planByWf = {};
+  plans.forEach(p => { planByWf[p.wf] = p; });
+
+  const allIcaos = [...new Set(rows.flatMap(r => [r.from, r.to]))];
+  const sceneryRows = await prisma.airportScenery.findMany({
+    where: { icao: { in: allIcaos }, approved: true },
+    select: { icao: true }
+  });
+  const scenerySet = new Set(sceneryRows.map(s => s.icao));
+  const docRows = await prisma.airportDocument.findMany({
+    where: { icao: { in: allIcaos } },
+    select: { icao: true }
+  });
+  const docSet = new Set(docRows.map(d => d.icao));
+
+  const FLOW_LABELS = { 'NONE': 'No Restrictions', 'BOOKING_REQUIRED': 'Booking Required', 'TIME_SLOT_REQUIRED': 'Time Slot Required' };
+  const FLOW_TYPE_MAP = { 'BOOKING_REQUIRED': 'BOOKING_ONLY', 'TIME_SLOT_REQUIRED': 'SLOTTED', 'NONE': 'NONE' };
+  const FLOW_TYPE_REV = { 'BOOKING_ONLY': 'BOOKING_REQUIRED', 'SLOTTED': 'TIME_SLOT_REQUIRED', 'NONE': 'NONE' };
+
+  // Load current live DepFlow data for comparison
+  const liveFlows = await prisma.depFlow.findMany({ where: { eventId: eventId || 0 } });
+  const liveFlowByKey = {};
+  liveFlows.forEach(f => { liveFlowByKey[f.sector] = f; });
+
+  const sectorRows = rows.map(r => {
+    const plan = planByWf[r.number] || {};
+    const routeComparison = compareRoutes(plan.depRouteSuggestion, plan.arrRouteSuggestion);
+    const routeAgreed = routeComparison.status === 'GREEN';
+    const flowSet = !!plan.depFlowType && (plan.depFlowType !== 'BOOKING_REQUIRED' || (plan.depFlowRate != null && plan.depFlowRate > 0));
+    const depScenery = scenerySet.has(r.from);
+    const arrScenery = scenerySet.has(r.to);
+    const depDocs = docSet.has(r.from);
+    const arrDocs = docSet.has(r.to);
+    const hasSplit = !!(plan.depSplitRoute || plan.arrSplitRoute);
+    const splitAgreed = !!plan.splitAgreed;
+    const agreedRoute = routeAgreed ? (plan.depRouteSuggestion || '').trim() : '';
+    const currentScheduleRoute = (r.atc_route || '').trim();
+    const norm = s => (s || '').toUpperCase().replace(/\s+/g, ' ');
+    const routeSynced = !!(agreedRoute && currentScheduleRoute && norm(currentScheduleRoute) === norm(agreedRoute));
+    const routeChanged = !!(agreedRoute && currentScheduleRoute && norm(currentScheduleRoute) !== norm(agreedRoute));
+
+    // Secondary route sync check
+    const agreedRoute2 = (plan.splitAgreed && plan.depSplitRoute) ? (plan.depSplitRoute || '').trim() : '';
+    const currentScheduleRoute2 = (r.atc_route2 || '').trim();
+    const route2Synced = norm(currentScheduleRoute2) === norm(agreedRoute2);
+    const route2Changed = !route2Synced && !!(agreedRoute2 || currentScheduleRoute2);
+
+    // Flow sync check: compare SectorPlan flow vs live DepFlow
+    const sectorKey = r.from + '-' + r.to;
+    const liveFlow = liveFlowByKey[sectorKey];
+    const plannedFlowType = FLOW_TYPE_MAP[plan.depFlowType] || 'NONE';
+    const plannedFlowRate = plan.depFlowType === 'NONE' ? 0 : (plan.depFlowRate || 0);
+    const liveFlowType = (liveFlow?.flowtype || 'NONE').toUpperCase();
+    const liveFlowRate = liveFlow?.rate || 0;
+    const flowSynced = flowSet && liveFlow && plannedFlowType === liveFlowType && plannedFlowRate === liveFlowRate;
+    const flowChanged = flowSet && liveFlow && (plannedFlowType !== liveFlowType || plannedFlowRate !== liveFlowRate);
+
+    const outOfSync = routeChanged || flowChanged || route2Changed;
+    const finalised = routeSynced && flowSynced && route2Synced;
+
+    return { wf: r.number, from: r.from, to: r.to, date: r.date_utc || '',
+      routeAgreed, flowSet, depScenery, arrScenery, depDocs, arrDocs,
+      hasSplit, splitAgreed, finalised, routeSynced, outOfSync, agreedRoute,
+      scheduleRoute: currentScheduleRoute,
+      routeChanged, flowChanged,
+      flowType: plan.depFlowType || '', flowRate: plan.depFlowRate,
+      flowLabel: FLOW_LABELS[plan.depFlowType] || plan.depFlowType || '—',
+      liveFlowType: FLOW_TYPE_REV[liveFlowType] || liveFlowType,
+      liveFlowRate };
+  });
+
+  const totalSectors = sectorRows.length;
+  const agreedCount = sectorRows.filter(s => s.routeAgreed).length;
+  const flowCount = sectorRows.filter(s => s.flowSet).length;
+  const finalisedCount = sectorRows.filter(s => s.finalised).length;
+
+  const outOfSyncCount = sectorRows.filter(s => s.outOfSync).length;
+
+  const tick = '<span style="color:var(--success);font-weight:700;">&#10003;</span>';
+  const cross = '<span style="color:var(--muted);">—</span>';
+  const warn = '<span style="color:var(--warning);font-weight:700;">&#9888;</span>';
+
+  const tableRows = sectorRows.map(s => {
+    const readyScore = (s.routeAgreed ? 1 : 0) + (s.flowSet ? 1 : 0) + (s.depScenery ? 1 : 0) + (s.arrScenery ? 1 : 0);
+    const readyMax = 4;
+    const readyPct = Math.round((readyScore / readyMax) * 100);
+    const readyColor = readyPct === 100 ? 'var(--success)' : readyPct >= 50 ? 'var(--warning)' : 'var(--danger)';
+    let finBtn;
+    if (s.routeAgreed && s.flowSet) {
+      if (s.routeSynced) {
+        finBtn = '<span style="font-size:10px;color:var(--success);font-weight:700;">&#10003; Synced</span>';
+      } else if (s.outOfSync) {
+        finBtn = '<button type="button" class="action-btn sp-finalise-btn" data-wf="' + s.wf + '" data-route="' + (s.agreedRoute || '').replace(/"/g, '&quot;') + '" style="font-size:10px;padding:3px 8px;background:rgba(245,158,11,0.15);color:var(--warning);border:1px solid rgba(245,158,11,0.4);">&#9888; Re-sync</button>';
+      } else {
+        finBtn = '<button type="button" class="action-btn sp-finalise-btn" data-wf="' + s.wf + '" data-route="' + (s.agreedRoute || '').replace(/"/g, '&quot;') + '" style="font-size:10px;padding:3px 8px;background:rgba(74,222,128,0.15);color:var(--success);border:1px solid rgba(74,222,128,0.4);">Finalise</button>';
+      }
+    } else {
+      finBtn = '<span style="font-size:10px;color:var(--muted);">Not ready</span>';
+    }
+    const syncRowStyle = s.outOfSync ? ' style="background:rgba(245,158,11,0.08);border-left:3px solid var(--warning);"' : '';
+    let diffRow = '';
+    if (s.outOfSync) {
+      const esc = t => (t || '').replace(/</g, '&lt;');
+      let diffHtml = '<div style="font-size:10px;font-weight:700;color:var(--warning);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:6px;">⚠ Changed since last sync</div>';
+      if (s.routeChanged) {
+        diffHtml += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:11px;margin-bottom:6px;">'
+          + '<div style="padding:6px 8px;background:var(--panel2);border-radius:4px;border:1px solid var(--border);">'
+          + '<div style="font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:3px;">Route in schedule</div>'
+          + '<div style="font-family:monospace;color:var(--danger);word-break:break-word;">' + esc(s.scheduleRoute) + '</div></div>'
+          + '<div style="padding:6px 8px;background:var(--panel2);border-radius:4px;border:1px solid var(--border);">'
+          + '<div style="font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:3px;">New agreed route</div>'
+          + '<div style="font-family:monospace;color:var(--success);word-break:break-word;">' + esc(s.agreedRoute) + '</div></div>'
+          + '</div>';
+      }
+      if (s.flowChanged) {
+        diffHtml += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:11px;">'
+          + '<div style="padding:6px 8px;background:var(--panel2);border-radius:4px;border:1px solid var(--border);">'
+          + '<div style="font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:3px;">Live flow</div>'
+          + '<div style="color:var(--danger);">' + (FLOW_LABELS[s.liveFlowType] || s.liveFlowType || 'None') + (s.liveFlowRate ? ' · ' + s.liveFlowRate + ' planes/hr' : '') + '</div></div>'
+          + '<div style="padding:6px 8px;background:var(--panel2);border-radius:4px;border:1px solid var(--border);">'
+          + '<div style="font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:3px;">Planned flow</div>'
+          + '<div style="color:var(--success);">' + (s.flowLabel || 'None') + (s.flowRate ? ' · ' + s.flowRate + ' planes/hr' : '') + '</div></div>'
+          + '</div>';
+      }
+      diffRow = '<tr style="background:rgba(245,158,11,0.04);"><td colspan="9" style="padding:6px 12px 10px;border-bottom:2px solid var(--warning);">'
+        + diffHtml + '</td></tr>';
+    }
+    return `<tr${syncRowStyle}>
+      <td style="font-weight:700;"><a href="/sector-planning/${encodeURIComponent(s.wf)}" style="color:var(--accent);text-decoration:none;">${s.wf}</a></td>
+      <td style="font-family:monospace;font-size:12px;">${s.from} → ${s.to}</td>
+      <td style="font-size:11px;">${s.date}</td>
+      <td style="text-align:center;">${s.routeAgreed ? tick : cross}</td>
+      <td style="text-align:center;">${s.flowSet ? tick : cross}</td>
+      <td style="text-align:center;">${s.depScenery ? tick : cross}</td>
+      <td style="text-align:center;">${s.arrScenery ? tick : cross}</td>
+      <td style="text-align:center;">
+        <div style="width:48px;height:6px;background:var(--panel2);border-radius:3px;overflow:hidden;display:inline-block;vertical-align:middle;">
+          <div style="width:${readyPct}%;height:100%;background:${readyColor};border-radius:3px;"></div>
+        </div>
+        <span style="font-size:10px;color:${readyColor};margin-left:4px;">${readyPct}%</span>
+      </td>
+      <td style="text-align:center;">${finBtn}</td>
+    </tr>${diffRow}`;
+  }).join('');
+
+  const content = `
+    <style>
+      .sp-admin-table { width:100%; border-collapse:collapse; font-size:12px; }
+      .sp-admin-table th { text-align:left; font-size:10px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:0.05em; padding:6px 8px; border-bottom:2px solid var(--border); white-space:nowrap; }
+      .sp-admin-table td { padding:8px 8px; border-bottom:1px solid var(--border); vertical-align:middle; }
+      .sp-admin-table tr:hover td { background:var(--panel2); }
+      .sp-admin-table th:nth-child(n+4), .sp-admin-table td:nth-child(n+4) { text-align:center; }
+    </style>
+
+    <section class="card card-full">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px;">
+        <div>
+          <h2 style="margin:0 0 4px;">Sector Planning — Admin Overview</h2>
+          <p style="color:var(--muted);margin:0;">All ${totalSectors} sectors for the active event. Route agreed: ${agreedCount}/${totalSectors} · Flow set: ${flowCount}/${totalSectors} · Finalised: ${finalisedCount}/${totalSectors}${outOfSyncCount > 0 ? ' · <span style="color:var(--warning);font-weight:700;">⚠ ' + outOfSyncCount + ' out of sync</span>' : ''}</p>
+        </div>
+        <a href="/sector-planning" style="font-size:11px;color:var(--accent);text-decoration:none;">← Back to my sectors</a>
+      </div>
+
+      <div style="overflow-x:auto;">
+        <table class="sp-admin-table">
+          <thead>
+            <tr>
+              <th>Sector</th>
+              <th>Route</th>
+              <th>Date</th>
+              <th>Route Agreed</th>
+              <th>Flow Set</th>
+              <th>Dep Scenery</th>
+              <th>Arr Scenery</th>
+              <th>Readiness</th>
+              <th>Finalise</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${tableRows}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <script>
+      document.querySelectorAll('.sp-finalise-btn').forEach(function(btn) {
+        btn.addEventListener('click', async function() {
+          var wf = btn.dataset.wf;
+          var route = btn.dataset.route;
+          if (!route) return;
+          btn.disabled = true;
+          btn.textContent = 'Syncing...';
+          try {
+            var res = await fetch('/admin/api/sector-plan/finalise', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ wf: wf })
+            });
+            var data = await res.json();
+            if (data.ok) {
+              btn.outerHTML = '<span style="font-size:10px;color:var(--success);font-weight:700;">&#10003; Synced</span>';
+            } else {
+              btn.textContent = data.error || 'Failed';
+              btn.style.color = 'var(--danger)';
+              btn.disabled = false;
+            }
+          } catch (e) {
+            btn.textContent = 'Error';
+            btn.style.color = 'var(--danger)';
+            btn.disabled = false;
+          }
+        });
+      });
+    </script>
+  `;
+
+  res.send(renderLayout({
+    title: 'Sector Planning — Admin Overview',
+    user, isAdmin,
+    content,
+    layoutClass: 'dashboard-full'
+  }));
+});
+
+// Finalise: sync agreed route from SectorPlan → WfScheduleRow.atcRoute
+app.post('/admin/api/sector-plan/finalise', requireAdmin, async (req, res) => {
+  try {
+    const wf = String(req.body?.wf || '').toUpperCase();
+    const sched = (adminSheetCache || []).find(r => r?.number === wf);
+    if (!sched) return res.status(404).json({ error: 'Sector not found' });
+
+    const eventId = activeEventId || null;
+    const plan = await prisma.sectorPlan.findFirst({ where: { wf, eventId } });
+    if (!plan) return res.status(404).json({ error: 'No sector plan found' });
+
+    const comparison = compareRoutes(plan.depRouteSuggestion, plan.arrRouteSuggestion);
+    if (comparison.status !== 'GREEN') return res.status(400).json({ error: 'Route not agreed — both sides must propose the same route first' });
+
+    const depFlowConfirmed = !!plan.depFlowType && (plan.depFlowType !== 'BOOKING_REQUIRED' || (plan.depFlowRate != null && plan.depFlowRate > 0));
+    if (!depFlowConfirmed) return res.status(400).json({ error: 'Flow restriction not set' });
+
+    const agreedRoute = (plan.depRouteSuggestion || '').trim();
+    if (!agreedRoute) return res.status(400).json({ error: 'Agreed route is empty' });
+
+    const splitRoute = (plan.splitAgreed && plan.depSplitRoute) ? plan.depSplitRoute.trim() : '';
+
+    // Sync route to schedule
+    await prisma.wfScheduleRow.update({
+      where: { eventId_number: { eventId, number: wf } },
+      data: { atcRoute: agreedRoute, atcRoute2: splitRoute }
+    });
+
+    // Sync flow type + rate to DepFlow table
+    const sectorKey = sched.from + '-' + sched.to;
+    const flowTypeMap = { 'BOOKING_REQUIRED': 'BOOKING_ONLY', 'TIME_SLOT_REQUIRED': 'SLOTTED', 'NONE': 'NONE' };
+    const depFlowType = flowTypeMap[plan.depFlowType] || 'NONE';
+    const depFlowRate = (plan.depFlowType === 'NONE') ? 0 : (plan.depFlowRate || 0);
+    await prisma.depFlow.upsert({
+      where: { eventId_sector: { eventId: eventId || 0, sector: sectorKey } },
+      update: { rate: depFlowRate, flowtype: depFlowType },
+      create: { eventId: eventId || 0, sector: sectorKey, rate: depFlowRate, flowtype: depFlowType }
+    });
+
+    // Reload schedule + flow caches
+    await loadScheduleFromDb(eventId);
+    await loadDepFlowsFromDb();
+    clearFirAnalysisCache();
+
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // ============================================================
@@ -28883,6 +29325,7 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
     routeComparison,
     checklist,
     scheduleRoute: sched.atcRoute || '',
+    scheduleRoute2: sched.atc_route2 || '',
     issues: issuesWithNames
   };
 
@@ -29720,31 +30163,37 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
       // Wire dep route save
       var depBtn = document.getElementById('spDepRouteSave');
       if (depBtn) depBtn.addEventListener('click', async function() {
-        var val = document.getElementById('spDepRoute').value;
+        var ta = document.getElementById('spDepRoute');
+        var val = ta.value;
         var msg = document.getElementById('spDepRouteMsg');
         var res = await spPostJson('/api/sector-plan/' + encodeURIComponent(window.SP.wf) + '/route', { side: 'DEP', route: val });
         if (res.ok) {
-          window.SP.depRouteSuggestion = val;
+          var cleaned = res.data.cleanedRoute || val;
+          if (res.data.sidStarStripped) ta.value = cleaned;
+          window.SP.depRouteSuggestion = cleaned;
           window.SP.routeComparison = res.data.routeComparison;
           spRenderComparison();
           if (typeof spRefreshAgreePrompts === 'function') spRefreshAgreePrompts();
           if (window.SP._spMap) window.SP._spMap.drawProposedRoutes();
-          spSetMsg(msg, 'Saved', true);
+          spSetMsg(msg, res.data.sidStarStripped ? 'Saved — SID/STAR removed from route' : 'Saved', true);
         } else spSetMsg(msg, res.data.error || 'Failed', false);
       });
 
       var arrBtn = document.getElementById('spArrRouteSave');
       if (arrBtn) arrBtn.addEventListener('click', async function() {
-        var val = document.getElementById('spArrRoute').value;
+        var ta = document.getElementById('spArrRoute');
+        var val = ta.value;
         var msg = document.getElementById('spArrRouteMsg');
         var res = await spPostJson('/api/sector-plan/' + encodeURIComponent(window.SP.wf) + '/route', { side: 'ARR', route: val });
         if (res.ok) {
-          window.SP.arrRouteSuggestion = val;
+          var cleaned = res.data.cleanedRoute || val;
+          if (res.data.sidStarStripped) ta.value = cleaned;
+          window.SP.arrRouteSuggestion = cleaned;
           window.SP.routeComparison = res.data.routeComparison;
           spRenderComparison();
           spRefreshAgreePrompts();
           if (window.SP._spMap) window.SP._spMap.drawProposedRoutes();
-          spSetMsg(msg, 'Saved', true);
+          spSetMsg(msg, res.data.sidStarStripped ? 'Saved — SID/STAR removed from route' : 'Saved', true);
         } else spSetMsg(msg, res.data.error || 'Failed', false);
       });
 
@@ -29768,13 +30217,14 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
           var res = await spPostJson('/api/sector-plan/' + encodeURIComponent(window.SP.wf) + '/route', { side: side, route: other });
           btn.disabled = false;
           if (res.ok) {
-            document.getElementById(taId).value = other;
-            window.SP[side === 'DEP' ? 'depRouteSuggestion' : 'arrRouteSuggestion'] = other;
+            var cleaned = res.data.cleanedRoute || other;
+            document.getElementById(taId).value = cleaned;
+            window.SP[side === 'DEP' ? 'depRouteSuggestion' : 'arrRouteSuggestion'] = cleaned;
             window.SP.routeComparison = res.data.routeComparison;
             spRenderComparison();
             spRefreshAgreePrompts();
             if (window.SP._spMap) window.SP._spMap.drawProposedRoutes();
-            spSetMsg(document.getElementById(msgId), 'Saved — route agreed', true);
+            spSetMsg(document.getElementById(msgId), res.data.sidStarStripped ? 'Saved — SID/STAR removed' : 'Saved — route agreed', true);
           } else {
             spSetMsg(document.getElementById(msgId), res.data.error || 'Failed', false);
           }
@@ -30915,12 +31365,14 @@ app.post('/api/sector-plan/:wf/route', requireLogin, async (req, res) => {
     if (!(await canEditPlanSide(cid, side, sched.from, sched.to))) return res.status(403).json({ error: 'No edit access to this side' });
 
     const plan = await getOrCreateSectorPlan(wf, sched.from, sched.to);
+    const cleaned = stripSidStar(route, sched.from, sched.to);
+    const stripped = !!(route && cleaned !== route.trim());
     const data = side === 'DEP'
-      ? { depRouteSuggestion: route || null, depUpdatedBy: cid, depUpdatedAt: new Date() }
-      : { arrRouteSuggestion: route || null, arrUpdatedBy: cid, arrUpdatedAt: new Date() };
+      ? { depRouteSuggestion: cleaned || null, depUpdatedBy: cid, depUpdatedAt: new Date() }
+      : { arrRouteSuggestion: cleaned || null, arrUpdatedBy: cid, arrUpdatedAt: new Date() };
     const updated = await prisma.sectorPlan.update({ where: { id: plan.id }, data });
     const cmp = compareRoutes(updated.depRouteSuggestion, updated.arrRouteSuggestion);
-    res.json({ success: true, routeComparison: cmp });
+    res.json({ success: true, routeComparison: cmp, cleanedRoute: cleaned, sidStarStripped: stripped });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -31832,7 +32284,8 @@ app.get('/airspace/by-sector', requirePageEnabled('airspace'), async (req, res) 
         actionsEl.innerHTML = (first.atcRoute && first.atcRoute !== '-')
           ? '<button type="button" class="show-route-btn" data-route="'
               + String(first.atcRoute).replace(/&/g, '&amp;').replace(/"/g, '&quot;')
-              + '" style="font-size:13px;padding:8px 14px;">Show ATC Route</button>'
+              + '" data-route2="' + (first.atcRoute2 && first.atcRoute2 !== '-' ? String(first.atcRoute2).replace(/&/g, '&amp;').replace(/"/g, '&quot;') : '') + '"'
+              + ' style="font-size:13px;padding:8px 14px;">Show ATC Route</button>'
           : '';
 
         // Map: full route + highlighted transit FIRs, each FIR in its own colour
@@ -31916,12 +32369,25 @@ app.get('/airspace/by-sector', requirePageEnabled('airspace'), async (req, res) 
         var closeActionBtn = document.getElementById('routeModalCloseAction');
         var backdrop = modal.querySelector('.route-modal-backdrop');
 
-        function open(route) { body.textContent = route; modal.hidden = false; }
+        function open(route, route2) {
+          body.textContent = '';
+          if (route) { body.textContent = route; }
+          if (route2) {
+            var sep = document.createElement('div');
+            sep.style.cssText = 'margin:12px 0 8px;padding-top:10px;border-top:1px solid var(--border);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted);font-family:inherit;';
+            sep.textContent = 'Secondary Route';
+            body.appendChild(sep);
+            var r2 = document.createElement('span');
+            r2.textContent = route2;
+            body.appendChild(r2);
+          }
+          modal.hidden = false;
+        }
         function close() { modal.hidden = true; }
 
         document.addEventListener('click', function(e) {
           var btn = e.target.closest('.show-route-btn');
-          if (btn) open(btn.getAttribute('data-route') || '');
+          if (btn) open(btn.getAttribute('data-route') || '', btn.getAttribute('data-route2') || '');
         });
         closeBtn.addEventListener('click', close);
         if (closeActionBtn) closeActionBtn.addEventListener('click', close);
@@ -33423,7 +33889,7 @@ app.get('/airspace/by-area', requirePageEnabled('airspace'), async (req, res) =>
               + '<td class=""><span class="flow-badge ' + flowClass + '">' + flowLabel + '</span></td>'
               + '<td></td>'
               + '<td>' + (l.atcRoute && l.atcRoute !== '-'
-                  ? '<button type="button" class="show-route-btn" data-route="' + String(l.atcRoute).replace(/&/g, '&amp;').replace(/"/g, '&quot;') + '">Show Route</button>'
+                  ? '<button type="button" class="show-route-btn" data-route="' + String(l.atcRoute).replace(/&/g, '&amp;').replace(/"/g, '&quot;') + '" data-route2="' + (l.atcRoute2 && l.atcRoute2 !== '-' ? String(l.atcRoute2).replace(/&/g, '&amp;').replace(/"/g, '&quot;') : '') + '">Show Route</button>'
                   : '<span style="color:var(--muted);">—</span>') + '</td>'
               + '</tr>';
           }).join('');
@@ -33549,7 +34015,7 @@ app.get('/airspace/by-area', requirePageEnabled('airspace'), async (req, res) =>
           var wfColor = colorBySectorKey[key] || 'var(--accent)';
           var firCount = s.firLegs.length;
           var routeHtml = (l.atcRoute && l.atcRoute !== '-')
-            ? '<button type="button" class="show-route-btn" data-route="' + String(l.atcRoute).replace(/&/g, '&amp;').replace(/"/g, '&quot;') + '">Show Route</button>'
+            ? '<button type="button" class="show-route-btn" data-route="' + String(l.atcRoute).replace(/&/g, '&amp;').replace(/"/g, '&quot;') + '" data-route2="' + (l.atcRoute2 && l.atcRoute2 !== '-' ? String(l.atcRoute2).replace(/&/g, '&amp;').replace(/"/g, '&quot;') : '') + '">Show Route</button>'
             : '<span style="color:var(--muted);">—</span>';
           // Sector-level cells (WF / From / To / Date / ATC Route) render once on
           // the first FIR row with rowspan; later rows carry only FIR-specific
@@ -33900,6 +34366,12 @@ app.get('/airspace/by-area', requirePageEnabled('airspace'), async (req, res) =>
                 + '<div style="font-size:11px;font-family:monospace;color:#cbd5e1;word-break:break-all;line-height:1.4;">' + leg.atcRoute + '</div>'
                 + '</div>';
             }
+            if (leg.atcRoute2 && leg.atcRoute2 !== '-') {
+              html += '<div style="margin-top:6px;">'
+                + '<div style="font-size:11px;color:#94a3b8;margin-bottom:3px;">Secondary ATC Route</div>'
+                + '<div style="font-size:11px;font-family:monospace;color:#cbd5e1;word-break:break-all;line-height:1.4;">' + leg.atcRoute2 + '</div>'
+                + '</div>';
+            }
             html += '</div>';
             return html;
           }
@@ -34013,12 +34485,27 @@ app.get('/airspace/by-area', requirePageEnabled('airspace'), async (req, res) =>
       var closeActionBtn = document.getElementById('routeModalCloseAction');
       var backdrop = modal.querySelector('.route-modal-backdrop');
 
-      function open(route) { body.textContent = route; modal.hidden = false; }
+      function open(route, route2) {
+        body.textContent = '';
+        if (route) {
+          body.textContent = route;
+        }
+        if (route2) {
+          var sep = document.createElement('div');
+          sep.style.cssText = 'margin:12px 0 8px;padding-top:10px;border-top:1px solid var(--border);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted);font-family:inherit;';
+          sep.textContent = 'Secondary Route';
+          body.appendChild(sep);
+          var r2 = document.createElement('span');
+          r2.textContent = route2;
+          body.appendChild(r2);
+        }
+        modal.hidden = false;
+      }
       function close() { modal.hidden = true; }
 
       document.addEventListener('click', function(e) {
         var btn = e.target.closest('.show-route-btn');
-        if (btn) { open(btn.getAttribute('data-route') || ''); }
+        if (btn) { open(btn.getAttribute('data-route') || '', btn.getAttribute('data-route2') || ''); }
       });
       closeBtn.addEventListener('click', close);
       if (closeActionBtn) closeActionBtn.addEventListener('click', close);
@@ -34732,6 +35219,7 @@ app.get('/my-slots', requireLogin, requirePageEnabled('my-slots'), (req, res) =>
 
       const wfSector = wfRow?.number || '-';
       const atcRoute = showAtcRoute ? (wfRow?.atc_route || '-') : '-';
+      const atcRoute2 = showAtcRoute ? (wfRow?.atc_route2 || '') : '';
       const callsign = booking.callsign || '';
 
       let connectBy = '—';
@@ -34804,6 +35292,7 @@ app.get('/my-slots', requireLogin, requirePageEnabled('my-slots'), (req, res) =>
         tobt: tobtDisplay,
         connectBy,
         atcRoute,
+        atcRoute2,
         simbriefUrl,
         dateUtc,
         dateDisplay,
@@ -34840,6 +35329,7 @@ app.get('/my-slots', requireLogin, requirePageEnabled('my-slots'), (req, res) =>
                 const routeAttr = hasRoute
                   ? String(r.atcRoute).replace(/&/g, '&amp;').replace(/"/g, '&quot;')
                   : '';
+                const route2Attr = r.atcRoute2 && r.atcRoute2 !== '-' ? String(r.atcRoute2).replace(/&/g, '&amp;').replace(/"/g, '&quot;') : '';
                 return `
                 <tr>
                   <td><button class="sector-details-btn" data-from="${r.from}" data-to="${r.to}" data-wf="${r.wfSector}">${r.wfSector}</button></td>
@@ -34851,7 +35341,7 @@ app.get('/my-slots', requireLogin, requirePageEnabled('my-slots'), (req, res) =>
                     ? `Slotted - <span style="color:#4ade80;font-weight:600;">${r.tobt.replace(':','')}z</span> <span class="tobt-help">?<span class="tobt-tooltip">This is a TOBT (Target Off-Blocks Time).<br>Please connect at least 30 minutes before this time.<br>You should be ready to push at this time.<br><b>The actual push time may differ depending on<br>ramp and airfield congestion.</b></span></span>`
                     : `<span style="color:#4ade80;font-weight:600;">Booking Confirmed</span> <span class="tobt-help">?<span class="tobt-tooltip">You have a booking for this sector. Slots are not required.<br><b>Plan to depart within the Dep Window.</b></span></span>`}</td>
                   ${showAtcRoute ? `<td>${hasRoute
-                    ? `<button type="button" class="show-route-btn" data-route="${routeAttr}">Show Route</button>`
+                    ? `<button type="button" class="show-route-btn" data-route="${routeAttr}" data-route2="${route2Attr}">Show Route</button>`
                     : '<span style="color:var(--muted);">—</span>'}</td>` : ''}
                   <td>
                     <a class="simbrief-btn" href="${r.simbriefUrl}" target="_blank" rel="noopener">
@@ -34941,15 +35431,25 @@ app.get('/my-slots', requireLogin, requirePageEnabled('my-slots'), (req, res) =>
       var closeActionBtn = document.getElementById('routeModalCloseAction');
       var backdrop = modal.querySelector('.route-modal-backdrop');
 
-      function open(route) {
-        body.textContent = route;
+      function open(route, route2) {
+        body.textContent = '';
+        if (route) { body.textContent = route; }
+        if (route2) {
+          var sep = document.createElement('div');
+          sep.style.cssText = 'margin:12px 0 8px;padding-top:10px;border-top:1px solid var(--border);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted);font-family:inherit;';
+          sep.textContent = 'Secondary Route';
+          body.appendChild(sep);
+          var r2 = document.createElement('span');
+          r2.textContent = route2;
+          body.appendChild(r2);
+        }
         modal.hidden = false;
       }
       function close() { modal.hidden = true; }
 
       document.addEventListener('click', function(e) {
         var btn = e.target.closest('.show-route-btn');
-        if (btn) { open(btn.getAttribute('data-route') || ''); return; }
+        if (btn) { open(btn.getAttribute('data-route') || '', btn.getAttribute('data-route2') || ''); return; }
       });
       closeBtn.addEventListener('click', close);
       if (closeActionBtn) closeActionBtn.addEventListener('click', close);

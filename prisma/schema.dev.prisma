@@ -66,17 +66,18 @@ model DepFlow {
 }
 
 model TobtBooking {
-  id           Int      @id @default(autoincrement())
-  slotKey      String
-  cid          Int
-  callsign     String
-  from         String
-  to           String
-  dateUtc      String
-  depTimeUtc   String
-  tobtTimeUtc  String?
-  manual       Boolean  @default(false)
-  createdAt    DateTime @default(now())
+  id            Int      @id @default(autoincrement())
+  slotKey       String
+  cid           Int
+  callsign      String
+  from          String
+  to            String
+  dateUtc       String
+  depTimeUtc    String
+  tobtTimeUtc   String?
+  assignedRoute String   @default("A")
+  manual        Boolean  @default(false)
+  createdAt     DateTime @default(now())
 
   @@unique([cid, slotKey])
 }
@@ -347,6 +348,7 @@ model WfScheduleRow {
   blockTime   String @default("")
   flightTime  String @default("")
   atcRoute    String @default("")
+  atcRoute2   String @default("")
   isWfChallenge Boolean @default(false)
 
   @@unique([eventId, number])
