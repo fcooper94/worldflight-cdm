@@ -193,7 +193,7 @@ await pullTable({
 
 await pullTable({
   table: 'AirportDocument',
-  cols: ['id', 'icao', 'filename', 'uploadedBy', 'uploadedAt'],
+  cols: ['id', 'icao', 'filename', 'uploadedBy', 'uploadedAt', 'eventId'],
   dateCols: ['uploadedAt']
 });
 
@@ -220,6 +220,50 @@ await pullTable({
 await pullTable({
   table: 'WfVisitedAirport',
   cols: ['id', 'icao', 'year', 'eventName']
+});
+
+await pullTable({
+  table: 'SceneryReport',
+  cols: ['id', 'sceneryId', 'reason', 'details', 'reportedBy', 'reportedAt',
+         'resolved', 'resolvedBy', 'resolvedAt'],
+  boolCols: ['resolved'],
+  dateCols: ['reportedAt', 'resolvedAt']
+});
+
+await pullTable({
+  table: 'FirEventAccess',
+  cols: ['id', 'cid', 'scope', 'value', 'createdAt', 'createdBy'],
+  dateCols: ['createdAt']
+});
+
+await pullTable({
+  table: 'SectorPlan',
+  cols: ['id', 'wf', 'fromIcao', 'toIcao', 'eventId', 'depRouteSuggestion',
+         'arrRouteSuggestion', 'depSplitRoute', 'depSplitPct', 'arrSplitRoute', 'arrSplitPct', 'splitAgreed',
+         'depFlowType', 'depFlowReason', 'depFlowRate', 'arrFlowRequest', 'arrFlowReason',
+         'arrFlowRequestedBy', 'arrFlowRequestedAt', 'depUpdatedBy', 'depUpdatedAt',
+         'arrUpdatedBy', 'arrUpdatedAt', 'createdAt', 'updatedAt'],
+  boolCols: ['splitAgreed'],
+  dateCols: ['arrFlowRequestedAt', 'depUpdatedAt', 'arrUpdatedAt', 'createdAt', 'updatedAt']
+});
+
+await pullTable({
+  table: 'SectorPlanIssue',
+  cols: ['id', 'sectorPlanId', 'wf', 'raisedByCid', 'raisedByFir', 'notes',
+         'status', 'resolvedByCid', 'resolvedAt', 'replies', 'createdAt'],
+  dateCols: ['resolvedAt', 'createdAt']
+});
+
+await pullTable({
+  table: 'WfChallengeScore',
+  cols: ['id', 'eventId', 'callsign', 'style', 'speed', 'height', 'createdAt'],
+  dateCols: ['createdAt']
+});
+
+await pullTable({
+  table: 'AdminPermission',
+  cols: ['id', 'cid', 'page', 'createdAt'],
+  dateCols: ['createdAt']
 });
 
 await pullTable({

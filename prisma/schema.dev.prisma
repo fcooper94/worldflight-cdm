@@ -222,9 +222,16 @@ model SectorPlan {
   eventId            Int?
   depRouteSuggestion String?
   arrRouteSuggestion String?
+  depSplitRoute      String?   // second route for traffic split (departure proposal)
+  depSplitPct        Int?      // percentage on primary route (0-100), remainder on split
+  arrSplitRoute      String?   // second route for traffic split (arrival proposal)
+  arrSplitPct        Int?      // percentage on primary route (0-100), remainder on split
+  splitAgreed        Boolean   @default(false)
   depFlowType        String?
+  depFlowReason      String?
   depFlowRate        Int?
   arrFlowRequest     String?
+  arrFlowReason      String?
   arrFlowRequestedBy Int?
   arrFlowRequestedAt DateTime?
   depUpdatedBy       Int?

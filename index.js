@@ -28606,11 +28606,11 @@ app.get('/sector-planning', requirePageEnabled('sector-planning'), async (req, r
     const roleChips = s.roles.map(r => {
       const isDep = r.startsWith('Departure');
       const isArr = r.startsWith('Arrival');
-      const color = isDep ? '#818cf8' : isArr ? '#f472b6' : '#cbd5e1';
-      const bg = isDep ? 'rgba(129,140,248,0.14)' : isArr ? 'rgba(244,114,182,0.14)' : 'rgba(148,163,184,0.18)';
+      const color = isDep ? '#818cf8' : isArr ? '#f472b6' : 'var(--muted)';
+      const bg = isDep ? 'rgba(129,140,248,0.14)' : isArr ? 'rgba(244,114,182,0.14)' : 'rgba(148,163,184,0.12)';
       return `<span style="display:inline-flex;align-items:center;padding:2px 7px;background:${bg};color:${color};border:1px solid ${color};border-radius:4px;font-size:10px;font-weight:700;letter-spacing:0.04em;">${r}</span>`;
     }).join('');
-    return `<a href="/sector-planning/${encodeURIComponent(s.wf)}" class="sp-pill" style="display:flex;flex-direction:column;gap:8px;padding:14px 16px;background:rgba(255,255,255,0.025);border:1px solid var(--border);border-radius:10px;text-decoration:none;color:var(--text);min-width:260px;flex:1 1 260px;max-width:340px;transition:border-color .15s, transform .15s;">
+    return `<a href="/sector-planning/${encodeURIComponent(s.wf)}" class="sp-pill" style="display:flex;flex-direction:column;gap:8px;padding:14px 16px;background:var(--panel);border:1px solid var(--border);border-radius:10px;text-decoration:none;color:var(--text);min-width:260px;flex:1 1 260px;max-width:340px;transition:border-color .15s, transform .15s;">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
         <span style="font-weight:800;font-size:15px;color:var(--accent);">${s.wf}</span>
         <span style="font-size:11px;color:var(--muted);">${s.date || ''}</span>
@@ -28648,7 +28648,7 @@ app.get('/sector-planning', requirePageEnabled('sector-planning'), async (req, r
       ` : ''}
 
       ${owned.size > 0 ? `
-        <div style="margin-bottom:18px;padding:10px 12px;background:rgba(56,189,248,0.06);border:1px solid rgba(56,189,248,0.25);border-radius:8px;">
+        <div style="margin-bottom:18px;padding:10px 12px;background:var(--panel2);border:1px solid var(--border);border-radius:8px;">
           <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;">Your FIR Access</div>
           <div style="display:flex;flex-wrap:wrap;gap:4px;">${grantsBadgesHtml}</div>
         </div>
@@ -28850,6 +28850,7 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
     depFlowSet: depFlowConfirmed,
     depFlowType: plan.depFlowType || null,
     depFlowRate: plan.depFlowRate != null ? plan.depFlowRate : null,
+    depFlowReason: plan.depFlowReason || null,
     scenery: { dep: scenery.some(s => s.icao === fromIcao), arr: scenery.some(s => s.icao === toIcao) },
     docs:    { dep: docs.some(d => d.icao === fromIcao), arr: docs.some(d => d.icao === toIcao) }
   };
@@ -28868,9 +28869,16 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
     userEnrouteFirs,
     depRouteSuggestion: plan.depRouteSuggestion || '',
     arrRouteSuggestion: plan.arrRouteSuggestion || '',
+    depSplitRoute: plan.depSplitRoute || '',
+    depSplitPct: plan.depSplitPct != null ? plan.depSplitPct : null,
+    arrSplitRoute: plan.arrSplitRoute || '',
+    arrSplitPct: plan.arrSplitPct != null ? plan.arrSplitPct : null,
+    splitAgreed: !!plan.splitAgreed,
     depFlowType: plan.depFlowType || '',
     depFlowRate: plan.depFlowRate || null,
+    depFlowReason: plan.depFlowReason || '',
     arrFlowRequest: plan.arrFlowRequest || '',
+    arrFlowReason: plan.arrFlowReason || '',
     sectorFirLegs,
     routeComparison,
     checklist,
@@ -28920,12 +28928,12 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
     <style>
       #spDetailWrap { display:flex; flex-direction:column; gap:10px; }
       .sp-detail-grid { display:grid; grid-template-columns: 1fr; gap:10px; }
-      .sp-map-card { position:relative; height:260px; border-radius:10px; border:1px solid var(--border); background:#0b1220; overflow:hidden; padding:0 !important; }
+      .sp-map-card { position:relative; height:260px; border-radius:10px; border:1px solid var(--border); background:var(--panel2); overflow:hidden; padding:0 !important; }
       .sp-map-card #spMap { width:100%; height:100%; }
       .sp-sides { display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
       @media (max-width: 900px) { .sp-sides { grid-template-columns: 1fr; } }
       .sp-side {
-        background: rgba(255,255,255,0.02); border:1px solid var(--border);
+        background: var(--panel); border:1px solid var(--border);
         border-radius:10px; padding:12px;
         display: flex; flex-direction: column;
       }
@@ -28938,7 +28946,7 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
       .sp-side-label { font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px; }
       .sp-textarea {
         width:100%; box-sizing:border-box; padding:7px 10px;
-        background:#0b1220; border:1px solid var(--border); border-radius:6px;
+        background:var(--panel2); border:1px solid var(--border); border-radius:6px;
         color:var(--text); font-family: monospace; font-size:12px; resize:vertical;
         min-height: 60px;
       }
@@ -28947,52 +28955,73 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
       .sp-flow-options { display:flex; flex-wrap:wrap; gap:6px; }
       .sp-flow-option {
         padding:5px 12px; font-size:12px; font-weight:600;
-        background: rgba(255,255,255,0.06); color: var(--text);
+        background: var(--panel2); color: var(--text);
         border:1px solid var(--border);
         border-radius:6px; cursor:pointer; transition: all .12s;
       }
       .sp-flow-option:hover:not(:disabled):not(.disabled) { border-color:#818cf8; color:#a5b4fc; background: rgba(129,140,248,0.10); }
       .sp-flow-option.active { background:#818cf8; color:#0f172a; border-color:#818cf8; font-weight:700; }
       .sp-flow-option:disabled, .sp-flow-option.disabled { opacity:0.45; cursor:not-allowed; color: var(--muted); }
+      .sp-split-slider-wrap { display:flex; align-items:center; gap:10px; margin-bottom:8px; }
+      .sp-split-slider-wrap .sp-split-label { font-size:12px; font-weight:700; min-width:70px; text-align:center; }
+      .sp-split-slider-wrap .sp-split-label-a { color:#818cf8; }
+      .sp-split-slider-wrap .sp-split-label-b { color:#f472b6; }
+      .sp-split-slider {
+        -webkit-appearance:none; appearance:none; flex:1; height:6px;
+        background: linear-gradient(to right, rgba(129,140,248,0.4), rgba(244,114,182,0.4));
+        border-radius:3px; outline:none; cursor:pointer;
+      }
+      .sp-split-slider:disabled { opacity:0.45; cursor:not-allowed; }
+      .sp-split-slider::-webkit-slider-thumb {
+        -webkit-appearance:none; appearance:none; width:18px; height:18px;
+        background:#818cf8; border:2px solid var(--bg0); border-radius:50%; cursor:pointer;
+        box-shadow: 0 0 4px rgba(129,140,248,0.5);
+      }
+      .sp-split-slider::-moz-range-thumb {
+        width:18px; height:18px; background:#818cf8; border:2px solid #0f172a;
+        border-radius:50%; cursor:pointer; box-shadow: 0 0 4px rgba(129,140,248,0.5);
+      }
+      .sp-split-slider:disabled::-webkit-slider-thumb { background:var(--muted); cursor:not-allowed; box-shadow:none; }
+      .sp-split-slider:disabled::-moz-range-thumb { background:var(--muted); cursor:not-allowed; box-shadow:none; }
       .sp-comparison {
         margin-top:8px; padding:10px 12px;
         border-radius:8px; border:1px solid var(--border);
       }
-      .sp-cmp-empty   { background: rgba(255,255,255,0.02); }
-      .sp-cmp-partial { background: rgba(148,163,184,0.06); border-color: rgba(148,163,184,0.4); }
-      .sp-cmp-green   { background: rgba(74,222,128,0.08); border-color: rgba(74,222,128,0.5); }
-      .sp-cmp-amber   { background: rgba(245,158,11,0.08); border-color: rgba(245,158,11,0.5); }
-      .sp-cmp-red     { background: rgba(239,68,68,0.08);  border-color: rgba(239,68,68,0.5); }
+      .sp-cmp-empty   { background: var(--panel2); }
+      .sp-cmp-partial { background: var(--panel2); border-color: var(--muted2); }
+      .sp-cmp-green   { background: rgba(74,222,128,0.08); border-color: var(--success); }
+      .sp-cmp-amber   { background: rgba(245,158,11,0.08); border-color: var(--warning); }
+      .sp-cmp-red     { background: rgba(239,68,68,0.08);  border-color: var(--danger); }
       .sp-cmp-status { display:inline-flex;align-items:center;gap:6px;font-weight:700;font-size:13px; }
-      .sp-cmp-pill { padding:2px 8px;border-radius:999px;font-size:10px;letter-spacing:0.04em;text-transform:uppercase; }
-      .sp-token { display:inline-block;font-family:monospace;font-size:11px;padding:1px 5px;background:rgba(255,255,255,0.06);border-radius:3px;margin:1px; }
-      .sp-token.dep-only { background:rgba(129,140,248,0.18); color:#a5b4fc; }
-      .sp-token.arr-only { background:rgba(244,114,182,0.18); color:#fbcfe8; }
-      .sp-token.shared   { background:rgba(74,222,128,0.16); color:#86efac; }
-      .sp-msg-ok    { color:#4ade80; font-size:12px; }
-      .sp-msg-err   { color:#f87171; font-size:12px; }
+      .sp-cmp-pill { padding:2px 8px;border-radius:999px;font-size:10px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase; }
+      .sp-token { display:inline-block;font-family:monospace;font-size:11px;padding:1px 5px;background:var(--panel2);border:1px solid var(--border);border-radius:3px;margin:1px; }
+      .sp-token.dep-only { background:rgba(129,140,248,0.18); color:#6366f1; border-color:rgba(129,140,248,0.4); }
+      .sp-token.arr-only { background:rgba(244,114,182,0.18); color:#ec4899; border-color:rgba(244,114,182,0.4); }
+      .sp-token.shared   { background:rgba(74,222,128,0.16); color:var(--success); border-color:rgba(74,222,128,0.4); }
+      .sp-msg-ok    { color:var(--success); font-size:12px; }
+      .sp-msg-err   { color:var(--danger); font-size:12px; }
       .sp-checklist { display:grid; grid-template-columns: repeat(auto-fit, minmax(220px,1fr)); gap:8px; }
       .sp-check {
         display:flex;align-items:center;gap:8px;padding:8px 10px;
-        background:rgba(255,255,255,0.02); border:1px solid var(--border); border-radius:8px;
+        background:var(--panel); border:1px solid var(--border); border-radius:8px;
       }
-      .sp-check.done { border-color: rgba(74,222,128,0.5); background: rgba(74,222,128,0.06); }
+      .sp-check.done { border-color: var(--success); background: rgba(74,222,128,0.06); }
       .sp-check-icon {
         flex:0 0 auto; width:22px; height:22px; border-radius:50%;
         display:inline-flex;align-items:center;justify-content:center;
-        background: rgba(255,255,255,0.05); color:var(--muted); font-weight:700; font-size:12px;
+        background: var(--panel2); color:var(--muted); font-weight:700; font-size:12px;
       }
-      .sp-check.done .sp-check-icon { background: rgba(74,222,128,0.2); color:#4ade80; }
-      .sp-check.missing-required { border-color: rgba(239,68,68,0.45); background: rgba(239,68,68,0.06); }
-      .sp-check.missing-required .sp-check-icon { background: rgba(239,68,68,0.18); color:#f87171; }
+      .sp-check.done .sp-check-icon { background: rgba(74,222,128,0.2); color:var(--success); }
+      .sp-check.missing-required { border-color: var(--danger); background: rgba(239,68,68,0.06); }
+      .sp-check.missing-required .sp-check-icon { background: rgba(239,68,68,0.18); color:var(--danger); }
       .sp-check-body { flex:1; min-width:0; }
       .sp-check-title { font-size:12px; font-weight:600; display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
       .sp-check-tag {
         font-size:9px; font-weight:700; letter-spacing:0.05em; text-transform:uppercase;
         padding:1px 6px; border-radius:4px;
       }
-      .sp-check-tag.required    { background: rgba(239,68,68,0.16); color:#f87171; border:1px solid rgba(239,68,68,0.35); }
-      .sp-check-tag.recommended { background: rgba(96,165,250,0.14); color:#60a5fa; border:1px solid rgba(96,165,250,0.35); }
+      .sp-check-tag.required    { background: rgba(239,68,68,0.16); color:var(--danger); border:1px solid rgba(239,68,68,0.35); }
+      .sp-check-tag.recommended { background: rgba(96,165,250,0.14); color:var(--accent); border:1px solid rgba(96,165,250,0.35); }
       .sp-check.done .sp-check-tag { display: none; }
       .sp-textarea-wrap { position: relative; }
       .sp-textarea.sp-textarea-prompt {
@@ -29037,9 +29066,9 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
         margin: 14px 0 0; padding: 10px 12px;
         background: rgba(245, 158, 11, 0.10);
         border: 1px solid rgba(245, 158, 11, 0.45);
-        border-left: 3px solid #f59e0b;
+        border-left: 3px solid var(--warning);
         border-radius: 6px;
-        color: #fcd34d;
+        color: var(--warning);
         font-size: 12px; font-weight: 600;
         line-height: 1.4;
       }
@@ -29047,14 +29076,14 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
         flex: 0 0 16px;
         width: 16px; height: 16px;
         margin-top: 1px;
-        color: #f59e0b;
+        color: var(--warning);
       }
-      .sp-readonly-note strong { color: #fde68a; font-weight: 700; }
+      .sp-readonly-note strong { color: var(--text); font-weight: 700; }
       .sp-side.readonly .sp-side-body { opacity: 0.5; pointer-events: none; filter: saturate(0.5); }
       .sp-side.readonly .sp-readonly-note { opacity: 1; }
 
-      .sp-fixed-details { padding-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,0.06); margin-bottom: 4px; }
-      .sp-task { margin-top: 14px; padding-top: 14px; border-top: 1px dashed rgba(255,255,255,0.08); }
+      .sp-fixed-details { padding-bottom: 10px; border-bottom: 1px solid var(--border); margin-bottom: 4px; }
+      .sp-task { margin-top: 14px; padding-top: 14px; border-top: 1px dashed var(--border); }
       .sp-task:first-of-type { margin-top: 8px; padding-top: 0; border-top: none; }
       .sp-task-header { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
       .sp-task-num {
@@ -29105,7 +29134,7 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
         display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px;
       }
       .route-modal-copy {
-        padding: 8px 16px; background: var(--accent); color: #0b1220;
+        padding: 8px 16px; background: var(--accent); color: #fff;
         border: none; border-radius: 6px;
         font-weight: 600; cursor: pointer; font-family: inherit;
         font-size: 13px;
@@ -29115,7 +29144,7 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
         display:flex; flex-wrap:wrap; gap:10px;
         margin: 2px 0 10px;
         padding: 6px 10px;
-        background: rgba(255,255,255,0.025);
+        background: var(--panel2);
         border: 1px solid var(--border);
         border-radius: 6px;
       }
@@ -29156,9 +29185,18 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
             <div class="sp-check-icon">${checklist.atcRouteAgreed ? '✓' : '—'}</div>
             <div class="sp-check-body">
               <div class="sp-check-title">ATC Route Agreed <span class="sp-check-tag required">Required</span></div>
-              <div class="sp-check-sub">${checklist.atcRouteAgreed ? 'Dep and Arr have proposed the same route.' : 'Routes don’t match yet — coordinate with the other side.'}</div>
+              <div class="sp-check-sub">${checklist.atcRouteAgreed ? 'Dep and Arr have proposed the same route.' : "Routes don’t match yet — coordinate with the other side."}</div>
             </div>
           </div>
+          ${(plan.depSplitRoute || plan.arrSplitRoute) ? `
+          <div class="sp-check ${plan.splitAgreed ? 'done' : ''}" id="spChkSplit">
+            <div class="sp-check-icon">${plan.splitAgreed ? '✓' : '—'}</div>
+            <div class="sp-check-body">
+              <div class="sp-check-title">Route Split Agreed <span class="sp-check-tag recommended">Optional</span></div>
+              <div class="sp-check-sub">${plan.splitAgreed ? 'Both sides have agreed on a traffic split.' : 'A route split has been proposed — needs agreement from both sides.'}</div>
+            </div>
+          </div>
+          ` : ''}
           <div class="sp-check ${checklist.depFlowSet ? 'done' : 'missing-required'}" id="spChkDepFlow">
             <div class="sp-check-icon">${checklist.depFlowSet ? '✓' : '—'}</div>
             <div class="sp-check-body">
@@ -29177,7 +29215,11 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
                 const warning = isRestricted
                   ? '<div style="margin-top:8px;"><span style="display:inline-flex;align-items:center;gap:3px;padding:2px 8px;background:rgba(245,158,11,0.18);color:#fbbf24;border:1px solid rgba(245,158,11,0.45);border-radius:4px;font-size:10px;font-weight:700;letter-spacing:0.04em;">⚠ FLOW IN EFFECT</span></div>'
                   : '';
-                return (FLOW_LABELS[checklist.depFlowType] || checklist.depFlowType) + ' for ' + fromIcao + rateHtml + warning;
+                const REASON_LABELS = { DEP_STAFFING: 'Departure staffing', DEP_SINGLE_RUNWAY: 'Single runway at departure', DEP_BACKTRACK: 'Backtrack delay at departure', DEP_RAMP_CONGESTION: 'Ramp congestion at departure', DEP_RUNWAY_CROSSING: 'Runway crossing at departure', DEP_AIRPORT_CAPACITY: 'Departure airport capacity', ARR_STAFFING: 'Destination staffing', ARR_SINGLE_RUNWAY: 'Single runway at destination', ARR_BACKTRACK: 'Backtrack delay at destination', ARR_RAMP_CONGESTION: 'Ramp congestion at destination', ARR_RUNWAY_CROSSING: 'Runway crossing at destination', ARR_AIRPORT_CAPACITY: 'Destination airport capacity', ENROUTE_STAFFING: 'Enroute sector staffing', OTHER: 'Other' };
+                const reasonHtml = (isRestricted && checklist.depFlowReason)
+                  ? ' · <span style="color:var(--muted);">' + (REASON_LABELS[checklist.depFlowReason] || checklist.depFlowReason) + '</span>'
+                  : '';
+                return (FLOW_LABELS[checklist.depFlowType] || checklist.depFlowType) + ' for ' + fromIcao + rateHtml + reasonHtml + warning;
               })()}</div>
             </div>
           </div>
@@ -29228,7 +29270,7 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
           <button type="button" class="action-btn sp-agree-alt" data-side="ARR" style="font-size:12px;padding:5px 12px;background:rgba(245,158,11,0.15);color:#fbbf24;border:1px solid rgba(245,158,11,0.4);">⚠ We have an alternative route to suggest</button>
         </div>
       </div>
-      <div id="spProposedFirsBox" style="display:none;margin-top:14px;padding-top:14px;border-top:1px dashed rgba(255,255,255,0.08);">
+      <div id="spProposedFirsBox" style="display:none;margin-top:14px;padding-top:14px;border-top:1px dashed var(--border);">
         <div class="sp-side-label" style="margin-bottom:8px;">FIRs Each Proposal Would Transit</div>
         <div id="spProposedFirsContent" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;"></div>
         <div style="margin-top:10px;padding:8px 10px;background:rgba(56,189,248,0.06);border:1px solid rgba(56,189,248,0.22);border-radius:6px;font-size:11px;color:#7dd3fc;display:flex;align-items:flex-start;gap:8px;">
@@ -29239,6 +29281,7 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
     </section>
 
     <section class="card card-full">
+      <div style="margin-bottom:6px;"><span class="sp-side-label" style="margin-bottom:0;">1. Propose ATC Route</span></div>
       <div class="sp-sides">
         <div class="sp-side dep ${canEditDep ? '' : 'readonly'}" data-side="DEP">
           <div class="sp-side-head">
@@ -29269,12 +29312,6 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
           </div>
 
           <div class="sp-side-body">
-
-          <div class="sp-task">
-            <div class="sp-task-header">
-              <span class="sp-task-num">1</span>
-              <span class="sp-task-title">Propose ATC Route</span>
-            </div>
             <div class="sp-textarea-wrap" id="spDepRouteWrap">
             <textarea id="spDepRoute" class="sp-textarea" ${canEditDep ? '' : 'disabled'} placeholder="${canEditDep ? 'Enter the route the departure team proposes…' : 'Read-only — no edit access to this side.'}">${(plan.depRouteSuggestion || '').replace(/</g, '&lt;')}</textarea>
             </div>
@@ -29283,58 +29320,7 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
               ${canEditDep ? '<button class="action-btn primary" id="spDepRouteSave" style="font-size:12px;padding:5px 12px;">Save</button>' : ''}
             </div>
           </div>
-
-          <div class="sp-task">
-            <div class="sp-task-header">
-              <span class="sp-task-num">2</span>
-              <span class="sp-task-title">Set Flow Restrictions</span>
-            </div>
-          <div class="sp-flow-options" id="spFlowOptions">
-            ${['NONE','BOOKING_REQUIRED','TIME_SLOT_REQUIRED'].map(ft => {
-              const isTimeSlot = ft === 'TIME_SLOT_REQUIRED';
-              const allowedAirport = fromIcao === TIME_SLOT_AIRPORT;
-              const disabledByAirport = isTimeSlot && !allowedAirport;
-              const disabledAttr = (!canEditDep || disabledByAirport) ? 'disabled' : '';
-              const tooltip = disabledByAirport
-                ? `Only available for ${TIME_SLOT_AIRPORT}`
-                : (FLOW_TOOLTIPS[ft] || '');
-              const titleAttr = tooltip ? ` title="${tooltip.replace(/"/g, '&quot;')}"` : '';
-              const classes = 'sp-flow-option ' + (plan.depFlowType === ft ? 'active ' : '') + ((!canEditDep || disabledByAirport) ? 'disabled' : '');
-              return `<button type="button" class="${classes}" data-flow="${ft}"${titleAttr} ${disabledAttr}>${FLOW_LABELS[ft]}</button>`;
-            }).join('')}
-          </div>
-          <div id="spFlowMsg" style="font-size:11px;color:var(--muted);margin-top:4px;"></div>
-
-          <div id="spFlowRateWrap" style="display:${plan.depFlowType === 'BOOKING_REQUIRED' ? 'block' : 'none'};margin-top:10px;padding:8px 10px;background:rgba(56,189,248,0.06);border:1px solid rgba(56,189,248,0.25);border-radius:6px;">
-            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-              <span style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;">Flow Rate</span>
-              <input type="number" id="spFlowRate" min="0" max="240" step="1" value="${plan.depFlowRate != null ? plan.depFlowRate : ''}" ${canEditDep ? '' : 'disabled'} style="width:64px;padding:3px 6px;background:#0b1220;border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:monospace;font-size:12px;text-align:center;" />
-              <span style="font-size:11px;color:var(--muted);">planes/hr</span>
-              ${canEditDep ? '<button type="button" id="spFlowRateSave" class="action-btn primary" style="font-size:11px;padding:3px 10px;">Save</button>' : ''}
-            </div>
-            <div id="spFlowRateMsg" style="font-size:10px;color:var(--muted);margin-top:4px;"></div>
-            <div id="spFlowRateTotal" style="font-size:12px;color:var(--text);margin-top:6px;padding-top:6px;border-top:1px dashed rgba(255,255,255,0.06);"></div>
-          </div>
-          </div>
-
-          </div>
-          ${!canEditDep ? (userEnrouteFirs.length > 0 ? `
-          <div class="sp-readonly-note">
-            <svg class="sp-readonly-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-            <div>
-              <div style="font-size:13px;color:#fde68a;margin-bottom:2px;">Enroute view — view only</div>
-              As an enroute FIR (<strong>${userEnrouteFirs.join(', ')}</strong>) you can't edit departure data. If you have concerns once a route is agreed, raise an issue below.
-            </div>
-          </div>
-          ` : `
-          <div class="sp-readonly-note">
-            <svg class="sp-readonly-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-            <div>
-              <div style="font-size:13px;color:#fde68a;margin-bottom:2px;">Departure details — view only</div>
-              You can only edit your own side of this sector. The departure team at <strong>${depFir || fromIcao}</strong> manages this column.
-            </div>
-          </div>
-          `) : ''}
+          ${!canEditDep ? '<div style="font-size:10px;color:var(--warning);margin-top:6px;display:flex;align-items:center;gap:4px;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg> View only — managed by ' + (depFir || fromIcao) + '</div>' : ''}
         </div>
 
         <div class="sp-side arr ${canEditArr ? '' : 'readonly'}" data-side="ARR">
@@ -29366,12 +29352,6 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
           </div>
 
           <div class="sp-side-body">
-
-          <div class="sp-task">
-            <div class="sp-task-header">
-              <span class="sp-task-num">1</span>
-              <span class="sp-task-title">Propose ATC Route</span>
-            </div>
             <div class="sp-textarea-wrap" id="spArrRouteWrap">
             <textarea id="spArrRoute" class="sp-textarea" ${canEditArr ? '' : 'disabled'} placeholder="${canEditArr ? 'Enter the route the arrival team proposes…' : 'Read-only — no edit access to this side.'}">${(plan.arrRouteSuggestion || '').replace(/</g, '&lt;')}</textarea>
             </div>
@@ -29380,36 +29360,188 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
               ${canEditArr ? '<button class="action-btn primary" id="spArrRouteSave" style="font-size:12px;padding:5px 12px;">Save</button>' : ''}
             </div>
           </div>
+          ${!canEditArr ? '<div style="font-size:10px;color:var(--warning);margin-top:6px;display:flex;align-items:center;gap:4px;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg> View only — managed by ' + (arrFir || toIcao) + '</div>' : ''}
+        </div>
+      </div>
+    </section>
+
+    <section class="card card-full">
+      <div style="margin-bottom:6px;"><span class="sp-side-label" style="margin-bottom:0;">2. Propose Route Split</span> <span style="font-size:10px;color:var(--muted);font-style:italic;">Optional</span></div>
+      <div class="sp-sides">
+        <div class="sp-side dep ${canEditDep ? '' : 'readonly'}" data-side="DEP">
+          <div class="sp-side-head" style="margin-bottom:4px;">
+            <h3 style="margin:0;font-size:13px;">Departure Airport (${fromIcao})</h3>
+          </div>
+          <div class="sp-side-body">
+            <div id="spDepSplitWrap">
+              ${plan.depSplitRoute ? `
+              <div style="margin-bottom:8px;">
+                <span style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;">Route B</span>
+                <textarea id="spDepSplitRoute" class="sp-textarea" ${canEditDep ? '' : 'disabled'} placeholder="${canEditDep ? 'Enter second route…' : ''}" style="margin-top:4px;">${(plan.depSplitRoute || '').replace(/</g, '&lt;')}</textarea>
+              </div>
+              <div class="sp-split-slider-wrap">
+                <span class="sp-split-label sp-split-label-a">Route A<br><span id="spDepSplitPctA" style="font-size:14px;">${plan.depSplitPct != null ? plan.depSplitPct : 50}%</span></span>
+                <input type="range" id="spDepSplitPct" class="sp-split-slider" min="5" max="95" step="5" value="${plan.depSplitPct != null ? plan.depSplitPct : 50}" ${canEditDep ? '' : 'disabled'} />
+                <span class="sp-split-label sp-split-label-b">Route B<br><span id="spDepSplitPctB" style="font-size:14px;">${plan.depSplitPct != null ? (100 - plan.depSplitPct) : 50}%</span></span>
+              </div>
+              <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+                <span id="spDepSplitMsg" style="font-size:11px;color:var(--muted);"></span>
+                <div style="display:flex;gap:6px;">
+                  ${canEditDep ? '<button type="button" class="action-btn" id="spDepSplitRemove" style="font-size:11px;padding:4px 10px;color:#f87171;">Remove Split</button>' : ''}
+                  ${canEditDep ? '<button class="action-btn primary" id="spDepSplitSave" style="font-size:12px;padding:5px 12px;">Save</button>' : ''}
+                </div>
+              </div>
+              ` : `
+              <div style="font-size:12px;color:var(--muted);margin-bottom:8px;">Propose splitting traffic across two routes with a percentage split.</div>
+              ${canEditDep ? '<button type="button" class="action-btn" id="spDepSplitAdd" style="font-size:12px;padding:5px 12px;">+ Propose Route Split</button>' : ''}
+              <span id="spDepSplitMsg" style="font-size:11px;color:var(--muted);margin-left:8px;"></span>
+              `}
+            </div>
+          </div>
+          ${!canEditDep ? '<div style="font-size:10px;color:var(--warning);margin-top:6px;display:flex;align-items:center;gap:4px;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg> View only — managed by ' + (depFir || fromIcao) + '</div>' : ''}
+        </div>
+
+        <div class="sp-side arr ${canEditArr ? '' : 'readonly'}" data-side="ARR">
+          <div class="sp-side-head" style="margin-bottom:4px;">
+            <h3 style="margin:0;font-size:13px;">Arrival Airport (${toIcao})</h3>
+          </div>
+          <div class="sp-side-body">
+            <div id="spArrSplitWrap">
+              ${plan.arrSplitRoute ? `
+              <div style="margin-bottom:8px;">
+                <span style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;">Route B</span>
+                <textarea id="spArrSplitRoute" class="sp-textarea" ${canEditArr ? '' : 'disabled'} placeholder="${canEditArr ? 'Enter second route…' : ''}" style="margin-top:4px;">${(plan.arrSplitRoute || '').replace(/</g, '&lt;')}</textarea>
+              </div>
+              <div class="sp-split-slider-wrap">
+                <span class="sp-split-label sp-split-label-a">Route A<br><span id="spArrSplitPctA" style="font-size:14px;">${plan.arrSplitPct != null ? plan.arrSplitPct : 50}%</span></span>
+                <input type="range" id="spArrSplitPct" class="sp-split-slider" min="5" max="95" step="5" value="${plan.arrSplitPct != null ? plan.arrSplitPct : 50}" ${canEditArr ? '' : 'disabled'} />
+                <span class="sp-split-label sp-split-label-b">Route B<br><span id="spArrSplitPctB" style="font-size:14px;">${plan.arrSplitPct != null ? (100 - plan.arrSplitPct) : 50}%</span></span>
+              </div>
+              <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+                <span id="spArrSplitMsg" style="font-size:11px;color:var(--muted);"></span>
+                <div style="display:flex;gap:6px;">
+                  ${canEditArr ? '<button type="button" class="action-btn" id="spArrSplitRemove" style="font-size:11px;padding:4px 10px;color:#f87171;">Remove Split</button>' : ''}
+                  ${canEditArr ? '<button class="action-btn primary" id="spArrSplitSave" style="font-size:12px;padding:5px 12px;">Save</button>' : ''}
+                </div>
+              </div>
+              ` : `
+              <div style="font-size:12px;color:var(--muted);margin-bottom:8px;">Propose splitting traffic across two routes with a percentage split.</div>
+              ${canEditArr ? '<button type="button" class="action-btn" id="spArrSplitAdd" style="font-size:12px;padding:5px 12px;">+ Propose Route Split</button>' : ''}
+              <span id="spArrSplitMsg" style="font-size:11px;color:var(--muted);margin-left:8px;"></span>
+              `}
+            </div>
+          </div>
+          ${!canEditArr ? '<div style="font-size:10px;color:var(--warning);margin-top:6px;display:flex;align-items:center;gap:4px;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg> View only — managed by ' + (arrFir || toIcao) + '</div>' : ''}
+        </div>
+      </div>
+      <div id="spSplitComparisonWrap" style="display:${(plan.depSplitRoute || plan.arrSplitRoute) ? 'block' : 'none'};margin-top:14px;padding-top:14px;border-top:1px dashed var(--border);">
+        <div class="sp-side-label" style="margin-bottom:8px;">Route Split Proposals</div>
+        <div id="spSplitComparisonBox"></div>
+        <div style="margin-top:12px;">
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
+            <span style="display:inline-block;width:24px;height:3px;background:#fbbf24;border-radius:2px;border-top:2px dashed #fbbf24;"></span>
+            <span style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;">Route B — Transited FIRs</span>
+          </div>
+          <div id="spSplitFirsContent" style="margin-top:4px;">
+            <div style="font-size:11px;color:var(--muted);">No split route proposed yet.</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card card-full">
+      <div style="margin-bottom:6px;"><span class="sp-side-label" style="margin-bottom:0;">3. Flow Restrictions</span></div>
+      <div class="sp-sides">
+        <div class="sp-side dep ${canEditDep ? '' : 'readonly'}" data-side="DEP">
+          <div class="sp-side-head" style="margin-bottom:4px;">
+            <h3 style="margin:0;font-size:13px;">Departure Airport (${fromIcao})</h3>
+          </div>
+          <div class="sp-side-body">
+
+          ${(plan.arrFlowReason || plan.arrFlowRequest) ? `
+          <div id="spArrFlowAlert" style="margin-bottom:12px;padding:12px 14px;background:rgba(245,158,11,0.10);border:1px solid rgba(245,158,11,0.45);border-radius:8px;">
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+              <span style="font-size:12px;font-weight:700;color:#fbbf24;text-transform:uppercase;letter-spacing:0.04em;">Flow Requested by ${toIcao}</span>
+            </div>
+            ${plan.arrFlowReason ? `<div style="font-size:13px;color:var(--text);margin-bottom:${plan.arrFlowRequest ? '4px' : '0'};"><strong>Reason:</strong> ${({ARR_STAFFING:'Destination staffing',ARR_SINGLE_RUNWAY:'Single runway at destination',ARR_BACKTRACK:'Backtrack delay at destination',ARR_RAMP_CONGESTION:'Ramp congestion at destination',ARR_RUNWAY_CROSSING:'Runway crossing at destination',ARR_AIRPORT_CAPACITY:'Destination airport capacity',ENROUTE_STAFFING:'Enroute sector staffing',OTHER:'Other'})[plan.arrFlowReason] || plan.arrFlowReason}</div>` : ''}
+            ${plan.arrFlowRequest ? `<div style="font-size:12px;color:var(--muted);"><strong>Notes:</strong> ${plan.arrFlowRequest.replace(/</g, '&lt;')}</div>` : ''}
+          </div>
+          ` : ''}
 
           <div class="sp-task">
             <div class="sp-task-header">
-              <span class="sp-task-num">2</span>
-              <span class="sp-task-title">Request Flow from Departure</span>
+              <span class="sp-task-num">3</span>
+              <span class="sp-task-title">Set Flow Restrictions</span>
             </div>
-            <textarea id="spArrFlowReq" class="sp-textarea" ${canEditArr ? '' : 'disabled'} placeholder="${canEditArr ? 'Describe any flow request for ' + fromIcao + ' to impose…' : ''}">${(plan.arrFlowRequest || '').replace(/</g, '&lt;')}</textarea>
+          <div class="sp-flow-options" id="spFlowOptions">
+            ${['NONE','BOOKING_REQUIRED','TIME_SLOT_REQUIRED'].map(ft => {
+              const isTimeSlot = ft === 'TIME_SLOT_REQUIRED';
+              const allowedAirport = fromIcao === TIME_SLOT_AIRPORT;
+              const disabledByAirport = isTimeSlot && !allowedAirport;
+              const disabledAttr = (!canEditDep || disabledByAirport) ? 'disabled' : '';
+              const tooltip = disabledByAirport
+                ? `Only available for ${TIME_SLOT_AIRPORT}`
+                : (FLOW_TOOLTIPS[ft] || '');
+              const titleAttr = tooltip ? ` title="${tooltip.replace(/"/g, '&quot;')}"` : '';
+              const classes = 'sp-flow-option ' + (plan.depFlowType === ft ? 'active ' : '') + ((!canEditDep || disabledByAirport) ? 'disabled' : '');
+              return `<button type="button" class="${classes}" data-flow="${ft}"${titleAttr} ${disabledAttr}>${FLOW_LABELS[ft]}</button>`;
+            }).join('')}
+          </div>
+          <div id="spFlowMsg" style="font-size:11px;color:var(--muted);margin-top:4px;"></div>
+
+          <div id="spFlowReasonWrap" style="display:${plan.depFlowType && plan.depFlowType !== 'NONE' ? 'block' : 'none'};margin-top:10px;">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+              <span style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;">Reason</span>
+              <select id="spFlowReason" ${canEditDep ? '' : 'disabled'} style="padding:4px 8px;background:var(--panel2);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:12px;">
+                <option value="">\u2014 Select reason \u2014</option>
+                ${[['DEP_STAFFING','Departure staffing'],['DEP_SINGLE_RUNWAY','Single runway at departure'],['DEP_BACKTRACK','Backtrack delay at departure'],['DEP_RAMP_CONGESTION','Ramp congestion at departure'],['DEP_RUNWAY_CROSSING','Runway crossing at departure'],['DEP_AIRPORT_CAPACITY','Departure airport capacity'],['ARR_STAFFING','Destination staffing'],['ARR_SINGLE_RUNWAY','Single runway at destination'],['ARR_BACKTRACK','Backtrack delay at destination'],['ARR_RAMP_CONGESTION','Ramp congestion at destination'],['ARR_RUNWAY_CROSSING','Runway crossing at destination'],['ARR_AIRPORT_CAPACITY','Destination airport capacity'],['ENROUTE_STAFFING','Enroute sector staffing'],['OTHER','Other']].map(([v, label]) => {
+                  return '<option value="' + v + '"' + (plan.depFlowReason === v ? ' selected' : '') + '>' + label + '</option>';
+                }).join('')}
+              </select>
+              <span id="spFlowReasonMsg" style="font-size:11px;color:var(--muted);"></span>
+            </div>
+          </div>
+
+          <div id="spFlowRateWrap" style="display:${plan.depFlowType === 'BOOKING_REQUIRED' ? 'block' : 'none'};margin-top:10px;padding:8px 10px;background:rgba(56,189,248,0.06);border:1px solid rgba(56,189,248,0.25);border-radius:6px;">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+              <span style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;">Flow Rate</span>
+              <input type="number" id="spFlowRate" min="0" max="240" step="1" value="${plan.depFlowRate != null ? plan.depFlowRate : ''}" ${canEditDep ? '' : 'disabled'} style="width:64px;padding:3px 6px;background:var(--panel2);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:monospace;font-size:12px;text-align:center;" />
+              <span style="font-size:11px;color:var(--muted);">planes/hr</span>
+              ${canEditDep ? '<button type="button" id="spFlowRateSave" class="action-btn primary" style="font-size:11px;padding:3px 10px;">Save</button>' : ''}
+            </div>
+            <div id="spFlowRateMsg" style="font-size:10px;color:var(--muted);margin-top:4px;"></div>
+            <div id="spFlowRateTotal" style="font-size:12px;color:var(--text);margin-top:6px;padding-top:6px;border-top:1px dashed var(--border);"></div>
+          </div>
+          </div>
+
+          </div>
+          ${!canEditDep ? '<div style="font-size:10px;color:var(--warning);margin-top:6px;display:flex;align-items:center;gap:4px;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg> View only — managed by ' + (depFir || fromIcao) + '</div>' : ''}
+        </div>
+
+        <div class="sp-side arr ${canEditArr ? '' : 'readonly'}" data-side="ARR">
+          <div class="sp-side-head" style="margin-bottom:4px;">
+            <h3 style="margin:0;font-size:13px;">Arrival Airport (${toIcao})</h3>
+          </div>
+          <div class="sp-side-body">
+            <div style="font-size:12px;color:var(--text);font-weight:600;margin-bottom:8px;">Request Flow from Departure</div>
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+              <span style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;">Reason</span>
+              <select id="spArrFlowReason" ${canEditArr ? '' : 'disabled'} style="padding:4px 8px;background:var(--panel2);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:12px;">
+                <option value="">\u2014 Select reason \u2014</option>
+                ${[['ARR_STAFFING','Destination staffing'],['ARR_SINGLE_RUNWAY','Single runway at destination'],['ARR_BACKTRACK','Backtrack delay at destination'],['ARR_RAMP_CONGESTION','Ramp congestion at destination'],['ARR_RUNWAY_CROSSING','Runway crossing at destination'],['ARR_AIRPORT_CAPACITY','Destination airport capacity'],['ENROUTE_STAFFING','Enroute sector staffing'],['OTHER','Other']].map(([v, label]) => {
+                  return '<option value="' + v + '"' + (plan.arrFlowReason === v ? ' selected' : '') + '>' + label + '</option>';
+                }).join('')}
+              </select>
+              <span id="spArrFlowReasonMsg" style="font-size:11px;color:var(--muted);"></span>
+            </div>
+            <textarea id="spArrFlowReq" class="sp-textarea" ${canEditArr ? '' : 'disabled'} placeholder="${canEditArr ? 'Additional notes for ' + fromIcao + ' (optional)…' : ''}">${(plan.arrFlowRequest || '').replace(/</g, '&lt;')}</textarea>
             <div style="margin-top:6px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
               <span id="spArrFlowMsg" style="font-size:11px;color:var(--muted);"></span>
               ${canEditArr ? '<button class="action-btn primary" id="spArrFlowSave" style="font-size:12px;padding:5px 12px;">Save</button>' : ''}
             </div>
           </div>
-          </div>
-          ${!canEditArr ? (userEnrouteFirs.length > 0 ? `
-          <div class="sp-readonly-note">
-            <svg class="sp-readonly-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-            <div>
-              <div style="font-size:13px;color:#fde68a;margin-bottom:2px;">Enroute view — view only</div>
-              As an enroute FIR (<strong>${userEnrouteFirs.join(', ')}</strong>) you can't edit arrival data. If you have concerns once a route is agreed, raise an issue below.
-            </div>
-          </div>
-          ` : `
-          <div class="sp-readonly-note">
-            <svg class="sp-readonly-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-            <div>
-              <div style="font-size:13px;color:#fde68a;margin-bottom:2px;">Arrival details — view only</div>
-              You can only edit your own side of this sector. The arrival team at <strong>${arrFir || toIcao}</strong> manages this column.
-            </div>
-          </div>
-          `) : ''}
+          ${!canEditArr ? '<div style="font-size:10px;color:var(--warning);margin-top:6px;display:flex;align-items:center;gap:4px;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg> View only — managed by ' + (arrFir || toIcao) + '</div>' : ''}
         </div>
       </div>
     </section>
@@ -29463,19 +29595,19 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
         box.className = cls;
         var statusPill, statusText;
         if (c.status === 'EMPTY') {
-          statusPill = '<span class="sp-cmp-pill" style="background:rgba(148,163,184,0.18);color:#cbd5e1;">No routes</span>';
+          statusPill = '<span class="sp-cmp-pill" style="background:rgba(148,163,184,0.18);color:var(--muted);">No routes</span>';
           statusText = 'No proposed routes yet from either side.';
         } else if (c.status === 'PARTIAL') {
-          statusPill = '<span class="sp-cmp-pill" style="background:rgba(148,163,184,0.18);color:#cbd5e1;">Awaiting</span>';
+          statusPill = '<span class="sp-cmp-pill" style="background:rgba(148,163,184,0.18);color:var(--muted);">Awaiting</span>';
           statusText = 'Only one side has proposed a route so far.';
         } else if (c.status === 'GREEN') {
-          statusPill = '<span class="sp-cmp-pill" style="background:rgba(74,222,128,0.25);color:#4ade80;">Agreed</span>';
+          statusPill = '<span class="sp-cmp-pill" style="background:rgba(74,222,128,0.25);color:var(--success);">Agreed</span>';
           statusText = 'Dep and Arr have proposed the same route.';
         } else if (c.status === 'AMBER') {
-          statusPill = '<span class="sp-cmp-pill" style="background:rgba(245,158,11,0.25);color:#fbbf24;">Differs (' + c.matchPct + '% match)</span>';
+          statusPill = '<span class="sp-cmp-pill" style="background:rgba(245,158,11,0.25);color:var(--warning);">Differs (' + c.matchPct + '% match)</span>';
           statusText = 'Routes agree on most waypoints. See differences below.';
         } else {
-          statusPill = '<span class="sp-cmp-pill" style="background:rgba(239,68,68,0.25);color:#f87171;">Conflict (' + c.matchPct + '% match)</span>';
+          statusPill = '<span class="sp-cmp-pill" style="background:rgba(239,68,68,0.25);color:var(--danger);">Conflict (' + c.matchPct + '% match)</span>';
           statusText = 'Routes disagree on most of the path. A coordination call may be needed.';
         }
 
@@ -29498,8 +29630,8 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
 
         var sharedSet = new Set(c.shared || []);
 
-        var depRouteHtml = renderRoutePlain(window.SP.depRouteSuggestion, sharedSet, '#a5b4fc');
-        var arrRouteHtml = renderRoutePlain(window.SP.arrRouteSuggestion, sharedSet, '#fbcfe8');
+        var depRouteHtml = renderRoutePlain(window.SP.depRouteSuggestion, sharedSet, '#818cf8');
+        var arrRouteHtml = renderRoutePlain(window.SP.arrRouteSuggestion, sharedSet, '#f472b6');
 
         var depBy = window.SP.depFir || window.SP.fromIcao;
         var arrBy = window.SP.arrFir || window.SP.toIcao;
@@ -29509,16 +29641,16 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
           + '  <div>'
           + '    <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">'
           + '      <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#818cf8;"></span>'
-          + '      <span style="font-size:11px;font-weight:700;color:#a5b4fc;letter-spacing:0.04em;text-transform:uppercase;">ATC route — proposed by ' + depBy + '</span>'
+          + '      <span style="font-size:11px;font-weight:700;color:#818cf8;letter-spacing:0.04em;text-transform:uppercase;">ATC route — proposed by ' + depBy + '</span>'
           + '    </div>'
-          + '    <div style="font-family:monospace;font-size:13px;line-height:1.7;padding:8px 10px;background:rgba(0,0,0,0.22);border-radius:6px;word-break:break-word;">' + depRouteHtml + '</div>'
+          + '    <div style="font-family:monospace;font-size:13px;line-height:1.7;padding:8px 10px;background:var(--panel2);border-radius:6px;word-break:break-word;">' + depRouteHtml + '</div>'
           + '  </div>'
           + '  <div>'
           + '    <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">'
           + '      <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#f472b6;"></span>'
-          + '      <span style="font-size:11px;font-weight:700;color:#fbcfe8;letter-spacing:0.04em;text-transform:uppercase;">ATC route — proposed by ' + arrBy + '</span>'
+          + '      <span style="font-size:11px;font-weight:700;color:#f472b6;letter-spacing:0.04em;text-transform:uppercase;">ATC route — proposed by ' + arrBy + '</span>'
           + '    </div>'
-          + '    <div style="font-family:monospace;font-size:13px;line-height:1.7;padding:8px 10px;background:rgba(0,0,0,0.22);border-radius:6px;word-break:break-word;">' + arrRouteHtml + '</div>'
+          + '    <div style="font-family:monospace;font-size:13px;line-height:1.7;padding:8px 10px;background:var(--panel2);border-radius:6px;word-break:break-word;">' + arrRouteHtml + '</div>'
           + '  </div>'
           + '</div>';
 
@@ -29526,7 +29658,7 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
         var validationHtml = '';
         if (c.status === 'AMBER' || c.status === 'RED') {
           validationHtml = ''
-            + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px;padding-top:12px;border-top:1px dashed rgba(255,255,255,0.08);font-size:12px;">'
+            + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px;padding-top:12px;border-top:1px dashed var(--border);font-size:12px;">'
             + '<div><div style="color:var(--muted);font-size:11px;margin-bottom:4px;">Only on ' + depBy + '’s route</div>' + (c.depOnly.length ? tokens(c.depOnly, 'dep-only') : '<span style="color:var(--muted);">—</span>') + '</div>'
             + '<div><div style="color:var(--muted);font-size:11px;margin-bottom:4px;">Only on ' + arrBy + '’s route</div>' + (c.arrOnly.length ? tokens(c.arrOnly, 'arr-only') : '<span style="color:var(--muted);">—</span>') + '</div>'
             + '</div>';
@@ -29571,7 +29703,7 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
       }
 
       // Force route textareas to uppercase as the user types
-      ['spDepRoute', 'spArrRoute'].forEach(function(id) {
+      ['spDepRoute', 'spArrRoute', 'spDepSplitRoute', 'spArrSplitRoute'].forEach(function(id) {
         var ta = document.getElementById(id);
         if (!ta) return;
         ta.style.textTransform = 'uppercase';
@@ -29684,6 +29816,273 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
 
       spRefreshAgreePrompts();
 
+      // ===== ROUTE SPLIT =====
+      function spRenderSplitComparison() {
+        var wrap = document.getElementById('spSplitComparisonWrap');
+        var box = document.getElementById('spSplitComparisonBox');
+        if (!wrap || !box) return;
+        var ds = window.SP.depSplitRoute, dp = window.SP.depSplitPct;
+        var as = window.SP.arrSplitRoute, ap = window.SP.arrSplitPct;
+        if (!ds && !as) { wrap.style.display = 'none'; box.innerHTML = ''; return; }
+        wrap.style.display = 'block';
+
+        var html = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">';
+        // Dep proposal
+        html += '<div style="padding:10px 12px;background:rgba(129,140,248,0.06);border:1px solid rgba(129,140,248,0.25);border-radius:6px;">';
+        html += '<div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;">Departure Proposal</div>';
+        if (ds) {
+          html += '<div style="font-size:12px;color:var(--text);margin-bottom:4px;"><strong>Route B:</strong> ' + ds.replace(/</g, '&lt;') + '</div>';
+          html += '<div style="font-size:12px;color:var(--text);">Split: <strong>' + (dp != null ? dp : 50) + '%</strong> Route A / <strong>' + (dp != null ? (100 - dp) : 50) + '%</strong> Route B</div>';
+        } else {
+          html += '<div style="font-size:12px;color:var(--muted);font-style:italic;">No split proposed</div>';
+        }
+        html += '</div>';
+        // Arr proposal
+        html += '<div style="padding:10px 12px;background:rgba(244,114,182,0.06);border:1px solid rgba(244,114,182,0.25);border-radius:6px;">';
+        html += '<div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;">Arrival Proposal</div>';
+        if (as) {
+          html += '<div style="font-size:12px;color:var(--text);margin-bottom:4px;"><strong>Route B:</strong> ' + as.replace(/</g, '&lt;') + '</div>';
+          html += '<div style="font-size:12px;color:var(--text);">Split: <strong>' + (ap != null ? ap : 50) + '%</strong> Route A / <strong>' + (ap != null ? (100 - ap) : 50) + '%</strong> Route B</div>';
+        } else {
+          html += '<div style="font-size:12px;color:var(--muted);font-style:italic;">No split proposed</div>';
+        }
+        html += '</div></div>';
+
+        // Agreement status + action buttons
+        var agreed = window.SP.splitAgreed;
+        if (ds && as) {
+          var routeMatch = ds.trim().toUpperCase().replace(/\s+/g, ' ') === as.trim().toUpperCase().replace(/\s+/g, ' ');
+          var pctMatch = (dp != null ? dp : 50) === (ap != null ? ap : 50);
+          if (agreed) {
+            html += '<div style="margin-top:10px;padding:8px 12px;background:rgba(74,222,128,0.10);border:1px solid rgba(74,222,128,0.35);border-radius:6px;display:flex;align-items:center;gap:6px;"><span style="color:#4ade80;font-weight:700;font-size:12px;">\u2713 Split Agreed</span></div>';
+          } else if (routeMatch && pctMatch) {
+            html += '<div style="margin-top:10px;padding:8px 12px;background:rgba(74,222,128,0.10);border:1px solid rgba(74,222,128,0.35);border-radius:6px;display:flex;align-items:center;gap:6px;font-size:12px;color:#4ade80;"><span style="font-weight:700;">\u2713 Proposals match</span><span style="color:var(--muted);margin-left:4px;">\u2014 waiting for agreement confirmation.</span></div>';
+            if (window.SP.canEditDep || window.SP.canEditArr) {
+              html += '<div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;"><button type="button" id="spSplitAgreeBtn" class="action-btn" style="font-size:12px;padding:5px 14px;background:rgba(74,222,128,0.15);color:#4ade80;border:1px solid rgba(74,222,128,0.4);">\u2713 Confirm split agreement</button> <span id="spSplitAgreeMsg" style="font-size:11px;color:var(--muted);"></span></div>';
+            }
+          } else {
+            var diffs = [];
+            if (!routeMatch) diffs.push('routes differ');
+            if (!pctMatch) diffs.push('percentages differ');
+            html += '<div style="margin-top:10px;padding:8px 12px;background:rgba(245,158,11,0.10);border:1px solid rgba(245,158,11,0.35);border-radius:6px;font-size:12px;color:#fbbf24;">\u26a0 Proposals don\u2019t match \u2014 ' + diffs.join(' and ') + '.</div>';
+          }
+        } else if (ds || as) {
+          // Only one side proposed — show action buttons for the other side
+          var proposerSide = ds ? 'DEP' : 'ARR';
+          var responderSide = ds ? 'ARR' : 'DEP';
+          var canRespond = responderSide === 'DEP' ? window.SP.canEditDep : window.SP.canEditArr;
+          var proposerLabel = proposerSide === 'DEP' ? (window.SP.depFir || window.SP.fromIcao) : (window.SP.arrFir || window.SP.toIcao);
+          html += '<div style="margin-top:10px;padding:10px 12px;background:rgba(56,189,248,0.05);border:1px solid rgba(56,189,248,0.25);border-radius:8px;">';
+          html += '<div style="font-size:12px;color:var(--text);margin-bottom:8px;"><strong>' + proposerLabel + '</strong> has proposed a route split. What do you want to do?</div>';
+          if (canRespond) {
+            html += '<div style="display:flex;gap:6px;flex-wrap:wrap;">';
+            html += '<button type="button" id="spSplitActionAgree" data-side="' + responderSide + '" class="action-btn" style="font-size:12px;padding:5px 12px;background:rgba(74,222,128,0.15);color:#4ade80;border:1px solid rgba(74,222,128,0.4);">\u2713 Agree with this split</button>';
+            html += '<button type="button" id="spSplitActionChangeRoute" data-side="' + responderSide + '" class="action-btn" style="font-size:12px;padding:5px 12px;background:rgba(245,158,11,0.15);color:#fbbf24;border:1px solid rgba(245,158,11,0.4);">\u270f Suggest different route</button>';
+            html += '<button type="button" id="spSplitActionChangePct" data-side="' + responderSide + '" class="action-btn" style="font-size:12px;padding:5px 12px;background:rgba(129,140,248,0.15);color:#a5b4fc;border:1px solid rgba(129,140,248,0.4);">\u2696 Suggest different %</button>';
+            html += '<button type="button" id="spSplitActionReject" data-side="' + responderSide + '" class="action-btn" style="font-size:12px;padding:5px 12px;background:rgba(239,68,68,0.15);color:#f87171;border:1px solid rgba(239,68,68,0.4);">\u2717 Reject split</button>';
+            html += '</div>';
+          }
+          html += '<span id="spSplitActionMsg" style="font-size:11px;color:var(--muted);margin-top:6px;display:block;"></span>';
+          html += '</div>';
+        }
+        box.innerHTML = html;
+
+        // Wire agree button (both proposals match)
+        var agreeBtn = document.getElementById('spSplitAgreeBtn');
+        if (agreeBtn) agreeBtn.addEventListener('click', async function() {
+          agreeBtn.disabled = true;
+          var msg = document.getElementById('spSplitAgreeMsg');
+          var res = await spPostJson('/api/sector-plan/' + encodeURIComponent(window.SP.wf) + '/split-agree', {});
+          agreeBtn.disabled = false;
+          if (res.ok) {
+            window.SP.splitAgreed = true;
+            spRenderSplitComparison();
+            if (window.SP._spMap) window.SP._spMap.drawSplitRoute();
+          } else spSetMsg(msg, res.data.error || 'Failed', false);
+        });
+
+        // Wire action buttons (one side proposed, other responds)
+        var actionAgree = document.getElementById('spSplitActionAgree');
+        if (actionAgree) actionAgree.addEventListener('click', async function() {
+          var side = actionAgree.dataset.side;
+          var sideKey = side === 'DEP' ? 'dep' : 'arr';
+          var otherRoute = side === 'DEP' ? window.SP.arrSplitRoute : window.SP.depSplitRoute;
+          var otherPct = side === 'DEP' ? (window.SP.arrSplitPct != null ? window.SP.arrSplitPct : 50) : (window.SP.depSplitPct != null ? window.SP.depSplitPct : 50);
+          actionAgree.disabled = true;
+          var msg = document.getElementById('spSplitActionMsg');
+          // Save matching proposal
+          var res = await spPostJson('/api/sector-plan/' + encodeURIComponent(window.SP.wf) + '/split', { side: side, route: otherRoute, pct: otherPct });
+          if (res.ok) {
+            window.SP[sideKey + 'SplitRoute'] = otherRoute;
+            window.SP[sideKey + 'SplitPct'] = otherPct;
+            // Now confirm agreement
+            var res2 = await spPostJson('/api/sector-plan/' + encodeURIComponent(window.SP.wf) + '/split-agree', {});
+            if (res2.ok) {
+              window.SP.splitAgreed = true;
+              // Update the form on this side
+              spSplitAddForm(side);
+              var ta = document.getElementById((side === 'DEP' ? 'spDepSplit' : 'spArrSplit') + 'Route');
+              var pctInput = document.getElementById((side === 'DEP' ? 'spDepSplit' : 'spArrSplit') + 'Pct');
+              if (ta) ta.value = otherRoute;
+              if (pctInput) {
+                pctInput.value = otherPct;
+                var a = document.getElementById((side === 'DEP' ? 'spDepSplit' : 'spArrSplit') + 'PctA'); if (a) a.textContent = otherPct + '%';
+                var b = document.getElementById((side === 'DEP' ? 'spDepSplit' : 'spArrSplit') + 'PctB'); if (b) b.textContent = (100 - otherPct) + '%';
+              }
+            }
+            spRenderSplitComparison();
+            if (window.SP._spMap) window.SP._spMap.drawSplitRoute();
+          } else {
+            actionAgree.disabled = false;
+            if (msg) spSetMsg(msg, res.data.error || 'Failed', false);
+          }
+        });
+
+        var actionChangeRoute = document.getElementById('spSplitActionChangeRoute');
+        if (actionChangeRoute) actionChangeRoute.addEventListener('click', function() {
+          var side = actionChangeRoute.dataset.side;
+          spSplitAddForm(side);
+          var ta = document.getElementById((side === 'DEP' ? 'spDepSplit' : 'spArrSplit') + 'Route');
+          if (ta) { ta.focus(); ta.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+        });
+
+        var actionChangePct = document.getElementById('spSplitActionChangePct');
+        if (actionChangePct) actionChangePct.addEventListener('click', function() {
+          var side = actionChangePct.dataset.side;
+          var otherRoute = side === 'DEP' ? window.SP.arrSplitRoute : window.SP.depSplitRoute;
+          // Pre-fill with the same route but let them change the slider
+          spSplitAddForm(side);
+          var ta = document.getElementById((side === 'DEP' ? 'spDepSplit' : 'spArrSplit') + 'Route');
+          if (ta && otherRoute) ta.value = otherRoute;
+          var pctInput = document.getElementById((side === 'DEP' ? 'spDepSplit' : 'spArrSplit') + 'Pct');
+          if (pctInput) { pctInput.focus(); pctInput.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+        });
+
+        var actionReject = document.getElementById('spSplitActionReject');
+        if (actionReject) actionReject.addEventListener('click', async function() {
+          // "Rejecting" means this side explicitly saves no split, clearing any previous proposal
+          var side = actionReject.dataset.side;
+          var sideKey = side === 'DEP' ? 'dep' : 'arr';
+          actionReject.disabled = true;
+          var msg = document.getElementById('spSplitActionMsg');
+          var res = await spPostJson('/api/sector-plan/' + encodeURIComponent(window.SP.wf) + '/split', { side: side, route: null, pct: null });
+          actionReject.disabled = false;
+          if (res.ok) {
+            window.SP[sideKey + 'SplitRoute'] = '';
+            window.SP[sideKey + 'SplitPct'] = null;
+            window.SP.splitAgreed = false;
+            spRenderSplitComparison();
+            if (window.SP._spMap) window.SP._spMap.drawSplitRoute();
+          } else if (msg) spSetMsg(msg, res.data.error || 'Failed', false);
+        });
+      }
+
+      function spSplitAddForm(side) {
+        var wrapId = side === 'DEP' ? 'spDepSplitWrap' : 'spArrSplitWrap';
+        var wrap = document.getElementById(wrapId);
+        if (!wrap) return;
+        var pfx = side === 'DEP' ? 'spDepSplit' : 'spArrSplit';
+        var canEdit = side === 'DEP' ? window.SP.canEditDep : window.SP.canEditArr;
+        if (!canEdit) return;
+        wrap.innerHTML = ''
+          + '<div style="margin-bottom:8px;">'
+          + '<span style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;">Route B</span>'
+          + '<textarea id="' + pfx + 'Route" class="sp-textarea" placeholder="Enter second route\u2026" style="margin-top:4px;"></textarea>'
+          + '</div>'
+          + '<div class="sp-split-slider-wrap">'
+          + '<span class="sp-split-label sp-split-label-a">Route A<br><span id="' + pfx + 'PctA" style="font-size:14px;">50%</span></span>'
+          + '<input type="range" id="' + pfx + 'Pct" class="sp-split-slider" min="5" max="95" step="5" value="50" />'
+          + '<span class="sp-split-label sp-split-label-b">Route B<br><span id="' + pfx + 'PctB" style="font-size:14px;">50%</span></span>'
+          + '</div>'
+          + '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">'
+          + '<span id="' + pfx + 'Msg" style="font-size:11px;color:var(--muted);"></span>'
+          + '<div style="display:flex;gap:6px;">'
+          + '<button type="button" class="action-btn" id="' + pfx + 'Remove" style="font-size:11px;padding:4px 10px;color:#f87171;">Remove Split</button>'
+          + '<button class="action-btn primary" id="' + pfx + 'Save" style="font-size:12px;padding:5px 12px;">Save</button>'
+          + '</div></div>';
+        spWireSplitHandlers(side);
+        // Auto-uppercase the new textarea
+        var ta = document.getElementById(pfx + 'Route');
+        if (ta) ta.addEventListener('input', function() {
+          var p = ta.selectionStart, e = ta.selectionEnd, u = ta.value.toUpperCase();
+          if (u !== ta.value) { ta.value = u; try { ta.setSelectionRange(p, e); } catch(x) {} }
+        });
+      }
+
+      function spWireSplitHandlers(side) {
+        var pfx = side === 'DEP' ? 'spDepSplit' : 'spArrSplit';
+        var sideKey = side === 'DEP' ? 'dep' : 'arr';
+
+        // Slider live update
+        var pctInput = document.getElementById(pfx + 'Pct');
+        var pctA = document.getElementById(pfx + 'PctA');
+        var pctB = document.getElementById(pfx + 'PctB');
+        if (pctInput) pctInput.addEventListener('input', function() {
+          var v = Number(pctInput.value);
+          if (isFinite(v) && v >= 0 && v <= 100) {
+            if (pctA) pctA.textContent = v + '%';
+            if (pctB) pctB.textContent = (100 - v) + '%';
+          }
+        });
+
+        // Save
+        var saveBtn = document.getElementById(pfx + 'Save');
+        if (saveBtn) saveBtn.addEventListener('click', async function() {
+          var route = document.getElementById(pfx + 'Route').value.trim();
+          var pct = Number(document.getElementById(pfx + 'Pct').value);
+          var msg = document.getElementById(pfx + 'Msg');
+          if (!route) { spSetMsg(msg, 'Enter a route', false); return; }
+          if (!isFinite(pct) || pct < 5 || pct > 95) { spSetMsg(msg, 'Split must be 5–95%', false); return; }
+          var res = await spPostJson('/api/sector-plan/' + encodeURIComponent(window.SP.wf) + '/split', { side: side, route: route, pct: Math.round(pct) });
+          if (res.ok) {
+            window.SP[sideKey + 'SplitRoute'] = route;
+            window.SP[sideKey + 'SplitPct'] = Math.round(pct);
+            window.SP.splitAgreed = false;
+            spSetMsg(msg, 'Saved', true);
+            spRenderSplitComparison();
+            if (window.SP._spMap) window.SP._spMap.drawSplitRoute();
+          } else spSetMsg(msg, res.data.error || 'Failed', false);
+        });
+
+        // Remove
+        var removeBtn = document.getElementById(pfx + 'Remove');
+        if (removeBtn) removeBtn.addEventListener('click', async function() {
+          var msg = document.getElementById(pfx + 'Msg');
+          var res = await spPostJson('/api/sector-plan/' + encodeURIComponent(window.SP.wf) + '/split', { side: side, route: null, pct: null });
+          if (res.ok) {
+            window.SP[sideKey + 'SplitRoute'] = '';
+            window.SP[sideKey + 'SplitPct'] = null;
+            window.SP.splitAgreed = false;
+            // Reset to "add" state
+            var wrapId = side === 'DEP' ? 'spDepSplitWrap' : 'spArrSplitWrap';
+            var wrap = document.getElementById(wrapId);
+            var canEdit = side === 'DEP' ? window.SP.canEditDep : window.SP.canEditArr;
+            if (wrap) {
+              wrap.innerHTML = '<div style="font-size:12px;color:var(--muted);margin-bottom:8px;">Propose splitting traffic across two routes with a percentage split.</div>'
+                + (canEdit ? '<button type="button" class="action-btn" id="' + pfx + 'Add" style="font-size:12px;padding:5px 12px;">+ Propose Route Split</button>' : '')
+                + '<span id="' + pfx + 'Msg" style="font-size:11px;color:var(--muted);margin-left:8px;"></span>';
+              var addBtn = document.getElementById(pfx + 'Add');
+              if (addBtn) addBtn.addEventListener('click', function() { spSplitAddForm(side); });
+            }
+            spRenderSplitComparison();
+            if (window.SP._spMap) window.SP._spMap.drawSplitRoute();
+          } else spSetMsg(msg, res.data.error || 'Failed', false);
+        });
+      }
+
+      // Wire initial add buttons
+      var depSplitAdd = document.getElementById('spDepSplitAdd');
+      if (depSplitAdd) depSplitAdd.addEventListener('click', function() { spSplitAddForm('DEP'); });
+      var arrSplitAdd = document.getElementById('spArrSplitAdd');
+      if (arrSplitAdd) arrSplitAdd.addEventListener('click', function() { spSplitAddForm('ARR'); });
+
+      // Wire existing split form handlers (if pre-rendered with data)
+      if (document.getElementById('spDepSplitSave')) spWireSplitHandlers('DEP');
+      if (document.getElementById('spArrSplitSave')) spWireSplitHandlers('ARR');
+
+      // Initial render
+      spRenderSplitComparison();
+
       // Flow type
       // Departure window is buildTimeWindow(±60min) = 2h.
       var DEP_WINDOW_HOURS = 2;
@@ -29705,8 +30104,9 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
 
       function spRefreshFlowRateWrap(flowType) {
         var wrap = document.getElementById('spFlowRateWrap');
-        if (!wrap) return;
-        wrap.style.display = flowType === 'BOOKING_REQUIRED' ? 'block' : 'none';
+        if (wrap) wrap.style.display = flowType === 'BOOKING_REQUIRED' ? 'block' : 'none';
+        var reasonWrap = document.getElementById('spFlowReasonWrap');
+        if (reasonWrap) reasonWrap.style.display = (flowType && flowType !== 'NONE') ? 'block' : 'none';
       }
 
       var FLOW_LABELS_CLIENT = { 'NONE': 'No Restrictions', 'BOOKING_REQUIRED': 'Booking Required', 'TIME_SLOT_REQUIRED': 'Time Slot Required' };
@@ -29730,10 +30130,16 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
         var rateHtml = (ft === 'BOOKING_REQUIRED' && rate != null)
           ? ' · <strong style="color:#fbbf24;">' + rate + ' planes/hr</strong>'
           : '';
+        var REASON_LABELS_CLIENT = { DEP_STAFFING: 'Departure staffing', DEP_SINGLE_RUNWAY: 'Single runway at departure', DEP_BACKTRACK: 'Backtrack delay at departure', DEP_RAMP_CONGESTION: 'Ramp congestion at departure', DEP_RUNWAY_CROSSING: 'Runway crossing at departure', DEP_AIRPORT_CAPACITY: 'Departure airport capacity', ARR_STAFFING: 'Destination staffing', ARR_SINGLE_RUNWAY: 'Single runway at destination', ARR_BACKTRACK: 'Backtrack delay at destination', ARR_RAMP_CONGESTION: 'Ramp congestion at destination', ARR_RUNWAY_CROSSING: 'Runway crossing at destination', ARR_AIRPORT_CAPACITY: 'Destination airport capacity', ENROUTE_STAFFING: 'Enroute sector staffing', OTHER: 'Other' };
+        var reasonSel = document.getElementById('spFlowReason');
+        var reason = reasonSel ? reasonSel.value : '';
+        var reasonHtml = (isRestricted && reason)
+          ? ' · <span style="color:var(--muted);">' + (REASON_LABELS_CLIENT[reason] || reason) + '</span>'
+          : '';
         var warningChip = isRestricted
           ? '<div style="margin-top:8px;"><span style="display:inline-flex;align-items:center;gap:3px;padding:2px 8px;background:rgba(245,158,11,0.18);color:#fbbf24;border:1px solid rgba(245,158,11,0.45);border-radius:4px;font-size:10px;font-weight:700;letter-spacing:0.04em;">⚠ FLOW IN EFFECT</span></div>'
           : '';
-        sub.innerHTML = (FLOW_LABELS_CLIENT[ft] || ft) + ' for ' + window.SP.fromIcao + rateHtml + warningChip;
+        sub.innerHTML = (FLOW_LABELS_CLIENT[ft] || ft) + ' for ' + window.SP.fromIcao + rateHtml + reasonHtml + warningChip;
       }
 
       var flowOpts = document.querySelectorAll('#spFlowOptions .sp-flow-option');
@@ -29766,6 +30172,11 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
               window.SP.depFlowRate = null;
               var rateInput = document.getElementById('spFlowRate');
               if (rateInput) rateInput.value = '';
+            }
+            // Clear reason when switching to NONE
+            if (ft === 'NONE') {
+              var reasonSel = document.getElementById('spFlowReason');
+              if (reasonSel) reasonSel.value = '';
             }
             spRefreshFlowRateWrap(ft);
             spRenderFlowRateTotal();
@@ -29812,7 +30223,27 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
 
       spRenderFlowRateTotal();
 
-      // Arr flow request
+      // Flow reason dropdown
+      var flowReasonSelect = document.getElementById('spFlowReason');
+      if (flowReasonSelect) flowReasonSelect.addEventListener('change', async function() {
+        var val = flowReasonSelect.value || null;
+        var msg = document.getElementById('spFlowReasonMsg');
+        var res = await spPostJson('/api/sector-plan/' + encodeURIComponent(window.SP.wf) + '/flow-reason', { reason: val });
+        if (res.ok) { spSetMsg(msg, 'Saved', true); spRefreshDepFlowCheck(); }
+        else spSetMsg(msg, res.data.error || 'Failed', false);
+      });
+
+      // Arr flow reason dropdown
+      var arrFlowReasonSelect = document.getElementById('spArrFlowReason');
+      if (arrFlowReasonSelect) arrFlowReasonSelect.addEventListener('change', async function() {
+        var val = arrFlowReasonSelect.value || null;
+        var msg = document.getElementById('spArrFlowReasonMsg');
+        var res = await spPostJson('/api/sector-plan/' + encodeURIComponent(window.SP.wf) + '/arr-flow-reason', { reason: val });
+        if (res.ok) spSetMsg(msg, 'Saved', true);
+        else spSetMsg(msg, res.data.error || 'Failed', false);
+      });
+
+      // Arr flow request (notes)
       var arrFlowBtn = document.getElementById('spArrFlowSave');
       if (arrFlowBtn) arrFlowBtn.addEventListener('click', async function() {
         var val = document.getElementById('spArrFlowReq').value;
@@ -30254,6 +30685,72 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
         }
       }
 
+      function spDrawSplitRoute() {
+        var ctx = window.SP._spMap;
+        if (!ctx) return;
+        var map = ctx.map;
+
+        // Clear previous split route layers
+        (ctx.splitRouteLayers || []).forEach(function(l) { try { map.removeLayer(l); } catch (e) {} });
+        ctx.splitRouteLayers = [];
+
+        // Use whichever split route exists (prefer agreed, else dep, else arr)
+        var splitRoute = '';
+        if (window.SP.splitAgreed && window.SP.depSplitRoute) {
+          splitRoute = window.SP.depSplitRoute;
+        } else if (window.SP.depSplitRoute) {
+          splitRoute = window.SP.depSplitRoute;
+        } else if (window.SP.arrSplitRoute) {
+          splitRoute = window.SP.arrSplitRoute;
+        }
+        var splitFirsBox = document.getElementById('spSplitFirsContent');
+
+        if (!splitRoute || !splitRoute.trim()) {
+          if (splitFirsBox) splitFirsBox.innerHTML = '<div style="font-size:11px;color:var(--muted);">No split route proposed yet.</div>';
+          return;
+        }
+
+        fetch('/api/resolve-route?from=' + window.SP.fromIcao + '&to=' + window.SP.toIcao + '&route=' + encodeURIComponent(splitRoute) + '&depTime=&blockTime=')
+          .then(function(r) { return r.json(); })
+          .then(function(rd) {
+            if (!rd.points || rd.points.length < 2) {
+              if (splitFirsBox) splitFirsBox.innerHTML = '<div style="font-size:11px;color:var(--muted);">Split route could not be resolved.</div>';
+              return;
+            }
+
+            var coords = rd.points.map(function(p) { return [p.lat, ctx.unwrapLon(p.lon, ctx.refLon)]; });
+            var splitColor = '#fbbf24';
+            var line = L.polyline(coords, { color: splitColor, weight: 3, opacity: 0.85, dashArray: '8, 6' }).addTo(map);
+            ctx.splitRouteLayers.push(line);
+            if (L.polylineDecorator) {
+              var deco = L.polylineDecorator(line, {
+                patterns: [{ offset: 40, endOffset: 40, repeat: '110px', symbol: L.Symbol.arrowHead({ pixelSize: 9, polygon: false, pathOptions: { color: splitColor, weight: 2, opacity: 1 } }) }]
+              }).addTo(map);
+              ctx.splitRouteLayers.push(deco);
+            }
+            line.bindTooltip('Route B (split)', { sticky: true, className: 'fir-tooltip' });
+
+            // Show FIRs
+            if (splitFirsBox) {
+              var firs = (rd.firs || []).map(function(f) { return f.fir; });
+              var seen = {}; var uniq = [];
+              firs.forEach(function(f) { if (!seen[f]) { seen[f] = 1; uniq.push(f); } });
+              if (!uniq.length) {
+                splitFirsBox.innerHTML = '<div style="font-size:11px;color:var(--muted);">No FIRs detected.</div>';
+              } else {
+                splitFirsBox.innerHTML = '<div style="display:flex;flex-wrap:wrap;gap:4px;">'
+                  + uniq.map(function(f) {
+                      return '<span style="font-size:11px;font-weight:600;padding:2px 8px;background:rgba(251,191,36,0.14);color:#fbbf24;border:1px solid rgba(251,191,36,0.4);border-radius:4px;">' + f + '</span>';
+                    }).join('')
+                  + '</div>';
+              }
+            }
+          })
+          .catch(function() {
+            if (splitFirsBox) splitFirsBox.innerHTML = '<div style="font-size:11px;color:#f87171;">Failed to resolve split route.</div>';
+          });
+      }
+
       // ===== MAP — same colour-coded transit FIR style as by-sector =====
       // Leaflet loads with the defer attribute, so wait for DOMContentLoaded
       // before touching L. If we are already past that point, run immediately.
@@ -30360,11 +30857,14 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
             baselineLayers: baselineLayers,
             proposedFirLayers: [],
             proposedRouteLayers: { DEP: [], ARR: [] },
+            splitRouteLayers: [],
             drawnFirs: {},
             colors: { DEP: '#818cf8', ARR: '#f472b6' },
-            drawProposedRoutes: spDrawProposedRoutes
+            drawProposedRoutes: spDrawProposedRoutes,
+            drawSplitRoute: spDrawSplitRoute
           };
           spDrawProposedRoutes();
+          spDrawSplitRoute();
 
           // If the route crosses the antimeridian, the FIR polygons have
           // been shifted into a world copy outside [-180, 180]. Panning
@@ -30441,9 +30941,12 @@ app.post('/api/sector-plan/:wf/flow-type', requireLogin, async (req, res) => {
       return res.status(400).json({ error: 'Enter a flow rate before activating Booking Required.' });
     }
     // Only BOOKING_REQUIRED keeps a flow rate; clear it for NONE and TIME_SLOT_REQUIRED
-    const data = ft === 'BOOKING_REQUIRED'
-      ? { depFlowType: ft, depUpdatedBy: cid, depUpdatedAt: new Date() }
-      : { depFlowType: ft, depFlowRate: null, depUpdatedBy: cid, depUpdatedAt: new Date() };
+    // NONE also clears the reason
+    const data = ft === 'NONE'
+      ? { depFlowType: ft, depFlowRate: null, depFlowReason: null, depUpdatedBy: cid, depUpdatedAt: new Date() }
+      : ft === 'BOOKING_REQUIRED'
+        ? { depFlowType: ft, depUpdatedBy: cid, depUpdatedAt: new Date() }
+        : { depFlowType: ft, depFlowRate: null, depUpdatedBy: cid, depUpdatedAt: new Date() };
     await prisma.sectorPlan.update({ where: { id: plan.id }, data });
     res.json({ success: true });
   } catch (e) {
@@ -30466,6 +30969,75 @@ app.post('/api/sector-plan/:wf/flow-rate', requireLogin, async (req, res) => {
       where: { id: plan.id },
       data: { depFlowRate: rate === null ? null : Math.round(rate), depUpdatedBy: cid, depUpdatedAt: new Date() }
     });
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/sector-plan/:wf/flow-reason', requireLogin, async (req, res) => {
+  try {
+    const cid = Number(req.session?.user?.data?.cid);
+    const wf = String(req.params.wf || '').toUpperCase();
+    const VALID_REASONS = ['DEP_STAFFING','DEP_SINGLE_RUNWAY','DEP_BACKTRACK','DEP_RAMP_CONGESTION','DEP_RUNWAY_CROSSING','DEP_AIRPORT_CAPACITY','ARR_STAFFING','ARR_SINGLE_RUNWAY','ARR_BACKTRACK','ARR_RAMP_CONGESTION','ARR_RUNWAY_CROSSING','ARR_AIRPORT_CAPACITY','ENROUTE_STAFFING','OTHER'];
+    const reason = req.body?.reason ? String(req.body.reason).toUpperCase() : null;
+    if (reason && !VALID_REASONS.includes(reason)) return res.status(400).json({ error: 'Invalid reason' });
+    const sched = (adminSheetCache || []).find(r => r?.number === wf);
+    if (!sched) return res.status(404).json({ error: 'WF not found' });
+    if (!(await canEditPlanSide(cid, 'DEP', sched.from, sched.to))) return res.status(403).json({ error: 'No edit access' });
+    const plan = await getOrCreateSectorPlan(wf, sched.from, sched.to);
+    await prisma.sectorPlan.update({
+      where: { id: plan.id },
+      data: { depFlowReason: reason, depUpdatedBy: cid, depUpdatedAt: new Date() }
+    });
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/sector-plan/:wf/split', requireLogin, async (req, res) => {
+  try {
+    const cid = Number(req.session?.user?.data?.cid);
+    const wf = String(req.params.wf || '').toUpperCase();
+    const side = String(req.body?.side || '').toUpperCase();
+    if (!['DEP', 'ARR'].includes(side)) return res.status(400).json({ error: 'invalid side' });
+    const route = req.body?.route != null ? String(req.body.route).trim() || null : null;
+    const rawPct = req.body?.pct;
+    const pct = rawPct != null ? Number(rawPct) : null;
+    if (pct !== null && (!Number.isFinite(pct) || pct < 5 || pct > 95)) return res.status(400).json({ error: 'Split must be 5–95%' });
+    const sched = (adminSheetCache || []).find(r => r?.number === wf);
+    if (!sched) return res.status(404).json({ error: 'WF not found' });
+    if (!(await canEditPlanSide(cid, side, sched.from, sched.to))) return res.status(403).json({ error: 'No edit access' });
+    const plan = await getOrCreateSectorPlan(wf, sched.from, sched.to);
+    const data = side === 'DEP'
+      ? { depSplitRoute: route, depSplitPct: pct !== null ? Math.round(pct) : null, splitAgreed: false, depUpdatedBy: cid, depUpdatedAt: new Date() }
+      : { arrSplitRoute: route, arrSplitPct: pct !== null ? Math.round(pct) : null, splitAgreed: false, arrUpdatedBy: cid, arrUpdatedAt: new Date() };
+    await prisma.sectorPlan.update({ where: { id: plan.id }, data });
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/sector-plan/:wf/split-agree', requireLogin, async (req, res) => {
+  try {
+    const cid = Number(req.session?.user?.data?.cid);
+    const wf = String(req.params.wf || '').toUpperCase();
+    const sched = (adminSheetCache || []).find(r => r?.number === wf);
+    if (!sched) return res.status(404).json({ error: 'WF not found' });
+    const canDep = await canEditPlanSide(cid, 'DEP', sched.from, sched.to);
+    const canArr = await canEditPlanSide(cid, 'ARR', sched.from, sched.to);
+    if (!canDep && !canArr) return res.status(403).json({ error: 'No edit access' });
+    const plan = await getOrCreateSectorPlan(wf, sched.from, sched.to);
+    // Verify proposals actually match before agreeing
+    if (!plan.depSplitRoute || !plan.arrSplitRoute) return res.status(400).json({ error: 'Both sides must propose a split first' });
+    const dNorm = plan.depSplitRoute.trim().toUpperCase().replace(/\s+/g, ' ');
+    const aNorm = plan.arrSplitRoute.trim().toUpperCase().replace(/\s+/g, ' ');
+    const dPct = plan.depSplitPct != null ? plan.depSplitPct : 50;
+    const aPct = plan.arrSplitPct != null ? plan.arrSplitPct : 50;
+    if (dNorm !== aNorm || dPct !== aPct) return res.status(400).json({ error: 'Proposals don\'t match — coordinate with the other side first' });
+    await prisma.sectorPlan.update({ where: { id: plan.id }, data: { splitAgreed: true } });
     res.json({ success: true });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -30696,6 +31268,27 @@ app.post('/api/sector-plan/:wf/flow-request', requireLogin, async (req, res) => 
     await prisma.sectorPlan.update({
       where: { id: plan.id },
       data: { arrFlowRequest: request || null, arrFlowRequestedBy: cid, arrFlowRequestedAt: new Date(), arrUpdatedBy: cid, arrUpdatedAt: new Date() }
+    });
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/sector-plan/:wf/arr-flow-reason', requireLogin, async (req, res) => {
+  try {
+    const cid = Number(req.session?.user?.data?.cid);
+    const wf = String(req.params.wf || '').toUpperCase();
+    const VALID_REASONS = ['ARR_STAFFING','ARR_SINGLE_RUNWAY','ARR_BACKTRACK','ARR_RAMP_CONGESTION','ARR_RUNWAY_CROSSING','ARR_AIRPORT_CAPACITY','ENROUTE_STAFFING','OTHER'];
+    const reason = req.body?.reason ? String(req.body.reason).toUpperCase() : null;
+    if (reason && !VALID_REASONS.includes(reason)) return res.status(400).json({ error: 'Invalid reason' });
+    const sched = (adminSheetCache || []).find(r => r?.number === wf);
+    if (!sched) return res.status(404).json({ error: 'WF not found' });
+    if (!(await canEditPlanSide(cid, 'ARR', sched.from, sched.to))) return res.status(403).json({ error: 'No edit access' });
+    const plan = await getOrCreateSectorPlan(wf, sched.from, sched.to);
+    await prisma.sectorPlan.update({
+      where: { id: plan.id },
+      data: { arrFlowReason: reason, arrUpdatedBy: cid, arrUpdatedAt: new Date() }
     });
     res.json({ success: true });
   } catch (e) {
