@@ -8892,22 +8892,49 @@ app.get('/sector/:wf/:from/:to', async (req, res) => {
           <div style="font-size:12px;text-align:center;font-style:italic;">
             ${flowType !== 'NONE' && flowReasonText ? '<span style="color:#94a3b8;">Reason:</span> <span style="color:inherit;opacity:0.8;">' + flowReasonText + '</span>' : ''}
           </div>
-          ${flowType !== 'NONE' ? '<a href="' + (user
-            ? (flowType === 'SLOTTED'
-              ? '/book?from=' + fromIcao + '&to=' + toIcao + '&dateUtc=' + encodeURIComponent(leg ? leg.date_utc : '') + '&depTimeUtc=' + encodeURIComponent(leg ? leg.dep_time_utc : '')
-              : '#" id="sectorBookingBtn" data-sector="' + fromIcao + '-' + toIcao + '|' + (leg ? leg.date_utc : '') + '|' + (leg ? leg.dep_time_utc : ''))
-            : '/auth/login?next=' + encodeURIComponent('/sector/' + wfNum + '/' + fromIcao + '/' + toIcao)) + '" style="display:block;text-align:center;padding:10px;margin:0 -17px -17px;border-top:1px solid rgba(255,255,255,0.08);border-radius:0 0 11px 11px;width:calc(100% + 34px);font-size:13px;font-weight:600;text-decoration:none;transition:background 0.15s;'
-            + (hasBooking
-              ? 'background:rgba(74,222,128,0.1);color:#4ade80;cursor:default;position:relative;overflow:hidden;" onclick="event.preventDefault()">'
-                + (flowType === 'SLOTTED' && bookingTobt ? 'You have a Time Slot: <strong style="color:#fbbf24;">' + bookingTobt + ' UTC</strong> <span class="col-help" title="This is a TOBT (Target Off-Blocks Time).&#10;Please connect at least 30 minutes before this time.&#10;You should be ready to push at this time.&#10;The actual push time may differ depending on&#10;ramp and airfield congestion." style="cursor:help;color:var(--muted);font-style:normal;">?</span>' : 'You already have a Booking')
-                + (leg && leg.atc_route2 && leg.atc_route2 !== '-' ? ' <span style="font-size:11px;opacity:0.8;">(' + bookingRouteLabel + ')</span>' : '')
-                + '<span id="cancelBookingBtn" data-slotkey="' + (userBooking ? userBooking.slotKey : '').replace(/"/g, '&quot;') + '" style="position:absolute;right:0;top:0;bottom:0;display:flex;align-items:center;padding:0 16px;background:rgba(239,68,68,0.2);color:#f87171;font-size:12px;font-weight:600;cursor:pointer;border-left:1px solid rgba(239,68,68,0.3);border-radius:0 0 11px 0;animation:slideInRight 0.5s ease 0.3s both;white-space:nowrap;">' + (flowType === 'SLOTTED' ? 'Cancel Slot' : 'Cancel Booking') + '</span>'
-              : !user
-                ? 'background:rgba(255,255,255,0.04);color:#fbbf24;">'
-                  + (flowType === 'SLOTTED' ? 'Login to book a Time Slot \u2192' : 'Login to make a Booking \u2192')
-                : 'background:rgba(255,255,255,0.04);color:var(--accent);" onmouseover="this.style.background=\'rgba(255,255,255,0.08)\'" onmouseout="this.style.background=\'rgba(255,255,255,0.04)\'">'
-                  + (bookingsFull ? 'No remaining bookings' : flowType === 'SLOTTED' ? 'Click here to book a Time Slot \u2192' : 'Click here to book \u2192'))
-            + '</a>' : ''}
+          ${flowType !== 'NONE' ? (() => {
+            if (hasBooking) {
+              const assignedAtcRoute = bookingRoute === 'B' && leg && leg.atc_route2 ? leg.atc_route2 : (leg ? leg.atc_route || '' : '');
+              const sbRoute = encodeURIComponent((isAdmin || isPageEnabled('atc-route')) ? assignedAtcRoute : '');
+              const sbUrl = 'https://dispatch.simbrief.com/options/custom?orig=' + fromIcao + '&dest=' + toIcao + '&route=' + sbRoute + '&manualrmk=' + encodeURIComponent('Route validated from www.worldflight.center');
+              return '<a href="#" id="viewBookingBtn" style="display:block;text-align:center;padding:10px;margin:0 -17px -17px;border-top:1px solid rgba(255,255,255,0.08);border-radius:0 0 11px 11px;width:calc(100% + 34px);font-size:13px;font-weight:600;text-decoration:none;background:rgba(74,222,128,0.1);color:#4ade80;cursor:pointer;" onclick="event.preventDefault();document.getElementById(\'bookingConfirmModal\').style.display=\'flex\';">'
+                + (flowType === 'SLOTTED' && bookingTobt ? '\u2713 You have a Time Slot \u2014 click for details' : '\u2713 You have a Booking \u2014 click for details')
+                + '</a>'
+                + '<div id="bookingConfirmModal" style="display:none;position:fixed;inset:0;z-index:1000;align-items:center;justify-content:center;padding:16px;">'
+                + '<div style="position:absolute;inset:0;background:rgba(0,0,0,0.65);backdrop-filter:blur(2px);" onclick="event.stopPropagation();document.getElementById(\'bookingConfirmModal\').style.display=\'none\';"></div>'
+                + '<div style="position:relative;background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:20px 24px;width:min(480px,92vw);box-shadow:0 20px 60px rgba(0,0,0,0.5);" onclick="event.stopPropagation();">'
+                + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">'
+                + '<h3 style="margin:0;font-size:16px;color:var(--text);">Booking Confirmation</h3>'
+                + '<button onclick="event.stopPropagation();document.getElementById(\'bookingConfirmModal\').style.display=\'none\';" style="background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;padding:0 4px;">&times;</button>'
+                + '</div>'
+                + '<div style="display:flex;flex-direction:column;gap:10px;">'
+                + '<div style="display:flex;justify-content:space-between;font-size:13px;"><span style="color:var(--muted);">Sector</span><strong>' + wfNum + ' \u2014 ' + fromIcao + ' \u2192 ' + toIcao + '</strong></div>'
+                + (bookingTobt ? '<div style="display:flex;justify-content:space-between;font-size:13px;"><span style="color:var(--muted);">TOBT</span><strong style="color:#fbbf24;">' + bookingTobt + ' UTC</strong></div>' : '')
+                + '<div style="display:flex;justify-content:space-between;font-size:13px;"><span style="color:var(--muted);">Assigned CID</span><strong>' + (userBooking ? userBooking.cid : '') + '</strong></div>'
+                + (leg && leg.atc_route2 && leg.atc_route2 !== '-'
+                  ? '<div style="display:flex;justify-content:space-between;font-size:13px;"><span style="color:var(--muted);">Assigned Route</span><strong style="color:#4ade80;">' + bookingRouteLabel + '</strong></div>'
+                  : '')
+                + '<div style="margin-top:4px;padding:10px 12px;background:var(--panel2);border:1px solid var(--border);border-radius:8px;">'
+                + '<div style="font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;">Your ATC Route</div>'
+                + '<div style="font-family:monospace;font-size:12px;line-height:1.6;color:var(--text);word-break:break-all;">' + (assignedAtcRoute || '<span style="color:var(--muted);">Not yet published</span>') + '</div>'
+                + '</div>'
+                + '</div>'
+                + '<div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap;">'
+                + '<a href="' + sbUrl + '" target="_blank" rel="noopener" style="flex:1;text-align:center;padding:8px 14px;background:rgba(74,222,128,0.12);color:#4ade80;border:1px solid rgba(74,222,128,0.35);border-radius:6px;font-size:12px;font-weight:600;text-decoration:none;">Plan with SimBrief</a>'
+                + '<button id="cancelBookingBtn" data-slotkey="' + (userBooking ? userBooking.slotKey : '').replace(/"/g, '&quot;') + '" style="flex:1;text-align:center;padding:8px 14px;background:rgba(239,68,68,0.12);color:#f87171;border:1px solid rgba(239,68,68,0.35);border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;">Cancel Booking</button>'
+                + '</div>'
+                + '</div></div>';
+            } else if (!user) {
+              return '<a href="/auth/login?next=' + encodeURIComponent('/sector/' + wfNum + '/' + fromIcao + '/' + toIcao) + '" style="display:block;text-align:center;padding:10px;margin:0 -17px -17px;border-top:1px solid rgba(255,255,255,0.08);border-radius:0 0 11px 11px;width:calc(100% + 34px);font-size:13px;font-weight:600;text-decoration:none;background:rgba(255,255,255,0.04);color:#fbbf24;">'
+                + (flowType === 'SLOTTED' ? 'Login to book a Time Slot \u2192' : 'Login to make a Booking \u2192') + '</a>';
+            } else {
+              const bookHref = flowType === 'SLOTTED'
+                ? '/book?from=' + fromIcao + '&to=' + toIcao + '&dateUtc=' + encodeURIComponent(leg ? leg.date_utc : '') + '&depTimeUtc=' + encodeURIComponent(leg ? leg.dep_time_utc : '')
+                : '#" id="sectorBookingBtn" data-sector="' + fromIcao + '-' + toIcao + '|' + (leg ? leg.date_utc : '') + '|' + (leg ? leg.dep_time_utc : '');
+              return '<a href="' + bookHref + '" style="display:block;text-align:center;padding:10px;margin:0 -17px -17px;border-top:1px solid rgba(255,255,255,0.08);border-radius:0 0 11px 11px;width:calc(100% + 34px);font-size:13px;font-weight:600;text-decoration:none;background:rgba(255,255,255,0.04);color:var(--accent);transition:background 0.15s;" onmouseover="this.style.background=\'rgba(255,255,255,0.08)\'" onmouseout="this.style.background=\'rgba(255,255,255,0.04)\'">'
+                + (bookingsFull ? 'No remaining bookings' : flowType === 'SLOTTED' ? 'Click here to book a Time Slot \u2192' : 'Click here to book \u2192') + '</a>';
+            }
+          })() : ''}
         </div>
         `}
       </div>
@@ -28908,7 +28935,8 @@ app.get('/sector-planning/admin', requireAdmin, async (req, res) => {
       routeAgreed, flowSet, depScenery, arrScenery, depDocs, arrDocs,
       hasSplit, splitAgreed, finalised, routeSynced, outOfSync, agreedRoute,
       scheduleRoute: currentScheduleRoute,
-      routeChanged, flowChanged,
+      routeChanged, flowChanged, route2Changed,
+      agreedRoute2, scheduleRoute2: currentScheduleRoute2,
       flowType: plan.depFlowType || '', flowRate: plan.depFlowRate,
       flowLabel: FLOW_LABELS[plan.depFlowType] || plan.depFlowType || '—',
       liveFlowType: FLOW_TYPE_REV[liveFlowType] || liveFlowType,
@@ -28933,7 +28961,7 @@ app.get('/sector-planning/admin', requireAdmin, async (req, res) => {
     const readyColor = readyPct === 100 ? 'var(--success)' : readyPct >= 50 ? 'var(--warning)' : 'var(--danger)';
     let finBtn;
     if (s.routeAgreed && s.flowSet) {
-      if (s.routeSynced) {
+      if (s.finalised) {
         finBtn = '<span style="font-size:10px;color:var(--success);font-weight:700;">&#10003; Synced</span>';
       } else if (s.outOfSync) {
         finBtn = '<button type="button" class="action-btn sp-finalise-btn" data-wf="' + s.wf + '" data-route="' + (s.agreedRoute || '').replace(/"/g, '&quot;') + '" style="font-size:10px;padding:3px 8px;background:rgba(245,158,11,0.15);color:var(--warning);border:1px solid rgba(245,158,11,0.4);">&#9888; Re-sync</button>';
@@ -28956,6 +28984,16 @@ app.get('/sector-planning/admin', requireAdmin, async (req, res) => {
           + '<div style="padding:6px 8px;background:var(--panel2);border-radius:4px;border:1px solid var(--border);">'
           + '<div style="font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:3px;">New agreed route</div>'
           + '<div style="font-family:monospace;color:var(--success);word-break:break-word;">' + esc(s.agreedRoute) + '</div></div>'
+          + '</div>';
+      }
+      if (s.route2Changed) {
+        diffHtml += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:11px;margin-bottom:6px;">'
+          + '<div style="padding:6px 8px;background:var(--panel2);border-radius:4px;border:1px solid var(--border);">'
+          + '<div style="font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:3px;">Secondary route in schedule</div>'
+          + '<div style="font-family:monospace;color:var(--danger);word-break:break-word;">' + (esc(s.scheduleRoute2) || '<em>none</em>') + '</div></div>'
+          + '<div style="padding:6px 8px;background:var(--panel2);border-radius:4px;border:1px solid var(--border);">'
+          + '<div style="font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:3px;">New agreed secondary route</div>'
+          + '<div style="font-family:monospace;color:var(--success);word-break:break-word;">' + (esc(s.agreedRoute2) || '<em>none</em>') + '</div></div>'
           + '</div>';
       }
       if (s.flowChanged) {
