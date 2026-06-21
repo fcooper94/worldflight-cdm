@@ -14,8 +14,37 @@ The **WorldFlight Planning Portal** is the operations site for the annual *World
 ## Tech overview
 
 - **Stack:** Express + Prisma + Leaflet + Socket.IO, vanilla JS templates (no React/Vue)
-- **`index.js`** is the monolithic main file (~25k lines) — most routes and rendered HTML live here
+- **`index.js`** is the monolithic main file (~35k lines) — most routes and rendered HTML live here
 - **`layout.js`** holds shared layout chrome and modal markup
+
+### `index.js` line map (approximate — shifts with edits)
+
+| Line   | Section |
+|--------|---------|
+| ~1     | Imports and setup |
+| ~600   | TOBT booking loading (`loadTobtBookingsFromDb`) |
+| ~790   | Dep flow / globals (`loadDepFlowsFromDb`, `connectedUsers`) |
+| ~3930  | Suggest airport page |
+| ~5380  | Socket.IO connection handler |
+| ~6080  | Route helpers (`stripSidStar`, `normalizeRoute`, `decorateRouteForDisplay`) |
+| ~7410  | Route tokenization + point resolution |
+| ~8670  | Sector detail page (`/sector/:wf/:from/:to`) |
+| ~9340  | Schedule page (`/schedule`) |
+| ~15900 | My Slots API data |
+| ~17300 | Affiliate portal |
+| ~19500 | Team bookings |
+| ~21870 | Schedule table editing UI |
+| ~24050 | Route resolve API (`/api/resolve-route`) |
+| ~24400 | Schedule row update/add APIs |
+| ~28400 | ATC page |
+| ~28520 | Sector Planning list (`/sector-planning`) |
+| ~28690 | Sector Planning admin overview (`/sector-planning/admin`) |
+| ~28960 | Sector Plan finalise API |
+| ~29050 | Sector Planning detail page (`/sector-planning/:wf`) |
+| ~31150 | Sector Plan route/flow/split APIs |
+| ~31790 | Airspace page |
+| ~34680 | Book a slot page (`/book`) |
+| ~35220 | My Slots page (`/my-slots`) |
 - **`public/`** has client-side JS (`icao-map.js`, `wf-world-map.js`, `previous-destinations.js`) and `styles.css`
 - **Auth:** VATSIM OAuth in production; `DEV_MODE=true` enables an offline dev login that bypasses VATSIM
 - **Map tiles:** CartoDB dark/light via `wfAddTileLayer()`; tiles swap automatically when the footer Light/Dark toggle changes `data-theme`

@@ -154,7 +154,7 @@
   display: inline-block;
   padding: 12px 24px;
   background: var(--accent);
-  color: #020617;
+  color: #fff;
   font-weight: 700;
   font-size: 14px;
   border-radius: 10px;
@@ -916,7 +916,7 @@ body.sidebar-collapsed .topbar{ padding-left: var(--sidebar-collapsed); }
   font-size:16px;
 }
 .stat span{ color: var(--muted); }
-.stat strong{ color:#fff; }
+.stat strong{ color:var(--text); }
 
 /* Status pill */
 .status{
@@ -1547,18 +1547,18 @@ select{ cursor:pointer; }
 }
 .tobt-controls label{
   font-size:.85rem;
-  color:#9fb4cc;
+  color:var(--muted);
 }
 .tobt-select{
   width: auto;
   background: var(--panel2);
-  color:#fff;
-  border:1px solid #1f2b3c;
+  color:var(--text);
+  border:1px solid var(--border);
   border-radius:12px;
   padding:12px 14px;
   font-size:15px;
 }
-.tobt-select:focus{ border-color:#4aa3ff; outline:none; }
+.tobt-select:focus{ border-color:var(--accent); outline:none; }
 
 .tobt-table{
   width:100%;
@@ -1568,13 +1568,13 @@ select{ cursor:pointer; }
 .tobt-table th{
   font-size:.85rem;
   font-weight:600;
-  color:#9fb4cc;
+  color:var(--muted);
   padding:10px 10px;
-  border-bottom:1px solid #1f2b3c;
+  border-bottom:2px solid var(--border);
 }
 .tobt-table td{
   padding:10px 10px;
-  border-bottom:1px solid #141f2e;
+  border-bottom:1px solid var(--border);
   font-size: .98rem;
 }
 
@@ -1585,7 +1585,7 @@ select{ cursor:pointer; }
 .tobt-table th:nth-child(3){
   text-align:left;
   font-weight:700;
-  color:#fff;
+  color:var(--text);
   width:20%;
 }
 .tobt-table td:nth-child(2),
@@ -1630,8 +1630,9 @@ select{ cursor:pointer; }
 .tobt-btn.cancel:hover{ filter: brightness(1.06); transform: translateY(-1px); }
 
 .tobt-table button:disabled{
-  background:#2a3547 !important;
-  color:#7f8fa4 !important;
+  background:var(--panel2) !important;
+  color:var(--muted) !important;
+  border:1px solid var(--border) !important;
   box-shadow:none !important;
 }
 
@@ -2310,6 +2311,14 @@ select{ cursor:pointer; }
   );
   border: 1px solid var(--danger);
   color: #fecaca;
+}
+[data-theme="light"] .booking-banner.success {
+  background: rgba(22,163,74,0.08);
+  color: var(--success);
+}
+[data-theme="light"] .booking-banner.cancel {
+  background: rgba(220,38,38,0.08);
+  color: var(--danger);
 }
 
 .banner-action {
@@ -3178,7 +3187,8 @@ tr:hover .row-actions {
   justify-content: center;
   width: 14px; height: 14px;
   border-radius: 50%;
-  background: rgba(255,255,255,0.08);
+  background: var(--panel2);
+  border: 1px solid var(--border);
   color: var(--muted);
   font-size: 9px;
   font-weight: 700;
@@ -3430,9 +3440,9 @@ tr:hover .row-actions {
 .my-slots-table thead th {
   font-size: 13px;
   font-weight: 600;
-  color: #94a3b8;
+  color: var(--muted);
   letter-spacing: 0.4px;
-  border-bottom: 1px solid rgba(255,255,255,0.08);
+  border-bottom: 2px solid var(--border);
 }
 
 /* =========================
@@ -3499,22 +3509,22 @@ tr:hover .row-actions {
 }
 .tobt-help:hover {
   background: rgba(148,163,184,0.25);
-  color: #e2e8f0;
+  color: var(--text);
 }
 .tobt-tooltip {
   display: none;
   position: fixed;
-  background: var(--panel, #1e293b);
-  border: 1px solid rgba(255,255,255,0.12);
+  background: var(--panel);
+  border: 1px solid var(--border);
   border-radius: 8px;
   padding: 10px 14px;
   font-size: 12px;
   font-weight: 400;
   line-height: 1.6;
-  color: #e2e8f0;
+  color: var(--text);
   white-space: nowrap;
   z-index: 1000;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+  box-shadow: var(--shadow);
   pointer-events: none;
 }
 

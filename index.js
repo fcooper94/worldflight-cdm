@@ -2723,19 +2723,19 @@ app.get('/admin/visited-airports', requireAdmin, async (req, res) => {
         <label style="font-size:13px;">
           ICAO
           <input type="text" id="visitIcao" placeholder="EGLL" maxlength="4" required
-            style="width:100px;padding:6px 8px;background:#0f172a;border:1px solid #1e293b;border-radius:6px;color:#e5e7eb;text-transform:uppercase;font-family:monospace;" />
+            style="width:100px;padding:6px 8px;background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);text-transform:uppercase;font-family:monospace;" />
         </label>
         <label style="font-size:13px;">
           Year
           <input type="number" id="visitYear" placeholder="2025" min="2000" max="2099" required
-            style="width:90px;padding:6px 8px;background:#0f172a;border:1px solid #1e293b;border-radius:6px;color:#e5e7eb;" />
+            style="width:90px;padding:6px 8px;background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);" />
         </label>
         <button type="submit" class="action-btn primary" style="padding:7px 16px;">Add</button>
         <span id="visitMsg" style="font-size:13px;margin-left:8px;" class="hidden"></span>
       </form>
 
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
-        <input type="search" id="visitSearchIcao" placeholder="Search ICAO..." maxlength="4" style="width:180px;padding:7px 10px;border-radius:6px;border:1px solid var(--border);background:rgba(255,255,255,0.04);color:var(--text);font-size:13px;font-family:monospace;text-transform:uppercase;" />
+        <input type="search" id="visitSearchIcao" placeholder="Search ICAO..." maxlength="4" style="width:180px;padding:7px 10px;border-radius:6px;border:1px solid var(--border);background:var(--panel2);color:var(--text);font-size:13px;font-family:monospace;text-transform:uppercase;" />
         <span id="visitSearchCount" style="font-size:12px;color:var(--muted);"></span>
       </div>
 
@@ -3436,7 +3436,7 @@ app.get('/admin/suggestions', requireAdmin, async (req, res) => {
       .dp-stats { font-size:11px; color:var(--muted); }
       .division-modal-card {
         position:relative; width:560px; max-width:92vw; max-height:80vh;
-        padding:20px 22px; background:#0b1220;
+        padding:20px 22px; background:var(--panel);
         border:1px solid rgba(167,139,250,0.3); border-radius:10px;
         box-shadow:0 20px 60px rgba(0,0,0,0.6); overflow:hidden;
         display:flex; flex-direction:column; text-align:left;
@@ -3446,14 +3446,14 @@ app.get('/admin/suggestions', requireAdmin, async (req, res) => {
         background:transparent; border:1px solid transparent; color:var(--muted);
         font-size:22px; line-height:1; width:30px; height:30px; border-radius:6px; cursor:pointer; padding:0;
       }
-      .division-modal-close:hover { background:rgba(255,255,255,0.06); color:var(--text); border-color:rgba(255,255,255,0.12); }
+      .division-modal-close:hover { background:var(--panel2); color:var(--text); border-color:var(--border); }
       #divisionModalList { overflow-y:auto; padding-right:4px; }
 
       .icao-tag, .suggestion-chip { cursor: pointer; }
       .icao-tag:hover { filter: brightness(1.15); }
       .suggester-modal-card {
         position:relative; width:520px; max-width:92vw; max-height:80vh;
-        padding:20px 22px; background:#0b1220;
+        padding:20px 22px; background:var(--panel);
         border:1px solid rgba(56,189,248,0.3); border-radius:10px;
         box-shadow:0 20px 60px rgba(0,0,0,0.6); overflow:hidden;
         display:flex; flex-direction:column; text-align:left;
@@ -3463,10 +3463,10 @@ app.get('/admin/suggestions', requireAdmin, async (req, res) => {
         background:transparent; border:1px solid transparent; color:var(--muted);
         font-size:22px; line-height:1; width:30px; height:30px; border-radius:6px; cursor:pointer; padding:0;
       }
-      .suggester-modal-close:hover { background:rgba(255,255,255,0.06); color:var(--text); border-color:rgba(255,255,255,0.12); }
+      .suggester-modal-close:hover { background:var(--panel2); color:var(--text); border-color:var(--border); }
       .suggester-list { overflow-y:auto; padding-right:4px; display:flex; flex-direction:column; gap:8px; }
       .suggester-row {
-        padding:10px 12px; background:rgba(255,255,255,0.03);
+        padding:10px 12px; background:var(--panel2);
         border:1px solid var(--border); border-radius:8px;
       }
       .suggester-row.avoid { border-color:rgba(248,113,113,0.4); background:rgba(248,113,113,0.04); }
@@ -3487,7 +3487,7 @@ app.get('/admin/suggestions', requireAdmin, async (req, res) => {
       .suggester-role.role-controller { color:#38bdf8; background:rgba(56,189,248,0.12); border-color:rgba(56,189,248,0.3); }
       .suggester-role.role-student  { color:#22d3ee; background:rgba(34,211,238,0.12); border-color:rgba(34,211,238,0.3); }
       .suggester-role.role-pilot    { color:#4ade80; background:rgba(74,222,128,0.12); border-color:rgba(74,222,128,0.3); }
-      .suggester-role.role-member   { color:#94a3b8; background:rgba(148,163,184,0.12); border-color:rgba(148,163,184,0.3); }
+      .suggester-role.role-member   { color:var(--muted); background:rgba(148,163,184,0.12); border-color:rgba(148,163,184,0.3); }
       .suggester-role.role-other    { color:#a78bfa; background:rgba(167,139,250,0.12); border-color:rgba(167,139,250,0.3); }
       .suggester-meta { font-size:11px; color:var(--muted); }
       .suggester-reason { font-size:12px; color:var(--muted); margin-top:4px; line-height:1.5; white-space:pre-wrap; word-break:break-word; }
@@ -3655,7 +3655,7 @@ app.get('/admin/suggestions', requireAdmin, async (req, res) => {
       <h2 style="color:#4ade80;">All Suggestions</h2>
       <p style="color:var(--muted);font-size:13px;margin-bottom:12px;">${visits.length} suggestion${visits.length !== 1 ? 's' : ''} to visit</p>
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
-        <input type="search" id="visitSearch" placeholder="Filter by ICAO or name..." style="flex:1;max-width:360px;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:rgba(255,255,255,0.04);color:var(--text);font-size:13px;" />
+        <input type="search" id="visitSearch" placeholder="Filter by ICAO or name..." style="flex:1;max-width:360px;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:var(--panel2);color:var(--text);font-size:13px;" />
         <span id="visitSearchCount" style="font-size:12px;color:var(--muted);"></span>
       </div>
       <div class="admin-table-scroll">
@@ -3752,13 +3752,13 @@ app.get('/admin/suggestions', requireAdmin, async (req, res) => {
       .top-row {
         display: flex; align-items: center; gap: 8px;
         padding: 6px 10px; border-radius: 6px;
-        background: rgba(255,255,255,0.02);
+        background: var(--panel2);
         border: 1px solid var(--border);
         min-width: 0;
       }
-      .top-row:hover { background: rgba(255,255,255,0.04); }
+      .top-row:hover { background: var(--bg0); }
       .top-pos { font-size: 13px; font-weight: 700; color: var(--muted2); min-width: 28px; flex-shrink: 0; }
-      .top-bar-wrap { flex: 1; min-width: 0; height: 6px; background: rgba(255,255,255,0.05); border-radius: 3px; overflow: hidden; }
+      .top-bar-wrap { flex: 1; min-width: 0; height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
       .top-bar { height: 100%; border-radius: 3px; }
       .top-bar.visit { background: #4ade80; }
       .top-bar.avoid { background: #f87171; }
@@ -4220,11 +4220,11 @@ app.get('/suggest-airport', requirePageEnabled('suggest-airport'), (req, res) =>
     .suggest-form-card select,
     .suggest-form-card textarea {
       width: 100%; margin-top: 4px; padding: 8px;
-      background: #0f172a; border: 1px solid #1e293b; border-radius: 6px;
-      color: #e5e7eb; font-family: inherit; font-size: 13px;
+      background: var(--panel2); border: 1px solid var(--border); border-radius: 6px;
+      color: var(--text); font-family: inherit; font-size: 13px;
     }
     .suggest-form-card input[readonly] {
-      color: #4a5568; background: #080d17; cursor: not-allowed;
+      color: var(--muted2); background: var(--bg0); cursor: not-allowed;
     }
     .suggest-form-card textarea { resize: vertical; }
     .suggest-checkbox {
@@ -4542,10 +4542,10 @@ app.get('/suggest-airport', requirePageEnabled('suggest-airport'), (req, res) =>
     .suggestion-list { display: flex; flex-direction: column; gap: 4px; }
     .suggestion-rank {
       display: flex; align-items: center; padding: 12px 16px;
-      border-radius: 8px; background: rgba(255,255,255,0.02);
+      border-radius: 8px; background: var(--panel2);
       border: 1px solid var(--border); transition: background .15s;
     }
-    .suggestion-rank:hover { background: rgba(255,255,255,0.04); }
+    .suggestion-rank:hover { background: var(--bg0); }
     .rank-icao { font-family: monospace; font-size: 15px; font-weight: 700; color: var(--accent); min-width: 56px; flex-shrink: 0; }
     .rank-name { flex: 1 1 0; min-width: 0; font-size: 13px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-left: 8px; }
     .rank-time { text-align: right; flex-shrink: 0; margin-left: 12px; font-size: 12px; color: var(--muted2); white-space: nowrap; }
@@ -5092,7 +5092,7 @@ function renderPolicyPage(req, res, opts) {
       .policy-body ul { margin:0 0 12px 20px; padding:0; }
       .policy-body li { margin-bottom:4px; }
       .policy-body a  { color:var(--accent); }
-      .policy-body code { background:rgba(255,255,255,0.05); padding:1px 6px; border-radius:4px; font-size:13px; }
+      .policy-body code { background:var(--panel2); padding:1px 6px; border-radius:4px; font-size:13px; }
     </style>
   `;
   res.send(renderLayout({ title: opts.title, user, isAdmin, content, layoutClass: 'dashboard-full' }));
@@ -7207,8 +7207,8 @@ app.get('/', async (req, res) => {
         white-space: nowrap;
         padding: 6px 14px;
         border-radius: 8px;
-        background: rgba(255,255,255,0.04);
-        border: 1px solid rgba(255,255,255,0.06);
+        background: var(--panel2);
+        border: 1px solid var(--border);
       }
 
       .db-stats {
@@ -8268,7 +8268,7 @@ app.get('/admin/wf-challenge', requireAdminPage('wf-challenge'), (req, res) => {
   <style>
     .wfca-form { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-top:8px; }
     .wfca-form input {
-      background: rgba(255,255,255,0.04);
+      background: var(--panel2);
       border: 1px solid var(--border);
       border-radius: 8px;
       color: var(--text);
@@ -8278,7 +8278,7 @@ app.get('/admin/wf-challenge', requireAdminPage('wf-challenge'), (req, res) => {
     .wfca-form input:focus { outline: none; border-color: #fbbf24; }
     #wfcaCallsign { text-transform: uppercase; }
     .wfca-edit-input {
-      background: rgba(255,255,255,0.06);
+      background: var(--panel2);
       border: 1px solid #fbbf24;
       border-radius: 6px;
       color: var(--text);
@@ -8288,7 +8288,7 @@ app.get('/admin/wf-challenge', requireAdminPage('wf-challenge'), (req, res) => {
     }
     .wfca-edit-input.cs { width: 110px; text-transform: uppercase; }
     .wfca-row-btn {
-      background: rgba(255,255,255,0.05);
+      background: var(--panel2);
       border: 1px solid var(--border);
       border-radius: 6px;
       color: var(--text);
@@ -8619,7 +8619,38 @@ if (process.env.DEV_MODE === 'true') {
       font-size:13px; font-weight:600; cursor:pointer;
     }
     .dev-custom button:hover { filter:brightness(1.08); }
+    [data-theme="light"] body {
+      background:#f8fafc;
+      background-image: radial-gradient(ellipse at 50% 0%, rgba(37,99,235,0.06) 0%, transparent 60%);
+    }
+    [data-theme="light"] .picker h1 { color:#0f172a; }
+    [data-theme="light"] .picker p { color:#64748b; }
+    [data-theme="light"] .dev-user-btn {
+      background:#ffffff; border-color:#e2e8f0; color:#0f172a;
+      box-shadow:0 1px 3px rgba(0,0,0,0.06);
+    }
+    [data-theme="light"] .dev-user-btn:hover {
+      background:#f8fafc; border-color:#93c5fd;
+      box-shadow:0 4px 12px rgba(0,0,0,0.08);
+    }
+    [data-theme="light"] .dev-user-avatar { background:rgba(0,0,0,0.04); }
+    [data-theme="light"] .dev-user-name { color:#0f172a; }
+    [data-theme="light"] .dev-user-cid { color:#64748b; }
+    [data-theme="light"] .dev-custom {
+      background:#ffffff; border-color:#e2e8f0;
+    }
+    [data-theme="light"] .dev-custom-label { color:#64748b; }
+    [data-theme="light"] .dev-custom input {
+      background:#f8fafc; border-color:#e2e8f0; color:#0f172a;
+    }
+    [data-theme="light"] .dev-custom input:focus { border-color:#3b82f6; }
   </style>
+  <script>
+    (function() {
+      var theme = localStorage.getItem('wf-theme') || 'dark';
+      document.documentElement.setAttribute('data-theme', theme);
+    })();
+  </script>
 </head><body>
   <div class="picker">
     <div class="picker-header">
@@ -8829,35 +8860,31 @@ app.get('/sector/:wf/:from/:to', async (req, res) => {
       ` : ''}
 
       <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:16px;align-items:stretch;">
-        <div style="width:calc(60% - 8px);min-width:300px;padding:16px;background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:12px;box-sizing:border-box;display:flex;flex-direction:column;gap:14px;">
-          <div style="display:flex;gap:24px;flex-wrap:wrap;">
-            <div style="display:flex;align-items:center;gap:8px;">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-              <div><div style="font-size:9px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);">Date</div><div style="font-size:15px;font-weight:600;color:var(--text);">${leg ? leg.date_utc : '-'}</div></div>
+        <div style="width:calc(60% - 8px);min-width:300px;padding:16px;background:var(--panel2);border:1px solid var(--border);border-radius:12px;box-sizing:border-box;display:flex;flex-direction:column;gap:14px;">
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;">
+            <div style="padding:8px 10px;background:var(--panel);border:1px solid var(--border);border-radius:8px;">
+              <div style="font-size:9px;text-transform:uppercase;letter-spacing:0.8px;color:var(--muted);margin-bottom:4px;">Date</div>
+              <div style="font-size:15px;font-weight:700;color:var(--text);">${leg ? leg.date_utc : '-'}</div>
             </div>
-            <div style="display:flex;align-items:center;gap:8px;">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-              <div><div style="font-size:9px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);">Dep Window UTC</div><div style="font-size:15px;font-weight:600;color:var(--text);">${leg && leg.dep_time_utc ? buildTimeWindow(leg.dep_time_utc) : '-'}</div></div>
+            <div style="padding:8px 10px;background:var(--panel);border:1px solid var(--border);border-radius:8px;">
+              <div style="font-size:9px;text-transform:uppercase;letter-spacing:0.8px;color:var(--muted);margin-bottom:4px;">Flight Time</div>
+              <div style="font-size:15px;font-weight:700;color:var(--text);">${leg && leg.flight_time ? leg.flight_time : '-'}</div>
             </div>
-            <div style="display:flex;align-items:center;gap:8px;">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/><path d="M2 12h1M21 12h1M12 2v1M12 21v1"/></svg>
-              <div><div style="font-size:9px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);">Dep Window Local</div><div style="font-size:14px;font-weight:500;color:var(--muted);">${_depWindowLocal || '-'}</div></div>
+            <div style="padding:8px 10px;background:var(--panel);border:1px solid var(--border);border-radius:8px;">
+              <div style="font-size:9px;text-transform:uppercase;letter-spacing:0.8px;color:var(--muted);margin-bottom:4px;">Block Time</div>
+              <div style="font-size:15px;font-weight:700;color:var(--text);">${leg ? leg.block_time || '-' : '-'}</div>
             </div>
-            <div style="display:flex;align-items:center;gap:8px;">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 8 14"/></svg>
-              <div><div style="font-size:9px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);">Arr Window UTC</div><div style="font-size:15px;font-weight:600;color:var(--text);">${leg && leg.arr_time_utc ? buildTimeWindow(leg.arr_time_utc) : '-'}</div></div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <div style="padding:10px 12px;background:var(--panel);border:1px solid var(--border);border-radius:8px;">
+              <div style="font-size:9px;text-transform:uppercase;letter-spacing:0.8px;color:var(--accent);font-weight:700;margin-bottom:6px;">Departure Window</div>
+              <div style="font-size:16px;font-weight:700;color:var(--text);">${leg && leg.dep_time_utc ? buildTimeWindow(leg.dep_time_utc) : '-'} <span style="font-size:11px;font-weight:400;color:var(--muted);">UTC</span></div>
+              ${_depWindowLocal ? '<div style="font-size:13px;color:var(--muted);margin-top:2px;">' + _depWindowLocal + ' <span style="font-size:10px;">local</span></div>' : ''}
             </div>
-            <div style="display:flex;align-items:center;gap:8px;">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 8 14"/><path d="M2 12h1M21 12h1M12 2v1M12 21v1"/></svg>
-              <div><div style="font-size:9px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);">Arr Window Local</div><div style="font-size:14px;font-weight:500;color:var(--muted);">${_arrWindowLocal || '-'}</div></div>
-            </div>
-            <div style="display:flex;align-items:center;gap:8px;">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/></svg>
-              <div><div style="font-size:9px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);">Flight Time</div><div style="font-size:15px;font-weight:600;color:var(--text);">${leg && leg.flight_time ? leg.flight_time : '-'}</div></div>
-            </div>
-            <div style="display:flex;align-items:center;gap:8px;">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 8 14"/></svg>
-              <div><div style="font-size:9px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);">Block Time</div><div style="font-size:15px;font-weight:600;color:var(--text);">${leg ? leg.block_time || '-' : '-'}</div></div>
+            <div style="padding:10px 12px;background:var(--panel);border:1px solid var(--border);border-radius:8px;">
+              <div style="font-size:9px;text-transform:uppercase;letter-spacing:0.8px;color:var(--accent);font-weight:700;margin-bottom:6px;">Arrival Window</div>
+              <div style="font-size:16px;font-weight:700;color:var(--text);">${leg && leg.arr_time_utc ? buildTimeWindow(leg.arr_time_utc) : '-'} <span style="font-size:11px;font-weight:400;color:var(--muted);">UTC</span></div>
+              ${_arrWindowLocal ? '<div style="font-size:13px;color:var(--muted);margin-top:2px;">' + _arrWindowLocal + ' <span style="font-size:10px;">local</span></div>' : ''}
             </div>
           </div>
           ${(isAdmin || isPageEnabled('atc-route')) && leg && leg.atc_route
@@ -8866,7 +8893,7 @@ app.get('/sector/:wf/:from/:to', async (req, res) => {
             : !(isAdmin || isPageEnabled('atc-route'))
               ? '<div style="border-top:1px solid var(--border);padding-top:12px;"><div style="font-size:9px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:6px;">ATC Route</div><div style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;background:rgba(251,191,36,0.06);border:1px solid rgba(251,191,36,0.25);border-radius:8px;">'
                 + '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:1px;"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>'
-                + '<div style="font-size:12px;line-height:1.5;color:#cbd5e1;">The ATC route has not yet been published. We are in coordination with local division / vACC staff. The ATC route will be published here as soon as possible.</div>'
+                + '<div style="font-size:12px;line-height:1.5;color:var(--text);">The ATC route has not yet been published. We are in coordination with local division / vACC staff. The ATC route will be published here as soon as possible.</div>'
                 + '</div></div>'
               : ''}
         </div>
@@ -8876,7 +8903,7 @@ app.get('/sector/:wf/:from/:to', async (req, res) => {
             <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/><path d="M12 6v6l4 2"/></svg>
             <div class="sector-banner-text" style="align-items:center;text-align:center;">
               <span class="sector-banner-label">Flow Restrictions</span>
-              <span style="font-size:13px;font-weight:500;color:#94a3b8;line-height:1.5;margin-top:4px;">Closer to the event, we will confirm if any flow restrictions are applicable for this sector.</span>
+              <span style="font-size:13px;font-weight:500;color:var(--muted);line-height:1.5;margin-top:4px;">Closer to the event, we will confirm if any flow restrictions are applicable for this sector.</span>
             </div>
           </div>
         </div>
@@ -8890,14 +8917,14 @@ app.get('/sector/:wf/:from/:to', async (req, res) => {
             <div class="sector-banner-text" style="align-items:center;"><span class="sector-banner-label">Flow Restrictions</span><span class="sector-banner-icao">${flowLabel}</span>${remainingText ? '<span style="font-size:12px;color:inherit;opacity:0.7;margin-top:2px;">' + remainingText + '</span>' : ''}</div>
           </div>
           <div style="font-size:12px;text-align:center;font-style:italic;">
-            ${flowType !== 'NONE' && flowReasonText ? '<span style="color:#94a3b8;">Reason:</span> <span style="color:inherit;opacity:0.8;">' + flowReasonText + '</span>' : ''}
+            ${flowType !== 'NONE' && flowReasonText ? '<span style="color:var(--muted);">Reason:</span> <span style="color:inherit;opacity:0.8;">' + flowReasonText + '</span>' : ''}
           </div>
           ${flowType !== 'NONE' ? (() => {
             if (hasBooking) {
               const assignedAtcRoute = bookingRoute === 'B' && leg && leg.atc_route2 ? leg.atc_route2 : (leg ? leg.atc_route || '' : '');
               const sbRoute = encodeURIComponent((isAdmin || isPageEnabled('atc-route')) ? assignedAtcRoute : '');
               const sbUrl = 'https://dispatch.simbrief.com/options/custom?orig=' + fromIcao + '&dest=' + toIcao + '&route=' + sbRoute + '&manualrmk=' + encodeURIComponent('Route validated from www.worldflight.center');
-              return '<a href="#" id="viewBookingBtn" style="display:block;text-align:center;padding:10px;margin:0 -17px -17px;border-top:1px solid rgba(255,255,255,0.08);border-radius:0 0 11px 11px;width:calc(100% + 34px);font-size:13px;font-weight:600;text-decoration:none;background:rgba(74,222,128,0.1);color:#4ade80;cursor:pointer;" onclick="event.preventDefault();document.getElementById(\'bookingConfirmModal\').style.display=\'flex\';">'
+              return '<a href="#" id="viewBookingBtn" style="display:block;text-align:center;padding:10px;margin:0 -17px -17px;border-top:1px solid var(--border);border-radius:0 0 11px 11px;width:calc(100% + 34px);font-size:13px;font-weight:600;text-decoration:none;background:rgba(74,222,128,0.1);color:var(--success);cursor:pointer;" onclick="event.preventDefault();document.getElementById(\'bookingConfirmModal\').style.display=\'flex\';">'
                 + (flowType === 'SLOTTED' && bookingTobt ? '\u2713 You have a Time Slot \u2014 click for details' : '\u2713 You have a Booking \u2014 click for details')
                 + '</a>'
                 + '<div id="bookingConfirmModal" style="display:none;position:fixed;inset:0;z-index:1000;align-items:center;justify-content:center;padding:16px;">'
@@ -8925,13 +8952,13 @@ app.get('/sector/:wf/:from/:to', async (req, res) => {
                 + '</div>'
                 + '</div></div>';
             } else if (!user) {
-              return '<a href="/auth/login?next=' + encodeURIComponent('/sector/' + wfNum + '/' + fromIcao + '/' + toIcao) + '" style="display:block;text-align:center;padding:10px;margin:0 -17px -17px;border-top:1px solid rgba(255,255,255,0.08);border-radius:0 0 11px 11px;width:calc(100% + 34px);font-size:13px;font-weight:600;text-decoration:none;background:rgba(255,255,255,0.04);color:#fbbf24;">'
+              return '<a href="/auth/login?next=' + encodeURIComponent('/sector/' + wfNum + '/' + fromIcao + '/' + toIcao) + '" style="display:block;text-align:center;padding:10px;margin:0 -17px -17px;border-top:1px solid var(--border);border-radius:0 0 11px 11px;width:calc(100% + 34px);font-size:13px;font-weight:600;text-decoration:none;background:var(--panel2);color:var(--warning);">'
                 + (flowType === 'SLOTTED' ? 'Login to book a Time Slot \u2192' : 'Login to make a Booking \u2192') + '</a>';
             } else {
               const bookHref = flowType === 'SLOTTED'
                 ? '/book?from=' + fromIcao + '&to=' + toIcao + '&dateUtc=' + encodeURIComponent(leg ? leg.date_utc : '') + '&depTimeUtc=' + encodeURIComponent(leg ? leg.dep_time_utc : '')
                 : '#" id="sectorBookingBtn" data-sector="' + fromIcao + '-' + toIcao + '|' + (leg ? leg.date_utc : '') + '|' + (leg ? leg.dep_time_utc : '');
-              return '<a href="' + bookHref + '" style="display:block;text-align:center;padding:10px;margin:0 -17px -17px;border-top:1px solid rgba(255,255,255,0.08);border-radius:0 0 11px 11px;width:calc(100% + 34px);font-size:13px;font-weight:600;text-decoration:none;background:rgba(255,255,255,0.04);color:var(--accent);transition:background 0.15s;" onmouseover="this.style.background=\'rgba(255,255,255,0.08)\'" onmouseout="this.style.background=\'rgba(255,255,255,0.04)\'">'
+              return '<a href="' + bookHref + '" style="display:block;text-align:center;padding:10px;margin:0 -17px -17px;border-top:1px solid var(--border);border-radius:0 0 11px 11px;width:calc(100% + 34px);font-size:13px;font-weight:600;text-decoration:none;background:var(--panel2);color:var(--accent);transition:background 0.15s;" onmouseover="this.style.background=\'var(--bg0)\'" onmouseout="this.style.background=\'var(--panel2)\'">'
                 + (bookingsFull ? 'No remaining bookings' : flowType === 'SLOTTED' ? 'Click here to book a Time Slot \u2192' : 'Click here to book \u2192') + '</a>';
             }
           })() : ''}
@@ -9572,10 +9599,10 @@ app.get('/schedule', requirePageEnabled('schedule'), async (req, res) => {
                     const pillLabel = isBookingOnly ? 'Booked' : bookedCid + ' (' + tobt.slice(0, 5) + ')';
                     const rawSlotKey = booking?.slotKey || mySlotKey;
                     return '<td class="col-book">'
-                      + '<button class="book-pill book-pill-booked" data-slot-key="' + rawSlotKey + '">'
+                      + '<a href="/my-slots?view=' + encodeURIComponent(rawSlotKey) + '" class="book-pill book-pill-booked" style="text-decoration:none;">'
                       + '<span class="book-pill-label">' + escapeHtml(pillLabel) + '</span>'
-                      + '<span class="book-pill-hover">Cancel Booking</span>'
-                      + '</button></td>';
+                      + '<span class="book-pill-hover">View Booking</span>'
+                      + '</a></td>';
                   }
                 }
 
@@ -9931,7 +9958,7 @@ document.addEventListener('DOMContentLoaded', () => {
 </script>
 <script>
 document.addEventListener('click', async (e) => {
-  const btn = e.target.closest('.tobt-btn.cancel, .book-pill-booked');
+  const btn = e.target.closest('.tobt-btn.cancel');
   if (!btn) return;
 
   const slotKey = btn.dataset.slotKey;
@@ -10016,18 +10043,18 @@ document.addEventListener('DOMContentLoaded', () => {
   .route-modal-body {
     font-family: 'JetBrains Mono', ui-monospace, monospace;
     font-size: 13px; line-height: 1.5; color: var(--text);
-    background: rgba(255,255,255,0.03); border: 1px solid var(--border);
+    background: var(--panel2); border: 1px solid var(--border);
     border-radius: 8px; padding: 12px; overflow: auto; word-break: break-word; white-space: pre-wrap;
   }
   .route-modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
   .route-modal-copy {
-    padding: 6px 14px; background: var(--accent); color: #0b1220; border: none; border-radius: 6px;
+    padding: 6px 14px; background: var(--accent); color: #fff; border: none; border-radius: 6px;
     font-weight: 600; cursor: pointer; font-family: inherit;
   }
   .route-modal-copy.route-modal-secondary {
     background: transparent; color: var(--text); border: 1px solid var(--border);
   }
-  .route-modal-copy.route-modal-secondary:hover { background: rgba(255,255,255,0.04); }
+  .route-modal-copy.route-modal-secondary:hover { background: var(--panel2); }
 </style>
 
 <script>
@@ -10849,7 +10876,7 @@ app.get('/admin/access-management', requireAdmin, (req, res) => {
       </div>
     </div>
 
-    <div id="permAddSection" style="display:none;margin-top:16px;padding:12px;background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:8px;">
+    <div id="permAddSection" style="display:none;margin-top:16px;padding:12px;background:var(--panel2);border:1px solid var(--border);border-radius:8px;">
       <div style="font-size:13px;font-weight:600;margin-bottom:8px;">Add Permission</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
         <input type="text" id="permAddCid" placeholder="CID" style="padding:8px 12px;background:var(--panel);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;width:120px;" />
@@ -10866,7 +10893,7 @@ app.get('/admin/access-management', requireAdmin, (req, res) => {
       <div id="permAddMsg" style="display:none;margin-top:8px;font-size:12px;"></div>
     </div>
 
-    <div id="firEventsAccessSection" style="display:none;margin-top:16px;padding:14px;background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:8px;">
+    <div id="firEventsAccessSection" style="display:none;margin-top:16px;padding:14px;background:var(--panel2);border:1px solid var(--border);border-radius:8px;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
         <div>
           <div style="font-weight:700;font-size:13px;">FIR Events Access</div>
@@ -10890,7 +10917,7 @@ app.get('/admin/access-management', requireAdmin, (req, res) => {
       <div id="firEventsAddMsg" style="display:none;margin-top:8px;font-size:12px;"></div>
     </div>
 
-    <div id="globalAccessSection" style="display:none;margin-top:16px;padding:12px;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:8px;">
+    <div id="globalAccessSection" style="display:none;margin-top:16px;padding:12px;background:var(--panel2);border:1px solid var(--border);border-radius:8px;">
       <div style="display:flex;justify-content:space-between;align-items:center;">
         <div>
           <div style="font-weight:700;font-size:13px;">Global FIR and Document Access</div>
@@ -10903,7 +10930,7 @@ app.get('/admin/access-management', requireAdmin, (req, res) => {
       </div>
     </div>
 
-    <div id="masterUserSection" style="display:none;margin-top:12px;padding:12px;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:8px;">
+    <div id="masterUserSection" style="display:none;margin-top:12px;padding:12px;background:var(--panel2);border:1px solid var(--border);border-radius:8px;">
       <div style="display:flex;justify-content:space-between;align-items:center;">
         <div>
           <div style="font-weight:700;font-size:13px;">Master User</div>
@@ -10916,7 +10943,7 @@ app.get('/admin/access-management', requireAdmin, (req, res) => {
       </div>
     </div>
 
-    <div id="additionalRolesSection" style="display:none;margin-top:12px;padding:12px;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:8px;">
+    <div id="additionalRolesSection" style="display:none;margin-top:12px;padding:12px;background:var(--panel2);border:1px solid var(--border);border-radius:8px;">
       <div style="font-weight:700;font-size:13px;margin-bottom:4px;">Additional Permissions</div>
       <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">Tag this user with one or more role memberships</div>
       <div style="display:flex;flex-wrap:wrap;gap:16px;">
@@ -10947,7 +10974,7 @@ app.get('/admin/access-management', requireAdmin, (req, res) => {
       </div>
     </div>
 
-    <div id="adminAccessSection" style="display:none;margin-top:12px;padding:12px;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:8px;">
+    <div id="adminAccessSection" style="display:none;margin-top:12px;padding:12px;background:var(--panel2);border:1px solid var(--border);border-radius:8px;">
       <div style="font-weight:700;font-size:13px;margin-bottom:4px;">Admin Access</div>
       <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">Grant access to specific admin pages. Super admin always has full access.</div>
       <div id="adminSuperBadge" style="display:none;padding:8px 12px;background:rgba(251,191,36,0.1);border:1px solid rgba(251,191,36,0.3);border-radius:6px;color:#fbbf24;font-size:12px;font-weight:600;margin-bottom:10px;">
@@ -11076,7 +11103,7 @@ app.get('/admin/access-management', requireAdmin, (req, res) => {
     <label style="display:block;margin-top:16px;font-size:13px;font-weight:600;">
       Message <span style="font-weight:400;color:var(--muted);"> — included in the email to the user</span>
     </label>
-    <textarea id="approvalMessage" rows="3" placeholder="Optional message to include in the email..." style="width:100%;margin-top:4px;padding:8px;background:#0f172a;border:1px solid #1e293b;border-radius:6px;color:#e5e7eb;resize:vertical;font-family:inherit;font-size:13px;"></textarea>
+    <textarea id="approvalMessage" rows="3" placeholder="Optional message to include in the email..." style="width:100%;margin-top:4px;padding:8px;background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);resize:vertical;font-family:inherit;font-size:13px;"></textarea>
 
     <div id="approvalModalMsg" class="modal-message hidden" style="margin-top:12px;"></div>
 
@@ -11130,7 +11157,7 @@ app.get('/admin/access-management', requireAdmin, (req, res) => {
   .approval-perms { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:8px; min-height:32px; }
   .approval-perm-tag {
     display:inline-flex; align-items:center; gap:6px;
-    background:#1e293b; color:#e5e7eb; padding:4px 10px;
+    background:var(--panel2); color:var(--text); padding:4px 10px;
     border-radius:6px; font-size:13px; font-family:monospace; font-weight:600;
   }
   .approval-perm-tag .remove-perm {
@@ -11140,8 +11167,8 @@ app.get('/admin/access-management', requireAdmin, (req, res) => {
   .approval-perm-tag.perm-new { border:1px dashed var(--accent); background:rgba(56,189,248,0.08); }
   .approval-add-perm { display:flex; gap:6px; }
   .approval-add-perm input {
-    padding:6px 8px; background:#0f172a; border:1px solid #1e293b;
-    border-radius:6px; color:#e5e7eb; text-transform:uppercase; font-family:monospace;
+    padding:6px 8px; background:var(--panel2); border:1px solid var(--border);
+    border-radius:6px; color:var(--text); text-transform:uppercase; font-family:monospace;
   }
 </style>
 
@@ -11996,7 +12023,7 @@ document.addEventListener('DOMContentLoaded', function () {
             adminPagesGrid.style.display = hasAnyAdmin ? 'grid' : 'none';
             allPageKeys.forEach(function(key) {
               var label = document.createElement('label');
-              label.style.cssText = 'display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;padding:6px 8px;background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:6px;';
+              label.style.cssText = 'display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;padding:6px 8px;background:var(--panel2);border:1px solid var(--border);border-radius:6px;';
               var cb = document.createElement('input');
               cb.type = 'checkbox';
               cb.dataset.page = key;
@@ -12372,7 +12399,7 @@ document.addEventListener('DOMContentLoaded', function () {
       var actions = r.status === 'PENDING'
         ? '<button class="action-btn primary staff-approve-btn" data-id="' + r.id + '" style="font-size:11px;padding:3px 10px;">Approve</button>'
         + ' <button class="action-btn staff-deny-btn" data-id="' + r.id + '" style="font-size:11px;padding:3px 10px;background:rgba(239,68,68,0.15);color:#f87171;border-color:#f87171;">Deny</button>'
-        : '<button class="action-btn staff-delete-btn" data-id="' + r.id + '" style="font-size:11px;padding:3px 10px;background:rgba(255,255,255,0.05);color:var(--muted);border-color:var(--border);">Delete</button>';
+        : '<button class="action-btn staff-delete-btn" data-id="' + r.id + '" style="font-size:11px;padding:3px 10px;background:var(--panel2);color:var(--muted);border-color:var(--border);">Delete</button>';
       return '<tr>'
         + '<td>' + r.cid + '</td>'
         + '<td>' + (r.name || '\u2014') + '</td>'
@@ -13098,16 +13125,16 @@ app.get('/admin/scenery-legacy', requireAdmin, (req, res) => {
     flex:1; min-width:160px;
   }
   .report-card-scenery-name {
-    font-weight:600; font-size:14px; color:#1e293b;
+    font-weight:600; font-size:14px; color:var(--text);
   }
   .report-card-scenery-name a { color:#3b82f6; text-decoration:none; }
   .report-card-scenery-name a:hover { text-decoration:underline; }
   .report-card-scenery-meta {
-    font-size:12px; color:#94a3b8; margin-top:2px;
+    font-size:12px; color:var(--muted); margin-top:2px;
   }
   .report-card-icao {
-    font-family:monospace; font-weight:700; font-size:14px; color:#334155;
-    background:#f1f5f9; padding:4px 10px; border-radius:6px; white-space:nowrap;
+    font-family:monospace; font-weight:700; font-size:14px; color:var(--muted);
+    background:var(--panel2); padding:4px 10px; border-radius:6px; white-space:nowrap;
   }
   .report-reason-badge {
     display:inline-block; padding:4px 10px; border-radius:6px;
@@ -13119,12 +13146,12 @@ app.get('/admin/scenery-legacy', requireAdmin, (req, res) => {
   .report-reason-badge.wrong-label { background:rgba(168,85,247,0.10); color:#7c3aed; }
   .report-reason-badge.other { background:rgba(100,116,139,0.10); color:#475569; }
   .report-card-details {
-    font-size:12px; color:#64748b; max-width:220px;
+    font-size:12px; color:var(--muted2); max-width:220px;
     white-space:pre-wrap; word-break:break-word;
     font-style:italic;
   }
   .report-card-meta {
-    font-size:12px; color:#94a3b8; text-align:right; min-width:100px;
+    font-size:12px; color:var(--muted); text-align:right; min-width:100px;
   }
   .report-card-actions {
     display:flex; gap:6px; flex-shrink:0;
@@ -13158,7 +13185,7 @@ app.get('/admin/scenery-legacy', requireAdmin, (req, res) => {
       </button>
     </div>
     <div style="margin-top:12px;text-align:center;">
-      <button id="resolveActionCancel" style="background:none;border:none;color:#94a3b8;font-size:13px;cursor:pointer;">Cancel</button>
+      <button id="resolveActionCancel" style="background:none;border:none;color:var(--muted);font-size:13px;cursor:pointer;">Cancel</button>
     </div>
   </div>
 </div>
@@ -13961,7 +13988,7 @@ app.get('/icao/:icao', async (req, res) => {
       gap: 12px;
       padding: 14px 22px;
       border-radius: 10px;
-      background: rgba(255,255,255,0.03);
+      background: var(--panel2);
       border: 1px solid var(--border);
       color: var(--muted);
       font-size: 15px;
@@ -15428,7 +15455,7 @@ app.get('/admin/staff-access-OLD-UNUSED', requireAdmin, async (req, res) => {
         </div>
       </div>
 
-      <div id="permAddSection" style="display:none;margin-top:16px;padding:12px;background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:8px;">
+      <div id="permAddSection" style="display:none;margin-top:16px;padding:12px;background:var(--panel2);border:1px solid var(--border);border-radius:8px;">
         <div style="font-size:13px;font-weight:600;margin-bottom:8px;">Add Permission</div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
           <input type="text" id="permAddCid" placeholder="CID" style="padding:8px 12px;background:var(--panel);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;width:120px;" />
@@ -15563,7 +15590,7 @@ app.get('/admin/staff-access-OLD-UNUSED', requireAdmin, async (req, res) => {
           var actions = r.status === 'PENDING'
             ? '<button class="action-btn primary staff-approve-btn" data-id="' + r.id + '" style="font-size:11px;padding:3px 10px;">Approve</button>'
             + ' <button class="action-btn staff-deny-btn" data-id="' + r.id + '" style="font-size:11px;padding:3px 10px;background:rgba(239,68,68,0.15);color:#f87171;border-color:#f87171;">Deny</button>'
-            : '<button class="action-btn staff-delete-btn" data-id="' + r.id + '" style="font-size:11px;padding:3px 10px;background:rgba(255,255,255,0.05);color:var(--muted);border-color:var(--border);">Delete</button>';
+            : '<button class="action-btn staff-delete-btn" data-id="' + r.id + '" style="font-size:11px;padding:3px 10px;background:var(--panel2);color:var(--muted);border-color:var(--border);">Delete</button>';
           return '<tr>'
             + '<td>' + r.cid + '</td>'
             + '<td>' + (r.name || '\u2014') + '</td>'
@@ -16330,6 +16357,31 @@ app.post('/wf-schedule/refresh-schedule', requireAdmin, async (req, res) => {
   await refreshAdminSheet();
   rebuildAllTobtSlots();
   res.json({ success: true });
+});
+
+// Live JSON export of bookings per sector — e.g. /wf2631.json
+// Returns array of { cid, slot } — slot is HHMM string or empty for booking-only
+app.get('/api/slots/:wfNum.json', (req, res) => {
+  const wfNum = req.params.wfNum.toUpperCase();
+  const sched = (adminSheetCache || []).find(r => r?.number === wfNum);
+  if (!sched) return res.status(404).json({ error: 'Sector not found' });
+
+  const sectorPrefix = sched.from + '-' + sched.to + '|';
+  const bookings = [];
+
+  for (const [key, b] of Object.entries(tobtBookingsByKey)) {
+    if (!key.includes(':')) continue;
+    if (!b.slotKey || !b.slotKey.startsWith(sectorPrefix)) continue;
+    const slot = (b.tobtTimeUtc && b.tobtTimeUtc !== 'BOOKING_ONLY' && b.tobtTimeUtc !== 'null')
+      ? b.tobtTimeUtc.replace(':', '')
+      : '';
+    bookings.push({ cid: b.cid, slot });
+  }
+
+  bookings.sort((a, b) => (a.slot || 'zzzz').localeCompare(b.slot || 'zzzz'));
+
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.json(bookings);
 });
 
 app.post('/api/tobt/cancel', requireLogin, async (req, res) => {
@@ -18068,7 +18120,7 @@ app.get('/affiliates/hq', requireLogin, async (req, res) => {
         padding: 4px 8px;
         border-radius: 6px;
       }
-      .aff-route-modal-close:hover { color: var(--text); background: rgba(255,255,255,0.05); }
+      .aff-route-modal-close:hover { color: var(--text); background: var(--panel2); }
       .aff-route-modal-body {
         margin: 0;
         padding: 18px 22px;
@@ -18722,7 +18774,7 @@ app.get('/affiliates/my-members', requireLogin, requireAffiliateOwner, async (re
         text-transform: uppercase;
         padding: 3px 10px;
         border-radius: 999px;
-        background: rgba(255,255,255,0.05);
+        background: var(--panel2);
         color: var(--muted);
       }
 
@@ -19296,7 +19348,7 @@ app.get('/team/management', requireLogin, requireTeamMember, async (req, res) =>
         display: flex; justify-content: flex-end; margin-top: 4px;
       }
       .route-modal-copy {
-        padding: 6px 14px; background: var(--accent); color: #0b1220;
+        padding: 6px 14px; background: var(--accent); color: #fff;
         border: none; border-radius: 6px;
         font-weight: 600; cursor: pointer; font-family: inherit;
       }
@@ -19308,7 +19360,7 @@ app.get('/team/management', requireLogin, requireTeamMember, async (req, res) =>
         color: var(--text);
         cursor: pointer;
         padding: 9px 12px;
-        background: rgba(255,255,255,0.03);
+        background: var(--panel2);
         border: 1px solid var(--border);
         border-radius: 8px;
         transition: background 0.15s ease, border-color 0.15s ease;
@@ -19891,18 +19943,18 @@ app.get('/team/bookings', requireLogin, requireTeamMember, async (req, res) => {
       .route-modal-body {
         font-family: 'JetBrains Mono', ui-monospace, monospace;
         font-size: 13px; line-height: 1.5; color: var(--text);
-        background: rgba(255,255,255,0.03); border: 1px solid var(--border);
+        background: var(--panel2); border: 1px solid var(--border);
         border-radius: 8px; padding: 12px; overflow: auto; word-break: break-word; white-space: pre-wrap;
       }
       .route-modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
       .route-modal-copy {
-        padding: 6px 14px; background: var(--accent); color: #0b1220; border: none; border-radius: 6px;
+        padding: 6px 14px; background: var(--accent); color: #fff; border: none; border-radius: 6px;
         font-weight: 600; cursor: pointer; font-family: inherit;
       }
       .route-modal-copy.route-modal-secondary {
         background: transparent; color: var(--text); border: 1px solid var(--border);
       }
-      .route-modal-copy.route-modal-secondary:hover { background: rgba(255,255,255,0.04); }
+      .route-modal-copy.route-modal-secondary:hover { background: var(--panel2); }
     </style>
 
     <script>
@@ -20147,7 +20199,7 @@ app.get('/user-management', requireLogin, async (req, res) => {
         </div>
       </div>
 
-      <div id="umMasterSection" style="display:none;margin-top:16px;padding:12px;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:8px;">
+      <div id="umMasterSection" style="display:none;margin-top:16px;padding:12px;background:var(--panel2);border:1px solid var(--border);border-radius:8px;">
         <div style="display:flex;justify-content:space-between;align-items:center;">
           <div>
             <div style="font-weight:700;font-size:13px;">Master User</div>
@@ -20160,7 +20212,7 @@ app.get('/user-management', requireLogin, async (req, res) => {
         </div>
       </div>
 
-      <div id="umAddSection" style="display:none;margin-top:16px;padding:12px;background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:8px;">
+      <div id="umAddSection" style="display:none;margin-top:16px;padding:12px;background:var(--panel2);border:1px solid var(--border);border-radius:8px;">
         <div style="font-size:13px;font-weight:600;margin-bottom:8px;" id="umAddLabel">Add Permission</div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
           <select id="umAddPattern" style="padding:8px 12px;background:var(--panel);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;">
@@ -20566,7 +20618,7 @@ app.get('/admin/control-panel', requireAdmin, async (req, res) => {
         gap: 12px;
         padding: 20px;
         border-radius: 12px;
-        background: rgba(255,255,255,0.02);
+        background: var(--panel2);
         border: 1px solid var(--border);
         text-decoration: none;
         color: inherit;
@@ -20575,7 +20627,7 @@ app.get('/admin/control-panel', requireAdmin, async (req, res) => {
         min-height: 150px;
       }
       .cp-card:hover {
-        background: rgba(255,255,255,0.06);
+        background: var(--bg0);
         border-color: var(--accent, #3b82f6);
         transform: translateY(-1px);
       }
@@ -20836,7 +20888,7 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
       font-weight: 700;
       padding: 1px 8px;
       border-radius: 999px;
-      background: rgba(255,255,255,0.06);
+      background: var(--panel2);
       color: var(--muted);
       min-width: 22px;
       text-align: center;
@@ -21531,10 +21583,10 @@ app.get('/wf-schedule', requireAdmin, async (req, res) => {
       .event-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
       .event-card {
         padding: 20px; border-radius: 12px;
-        background: rgba(255,255,255,0.02); border: 1px solid var(--border);
+        background: var(--panel2); border: 1px solid var(--border);
         transition: background .15s;
       }
-      .event-card:hover { background: rgba(255,255,255,0.04); }
+      .event-card:hover { background: var(--bg0); }
       .event-card.event-active { border-color: rgba(34,197,94,0.3); }
       .event-card-header { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
       .event-card-header h3 { margin: 0; font-size: 16px; color: var(--text); }
@@ -21893,59 +21945,59 @@ const content = `
     <div id="wfChallengeBox" style="display:${event.isWorldFlight !== false ? 'flex' : 'none'};align-items:center;gap:6px;background:rgba(251,191,36,0.06);border:1px solid rgba(251,191,36,0.35);border-radius:6px;padding:4px 12px;" title="Flag one sector as the WF Challenge sector">
       <input type="checkbox" id="wfChallengeChk" ${eventRows.some(r => r.is_wf_challenge) ? 'checked' : ''} style="cursor:pointer;" />
       <label for="wfChallengeChk" style="font-size:12px;color:#fbbf24;cursor:pointer;white-space:nowrap;">Has WF Challenge</label>
-      <select id="wfChallengeSelect" style="display:${eventRows.some(r => r.is_wf_challenge) ? '' : 'none'};padding:2px 6px;background:#0f172a;border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:12px;max-width:220px;">
+      <select id="wfChallengeSelect" style="display:${eventRows.some(r => r.is_wf_challenge) ? '' : 'none'};padding:2px 6px;background:var(--panel2);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:12px;max-width:220px;">
         <option value="">Select sector\u2026</option>
         ${eventRows.filter(r => r.number).map(r => `<option value="${r.number}" ${r.is_wf_challenge ? 'selected' : ''}>${r.number}: ${r.from} \u2192 ${r.to}</option>`).join('')}
       </select>
     </div>
     ${isScratch ? `
-    <div style="display:flex;align-items:center;gap:6px;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:6px;padding:4px 12px;" title="Treat as WorldFlight: YSSY start, WF flight numbers, B738 SimBrief default">
+    <div style="display:flex;align-items:center;gap:6px;background:var(--panel2);border:1px solid var(--border);border-radius:6px;padding:4px 12px;" title="Treat as WorldFlight: YSSY start, WF flight numbers, B738 SimBrief default">
       <input type="checkbox" id="isWorldFlightChk" ${event.isWorldFlight !== false ? 'checked' : ''} style="cursor:pointer;" />
       <label for="isWorldFlightChk" style="font-size:12px;color:var(--muted);cursor:pointer;">Is a WorldFlight event?</label>
     </div>
-    <div style="display:flex;align-items:center;gap:6px;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:6px;padding:4px 12px;" title="First leg departure date and time (UTC)">
+    <div style="display:flex;align-items:center;gap:6px;background:var(--panel2);border:1px solid var(--border);border-radius:6px;padding:4px 12px;" title="First leg departure date and time (UTC)">
       <span style="font-size:11px;color:var(--muted);">Start:</span>
       <button type="button" id="eventStartDateBtn" class="date-picker-trigger">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity:.7;"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
         <span id="eventStartDateLabel">${startDateLabelText}</span>
       </button>
       <input type="hidden" id="eventStartDateInput" value="${event.startDateUtc || ''}" />
-      <input type="time" id="eventStartTimeInput" value="${event.startTimeUtc || ''}" step="60" style="padding:2px 6px;background:#0f172a;border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:12px;font-family:monospace;" />
+      <input type="time" id="eventStartTimeInput" value="${event.startTimeUtc || ''}" step="60" style="padding:2px 6px;background:var(--panel);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:12px;font-family:monospace;" />
       <span style="font-size:10px;color:var(--muted);">UTC</span>
     </div>
-    <div id="nonWfConfig" style="display:${event.isWorldFlight !== false ? 'none' : 'flex'};align-items:center;gap:6px;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:6px;padding:4px 12px;">
+    <div id="nonWfConfig" style="display:${event.isWorldFlight !== false ? 'none' : 'flex'};align-items:center;gap:6px;background:var(--panel2);border:1px solid var(--border);border-radius:6px;padding:4px 12px;">
       <span style="font-size:11px;color:var(--muted);">Suffix:</span>
-      <input type="text" id="flightSuffixInput" value="${(event.flightSuffix || '').toUpperCase()}" placeholder="BA" maxlength="4" style="width:50px;padding:2px 6px;background:#0f172a;border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:12px;text-align:center;text-transform:uppercase;" />
+      <input type="text" id="flightSuffixInput" value="${(event.flightSuffix || '').toUpperCase()}" placeholder="BA" maxlength="4" style="width:50px;padding:2px 6px;background:var(--panel);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:12px;text-align:center;text-transform:uppercase;" />
       <span style="font-size:11px;color:var(--muted);margin-left:6px;" title="Flight number of the first leg. Subsequent legs increment from this.">First #:</span>
-      <div style="display:flex;align-items:center;background:#0f172a;border:1px solid var(--border);border-radius:4px;overflow:hidden;">
-        <span id="flightPrefixLabel" style="padding:2px 6px;background:rgba(255,255,255,0.04);color:var(--muted);font-size:12px;font-family:monospace;border-right:1px solid var(--border);">${(event.flightSuffix || 'BA').toUpperCase()}</span>
+      <div style="display:flex;align-items:center;background:var(--panel);border:1px solid var(--border);border-radius:4px;overflow:hidden;">
+        <span id="flightPrefixLabel" style="padding:2px 6px;background:var(--panel2);color:var(--muted);font-size:12px;font-family:monospace;border-right:1px solid var(--border);">${(event.flightSuffix || 'BA').toUpperCase()}</span>
         <input type="number" id="flightStartInput" value="${event.flightStartNumber ?? 1}" min="0" max="99999" style="width:60px;padding:2px 6px;background:transparent;border:none;color:var(--text);font-size:12px;text-align:center;font-family:monospace;" />
       </div>
       <span style="font-size:11px;color:var(--muted);margin-left:6px;">A/C:</span>
-      <select id="aircraftTypeSelect" style="padding:2px 6px;background:#0f172a;border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:12px;">
+      <select id="aircraftTypeSelect" style="padding:2px 6px;background:var(--panel);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:12px;">
         <option value="B738" ${(event.aircraftType || 'B738') === 'B738' ? 'selected' : ''}>737</option>
         <option value="B744" ${event.aircraftType === 'B744' ? 'selected' : ''}>747</option>
         <option value="B77W" ${event.aircraftType === 'B77W' ? 'selected' : ''}>777</option>
       </select>
-      <select id="cruiseModeSelect" title="Cruise planning mode sent to SimBrief" style="padding:2px 6px;margin-left:6px;background:#0f172a;border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:12px;">
+      <select id="cruiseModeSelect" title="Cruise planning mode sent to SimBrief" style="padding:2px 6px;margin-left:6px;background:var(--panel);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:12px;">
         <option value="CI" ${(event.cruiseMode || 'CI') === 'CI' ? 'selected' : ''}>CI</option>
         <option value="MACH" ${event.cruiseMode === 'MACH' ? 'selected' : ''}>Mach</option>
         <option value="KIAS" ${event.cruiseMode === 'KIAS' ? 'selected' : ''}>KIAS</option>
       </select>
-      <input type="number" id="costIndexInput" value="${event.costIndex ?? 30}" min="0" max="999" style="width:60px;padding:2px 6px;background:#0f172a;border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:12px;text-align:center;font-family:monospace;" />
+      <input type="number" id="costIndexInput" value="${event.costIndex ?? 30}" min="0" max="999" style="width:60px;padding:2px 6px;background:var(--panel);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:12px;text-align:center;font-family:monospace;" />
       <span style="font-size:11px;color:var(--muted);margin-left:6px;" title="BLOCK = next dep after arrival + turnaround (current default). FLIGHT = next dep after flight time (airborne only, no turnaround).">Next sector after:</span>
-      <select id="nextSectorAfterSelect" style="padding:2px 6px;background:#0f172a;border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:12px;">
+      <select id="nextSectorAfterSelect" style="padding:2px 6px;background:var(--panel);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:12px;">
         <option value="BLOCK" ${(event.nextSectorAfter || 'BLOCK') === 'BLOCK' ? 'selected' : ''}>Block time</option>
         <option value="FLIGHT" ${event.nextSectorAfter === 'FLIGHT' ? 'selected' : ''}>Flight time</option>
       </select>
       <span style="font-size:11px;color:var(--muted);margin-left:6px;" title="Forced cruise flight level for all legs (0 = auto/SimBrief optimum). Sent to SimBrief as &amp;fl=.">FL:</span>
-      <input type="number" id="cruiseAltitudeInput" value="${event.cruiseAltitude || ''}" placeholder="auto" min="0" max="600" style="width:60px;padding:2px 6px;background:#0f172a;border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:12px;text-align:center;font-family:monospace;" />
+      <input type="number" id="cruiseAltitudeInput" value="${event.cruiseAltitude || ''}" placeholder="auto" min="0" max="600" style="width:60px;padding:2px 6px;background:var(--panel);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:12px;text-align:center;font-family:monospace;" />
     </div>
-    <div style="display:flex;align-items:center;gap:6px;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:6px;padding:4px 12px;">
+    <div style="display:flex;align-items:center;gap:6px;background:var(--panel2);border:1px solid var(--border);border-radius:6px;padding:4px 12px;">
       <a href="https://www.simbrief.com/system/profile.php#settings" target="_blank" style="font-size:11px;color:var(--muted);text-decoration:none;" title="Find your Pilot ID in SimBrief Account Settings">SB Pilot ID:</a>
-      <input type="text" id="simbriefPilotId" value="" placeholder="e.g. 546033" style="width:80px;padding:2px 6px;background:#0f172a;border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:12px;text-align:center;" />
+      <input type="text" id="simbriefPilotId" value="" placeholder="e.g. 546033" style="width:80px;padding:2px 6px;background:var(--panel);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:12px;text-align:center;" />
     </div>
-    <div class="turnaround-setting" style="display:flex;align-items:center;gap:6px;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:6px;padding:4px 12px;">
+    <div class="turnaround-setting" style="display:flex;align-items:center;gap:6px;background:var(--panel2);border:1px solid var(--border);border-radius:6px;padding:4px 12px;">
       <span style="font-size:12px;color:var(--muted);">Turnaround:</span>
       <span id="turnaroundDisplay" style="font-size:13px;color:var(--text);font-weight:600;">${event.turnaroundMins ?? 45} min</span>
       <button type="button" id="editTurnaroundBtn" style="background:none;border:none;color:var(--accent);cursor:pointer;font-size:11px;padding:2px 4px;">&#9998;</button>
@@ -21954,7 +22006,7 @@ const content = `
     <button id="addRowBtn" class="action-btn" style="background:var(--success);color:#020617;font-weight:600;">+ Add Leg</button>
     ` : `
     <button id="unlinkCsvBtn" class="action-btn" style="background:var(--warning);color:#020617;font-weight:600;">Unlink CSV</button>
-    <button id="refreshScheduleBtn" class="action-btn" style="background:var(--accent);color:#020617;font-weight:600;">Force Refresh from Sheet</button>
+    <button id="refreshScheduleBtn" class="action-btn" style="background:var(--accent);color:#fff;font-weight:600;">Force Refresh from Sheet</button>
     `}
   </div>
 </div>
@@ -22105,7 +22157,7 @@ ${eventRows.map((r, idx) => {
             <textarea id="addLegRoute" rows="2" placeholder="Enter or paste ATC route..." style="font-family:monospace;font-size:12px;resize:none;overflow:hidden;"></textarea>
           </label>
           <div style="display:flex;gap:8px;margin-top:10px;">
-            <button type="button" id="addLegSimbriefGen" class="action-btn" style="font-size:12px;padding:6px 14px;background:var(--accent);color:#020617;font-weight:600;">Plan with SimBrief</button>
+            <button type="button" id="addLegSimbriefGen" class="action-btn" style="font-size:12px;padding:6px 14px;background:var(--accent);color:#fff;font-weight:600;">Plan with SimBrief</button>
             <button type="button" id="addLegSimbriefFetch" class="action-btn" style="font-size:12px;padding:6px 14px;" disabled>Pull SimBrief Data</button>
           </div>
           <div id="addLegSimbriefMsg" style="font-size:11px;color:var(--muted);margin-top:6px;display:none;"></div>
@@ -22151,7 +22203,7 @@ ${eventRows.map((r, idx) => {
 
 <style>
   .leg-section {
-    background: rgba(255,255,255,0.02);
+    background: var(--panel2);
     border: 1px solid var(--border);
     border-radius: 8px;
     padding: 14px 16px;
@@ -22181,16 +22233,16 @@ ${eventRows.map((r, idx) => {
     width: 100%;
     margin-top: 3px;
     padding: 7px 8px;
-    background: #0f172a;
-    border: 1px solid #1e293b;
+    background: var(--panel2);
+    border: 1px solid var(--border);
     border-radius: 6px;
-    color: #e5e7eb;
+    color: var(--text);
     font-size: 13px;
     box-sizing: border-box;
   }
   .leg-section input[readonly] {
-    color: #64748b;
-    background: #080d17;
+    color: var(--muted);
+    background: var(--bg0);
     cursor: not-allowed;
   }
   #addLegDialog ::-webkit-scrollbar { width: 4px; }
@@ -22270,7 +22322,7 @@ ${eventRows.map((r, idx) => {
     font-family: monospace; letter-spacing: 1px;
   }
   .sector-route-badge {
-    font-size: 11px; color: var(--muted); background: rgba(255,255,255,0.05);
+    font-size: 11px; color: var(--muted); background: var(--panel2);
     padding: 4px 10px; border-radius: 6px; border: 1px solid var(--border);
   }
 
@@ -22292,7 +22344,7 @@ ${eventRows.map((r, idx) => {
   .sector-times {
     display: grid; grid-template-columns: 1fr 1fr 1fr 1fr;
     gap: 12px; margin-bottom: 20px;
-    background: rgba(255,255,255,0.02); border: 1px solid var(--border);
+    background: var(--panel2); border: 1px solid var(--border);
     border-radius: 8px; padding: 14px;
   }
   .sector-time-item { text-align: center; }
@@ -22304,7 +22356,7 @@ ${eventRows.map((r, idx) => {
   .sector-route-section { margin-top: 12px; }
   .sector-route-text {
     margin-top: 6px; padding: 10px 14px;
-    background: rgba(255,255,255,0.02); border: 1px solid var(--border);
+    background: var(--panel2); border: 1px solid var(--border);
     border-radius: 8px; font-family: monospace; font-size: 12px;
     color: var(--text); line-height: 1.6; word-break: break-word;
   }
@@ -23712,7 +23764,7 @@ document.addEventListener('click', async function(e) {
     color: var(--text); font-size: 14px; font-weight: 600;
     cursor: pointer; transition: background .15s;
   }
-  .dp-title-btn:hover { background: rgba(255,255,255,0.04); }
+  .dp-title-btn:hover { background: var(--panel2); }
 
   .date-picker-weekdays {
     display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px;
@@ -23744,7 +23796,7 @@ document.addEventListener('click', async function(e) {
 
   .date-picker-actions {
     display: flex; gap: 8px; margin-top: 14px;
-    padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.06);
+    padding-top: 12px; border-top: 1px solid var(--border);
   }
   .dp-action-btn {
     flex: 1; padding: 6px 10px; border-radius: 6px;
@@ -25530,7 +25582,7 @@ app.get('/admin/settings', requireAdmin, async (req, res) => {
 
       <div style="margin-top:12px;display:flex;gap:8px;align-items:center;">
         <label style="font-size:12px;color:var(--muted);white-space:nowrap;">Banner Text</label>
-        <input type="text" id="bannerTextInput" value="${(siteBanner.text || '').replace(/"/g, '&quot;')}" placeholder="Enter banner message..." style="flex:1;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:rgba(255,255,255,0.04);color:var(--text);font-size:14px;" />
+        <input type="text" id="bannerTextInput" value="${(siteBanner.text || '').replace(/"/g, '&quot;')}" placeholder="Enter banner message..." style="flex:1;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:var(--panel2);color:var(--text);font-size:14px;" />
         <button id="bannerTextSave" class="action-btn primary" style="white-space:nowrap;">Save</button>
       </div>
     </section>
@@ -25599,12 +25651,12 @@ app.get('/admin/settings', requireAdmin, async (req, res) => {
         justify-content: space-between;
         padding: 14px 16px;
         border-radius: 8px;
-        background: rgba(255,255,255,0.02);
+        background: var(--panel2);
         border: 1px solid var(--border);
         transition: background .15s;
       }
       .settings-row:hover {
-        background: rgba(255,255,255,0.04);
+        background: var(--bg0);
       }
 
       .settings-row-info {
@@ -25658,7 +25710,7 @@ app.get('/admin/settings', requireAdmin, async (req, res) => {
       /* 3-way segmented control for page visibility */
       .vis-segctrl {
         display: inline-flex;
-        background: rgba(255,255,255,0.04);
+        background: var(--panel2);
         border: 1px solid var(--border);
         border-radius: 8px;
         padding: 2px;
@@ -25909,7 +25961,7 @@ app.get('/admin/test-pilots', requireAdmin, (req, res) => {
         </div>
       </div>
 
-      <div style="margin-top:16px;padding:12px;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:8px;">
+      <div style="margin-top:16px;padding:12px;background:var(--panel2);border:1px solid var(--border);border-radius:8px;">
         <div style="display:flex;justify-content:space-between;align-items:center;">
           <div>
             <div style="font-size:13px;color:var(--muted);">Active Test Pilots</div>
@@ -26427,7 +26479,7 @@ app.get('/admin/mailing-list', requireAdmin, async (req, res) => {
 
     <style>
       .ml-send-section {
-        background: rgba(255,255,255,0.02);
+        background: var(--panel2);
         border: 1px solid var(--border);
         border-radius: 10px;
         padding: 20px;
@@ -26445,10 +26497,10 @@ app.get('/admin/mailing-list', requireAdmin, async (req, res) => {
         width: 100%;
         margin-top: 4px;
         padding: 8px;
-        background: #0f172a;
-        border: 1px solid #1e293b;
+        background: var(--panel);
+        border: 1px solid var(--border);
         border-radius: 6px;
-        color: #e5e7eb;
+        color: var(--text);
         font-family: inherit;
         font-size: 13px;
       }
@@ -27038,7 +27090,7 @@ const filedRoute = p.flight_plan.route || '';
           .tobt-assign-list { display: flex; flex-direction: column; gap: 4px; max-height: 250px; overflow-y: auto; }
           .tobt-assign-pilot {
             display: flex; align-items: center; padding: 8px 12px;
-            background: rgba(255,255,255,0.02); border: 1px solid var(--border);
+            background: var(--panel2); border: 1px solid var(--border);
             border-radius: 6px; cursor: pointer; transition: all .15s;
             color: var(--text);
           }
@@ -27124,12 +27176,12 @@ const filedRoute = p.flight_plan.route || '';
           + '<style>'
           + '.dest-filter-btn {'
           + '  padding:6px 14px; font-size:12px; font-weight:600; border-radius:6px;'
-          + '  border:1px solid var(--border); background:rgba(255,255,255,0.03);'
+          + '  border:1px solid var(--border); background:var(--panel2);'
           + '  color:var(--muted); cursor:pointer; transition:all .15s;'
           + '}'
           + '.dest-filter-btn:hover { border-color:var(--accent); color:var(--text); }'
           + '.dest-filter-btn.active {'
-          + '  background:var(--accent); color:#020617; border-color:var(--accent);'
+          + '  background:var(--accent); color:#fff; border-color:var(--accent);'
           + '}'
           + '</style>'
           : ''}
@@ -27217,11 +27269,11 @@ document.addEventListener('click', function(e) {
     + '<p style="color:var(--muted);font-size:12px;margin:0 0 16px;">Pilot&apos;s filed route does not match the published WorldFlight route.</p>'
     + '<div style="margin-bottom:12px;">'
     + '<div style="font-size:11px;color:var(--muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px;">Published WF Route</div>'
-    + '<div style="font-family:monospace;font-size:12px;line-height:1.6;padding:8px 10px;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:6px;word-break:break-all;">' + (wf || '<em style="color:var(--muted);">No route published</em>') + '</div>'
+    + '<div style="font-family:monospace;font-size:12px;line-height:1.6;padding:8px 10px;background:var(--panel2);border:1px solid var(--border);border-radius:6px;word-break:break-all;">' + (wf || '<em style="color:var(--muted);">No route published</em>') + '</div>'
     + '</div>'
     + '<div style="margin-bottom:16px;">'
     + '<div style="font-size:11px;color:var(--muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px;">Pilot&apos;s Filed Route</div>'
-    + '<div style="font-family:monospace;font-size:12px;line-height:1.6;padding:8px 10px;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:6px;word-break:break-all;">' + highlightDiff(filedTokens, wfTokens) + '</div>'
+    + '<div style="font-family:monospace;font-size:12px;line-height:1.6;padding:8px 10px;background:var(--panel2);border:1px solid var(--border);border-radius:6px;word-break:break-all;">' + highlightDiff(filedTokens, wfTokens) + '</div>'
     + '</div>'
     + '<div style="font-size:11px;color:var(--muted);margin-bottom:16px;"><span style="color:#4ade80;">Green</span> = matches published route &nbsp; <span style="color:#f87171;">Red</span> = not in published route</div>'
     + '<div style="display:flex;gap:8px;">'
@@ -28419,7 +28471,7 @@ app.get('/atc', requirePageEnabled('atc'), (req, res) => {
           <h2 style="margin:0;">Ground Departures</h2>
         </div>
 
-        <div style="border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:14px;background:rgba(255,255,255,0.02);">
+        <div style="border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:14px;background:var(--panel2);">
           <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:14px;">
             <strong style="font-family:monospace;">EGLL &rarr; EKCH</strong>
             <span style="color:#4ade80;font-weight:600;">Slotted</span>
@@ -28434,19 +28486,19 @@ app.get('/atc', requirePageEnabled('atc'), (req, res) => {
         </div>
 
         <div style="display:grid;grid-template-columns:repeat(3, minmax(0, 1fr));gap:12px;margin-bottom:16px;">
-          <div style="border:1px solid var(--border);border-radius:10px;padding:14px;background:rgba(255,255,255,0.02);min-height:200px;">
+          <div style="border:1px solid var(--border);border-radius:10px;padding:14px;background:var(--panel2);min-height:200px;">
             <div style="font-size:13px;font-weight:700;color:var(--accent);letter-spacing:0.6px;margin-bottom:10px;">UPCOMING START</div>
             <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.4px;padding:6px 0;border-bottom:1px solid var(--border);">
               <span>Callsign</span><span>Target Start</span><span>Started</span>
             </div>
           </div>
-          <div style="border:1px solid var(--border);border-radius:10px;padding:14px;background:rgba(255,255,255,0.02);min-height:200px;">
+          <div style="border:1px solid var(--border);border-radius:10px;padding:14px;background:var(--panel2);min-height:200px;">
             <div style="font-size:13px;font-weight:700;color:var(--accent);letter-spacing:0.6px;margin-bottom:10px;">RECENTLY STARTED</div>
             <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.4px;padding:6px 0;border-bottom:1px solid var(--border);">
               <span>Callsign</span><span>Started At</span><span>Actions</span>
             </div>
           </div>
-          <div style="border:1px solid var(--border);border-radius:10px;padding:14px;background:rgba(255,255,255,0.02);min-height:200px;">
+          <div style="border:1px solid var(--border);border-radius:10px;padding:14px;background:var(--panel2);min-height:200px;">
             <div style="font-size:13px;font-weight:700;color:var(--accent);letter-spacing:0.6px;margin-bottom:4px;">AVAILABLE WF TOBTS</div>
             <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">Click to assign</div>
             <div style="display:grid;grid-template-columns:repeat(6, minmax(0, 1fr));gap:6px;">
@@ -28569,7 +28621,7 @@ app.get('/atc', requirePageEnabled('atc'), (req, res) => {
         padding: 10px 14px;
         border-radius: 8px;
         border: 1px solid var(--border);
-        background: rgba(255,255,255,0.02);
+        background: var(--panel2);
       }
       .flow-status-sector {
         font-family: monospace;
@@ -31846,7 +31898,7 @@ app.get('/airspace', requirePageEnabled('airspace'), async (req, res) => {
         aspect-ratio: 1 / 1;
         border-radius: 16px;
         border: 1px solid var(--border);
-        background: rgba(255,255,255,0.02);
+        background: var(--panel2);
         text-decoration: none;
         color: var(--text);
         cursor: pointer;
@@ -32005,7 +32057,7 @@ app.get('/airspace/by-sector', requirePageEnabled('airspace'), async (req, res) 
       }
       .flow-badge.slotted { background: rgba(244,114,182,0.15); color: #f472b6; border: 1px solid rgba(244,114,182,0.35); }
       .flow-badge.booking { background: rgba(56,189,248,0.12); color: var(--accent); border: 1px solid rgba(56,189,248,0.3); }
-      .flow-badge.none { background: rgba(255,255,255,0.04); color: var(--muted); border: 1px solid var(--border); }
+      .flow-badge.none { background: var(--panel2); color: var(--muted); border: 1px solid var(--border); }
       .fir-view-btn {
         background: rgba(56,189,248,0.12); color: var(--accent);
         border: 1px solid rgba(56,189,248,0.3); border-radius: 4px;
@@ -32031,9 +32083,9 @@ app.get('/airspace/by-sector', requirePageEnabled('airspace'), async (req, res) 
       .route-modal-close:hover { color: var(--text); }
       .route-modal-body { padding: 18px; overflow-y: auto; font-family: monospace; font-size: 13px; line-height: 1.6; color: var(--text); white-space: pre-wrap; word-break: break-all; }
       .route-modal-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 18px; border-top: 1px solid var(--border); }
-      .route-modal-copy { padding: 6px 14px; background: var(--accent); color: #020617; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; }
+      .route-modal-copy { padding: 6px 14px; background: var(--accent); color: #fff; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; }
       .route-modal-copy:hover { filter: brightness(1.05); }
-      .route-modal-secondary { background: rgba(255,255,255,0.05); color: var(--text); border: 1px solid var(--border); }
+      .route-modal-secondary { background: var(--panel2); color: var(--text); border: 1px solid var(--border); }
 
       .sector-empty-state {
         padding: 60px 20px;
@@ -32488,18 +32540,18 @@ app.get('/airspace/by-area', requirePageEnabled('airspace'), async (req, res) =>
     .airspace-search-row input { width: 140px; text-transform: uppercase; }
     .airspace-search-row select { min-width: 140px; }
     .airspace-search-row button {
-      padding: 8px 16px; background: var(--accent); color: #020617; border: none;
+      padding: 8px 16px; background: var(--accent); color: #fff; border: none;
       border-radius: 6px; font-weight: 600; cursor: pointer;
     }
     .airspace-filter-label { font-size: 11px; color: var(--muted); margin-bottom: 2px; display: block; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; }
     .filter-btn-group { display: flex; flex-wrap: wrap; gap: 4px; }
     .filter-btn {
       padding: 4px 12px; font-size: 12px; font-weight: 500;
-      background: rgba(255,255,255,0.03); border: 1px solid var(--border);
+      background: var(--panel2); border: 1px solid var(--border);
       border-radius: 6px; color: var(--muted); cursor: pointer; transition: all .15s;
     }
     .filter-btn:hover { border-color: var(--accent); color: var(--text); }
-    .filter-btn.active { background: var(--accent); color: #020617; border-color: var(--accent); font-weight: 600; }
+    .filter-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 600; }
     .your-division-btn { background: rgba(74,222,128,0.12); border-color: rgba(74,222,128,0.4); color: #4ade80; font-weight: 600; }
     .your-division-btn:hover { background: rgba(74,222,128,0.2); border-color: #4ade80; color: #4ade80; }
     .your-division-btn.active { background: #4ade80; color: #020617; border-color: #4ade80; }
@@ -32742,18 +32794,18 @@ app.get('/airspace/by-area', requirePageEnabled('airspace'), async (req, res) =>
     .route-modal-body {
       font-family: 'JetBrains Mono', ui-monospace, monospace;
       font-size: 13px; line-height: 1.5; color: var(--text);
-      background: rgba(255,255,255,0.03); border: 1px solid var(--border);
+      background: var(--panel2); border: 1px solid var(--border);
       border-radius: 8px; padding: 12px; overflow: auto; word-break: break-word; white-space: pre-wrap;
     }
     .route-modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
     .route-modal-copy {
-      padding: 6px 14px; background: var(--accent); color: #0b1220; border: none; border-radius: 6px;
+      padding: 6px 14px; background: var(--accent); color: #fff; border: none; border-radius: 6px;
       font-weight: 600; cursor: pointer; font-family: inherit;
     }
     .route-modal-copy.route-modal-secondary {
       background: transparent; color: var(--text); border: 1px solid var(--border);
     }
-    .route-modal-copy.route-modal-secondary:hover { background: rgba(255,255,255,0.04); }
+    .route-modal-copy.route-modal-secondary:hover { background: var(--panel2); }
 
     /* "View <Division> Overview" shortcut on the single-FIR header */
     .division-overview-btn {
@@ -32829,7 +32881,7 @@ app.get('/airspace/by-area', requirePageEnabled('airspace'), async (req, res) =>
     .fir-sub-row td {
       padding-top: 4px !important;
       padding-bottom: 4px !important;
-      border-top: 1px solid rgba(255,255,255,0.05) !important;
+      border-top: 1px solid var(--border) !important;
       font-size: 12px;
     }
     .fir-detail-header-box {
@@ -32855,7 +32907,7 @@ app.get('/airspace/by-area', requirePageEnabled('airspace'), async (req, res) =>
       letter-spacing: 1px;
       color: var(--muted);
       padding: 3px 10px;
-      background: rgba(255,255,255,0.05);
+      background: var(--panel2);
       border-radius: 4px;
     }
     .division-overview-header {
@@ -32881,7 +32933,7 @@ app.get('/airspace/by-area', requirePageEnabled('airspace'), async (req, res) =>
       letter-spacing: 1px;
       color: var(--muted);
       padding: 3px 10px;
-      background: rgba(255,255,255,0.05);
+      background: var(--panel2);
       border-radius: 4px;
     }
     .fir-badge {
@@ -32892,12 +32944,12 @@ app.get('/airspace/by-area', requirePageEnabled('airspace'), async (req, res) =>
     .flow-badge {
       display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;
     }
-    .flow-badge.none { background: rgba(255,255,255,0.05); color: var(--muted); }
+    .flow-badge.none { background: var(--panel2); color: var(--muted); }
     .flow-badge.slotted { background: rgba(34,197,94,0.15); color: #4ade80; }
     .flow-badge.booking { background: rgba(251,146,60,0.15); color: #fb923c; }
     .fir-highlight { fill: rgba(56,189,248,0.2); stroke: var(--accent); stroke-width: 2; }
     .fir-timeline {
-      margin-top: 16px; padding: 12px; background: rgba(255,255,255,0.02);
+      margin-top: 16px; padding: 12px; background: var(--panel2);
       border: 1px solid var(--border); border-radius: 8px;
     }
 
@@ -32908,20 +32960,20 @@ app.get('/airspace/by-area', requirePageEnabled('airspace'), async (req, res) =>
       display: flex; align-items: center; justify-content: center;
       font-size: 11px; font-weight: 600; color: var(--text);
       border-right: 1px solid var(--border);
-      background: rgba(255,255,255,0.02);
+      background: var(--panel2);
     }
     .tl-body { position: relative; min-width: 800px; }
     .tl-grid { position: absolute; top: 0; bottom: 0; left: 68px; right: 0; pointer-events: none; }
     .tl-gridline {
       position: absolute; top: 0; bottom: 0;
-      border-left: 1px solid rgba(255,255,255,0.04);
+      border-left: 1px solid var(--border);
     }
     .tl-gridline span {
       position: absolute; top: -14px;
       font-size: 9px; color: var(--muted2);
       transform: translateX(-50%);
     }
-    .tl-row { display: flex; align-items: center; min-height: 30px; border-bottom: 1px solid rgba(255,255,255,0.08); }
+    .tl-row { display: flex; align-items: center; min-height: 30px; border-bottom: 1px solid var(--border); }
     .tl-row-label {
       flex: 0 0 60px; font-size: 11px; font-weight: 600; color: var(--accent);
       font-family: monospace; padding-right: 8px; text-align: right;
@@ -32938,7 +32990,7 @@ app.get('/airspace/by-area', requirePageEnabled('airspace'), async (req, res) =>
     .tl-seg:hover { background: rgba(56,189,248,0.5); }
 
     .fir-timeline-bar {
-      position: relative; height: 32px; background: rgba(255,255,255,0.03);
+      position: relative; height: 32px; background: var(--panel2);
       border-radius: 4px; margin-bottom: 4px; border: 1px solid var(--border);
     }
     .fir-timeline-segment {
@@ -32988,7 +33040,7 @@ app.get('/airspace/by-area', requirePageEnabled('airspace'), async (req, res) =>
     .fir-leg-cards { display: none; }
     .fir-leg-cards { box-sizing: border-box; }
     .fir-leg-card {
-      background: rgba(255,255,255,0.03); border: 1px solid var(--border);
+      background: var(--panel2); border: 1px solid var(--border);
       border-radius: 8px; padding: 10px 12px; margin-bottom: 8px;
       overflow: hidden; word-break: break-word;
     }
@@ -34063,7 +34115,7 @@ app.get('/airspace/by-area', requirePageEnabled('airspace'), async (req, res) =>
             var flowLabel = fl.flowType === 'BOOKING_ONLY' ? 'Booking' : (fl.flowType === 'SLOTTED' ? 'Slotted' : 'None');
             var isFirst = idx === 0;
             var isLast = idx === firCount - 1;
-            var rowStyle = isLast ? '' : ' style="border-bottom:1px dashed rgba(255,255,255,0.05);"';
+            var rowStyle = isLast ? '' : ' style="border-bottom:1px dashed var(--border);"';
             html += '<tr' + rowStyle + '>';
             if (isFirst) {
               html += '<td rowspan="' + firCount + '" style="font-weight:700;color:' + wfColor + ';border-left:3px solid ' + wfColor + ';padding-left:10px;vertical-align:top;">' + l.wf + '</td>'
@@ -34745,7 +34797,7 @@ app.get('/book', async (req, res) => {
   ${preselectedKey ? (() => {
     const ps = adminSheetCache.find(s => `${s.from}-${s.to}-${s.dep_time_utc}` === preselectedKey);
     return ps
-      ? `<div style="font-size:15px;font-weight:600;color:var(--text);padding:8px 12px;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:6px;">${ps.number} | ${ps.from} – ${ps.to} <span style="color:var(--muted);font-size:12px;margin-left:8px;">${ps.date_utc}</span></div>`
+      ? `<div style="font-size:15px;font-weight:600;color:var(--text);padding:8px 12px;background:var(--panel2);border:1px solid var(--border);border-radius:6px;">${ps.number} | ${ps.from} – ${ps.to} <span style="color:var(--muted);font-size:12px;margin-left:8px;">${ps.date_utc}</span></div>`
       : `<div style="color:var(--muted);">Unknown departure</div>`;
   })() : `<div style="color:var(--muted);">No departure selected. <a href="/schedule" style="color:var(--accent);">Go to schedule</a></div>`}
   <select id="depSelect" class="tobt-select" style="display:none;">
@@ -34773,7 +34825,7 @@ const selected = value === preselectedKey ? 'selected' : '';
 </div>
       <div style="padding:14px 18px;margin-bottom:16px;background:linear-gradient(135deg,rgba(239,68,68,0.08),rgba(239,68,68,0.03));border:1px solid rgba(239,68,68,0.25);border-radius:10px;line-height:1.6;">
         <div style="font-size:14px;font-weight:700;color:#f87171;margin-bottom:6px;">What is a TOBT (Target Off-Blocks Time)?</div>
-        <div style="font-size:13px;color:#e5e7eb;">This is your scheduled departure time. Please connect at least <strong>30 minutes</strong> before this time. You should be ready to push back at this time. The actual push time may differ depending on ramp and airfield congestion.</div>
+        <div style="font-size:13px;color:var(--text);">This is your scheduled departure time. Please connect at least <strong>30 minutes</strong> before this time. You should be ready to push back at this time. The actual push time may differ depending on ramp and airfield congestion.</div>
       </div>
       <table class="tobt-table">
         <thead>
@@ -35356,8 +35408,7 @@ app.get('/my-slots', requireLogin, requirePageEnabled('my-slots'), (req, res) =>
                 <th>Date</th>
                 <th>Dep Window</th>
                 <th>Flow Type</th>
-                ${showAtcRoute ? '<th>ATC Route</th>' : ''}
-                <th>Plan</th>
+                <th>Booking</th>
                 <th></th>
               </tr>
             </thead>
@@ -35368,6 +35419,10 @@ app.get('/my-slots', requireLogin, requirePageEnabled('my-slots'), (req, res) =>
                   ? String(r.atcRoute).replace(/&/g, '&amp;').replace(/"/g, '&quot;')
                   : '';
                 const route2Attr = r.atcRoute2 && r.atcRoute2 !== '-' ? String(r.atcRoute2).replace(/&/g, '&amp;').replace(/"/g, '&quot;') : '';
+                const assignedRoute = tobtBookingsByKey[r.bookingKey]?.assignedRoute || 'A';
+                const assignedRouteDisplay = assignedRoute === 'B' && route2Attr ? route2Attr : routeAttr;
+                const assignedRouteLabel = assignedRoute === 'B' ? 'Secondary Route' : 'Primary Route';
+                const hasSplit = !!(route2Attr);
                 return `
                 <tr>
                   <td><button class="sector-details-btn" data-from="${r.from}" data-to="${r.to}" data-wf="${r.wfSector}">${r.wfSector}</button></td>
@@ -35376,16 +35431,21 @@ app.get('/my-slots', requireLogin, requirePageEnabled('my-slots'), (req, res) =>
                   <td>${r.dateDisplay}</td>
                   <td>${r.depWindow || '—'}</td>
                   <td>${r.tobt && r.tobt !== '—' && r.tobt !== 'N/A'
-                    ? `Slotted - <span style="color:#4ade80;font-weight:600;">${r.tobt.replace(':','')}z</span> <span class="tobt-help">?<span class="tobt-tooltip">This is a TOBT (Target Off-Blocks Time).<br>Please connect at least 30 minutes before this time.<br>You should be ready to push at this time.<br><b>The actual push time may differ depending on<br>ramp and airfield congestion.</b></span></span>`
-                    : `<span style="color:#4ade80;font-weight:600;">Booking Confirmed</span> <span class="tobt-help">?<span class="tobt-tooltip">You have a booking for this sector. Slots are not required.<br><b>Plan to depart within the Dep Window.</b></span></span>`}</td>
-                  ${showAtcRoute ? `<td>${hasRoute
-                    ? `<button type="button" class="show-route-btn" data-route="${routeAttr}" data-route2="${route2Attr}">Show Route</button>`
-                    : '<span style="color:var(--muted);">—</span>'}</td>` : ''}
+                    ? `Slotted - <span style="color:var(--success);font-weight:600;">${r.tobt.replace(':','')}z</span> <span class="tobt-help">?<span class="tobt-tooltip">This is a TOBT (Target Off-Blocks Time).<br>Please connect at least 30 minutes before this time.<br>You should be ready to push at this time.<br><b>The actual push time may differ depending on<br>ramp and airfield congestion.</b></span></span>`
+                    : `<span style="color:var(--success);font-weight:600;">Booking Confirmed</span> <span class="tobt-help">?<span class="tobt-tooltip">You have a booking for this sector. Slots are not required.<br><b>Plan to depart within the Dep Window.</b></span></span>`}</td>
                   <td>
-                    <a class="simbrief-btn" href="${r.simbriefUrl}" target="_blank" rel="noopener">
-                      <span class="simbrief-logo">SB</span>
-                      <span class="simbrief-text">Plan<span class="simbrief-text-long"> with SimBrief</span></span>
-                    </a>
+                    <button type="button" class="show-route-btn"
+                      data-wf="${r.wfSector}" data-from="${r.from}" data-to="${r.to}"
+                      data-route="${routeAttr}" data-route2="${route2Attr}"
+                      data-assigned="${assignedRoute}" data-assigned-label="${assignedRouteLabel}"
+                      data-assigned-route="${assignedRouteDisplay}"
+                      data-has-split="${hasSplit}" data-cid="${cid}"
+                      data-tobt="${r.tobt !== 'N/A' ? r.tobt : ''}"
+                      data-dep-window="${r.depWindow || ''}"
+                      data-date="${r.dateDisplay}"
+                      data-simbrief="${r.simbriefUrl.replace(/"/g, '&quot;')}"
+                      data-slot-key="${r.slotKey}" data-callsign="${r.callsign}"
+                      style="padding:6px 14px;">View Booking</button>
                   </td>
                   <td>
                     <button type="button" class="tobt-btn cancel cancel-slot-btn"
@@ -35446,18 +35506,18 @@ app.get('/my-slots', requireLogin, requirePageEnabled('my-slots'), (req, res) =>
       .route-modal-body {
         font-family: 'JetBrains Mono', ui-monospace, monospace;
         font-size: 13px; line-height: 1.5; color: var(--text);
-        background: rgba(255,255,255,0.03); border: 1px solid var(--border);
+        background: var(--panel2); border: 1px solid var(--border);
         border-radius: 8px; padding: 12px; overflow: auto; word-break: break-word; white-space: pre-wrap;
       }
       .route-modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
       .route-modal-copy {
-        padding: 6px 14px; background: var(--accent); color: #0b1220; border: none; border-radius: 6px;
+        padding: 6px 14px; background: var(--accent); color: #fff; border: none; border-radius: 6px;
         font-weight: 600; cursor: pointer; font-family: inherit;
       }
       .route-modal-copy.route-modal-secondary {
         background: transparent; color: var(--text); border: 1px solid var(--border);
       }
-      .route-modal-copy.route-modal-secondary:hover { background: rgba(255,255,255,0.04); }
+      .route-modal-copy.route-modal-secondary:hover { background: var(--panel2); }
     </style>
 
     <script>
@@ -35469,25 +35529,100 @@ app.get('/my-slots', requireLogin, requirePageEnabled('my-slots'), (req, res) =>
       var closeActionBtn = document.getElementById('routeModalCloseAction');
       var backdrop = modal.querySelector('.route-modal-backdrop');
 
-      function open(route, route2) {
-        body.textContent = '';
-        if (route) { body.textContent = route; }
-        if (route2) {
-          var sep = document.createElement('div');
-          sep.style.cssText = 'margin:12px 0 8px;padding-top:10px;border-top:1px solid var(--border);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted);font-family:inherit;';
-          sep.textContent = 'Secondary Route';
-          body.appendChild(sep);
-          var r2 = document.createElement('span');
-          r2.textContent = route2;
-          body.appendChild(r2);
+      function open(btn) {
+        var wf = btn.getAttribute('data-wf') || '';
+        var from = btn.getAttribute('data-from') || '';
+        var to = btn.getAttribute('data-to') || '';
+        var route = btn.getAttribute('data-route') || '';
+        var route2 = btn.getAttribute('data-route2') || '';
+        var assigned = btn.getAttribute('data-assigned') || 'A';
+        var assignedLabel = btn.getAttribute('data-assigned-label') || 'Primary Route';
+        var assignedRoute = btn.getAttribute('data-assigned-route') || route;
+        var hasSplit = btn.getAttribute('data-has-split') === 'true';
+        var cidVal = btn.getAttribute('data-cid') || '';
+        var tobt = btn.getAttribute('data-tobt') || '';
+        var depWindow = btn.getAttribute('data-dep-window') || '';
+        var dateVal = btn.getAttribute('data-date') || '';
+        var sbUrl = btn.getAttribute('data-simbrief') || '';
+
+        var titleEl = document.getElementById('routeModalTitle');
+        if (titleEl) titleEl.textContent = 'Booking Confirmation';
+
+        var html = '<div style="display:flex;flex-direction:column;gap:10px;font-family:inherit;">'
+          + '<div style="display:flex;justify-content:space-between;font-size:13px;"><span style="color:var(--muted);">Sector</span><strong style="color:var(--accent);">' + wf + ' — ' + from + ' → ' + to + '</strong></div>'
+          + '<div style="display:flex;justify-content:space-between;font-size:13px;"><span style="color:var(--muted);">Assigned CID</span><strong>' + cidVal + '</strong></div>'
+          + (dateVal ? '<div style="display:flex;justify-content:space-between;font-size:13px;"><span style="color:var(--muted);">Date</span><strong>' + dateVal + '</strong></div>' : '')
+          + (tobt
+            ? '<div style="display:flex;justify-content:space-between;font-size:13px;"><span style="color:var(--muted);">TOBT</span><strong style="color:var(--warning);">' + tobt + ' UTC</strong></div>'
+            : (depWindow ? '<div style="display:flex;justify-content:space-between;font-size:13px;"><span style="color:var(--muted);">Dep Window</span><strong>' + depWindow + '</strong></div>' : ''))
+          + (hasSplit ? '<div style="display:flex;justify-content:space-between;font-size:13px;"><span style="color:var(--muted);">Assigned Route</span><strong style="color:var(--success);">' + assignedLabel + '</strong></div>' : '')
+          + '</div>'
+          + '<div style="margin-top:6px;padding:10px 12px;background:var(--panel2);border:1px solid var(--border);border-radius:8px;">'
+          + '<div style="font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;">Your ATC Route</div>'
+          + '<div style="font-family:monospace;font-size:12px;line-height:1.6;word-break:break-all;">' + (assignedRoute || '<span style="color:var(--muted);">Not yet published</span>') + '</div>'
+          + '</div>';
+        if (tobt) {
+          html += '<div style="margin-top:6px;padding:8px 10px;background:rgba(245,158,11,0.06);border:1px solid rgba(245,158,11,0.2);border-radius:6px;font-size:11px;color:var(--muted);line-height:1.5;">'
+            + '<strong style="color:var(--warning);">TOBT</strong> is your Target Off-Blocks Time. Please connect at least <strong>30 minutes</strong> before this time. You should be ready to push at this time. The actual push time may differ depending on ramp and airfield congestion.'
+            + '</div>';
+        } else {
+          html += '<div style="margin-top:6px;padding:8px 10px;background:rgba(56,189,248,0.06);border:1px solid rgba(56,189,248,0.2);border-radius:6px;font-size:11px;color:var(--muted);line-height:1.5;">'
+            + 'You have a booking for this sector. Slots are not required. <strong>Plan to depart within the Dep Window.</strong>'
+            + '</div>';
         }
+        var slotKey = btn.getAttribute('data-slot-key') || '';
+        html += '<div style="display:flex;gap:8px;margin-top:8px;">'
+          + '<a href="' + sbUrl + '" target="_blank" rel="noopener" style="flex:1;text-align:center;padding:8px 14px;background:rgba(74,222,128,0.12);color:var(--success);border:1px solid rgba(74,222,128,0.35);border-radius:6px;font-size:12px;font-weight:600;text-decoration:none;">Plan with SimBrief</a>'
+          + '<button type="button" class="modal-cancel-booking-btn" data-slot-key="' + slotKey.replace(/"/g, '&quot;') + '" style="flex:1;text-align:center;padding:8px 14px;background:rgba(239,68,68,0.12);color:var(--danger);border:1px solid rgba(239,68,68,0.35);border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;">Cancel Booking</button>'
+          + '</div>';
+
+        body.innerHTML = html;
+        // Wire cancel button inside modal
+        var cancelBtn = body.querySelector('.modal-cancel-booking-btn');
+        if (cancelBtn) {
+          cancelBtn.addEventListener('click', function() {
+            var sk = cancelBtn.getAttribute('data-slot-key');
+            if (!sk) return;
+            var overlay = document.createElement('div');
+            overlay.style.cssText = 'position:fixed;inset:0;z-index:1100;display:flex;align-items:center;justify-content:center;padding:16px;';
+            overlay.innerHTML = '<div style="position:absolute;inset:0;background:rgba(0,0,0,0.5);" class="cancel-backdrop"></div>'
+              + '<div style="position:relative;background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:24px 28px;width:min(360px,90vw);text-align:center;box-shadow:var(--shadow);">'
+              + '<div style="font-size:16px;font-weight:700;color:var(--danger);margin-bottom:8px;">Cancel Booking?</div>'
+              + '<div style="font-size:13px;color:var(--muted);margin-bottom:20px;">Are you sure you want to cancel this booking? This cannot be undone.</div>'
+              + '<div style="display:flex;gap:8px;">'
+              + '<button type="button" class="confirm-keep" style="flex:1;padding:10px 14px;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;">Keep Booking</button>'
+              + '<button type="button" class="confirm-cancel" style="flex:1;padding:10px 14px;background:rgba(239,68,68,0.15);color:var(--danger);border:1px solid rgba(239,68,68,0.4);border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;">Yes, Cancel</button>'
+              + '</div></div>';
+            document.body.appendChild(overlay);
+            overlay.querySelector('.cancel-backdrop').addEventListener('click', function() { overlay.remove(); });
+            overlay.querySelector('.confirm-keep').addEventListener('click', function() { overlay.remove(); });
+            overlay.querySelector('.confirm-cancel').addEventListener('click', async function() {
+              this.disabled = true;
+              this.textContent = 'Cancelling...';
+              try {
+                await fetch('/api/tobt/cancel', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  credentials: 'same-origin',
+                  body: JSON.stringify({ slotKey: sk })
+                });
+                window.location.href = '/my-slots';
+              } catch (err) {
+                this.disabled = false;
+                this.textContent = 'Yes, Cancel';
+              }
+            });
+          });
+        }
+        // Hide copy button — not needed for booking modal
+        if (copyBtn) copyBtn.style.display = 'none';
         modal.hidden = false;
       }
-      function close() { modal.hidden = true; }
+      function close() { modal.hidden = true; if (copyBtn) copyBtn.style.display = ''; }
 
       document.addEventListener('click', function(e) {
         var btn = e.target.closest('.show-route-btn');
-        if (btn) { open(btn.getAttribute('data-route') || '', btn.getAttribute('data-route2') || ''); return; }
+        if (btn) { open(btn); return; }
       });
       closeBtn.addEventListener('click', close);
       if (closeActionBtn) closeActionBtn.addEventListener('click', close);
@@ -35501,6 +35636,18 @@ app.get('/my-slots', requireLogin, requirePageEnabled('my-slots'), (req, res) =>
           setTimeout(function() { copyBtn.textContent = prev; }, 1200);
         } catch (e) {}
       });
+
+      // Auto-open modal if ?view= query param is set
+      var viewParam = new URLSearchParams(window.location.search).get('view');
+      if (viewParam) {
+        var btns = document.querySelectorAll('.show-route-btn');
+        for (var i = 0; i < btns.length; i++) {
+          if (btns[i].getAttribute('data-slot-key') === viewParam) {
+            open(btns[i]);
+            break;
+          }
+        }
+      }
     })();
     </script>
 
