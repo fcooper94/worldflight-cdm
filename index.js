@@ -10009,7 +10009,7 @@ document.addEventListener('DOMContentLoaded', () => {
     <div id="routeModalBody" class="route-modal-body"></div>
     <div class="route-modal-actions">
       <button type="button" id="routeModalCloseAction" class="route-modal-copy route-modal-secondary">Close</button>
-      <button type="button" id="routeModalCopy" class="route-modal-copy">Copy</button>
+      <button type="button" id="routeModalCopy" class="route-modal-copy" style="display:none;">Copy</button>
     </div>
   </div>
 </div>
@@ -10068,17 +10068,22 @@ document.addEventListener('DOMContentLoaded', () => {
   var backdrop = modal.querySelector('.route-modal-backdrop');
 
   function open(route, route2) {
-    var html = route || '';
-    if (route2) {
-      html += '\\n\\n--- Secondary Route ---\\n' + route2;
-    }
     body.textContent = '';
+    body.innerHTML = '';
     if (route) {
-      body.textContent = route;
+      if (route2) {
+        var lbl1 = document.createElement('div');
+        lbl1.style.cssText = 'font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--accent);font-family:inherit;margin-bottom:6px;';
+        lbl1.textContent = 'Primary Route';
+        body.appendChild(lbl1);
+      }
+      var r1 = document.createElement('span');
+      r1.textContent = route;
+      body.appendChild(r1);
     }
     if (route2) {
       var sep = document.createElement('div');
-      sep.style.cssText = 'margin:12px 0 8px;padding-top:10px;border-top:1px solid var(--border);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted);font-family:inherit;';
+      sep.style.cssText = 'margin:12px 0 8px;padding-top:10px;border-top:1px solid var(--border);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--accent);font-family:inherit;';
       sep.textContent = 'Secondary Route';
       body.appendChild(sep);
       var r2 = document.createElement('span');
@@ -19882,7 +19887,7 @@ app.get('/team/bookings', requireLogin, requireTeamMember, async (req, res) => {
         <div id="routeModalBody" class="route-modal-body"></div>
         <div class="route-modal-actions">
           <button type="button" id="routeModalCloseAction" class="route-modal-copy route-modal-secondary">Close</button>
-      <button type="button" id="routeModalCopy" class="route-modal-copy">Copy</button>
+      <button type="button" id="routeModalCopy" class="route-modal-copy" style="display:none;">Copy</button>
         </div>
       </div>
     </div>
@@ -19966,15 +19971,40 @@ app.get('/team/bookings', requireLogin, requireTeamMember, async (req, res) => {
       var closeActionBtn = document.getElementById('routeModalCloseAction');
       var backdrop = modal.querySelector('.route-modal-backdrop');
 
+      function makeCopyBtn(text) {
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.title = 'Copy route';
+        btn.style.cssText = 'background:none;border:none;color:var(--muted);cursor:pointer;padding:2px;margin-left:6px;vertical-align:middle;';
+        btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+        btn.addEventListener('click', function() {
+          navigator.clipboard.writeText(text).then(function() {
+            btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+            setTimeout(function() {
+              btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+            }, 1200);
+          }).catch(function() {});
+        });
+        return btn;
+      }
       function open(route, route2) {
         body.textContent = '';
+        body.innerHTML = '';
         if (route) {
-          body.textContent = route;
+          var lbl1 = document.createElement('div');
+          lbl1.style.cssText = 'display:flex;align-items:center;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--accent);font-family:inherit;margin-bottom:6px;';
+          lbl1.textContent = route2 ? 'Primary Route' : 'ATC Route';
+          lbl1.appendChild(makeCopyBtn(route));
+          body.appendChild(lbl1);
+          var r1 = document.createElement('span');
+          r1.textContent = route;
+          body.appendChild(r1);
         }
         if (route2) {
           var sep = document.createElement('div');
-          sep.style.cssText = 'margin:12px 0 8px;padding-top:10px;border-top:1px solid var(--border);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted);font-family:inherit;';
+          sep.style.cssText = 'display:flex;align-items:center;margin:12px 0 8px;padding-top:10px;border-top:1px solid var(--border);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--accent);font-family:inherit;';
           sep.textContent = 'Secondary Route';
+          sep.appendChild(makeCopyBtn(route2));
           body.appendChild(sep);
           var r2 = document.createElement('span');
           r2.textContent = route2;
@@ -31982,8 +32012,8 @@ app.get('/airspace/by-sector', requirePageEnabled('airspace'), async (req, res) 
       .sector-picker-card {
         margin-bottom: 20px;
         padding: 28px 32px;
-        background: linear-gradient(135deg, rgba(139,92,246,0.06), rgba(56,189,248,0.04));
-        border: 1px solid rgba(139,92,246,0.25);
+        background: var(--panel);
+        border: 1px solid var(--border);
         border-radius: 14px;
       }
       .sector-picker-head {
@@ -31994,7 +32024,7 @@ app.get('/airspace/by-sector', requirePageEnabled('airspace'), async (req, res) 
       .sector-picker-back {
         text-decoration: none; padding: 6px 12px; font-size: 12px;
         background: rgba(139,92,246,0.12); border: 1px solid rgba(139,92,246,0.35);
-        color: #c4b5fd; border-radius: 6px;
+        color: #8b5cf6; border-radius: 6px;
       }
       .sector-picker-back:hover { background: rgba(139,92,246,0.2); }
       .sector-picker-sub {
@@ -32008,22 +32038,22 @@ app.get('/airspace/by-sector', requirePageEnabled('airspace'), async (req, res) 
       .sector-picker-select {
         width: 100%; padding: 16px 20px;
         font-size: 17px; font-weight: 600;
-        background: rgba(0,0,0,0.35); color: var(--text);
-        border: 2px solid rgba(139,92,246,0.4);
+        background: var(--panel2); color: var(--text);
+        border: 2px solid var(--border);
         border-radius: 10px; cursor: pointer;
         appearance: none;
-        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23a78bfa' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%238b5cf6' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
         background-repeat: no-repeat;
         background-position: right 18px center;
         padding-right: 48px;
         transition: border-color .15s, box-shadow .15s;
       }
       .sector-picker-select:hover, .sector-picker-select:focus {
-        border-color: #a78bfa;
+        border-color: #8b5cf6;
         box-shadow: 0 0 0 3px rgba(139,92,246,0.18);
         outline: none;
       }
-      .sector-picker-select option { background: #0f172a; color: var(--text); }
+      .sector-picker-select option { background: var(--panel); color: var(--text); }
 
       #sectorRouteMap path:focus { outline: none; }
       #sectorRouteMap .leaflet-interactive:focus { outline: none; }
@@ -32153,7 +32183,7 @@ app.get('/airspace/by-sector', requirePageEnabled('airspace'), async (req, res) 
         <div id="routeModalBody" class="route-modal-body"></div>
         <div class="route-modal-foot">
           <button type="button" id="routeModalCloseAction" class="route-modal-copy route-modal-secondary">Close</button>
-          <button type="button" id="routeModalCopy" class="route-modal-copy">Copy</button>
+          <button type="button" id="routeModalCopy" class="route-modal-copy" style="display:none;">Copy</button>
         </div>
       </div>
     </div>
@@ -33219,7 +33249,7 @@ app.get('/airspace/by-area', requirePageEnabled('airspace'), async (req, res) =>
         <div id="routeModalBody" class="route-modal-body"></div>
         <div class="route-modal-actions">
           <button type="button" id="routeModalCloseAction" class="route-modal-copy route-modal-secondary">Close</button>
-          <button type="button" id="routeModalCopy" class="route-modal-copy">Copy</button>
+          <button type="button" id="routeModalCopy" class="route-modal-copy" style="display:none;">Copy</button>
         </div>
       </div>
     </div>
@@ -34575,15 +34605,40 @@ app.get('/airspace/by-area', requirePageEnabled('airspace'), async (req, res) =>
       var closeActionBtn = document.getElementById('routeModalCloseAction');
       var backdrop = modal.querySelector('.route-modal-backdrop');
 
+      function makeCopyBtn(text) {
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.title = 'Copy route';
+        btn.style.cssText = 'background:none;border:none;color:var(--muted);cursor:pointer;padding:2px;margin-left:6px;vertical-align:middle;';
+        btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+        btn.addEventListener('click', function() {
+          navigator.clipboard.writeText(text).then(function() {
+            btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+            setTimeout(function() {
+              btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+            }, 1200);
+          }).catch(function() {});
+        });
+        return btn;
+      }
       function open(route, route2) {
         body.textContent = '';
+        body.innerHTML = '';
         if (route) {
-          body.textContent = route;
+          var lbl1 = document.createElement('div');
+          lbl1.style.cssText = 'display:flex;align-items:center;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--accent);font-family:inherit;margin-bottom:6px;';
+          lbl1.textContent = route2 ? 'Primary Route' : 'ATC Route';
+          lbl1.appendChild(makeCopyBtn(route));
+          body.appendChild(lbl1);
+          var r1 = document.createElement('span');
+          r1.textContent = route;
+          body.appendChild(r1);
         }
         if (route2) {
           var sep = document.createElement('div');
-          sep.style.cssText = 'margin:12px 0 8px;padding-top:10px;border-top:1px solid var(--border);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted);font-family:inherit;';
+          sep.style.cssText = 'display:flex;align-items:center;margin:12px 0 8px;padding-top:10px;border-top:1px solid var(--border);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--accent);font-family:inherit;';
           sep.textContent = 'Secondary Route';
+          sep.appendChild(makeCopyBtn(route2));
           body.appendChild(sep);
           var r2 = document.createElement('span');
           r2.textContent = route2;
@@ -35472,7 +35527,7 @@ app.get('/my-slots', requireLogin, requirePageEnabled('my-slots'), (req, res) =>
         <div id="routeModalBody" class="route-modal-body"></div>
         <div class="route-modal-actions">
           <button type="button" id="routeModalCloseAction" class="route-modal-copy route-modal-secondary">Close</button>
-      <button type="button" id="routeModalCopy" class="route-modal-copy">Copy</button>
+      <button type="button" id="routeModalCopy" class="route-modal-copy" style="display:none;">Copy</button>
         </div>
       </div>
     </div>
