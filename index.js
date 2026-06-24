@@ -371,6 +371,7 @@ function renderLayout(opts) {
     isAffiliate: cid ? isAffiliate(cid) : false,
     isWfAtc: cid ? (isWfAtc(cid) || isAdminUser(cid)) : false,
     hasFirAccess: cid ? (userHasFirAccess(cid) || isAdminUser(cid)) : false,
+    sectorPlanOutOfSync: (cid && isAdminUser(cid)) ? sectorPlanOutOfSyncCount : 0,
     canManageAffiliateMembers: cid ? canManageAffiliateMembers(cid) : false,
     activeEvent: active ? { id: active.id, name: active.name, year: active.year } : null
   });
@@ -2768,6 +2769,8 @@ await (async () => {
 
 
   rebuildAllTobtSlots();       // 🔑 NOW WORKS
+
+  refreshSectorPlanOutOfSyncCount(); // prime the out-of-sync badge count
 
   // Auto-assign bookings/slots for all participating teams (first), then
   // affiliates fill remaining slots. Both are idempotent — safe to re-run.
@@ -28911,6 +28914,10 @@ app.get('/sector-planning', requirePageEnabled('sector-planning'), async (req, r
     return renderForbidden(req, res, 'Sector Planning is only available to users with FIR Events Access.');
   }
 
+  // Refresh the out-of-sync badge count so it's accurate on this page (and the
+  // sidebar) for admins.
+  if (isAdmin) await refreshSectorPlanOutOfSyncCount();
+
   let owned = new Set();
   let participations = [];
   if (cid) {
@@ -29030,7 +29037,7 @@ app.get('/sector-planning', requirePageEnabled('sector-planning'), async (req, r
           <p style="color:var(--muted);margin:0 0 16px;">WorldFlight sectors you're participating in — either departing/arriving in one of your FIRs or transiting through.</p>
         </div>
         ${isAdmin ? '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">'
-          + '<a href="/sector-planning/admin" class="action-btn" style="font-size:12px;padding:6px 14px;white-space:nowrap;">Admin Overview</a>'
+          + '<a href="/sector-planning/admin" class="action-btn" style="font-size:12px;padding:6px 14px;white-space:nowrap;display:inline-flex;align-items:center;gap:6px;">Admin Overview' + (sectorPlanOutOfSyncCount > 0 ? '<span style="background:#ef4444;color:#fff;font-size:10px;font-weight:700;min-width:18px;height:18px;border-radius:9px;display:inline-flex;align-items:center;justify-content:center;padding:0 5px;" title="' + sectorPlanOutOfSyncCount + ' sector' + (sectorPlanOutOfSyncCount === 1 ? '' : 's') + ' need re-syncing">' + sectorPlanOutOfSyncCount + '</span>' : '') + '</a>'
           + (isSuperAdmin(cid) ? '<button type="button" id="spResetAllBtn" class="action-btn" style="font-size:12px;padding:6px 14px;white-space:nowrap;background:rgba(239,68,68,0.12);color:#f87171;border:1px solid rgba(239,68,68,0.4);">Reset All Data!</button>' : '')
           + '</div>' : ''}
       </div>
@@ -29146,6 +29153,64 @@ app.get('/sector-planning', requirePageEnabled('sector-planning'), async (req, r
   }));
 });
 
+// ── Sector Planning sync state (shared) ──────────────────────────────────
+// Per-sector "is the agreed plan out of sync with the live schedule?" check,
+// shared by the admin overview and the cached out-of-sync count below so the
+// two can't drift. `r` is an adminSheetCache row (uses atc_route_raw/_raw2 —
+// the ungated stored route). `plan` is its SectorPlan, `liveFlow` its DepFlow.
+const FLOW_TYPE_MAP_SP = { 'BOOKING_REQUIRED': 'BOOKING_ONLY', 'TIME_SLOT_REQUIRED': 'SLOTTED', 'NONE': 'NONE' };
+function computeSectorSync(r, plan, liveFlow) {
+  plan = plan || {};
+  const norm = s => (s || '').toUpperCase().replace(/\s+/g, ' ');
+  const routeAgreed = compareRoutes(plan.depRouteSuggestion, plan.arrRouteSuggestion).status === 'GREEN';
+  const flowSet = !!plan.depFlowType && (plan.depFlowType === 'NONE' || (plan.depFlowRate != null && plan.depFlowRate > 0));
+  const agreedRoute = routeAgreed ? (plan.depRouteSuggestion || '').trim() : '';
+  const currentScheduleRoute = (r.atc_route_raw || '').trim();
+  const routeSynced = !!(agreedRoute && currentScheduleRoute && norm(currentScheduleRoute) === norm(agreedRoute));
+  const routeChanged = !!(agreedRoute && currentScheduleRoute && norm(currentScheduleRoute) !== norm(agreedRoute));
+  const agreedRoute2 = (plan.splitAgreed && plan.depSplitRoute) ? (plan.depSplitRoute || '').trim() : '';
+  const currentScheduleRoute2 = (r.atc_route_raw2 || '').trim();
+  const route2Synced = norm(currentScheduleRoute2) === norm(agreedRoute2);
+  const route2Changed = !route2Synced && !!(agreedRoute2 || currentScheduleRoute2);
+  const plannedFlowType = FLOW_TYPE_MAP_SP[plan.depFlowType] || 'NONE';
+  const plannedFlowRate = plan.depFlowType === 'NONE' ? 0 : (plan.depFlowRate || 0);
+  const liveFlowType = (liveFlow?.flowtype || 'NONE').toUpperCase();
+  const liveFlowRate = liveFlow?.rate || 0;
+  const flowSynced = flowSet && liveFlow && plannedFlowType === liveFlowType && plannedFlowRate === liveFlowRate;
+  const flowChanged = flowSet && (plannedFlowType !== liveFlowType || plannedFlowRate !== liveFlowRate);
+  return {
+    routeAgreed, flowSet, agreedRoute, currentScheduleRoute, routeSynced, routeChanged,
+    agreedRoute2, currentScheduleRoute2, route2Synced, route2Changed,
+    liveFlowType, liveFlowRate, flowSynced, flowChanged,
+    outOfSync: routeChanged || flowChanged || route2Changed,
+    finalised: routeSynced && flowSynced && route2Synced
+  };
+}
+
+// Cached count of out-of-sync sectors for the active event, so the sidebar
+// (rendered synchronously) and the Admin Overview button can show a badge
+// without a per-render DB hit. Refreshed at bootstrap, on a timer, when the
+// admin overview is viewed, and after finalise/reset.
+let sectorPlanOutOfSyncCount = 0;
+async function refreshSectorPlanOutOfSyncCount() {
+  try {
+    const eventId = activeEventId || null;
+    if (!eventId || !adminSheetCache.length) { sectorPlanOutOfSyncCount = 0; return; }
+    const [plans, liveFlows] = await Promise.all([
+      prisma.sectorPlan.findMany({ where: { eventId } }),
+      prisma.depFlow.findMany({ where: { eventId: eventId || 0 } })
+    ]);
+    const planByWf = {}; plans.forEach(p => { planByWf[p.wf] = p; });
+    const liveByKey = {}; liveFlows.forEach(f => { liveByKey[f.sector] = f; });
+    let count = 0;
+    for (const r of adminSheetCache) {
+      if (computeSectorSync(r, planByWf[r.number], liveByKey[r.from + '-' + r.to]).outOfSync) count++;
+    }
+    sectorPlanOutOfSyncCount = count;
+  } catch (e) {}
+}
+setInterval(() => { refreshSectorPlanOutOfSyncCount(); }, 45000);
+
 // ============================================================
 // Sector Planning — Admin Overview
 // ============================================================
@@ -29193,57 +29258,24 @@ app.get('/sector-planning/admin', requireAdmin, async (req, res) => {
 
   const sectorRows = rows.map(r => {
     const plan = planByWf[r.number] || {};
-    const routeComparison = compareRoutes(plan.depRouteSuggestion, plan.arrRouteSuggestion);
-    const routeAgreed = routeComparison.status === 'GREEN';
-    const flowSet = !!plan.depFlowType && (plan.depFlowType !== 'BOOKING_REQUIRED' || (plan.depFlowRate != null && plan.depFlowRate > 0));
+    const sync = computeSectorSync(r, plan, liveFlowByKey[r.from + '-' + r.to]);
     const depScenery = scenerySet.has(r.from);
     const arrScenery = scenerySet.has(r.to);
     const depDocs = docSet.has(r.from);
     const arrDocs = docSet.has(r.to);
     const hasSplit = !!(plan.depSplitRoute || plan.arrSplitRoute);
     const splitAgreed = !!plan.splitAgreed;
-    const agreedRoute = routeAgreed ? (plan.depRouteSuggestion || '').trim() : '';
-    // Raw stored route (not the display-gated atc_route) so drift vs the
-    // agreed plan route is still detected before the route is published.
-    const currentScheduleRoute = (r.atc_route_raw || '').trim();
-    const norm = s => (s || '').toUpperCase().replace(/\s+/g, ' ');
-    const routeSynced = !!(agreedRoute && currentScheduleRoute && norm(currentScheduleRoute) === norm(agreedRoute));
-    const routeChanged = !!(agreedRoute && currentScheduleRoute && norm(currentScheduleRoute) !== norm(agreedRoute));
-
-    // Secondary route sync check
-    const agreedRoute2 = (plan.splitAgreed && plan.depSplitRoute) ? (plan.depSplitRoute || '').trim() : '';
-    const currentScheduleRoute2 = (r.atc_route_raw2 || '').trim();
-    const route2Synced = norm(currentScheduleRoute2) === norm(agreedRoute2);
-    const route2Changed = !route2Synced && !!(agreedRoute2 || currentScheduleRoute2);
-
-    // Flow sync check: compare SectorPlan flow vs live DepFlow
-    const sectorKey = r.from + '-' + r.to;
-    const liveFlow = liveFlowByKey[sectorKey];
-    const plannedFlowType = FLOW_TYPE_MAP[plan.depFlowType] || 'NONE';
-    const plannedFlowRate = plan.depFlowType === 'NONE' ? 0 : (plan.depFlowRate || 0);
-    const liveFlowType = (liveFlow?.flowtype || 'NONE').toUpperCase();
-    const liveFlowRate = liveFlow?.rate || 0;
-    const flowSynced = flowSet && liveFlow && plannedFlowType === liveFlowType && plannedFlowRate === liveFlowRate;
-    // No `&& liveFlow` guard here: a flow that's been set in the plan but never
-    // pushed has no DepFlow row yet, yet it IS a pending change. liveFlowType/
-    // liveFlowRate already default to NONE/0, so a first-time flow (e.g. going
-    // straight to Booking Required) correctly registers as changed against
-    // that baseline and flags the sector for re-sync.
-    const flowChanged = flowSet && (plannedFlowType !== liveFlowType || plannedFlowRate !== liveFlowRate);
-
-    const outOfSync = routeChanged || flowChanged || route2Changed;
-    const finalised = routeSynced && flowSynced && route2Synced;
 
     return { wf: r.number, from: r.from, to: r.to, date: r.date_utc || '',
-      routeAgreed, flowSet, depScenery, arrScenery, depDocs, arrDocs,
-      hasSplit, splitAgreed, finalised, routeSynced, outOfSync, agreedRoute,
-      scheduleRoute: currentScheduleRoute,
-      routeChanged, flowChanged, route2Changed,
-      agreedRoute2, scheduleRoute2: currentScheduleRoute2,
+      routeAgreed: sync.routeAgreed, flowSet: sync.flowSet, depScenery, arrScenery, depDocs, arrDocs,
+      hasSplit, splitAgreed, finalised: sync.finalised, routeSynced: sync.routeSynced, outOfSync: sync.outOfSync, agreedRoute: sync.agreedRoute,
+      scheduleRoute: sync.currentScheduleRoute,
+      routeChanged: sync.routeChanged, flowChanged: sync.flowChanged, route2Changed: sync.route2Changed,
+      agreedRoute2: sync.agreedRoute2, scheduleRoute2: sync.currentScheduleRoute2,
       flowType: plan.depFlowType || '', flowRate: plan.depFlowRate,
       flowLabel: FLOW_LABELS[plan.depFlowType] || plan.depFlowType || '—',
-      liveFlowType: FLOW_TYPE_REV[liveFlowType] || liveFlowType,
-      liveFlowRate };
+      liveFlowType: FLOW_TYPE_REV[sync.liveFlowType] || sync.liveFlowType,
+      liveFlowRate: sync.liveFlowRate };
   });
 
   const totalSectors = sectorRows.length;
@@ -29252,6 +29284,7 @@ app.get('/sector-planning/admin', requireAdmin, async (req, res) => {
   const finalisedCount = sectorRows.filter(s => s.finalised).length;
 
   const outOfSyncCount = sectorRows.filter(s => s.outOfSync).length;
+  sectorPlanOutOfSyncCount = outOfSyncCount; // keep the cached badge count fresh
 
   const tick = '<span style="color:var(--success);font-weight:700;">&#10003;</span>';
   const cross = '<span style="color:var(--muted);">—</span>';
@@ -29429,7 +29462,7 @@ app.post('/admin/api/sector-plan/finalise', requireAdmin, async (req, res) => {
     const routeAgreed = comparison.status === 'GREEN';
     const agreedRoute = (plan.depRouteSuggestion || '').trim();
 
-    const depFlowConfirmed = !!plan.depFlowType && (plan.depFlowType !== 'BOOKING_REQUIRED' || (plan.depFlowRate != null && plan.depFlowRate > 0));
+    const depFlowConfirmed = !!plan.depFlowType && (plan.depFlowType === 'NONE' || (plan.depFlowRate != null && plan.depFlowRate > 0));
 
     // Flow-only sync is allowed: an admin can push a flow restriction to the
     // live schedule before the route is agreed. We just need at least one
@@ -29461,10 +29494,19 @@ app.post('/admin/api/sector-plan/finalise', requireAdmin, async (req, res) => {
       });
     }
 
-    // Reload schedule + flow caches
+    // Reload schedule + flow caches, then rebuild slots so a newly-published
+    // Time Slot Required sector gets its TCT slots created immediately.
     await loadScheduleFromDb(eventId);
     await loadDepFlowsFromDb();
+    rebuildAllTobtSlots();
     clearFirAnalysisCache();
+    await refreshSectorPlanOutOfSyncCount();
+
+    // A flow is now live for this sector, so auto-assign participating teams
+    // (then affiliates) onto the regenerated slots — the legacy flow-set path
+    // did this, but the Sector Planning finalise path previously didn't.
+    // Idempotent: skips any team/affiliate already booked on the sector.
+    autoAssignTeamThenAffiliate({ reason: `sector ${wf} finalised` }).catch(() => {});
 
     res.json({ ok: true });
   } catch (e) {
@@ -29534,6 +29576,7 @@ app.post('/admin/api/sector-plan/reset-all', requireAdmin, async (req, res) => {
     await loadDepFlowsFromDb();
     rebuildAllTobtSlots();
     clearFirAnalysisCache();
+    await refreshSectorPlanOutOfSyncCount();
 
     // Push the now-empty booking lists to VATCAN for every affected sector.
     affectedWfs.forEach(wf => { try { vatcanPushForWf(wf); } catch (e) {} });
@@ -29718,7 +29761,7 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
   const issuesWithNames = await enrichIssues(issues);
 
   // Checklist auto-detect
-  const depFlowConfirmed = !!plan.depFlowType && (plan.depFlowType !== 'BOOKING_REQUIRED' || (plan.depFlowRate != null && plan.depFlowRate > 0));
+  const depFlowConfirmed = !!plan.depFlowType && (plan.depFlowType === 'NONE' || (plan.depFlowRate != null && plan.depFlowRate > 0));
   const checklist = {
     // "Agreed" = both sides proposed a route and the comparison is GREEN.
     atcRouteAgreed: routeComparison.status === 'GREEN',
@@ -30230,13 +30273,14 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
               <div class="sp-check-title">Departure Flow Restriction <span class="sp-check-tag required">Required</span></div>
               <div class="sp-check-sub">${(() => {
                 if (!checklist.depFlowSet) {
-                  if (checklist.depFlowType === 'BOOKING_REQUIRED') {
-                    return '<span style="color:#fbbf24;font-weight:600;">Booking Required selected — enter a flow rate to activate.</span>';
+                  if (checklist.depFlowType === 'BOOKING_REQUIRED' || checklist.depFlowType === 'TIME_SLOT_REQUIRED') {
+                    const lbl = checklist.depFlowType === 'TIME_SLOT_REQUIRED' ? 'Time Slot Required' : 'Booking Required';
+                    return '<span style="color:#fbbf24;font-weight:600;">' + lbl + ' selected — enter a flow rate to activate.</span>';
                   }
                   return 'Departure team needs to pick a flow restriction option.';
                 }
                 const isRestricted = checklist.depFlowType === 'BOOKING_REQUIRED' || checklist.depFlowType === 'TIME_SLOT_REQUIRED';
-                const rateHtml = (checklist.depFlowType === 'BOOKING_REQUIRED' && checklist.depFlowRate != null)
+                const rateHtml = ((checklist.depFlowType === 'BOOKING_REQUIRED' || checklist.depFlowType === 'TIME_SLOT_REQUIRED') && checklist.depFlowRate != null)
                   ? ' · <strong style="color:#fbbf24;">' + checklist.depFlowRate + ' planes/hr</strong>'
                   : '';
                 const warning = isRestricted
@@ -30569,7 +30613,7 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
             </div>
           </div>
 
-          <div id="spFlowRateWrap" style="display:${plan.depFlowType === 'BOOKING_REQUIRED' ? 'block' : 'none'};margin-top:10px;padding:8px 10px;background:rgba(56,189,248,0.06);border:1px solid rgba(56,189,248,0.25);border-radius:6px;">
+          <div id="spFlowRateWrap" style="display:${(plan.depFlowType === 'BOOKING_REQUIRED' || plan.depFlowType === 'TIME_SLOT_REQUIRED') ? 'block' : 'none'};margin-top:10px;padding:8px 10px;background:rgba(56,189,248,0.06);border:1px solid rgba(56,189,248,0.25);border-radius:6px;">
             <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
               <span style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;">Flow Rate</span>
               <input type="number" id="spFlowRate" min="0" max="240" step="1" value="${plan.depFlowRate != null ? plan.depFlowRate : ''}" ${canEditDep ? '' : 'disabled'} style="width:64px;padding:3px 6px;background:var(--panel2);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:monospace;font-size:12px;text-align:center;" />
@@ -31165,25 +31209,27 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
       // Flow type
       // Departure window is buildTimeWindow(±60min) = 2h.
       var DEP_WINDOW_HOURS = 2;
+      function spFlowNeedsRate(ft) { return ft === 'BOOKING_REQUIRED' || ft === 'TIME_SLOT_REQUIRED'; }
 
       function spRenderFlowRateTotal() {
         var totalEl = document.getElementById('spFlowRateTotal');
         if (!totalEl) return;
+        var noun = window.SP.depFlowType === 'TIME_SLOT_REQUIRED' ? 'time slots' : 'bookings';
         var rate = window.SP.depFlowRate;
         if (rate == null || rate === '' || !isFinite(rate)) {
-          totalEl.innerHTML = '<span style="color:var(--muted);">Set a rate to see the total expected bookings.</span>';
+          totalEl.innerHTML = '<span style="color:var(--muted);">Set a rate to see the total ' + noun + '.</span>';
           return;
         }
         var n = Math.round(Number(rate) * DEP_WINDOW_HOURS);
         totalEl.innerHTML = ''
-          + '<span style="color:var(--muted);">Total expected bookings during ' + DEP_WINDOW_HOURS + 'h departure window:</span> '
+          + '<span style="color:var(--muted);">Total ' + noun + ' during ' + DEP_WINDOW_HOURS + 'h departure window:</span> '
           + '<span style="font-weight:700;color:var(--accent);">' + n + '</span>'
           + ' <span style="color:var(--muted);font-size:11px;">(' + rate + ' × ' + DEP_WINDOW_HOURS + 'h)</span>';
       }
 
       function spRefreshFlowRateWrap(flowType) {
         var wrap = document.getElementById('spFlowRateWrap');
-        if (wrap) wrap.style.display = flowType === 'BOOKING_REQUIRED' ? 'block' : 'none';
+        if (wrap) wrap.style.display = spFlowNeedsRate(flowType) ? 'block' : 'none';
         var reasonWrap = document.getElementById('spFlowReasonWrap');
         if (reasonWrap) reasonWrap.style.display = (flowType && flowType !== 'NONE') ? 'block' : 'none';
       }
@@ -31194,19 +31240,19 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
         if (!chk) return;
         var ft = window.SP.depFlowType;
         var rate = window.SP.depFlowRate;
-        var done = !!ft && (ft !== 'BOOKING_REQUIRED' || (rate != null && rate > 0));
+        var done = !!ft && (!spFlowNeedsRate(ft) || (rate != null && rate > 0));
         chk.classList.toggle('done', done);
         chk.classList.toggle('missing-required', !done);
         chk.querySelector('.sp-check-icon').textContent = done ? '✓' : '—';
         var sub = chk.querySelector('.sp-check-sub');
         if (!done) {
-          sub.innerHTML = ft === 'BOOKING_REQUIRED'
-            ? '<span style="color:#fbbf24;font-weight:600;">Booking Required selected — enter a flow rate to activate.</span>'
+          sub.innerHTML = spFlowNeedsRate(ft)
+            ? '<span style="color:#fbbf24;font-weight:600;">' + (FLOW_LABELS_CLIENT[ft] || ft) + ' selected — enter a flow rate to activate.</span>'
             : 'Departure team needs to pick a flow restriction option.';
           return;
         }
         var isRestricted = ft === 'BOOKING_REQUIRED' || ft === 'TIME_SLOT_REQUIRED';
-        var rateHtml = (ft === 'BOOKING_REQUIRED' && rate != null)
+        var rateHtml = (spFlowNeedsRate(ft) && rate != null)
           ? ' · <strong style="color:#fbbf24;">' + rate + ' planes/hr</strong>'
           : '';
         var REASON_LABELS_CLIENT = { DEP_STAFFING: 'Departure staffing', DEP_SINGLE_RUNWAY: 'Single runway at departure', DEP_BACKTRACK: 'Backtrack delay at departure', DEP_RAMP_CONGESTION: 'Ramp congestion at departure', DEP_RUNWAY_CROSSING: 'Runway crossing at departure', DEP_AIRPORT_CAPACITY: 'Departure airport capacity', ARR_STAFFING: 'Destination staffing', ARR_SINGLE_RUNWAY: 'Single runway at destination', ARR_BACKTRACK: 'Backtrack delay at destination', ARR_RAMP_CONGESTION: 'Ramp congestion at destination', ARR_RUNWAY_CROSSING: 'Runway crossing at destination', ARR_AIRPORT_CAPACITY: 'Destination airport capacity', ENROUTE_STAFFING: 'Enroute sector staffing', OTHER: 'Other' };
@@ -31231,11 +31277,11 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
           if (btn.classList.contains('disabled')) return;
           var ft = btn.dataset.flow;
           var msg = document.getElementById('spFlowMsg');
-          // BOOKING_REQUIRED needs a rate first. Open the rate wrap, focus the
-          // input, queue the activation so the rate save chains into it.
-          if (ft === 'BOOKING_REQUIRED' && (window.SP.depFlowRate == null || window.SP.depFlowRate <= 0)) {
-            pendingFlowType = 'BOOKING_REQUIRED';
-            spRefreshFlowRateWrap('BOOKING_REQUIRED');
+          // Both restriction types need a rate first. Open the rate wrap, focus
+          // the input, queue the activation so the rate save chains into it.
+          if (spFlowNeedsRate(ft) && (window.SP.depFlowRate == null || window.SP.depFlowRate <= 0)) {
+            pendingFlowType = ft;
+            spRefreshFlowRateWrap(ft);
             var rateInput = document.getElementById('spFlowRate');
             if (rateInput) { rateInput.focus(); rateInput.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
             spSetMsg(msg, 'Enter a flow rate first, then this will activate.', false);
@@ -31246,8 +31292,8 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
             flowOpts.forEach(function(b) { b.classList.remove('active'); });
             btn.classList.add('active');
             window.SP.depFlowType = ft;
-            // When server clears the rate (anything other than BOOKING_REQUIRED), reflect it in the UI too.
-            if (ft !== 'BOOKING_REQUIRED') {
+            // When server clears the rate (only NONE clears it), reflect it in the UI too.
+            if (!spFlowNeedsRate(ft)) {
               window.SP.depFlowRate = null;
               var rateInput = document.getElementById('spFlowRate');
               if (rateInput) rateInput.value = '';
@@ -32018,16 +32064,15 @@ app.post('/api/sector-plan/:wf/flow-type', requireLogin, async (req, res) => {
     if (ft === 'TIME_SLOT_REQUIRED' && sched.from !== 'YSSY') return res.status(400).json({ error: 'Time Slot Required is only available for YSSY' });
     if (!(await canEditPlanSide(cid, 'DEP', sched.from, sched.to))) return res.status(403).json({ error: 'No edit access' });
     const plan = await getOrCreateSectorPlan(wf, sched.from, sched.to);
-    if (ft === 'BOOKING_REQUIRED' && (plan.depFlowRate == null || plan.depFlowRate <= 0)) {
-      return res.status(400).json({ error: 'Enter a flow rate before activating Booking Required.' });
+    // Both Booking Required (capacity cap) and Time Slot Required (slot count)
+    // need a flow rate before they can be activated.
+    if ((ft === 'BOOKING_REQUIRED' || ft === 'TIME_SLOT_REQUIRED') && (plan.depFlowRate == null || plan.depFlowRate <= 0)) {
+      return res.status(400).json({ error: 'Enter a flow rate first.' });
     }
-    // Only BOOKING_REQUIRED keeps a flow rate; clear it for NONE and TIME_SLOT_REQUIRED
-    // NONE also clears the reason
+    // NONE clears the rate (and reason); both restriction types keep it.
     const data = ft === 'NONE'
       ? { depFlowType: ft, depFlowRate: null, depFlowReason: null, depUpdatedBy: cid, depUpdatedAt: new Date() }
-      : ft === 'BOOKING_REQUIRED'
-        ? { depFlowType: ft, depUpdatedBy: cid, depUpdatedAt: new Date() }
-        : { depFlowType: ft, depFlowRate: null, depUpdatedBy: cid, depUpdatedAt: new Date() };
+      : { depFlowType: ft, depUpdatedBy: cid, depUpdatedAt: new Date() };
     await prisma.sectorPlan.update({ where: { id: plan.id }, data });
     res.json({ success: true });
   } catch (e) {
