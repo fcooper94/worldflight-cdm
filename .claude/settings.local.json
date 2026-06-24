@@ -283,7 +283,12 @@
       "Bash(grep -vE \"\\\\[TOBT\\\\]|console\\\\.|^[^:]+:[0-9]+:\\\\s*//\")",
       "Bash(awk 'NR>=9440 && NR<=9560 && /renderLayout|layoutClass|res.send/' index.js)",
       "Bash(awk -F: '$1>=9440 && $1<=9600')",
-      "Bash(git check-ignore *)"
+      "Bash(git check-ignore *)",
+      "Bash(awk -F: '$1>=21800 && $1<=24700')",
+      "Bash(node -e \"import\\('pg'\\).then\\(m=>{const{Client}=m.default||m;}\\).then\\(\\(\\)=>console.log\\('pg available'\\)\\).catch\\(\\(\\)=>console.log\\('pg NOT available'\\)\\)\")",
+      "Bash(node /tmp/preview-atc.mjs)",
+      "Bash(node preview-atc.mjs)",
+      "Bash(node clear-atc-routes.mjs --push)"
     ]
   }
 }

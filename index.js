@@ -370,6 +370,7 @@ function renderLayout(opts) {
     isTeamMember: cid ? isTeamMember(cid) : false,
     isAffiliate: cid ? isAffiliate(cid) : false,
     isWfAtc: cid ? (isWfAtc(cid) || isAdminUser(cid)) : false,
+    hasFirAccess: cid ? (userHasFirAccess(cid) || isAdminUser(cid)) : false,
     canManageAffiliateMembers: cid ? canManageAffiliateMembers(cid) : false,
     activeEvent: active ? { id: active.id, name: active.name, year: active.year } : null
   });
@@ -2733,6 +2734,7 @@ async function bootstrap() {
   await loadWfAtcMembers();
   await loadAffiliateOwners();
   await loadAdminPermissions();
+  await loadFirAccessCids();
 
   setBootstrapStatus(4, 'Loading event schedule');
   await refreshAdminSheet();   // 🔑 sets activeEventId + loads schedule rows
@@ -6088,6 +6090,11 @@ async function refreshSheetForEvent(event) {
     for (let i = 0; i < rows.length; i++) {
       const r = rows[i];
       if (!r.number) continue;
+      // NOTE: atcRoute / atcRoute2 are deliberately NOT synced from the sheet.
+      // The ATC route is owned by Sector Planning — the agreed route is pushed
+      // into WfScheduleRow.atcRoute on finalise and must never be clobbered by
+      // the sheet's raw ATC_Route column on a later startup/daily sync. The
+      // sheet still drives schedule metadata (airports, dates, times, block).
       await prisma.wfScheduleRow.upsert({
         where: { eventId_number: { eventId: event.id, number: r.number } },
         update: {
@@ -6097,8 +6104,7 @@ async function refreshSheetForEvent(event) {
           dateUtc: r.date_utc,
           depTimeUtc: r.dep_time_utc,
           arrTimeUtc: r.arr_time_utc,
-          blockTime: r.block_time,
-          atcRoute: r.atc_route
+          blockTime: r.block_time
         },
         create: {
           eventId: event.id,
@@ -6109,8 +6115,7 @@ async function refreshSheetForEvent(event) {
           dateUtc: r.date_utc,
           depTimeUtc: r.dep_time_utc,
           arrTimeUtc: r.arr_time_utc,
-          blockTime: r.block_time,
-          atcRoute: r.atc_route
+          blockTime: r.block_time
         }
       });
     }
@@ -6130,19 +6135,52 @@ async function loadScheduleFromDb(eventId) {
     orderBy: { sortOrder: 'asc' }
   });
 
-  const rows = dbRows.map(r => ({
-    number: r.number,
-    from: r.from,
-    to: r.to,
-    date_utc: r.dateUtc,
-    dep_time_utc: r.depTimeUtc,
-    arr_time_utc: r.arrTimeUtc,
-    block_time: r.blockTime,
-    flight_time: r.flightTime,
-    atc_route: stripSidStar(r.atcRoute, r.from, r.to),
-    atc_route2: stripSidStar(r.atcRoute2, r.from, r.to),
-    is_wf_challenge: r.isWfChallenge === true
-  }));
+  // ATC routes are only DISPLAYED once published via Sector Planning
+  // finalise/re-sync: the sector's plan route must be agreed by both FIR
+  // managers (compareRoutes GREEN) AND the schedule's stored atcRoute must
+  // match that agreed route (only true after a finalise). This hides raw
+  // sheet routes and agreed-but-not-yet-published changes.
+  //   atc_route / atc_route2   — gated (empty until published). Used for
+  //                              display, maps, SimBrief and route validation.
+  //   atc_route_raw / _raw2     — the stored schedule route (as the cache used
+  //                              to expose it). Used by the Sector Planning
+  //                              admin/detail pages to detect drift vs agreed.
+  //   route_agreed              — true when a published route is available.
+  const plans = await prisma.sectorPlan.findMany({ where: { eventId } }).catch(() => []);
+  const normRoute = s => (s || '').toUpperCase().replace(/\s+/g, ' ').trim();
+  const agreedByWf = {};
+  for (const p of plans) {
+    if (compareRoutes(p.depRouteSuggestion, p.arrRouteSuggestion).status === 'GREEN') {
+      agreedByWf[p.wf] = {
+        route: (p.depRouteSuggestion || '').trim(),
+        route2: (p.splitAgreed && p.depSplitRoute) ? p.depSplitRoute.trim() : ''
+      };
+    }
+  }
+
+  const rows = dbRows.map(r => {
+    const rawRoute  = stripSidStar(r.atcRoute, r.from, r.to);
+    const rawRoute2 = stripSidStar(r.atcRoute2, r.from, r.to);
+    const agreed = agreedByWf[r.number];
+    const published  = !!(agreed && r.atcRoute && normRoute(r.atcRoute) === normRoute(agreed.route));
+    const published2 = !!(published && agreed.route2 && r.atcRoute2 && normRoute(r.atcRoute2) === normRoute(agreed.route2));
+    return {
+      number: r.number,
+      from: r.from,
+      to: r.to,
+      date_utc: r.dateUtc,
+      dep_time_utc: r.depTimeUtc,
+      arr_time_utc: r.arrTimeUtc,
+      block_time: r.blockTime,
+      flight_time: r.flightTime,
+      atc_route:  published  ? rawRoute  : '',
+      atc_route2: published2 ? rawRoute2 : '',
+      atc_route_raw: rawRoute,
+      atc_route_raw2: rawRoute2,
+      route_agreed: published,
+      is_wf_challenge: r.isWfChallenge === true
+    };
+  });
 
   eventSheetCaches[eventId] = rows;
   if (eventId === activeEventId) {
@@ -7159,6 +7197,16 @@ function generateTobtSlots({ from, to, dateUtc, depTimeUtc }) {
 
   const flowKey = `${from}-${to}`;
   const flow = Number(sharedDepFlows[flowKey]);
+
+  // Time slots (TCTs) exist ONLY for SLOTTED ("Time Slot Required") sectors.
+  // BOOKING_ONLY ("Booking Required") sectors carry the same flow rate, but
+  // there the rate is a booking *cap* (see getBookingOnlyCapacity) — not a set
+  // of time slots. Without this gate, every Booking Required sector pollutes
+  // allTobtSlots with phantom TCTs and any reader that isn't flow-type-aware
+  // (e.g. the my-slots API) wrongly treats Booking Required as slotted.
+  if (sharedFlowTypes[flowKey] !== 'SLOTTED') {
+    return null; // Booking Required ≠ slotted: no TCTs
+  }
 
   if (!flow || flow <= 0) {
     return null; // Explicitly signal "no flow defined"
@@ -9041,7 +9089,10 @@ app.get('/sector/:wf/:from/:to', async (req, res) => {
                 + '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:1px;"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>'
                 + '<div style="font-size:12px;line-height:1.5;color:var(--text);">The ATC route has not yet been published. We are in coordination with local division / vACC staff. The ATC route will be published here as soon as possible.</div>'
                 + '</div></div>'
-              : ''}
+              : '<div style="border-top:1px solid var(--border);padding-top:12px;"><div style="font-size:9px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:6px;">ATC Route</div><div style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;background:rgba(56,189,248,0.06);border:1px solid rgba(56,189,248,0.25);border-radius:8px;">'
+                + '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:1px;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>'
+                + '<div style="font-size:12px;line-height:1.5;color:var(--text);">This information will be available once an ATC route has been agreed between the two airports.</div>'
+                + '</div></div>'}
         </div>
         ${!isPageVisibleTo('flow-restrictions', isAdmin) ? `
         <div class="sector-banner sector-banner-flow-full" style="width:calc(40% - 8px);min-width:250px;flex-direction:column;justify-content:center;padding:16px;box-sizing:border-box;">
@@ -9089,7 +9140,7 @@ app.get('/sector/:wf/:from/:to', async (req, res) => {
                   : '')
                 + '<div style="margin-top:4px;padding:10px 12px;background:var(--panel2);border:1px solid var(--border);border-radius:8px;">'
                 + '<div style="font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;">Your ATC Route</div>'
-                + '<div style="font-family:monospace;font-size:12px;line-height:1.6;color:var(--text);word-break:break-all;">' + (assignedAtcRoute || '<span style="color:var(--muted);">Not yet published</span>') + '</div>'
+                + '<div style="font-family:monospace;font-size:12px;line-height:1.6;color:var(--text);word-break:break-all;">' + (assignedAtcRoute || '<span style="color:var(--muted);font-style:italic;font-family:inherit;">This information will be available once an ATC route has been agreed between the two airports.</span>') + '</div>'
                 + '</div>'
                 + '</div>'
                 + '<div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap;">'
@@ -9731,7 +9782,7 @@ app.get('/schedule', requirePageEnabled('schedule'), async (req, res) => {
                 const route2Attr = r.atc_route2 && r.atc_route2 !== '-' ? String(r.atc_route2).replace(/&/g, '&amp;').replace(/"/g, '&quot;') : '';
                 return '<td class="col-route">' + (hasRoute
                   ? '<button type="button" class="show-route-btn" data-route="' + routeAttr + '" data-route2="' + route2Attr + '">Show Route</button>'
-                  : '<span style="color:var(--muted);">—</span>') + '</td>';
+                  : '<span style="color:var(--muted);font-size:11px;font-style:italic;" title="This information will be available once an ATC route has been agreed between the two airports.">Pending agreement</span>') + '</td>';
               })() : ''}
 
               <!-- ✅ BOOK (combined booking type + action) -->
@@ -12928,6 +12979,7 @@ app.post('/admin/api/fir-events-access', requireAdmin, async (req, res) => {
       update: {},
       create: { cid, scope, value, createdBy: grantedBy }
     });
+    firAccessCids.add(cid);
     res.json({ success: true, grant: row });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -12937,6 +12989,7 @@ app.post('/admin/api/fir-events-access', requireAdmin, async (req, res) => {
 app.delete('/admin/api/fir-events-access/:id', requireAdmin, async (req, res) => {
   try {
     await prisma.firEventAccess.delete({ where: { id: Number(req.params.id) } });
+    await loadFirAccessCids();
     res.json({ success: true });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -17728,7 +17781,7 @@ app.get('/affiliates/hq', requireLogin, async (req, res) => {
                       const r2Attr = r.atc_route2 && r.atc_route2 !== '-' ? String(r.atc_route2).replace(/&/g, '&amp;').replace(/"/g, '&quot;') : '';
                       return r.atc_route && r.atc_route !== '-'
                         ? `<button type="button" class="aff-route-btn" data-route="${String(r.atc_route).replace(/&/g, '&amp;').replace(/"/g, '&quot;')}" data-route2="${r2Attr}" data-simbrief="${sbAttr}" data-from="${escapeHtml(r.from)}" data-to="${escapeHtml(r.to)}">ATC Route</button>`
-                        : `<span class="ot-muted">—</span>`;
+                        : `<span class="ot-muted" style="font-style:italic;" title="This information will be available once an ATC route has been agreed between the two airports.">Pending agreement</span>`;
                     })()}</td>` : ''}
                     <td><a class="aff-icao-link" href="/icao/${escapeHtml(r.from)}">${escapeHtml(r.from)}</a></td>
                     <td><a class="aff-icao-link" href="/icao/${escapeHtml(r.to)}">${escapeHtml(r.to)}</a></td>
@@ -20103,7 +20156,7 @@ app.get('/team/bookings', requireLogin, requireTeamMember, async (req, res) => {
                     : `<span style="color:#4ade80;font-weight:600;">Booking Confirmed</span> <span class="tobt-help">?<span class="tobt-tooltip">You have a booking for this sector. Slots are not required.<br><b>Plan to depart within the Dep Window.</b></span></span>`}</td>
                   ${showAtcRoute ? `<td>${hasRoute
                     ? `<button type="button" class="show-route-btn" data-route="${routeAttr}" data-route2="${route2Attr}">Show Route</button>`
-                    : '<span style="color:var(--muted);">—</span>'}</td>` : ''}
+                    : '<span style="color:var(--muted);font-size:11px;font-style:italic;" title="This information will be available once an ATC route has been agreed between the two airports.">Pending agreement</span>'}</td>` : ''}
                   <td>
                     <a class="simbrief-btn" href="${r.simbriefUrl}" target="_blank" rel="noopener">
                       <span class="simbrief-logo">SB</span>
@@ -21937,14 +21990,11 @@ const content = `
   <th>WF</th>
   <th>From</th>
   <th>To</th>
-  <th>Dep Flow</th>
-  <th>Flow Type</th>
   <th>Date</th>
   <th>Dep</th>
   <th>Arr</th>
   <th>Flight</th>
   <th>Block</th>
-  <th class="col-route">ATC Route</th>
 </tr>
 </thead>
 <tbody>
@@ -21965,23 +22015,6 @@ ${eventRows.map((r, idx) => {
   ${isScratch
     ? '<td><input class="sched-edit" data-field="to" value="' + r.to + '" style="width:60px;text-transform:uppercase;" /></td>'
     : '<td>' + r.to + '</td>'}
-  <td>
-    <input
-      class="dep-flow-input"
-      type="number"
-      data-sector="${sectorKey}"
-      placeholder="Rate"
-      style="width:70px;"
-    />
-  </td>
-  <td class="col-flowtype">
-  <select class="flowtype-select" data-sector="${sectorKey}">
-  <option value="NONE">None</option>
-  <option value="SLOTTED">Slotted</option>
-  <option value="BOOKING_ONLY">Booking Only</option>
-</select>
-</td>
-
   ${isScratch
     ? (isFirst
       ? '<td><input class="sched-edit" data-field="dateUtc" value="' + r.date_utc + '" style="width:100px;" /></td>'
@@ -22001,7 +22034,6 @@ ${eventRows.map((r, idx) => {
   })()}
   ${isScratch && !r.block_time && r.from && r.to
     ? '<td></td><td></td><td></td>'
-      + '<td><div class="sched-edit sched-route" data-field="atcRoute" contenteditable="true" style="min-width:200px;">' + (r.atc_route || '') + '</div></td>'
     : '<td class="calc-cell" data-field="arr">' + r.arr_time_utc
       + ((localTimesByWf[r.number] && localTimesByWf[r.number].arrTime)
           ? '<div class="sched-local-time ' + localTimesByWf[r.number].arrClass + '" title="' + localTimesByWf[r.number].arrTime + ' ' + localTimesByWf[r.number].arrZone + '">' + localTimesByWf[r.number].arrTime + '</div>'
@@ -22012,10 +22044,7 @@ ${eventRows.map((r, idx) => {
         : '<td>' + (r.flight_time || '') + '</td>')
       + (isScratch
         ? '<td><input class="sched-edit" data-field="blockTime" value="' + r.block_time + '" style="width:60px;" /></td>'
-        : '<td>' + r.block_time + '</td>')
-      + (isScratch
-        ? '<td><input class="sched-edit sched-route" data-field="atcRoute" value="' + r.atc_route + '" style="width:100%;min-width:200px;" /></td>'
-        : '<td style="font-size:12px;font-family:monospace;white-space:pre-wrap;word-break:break-all;">' + r.atc_route + '</td>')}
+        : '<td>' + r.block_time + '</td>')}
 </tr>`;
 }).join('')}
 </tbody>
@@ -28712,6 +28741,34 @@ async function getUserOwnedFirs(cid) {
   return owned;
 }
 
+// In-memory cache of CIDs holding at least one FirEventAccess grant, so the
+// sidebar (rendered synchronously) can decide whether to show Sector Planning
+// without an async DB hit per page render. Refreshed at bootstrap and whenever
+// a grant is added or removed.
+const firAccessCids = new Set();
+
+async function loadFirAccessCids() {
+  try {
+    const rows = await prisma.firEventAccess.findMany({ select: { cid: true } });
+    firAccessCids.clear();
+    rows.forEach(r => firAccessCids.add(Number(r.cid)));
+    console.log(`[FIR-ACCESS] Loaded ${firAccessCids.size} CIDs with FIR Events Access grants`);
+  } catch (e) {}
+}
+
+// Synchronous "does this user have access to any FIR?" — true if they hold a
+// manual FirEventAccess grant OR are auto-granted via the WF FIR Management
+// CSV. Used to gate the Sector Planning nav item and routes.
+function userHasFirAccess(cid) {
+  if (!cid) return false;
+  const n = Number(cid);
+  if (firAccessCids.has(n)) return true;
+  const csv = firManagementState.data?.cidToFirs;
+  if (!csv) return false;
+  const list = csv[n] || csv[String(n)];
+  return Array.isArray(list) ? list.length > 0 : !!list;
+}
+
 // ── WF ATC: VATCAN Codes — list every WF sector with its VATCAN event_id ──
 // Gated on (admin OR WF_ATC role) — the page-visibility key is also honoured
 // so admins can still hide the page entirely via the admin Page Visibility
@@ -28847,6 +28904,12 @@ app.get('/sector-planning', requirePageEnabled('sector-planning'), async (req, r
   const user = req.session?.user?.data || null;
   const cid = Number(user?.cid) || null;
   const isAdmin = isAdminUser(cid);
+
+  // Sector Planning is only available to users with FIR Events Access (admins
+  // always have access).
+  if (!isAdmin && !userHasFirAccess(cid)) {
+    return renderForbidden(req, res, 'Sector Planning is only available to users with FIR Events Access.');
+  }
 
   let owned = new Set();
   let participations = [];
@@ -29069,14 +29132,16 @@ app.get('/sector-planning/admin', requireAdmin, async (req, res) => {
     const hasSplit = !!(plan.depSplitRoute || plan.arrSplitRoute);
     const splitAgreed = !!plan.splitAgreed;
     const agreedRoute = routeAgreed ? (plan.depRouteSuggestion || '').trim() : '';
-    const currentScheduleRoute = (r.atc_route || '').trim();
+    // Raw stored route (not the display-gated atc_route) so drift vs the
+    // agreed plan route is still detected before the route is published.
+    const currentScheduleRoute = (r.atc_route_raw || '').trim();
     const norm = s => (s || '').toUpperCase().replace(/\s+/g, ' ');
     const routeSynced = !!(agreedRoute && currentScheduleRoute && norm(currentScheduleRoute) === norm(agreedRoute));
     const routeChanged = !!(agreedRoute && currentScheduleRoute && norm(currentScheduleRoute) !== norm(agreedRoute));
 
     // Secondary route sync check
     const agreedRoute2 = (plan.splitAgreed && plan.depSplitRoute) ? (plan.depSplitRoute || '').trim() : '';
-    const currentScheduleRoute2 = (r.atc_route2 || '').trim();
+    const currentScheduleRoute2 = (r.atc_route_raw2 || '').trim();
     const route2Synced = norm(currentScheduleRoute2) === norm(agreedRoute2);
     const route2Changed = !route2Synced && !!(agreedRoute2 || currentScheduleRoute2);
 
@@ -29088,7 +29153,12 @@ app.get('/sector-planning/admin', requireAdmin, async (req, res) => {
     const liveFlowType = (liveFlow?.flowtype || 'NONE').toUpperCase();
     const liveFlowRate = liveFlow?.rate || 0;
     const flowSynced = flowSet && liveFlow && plannedFlowType === liveFlowType && plannedFlowRate === liveFlowRate;
-    const flowChanged = flowSet && liveFlow && (plannedFlowType !== liveFlowType || plannedFlowRate !== liveFlowRate);
+    // No `&& liveFlow` guard here: a flow that's been set in the plan but never
+    // pushed has no DepFlow row yet, yet it IS a pending change. liveFlowType/
+    // liveFlowRate already default to NONE/0, so a first-time flow (e.g. going
+    // straight to Booking Required) correctly registers as changed against
+    // that baseline and flags the sector for re-sync.
+    const flowChanged = flowSet && (plannedFlowType !== liveFlowType || plannedFlowRate !== liveFlowRate);
 
     const outOfSync = routeChanged || flowChanged || route2Changed;
     const finalised = routeSynced && flowSynced && route2Synced;
@@ -29237,8 +29307,8 @@ app.get('/sector-planning/admin', requireAdmin, async (req, res) => {
       document.querySelectorAll('.sp-finalise-btn').forEach(function(btn) {
         btn.addEventListener('click', async function() {
           var wf = btn.dataset.wf;
-          var route = btn.dataset.route;
-          if (!route) return;
+          // No early-return on an empty route: a flow-only re-sync has no
+          // agreed route to send. The server decides what's actionable.
           btn.disabled = true;
           btn.textContent = 'Syncing...';
           try {
@@ -29285,32 +29355,40 @@ app.post('/admin/api/sector-plan/finalise', requireAdmin, async (req, res) => {
     if (!plan) return res.status(404).json({ error: 'No sector plan found' });
 
     const comparison = compareRoutes(plan.depRouteSuggestion, plan.arrRouteSuggestion);
-    if (comparison.status !== 'GREEN') return res.status(400).json({ error: 'Route not agreed — both sides must propose the same route first' });
+    const routeAgreed = comparison.status === 'GREEN';
+    const agreedRoute = (plan.depRouteSuggestion || '').trim();
 
     const depFlowConfirmed = !!plan.depFlowType && (plan.depFlowType !== 'BOOKING_REQUIRED' || (plan.depFlowRate != null && plan.depFlowRate > 0));
-    if (!depFlowConfirmed) return res.status(400).json({ error: 'Flow restriction not set' });
 
-    const agreedRoute = (plan.depRouteSuggestion || '').trim();
-    if (!agreedRoute) return res.status(400).json({ error: 'Agreed route is empty' });
+    // Flow-only sync is allowed: an admin can push a flow restriction to the
+    // live schedule before the route is agreed. We just need at least one
+    // actionable item — an agreed route OR a confirmed flow restriction.
+    if (!(routeAgreed && agreedRoute) && !depFlowConfirmed) {
+      return res.status(400).json({ error: 'Nothing to sync — set a flow restriction or agree the route first' });
+    }
 
-    const splitRoute = (plan.splitAgreed && plan.depSplitRoute) ? plan.depSplitRoute.trim() : '';
+    // Sync the route to the schedule ONLY when it's agreed. A flow-only sync
+    // leaves the existing schedule route untouched.
+    if (routeAgreed && agreedRoute) {
+      const splitRoute = (plan.splitAgreed && plan.depSplitRoute) ? plan.depSplitRoute.trim() : '';
+      await prisma.wfScheduleRow.update({
+        where: { eventId_number: { eventId, number: wf } },
+        data: { atcRoute: agreedRoute, atcRoute2: splitRoute }
+      });
+    }
 
-    // Sync route to schedule
-    await prisma.wfScheduleRow.update({
-      where: { eventId_number: { eventId, number: wf } },
-      data: { atcRoute: agreedRoute, atcRoute2: splitRoute }
-    });
-
-    // Sync flow type + rate to DepFlow table
-    const sectorKey = sched.from + '-' + sched.to;
-    const flowTypeMap = { 'BOOKING_REQUIRED': 'BOOKING_ONLY', 'TIME_SLOT_REQUIRED': 'SLOTTED', 'NONE': 'NONE' };
-    const depFlowType = flowTypeMap[plan.depFlowType] || 'NONE';
-    const depFlowRate = (plan.depFlowType === 'NONE') ? 0 : (plan.depFlowRate || 0);
-    await prisma.depFlow.upsert({
-      where: { eventId_sector: { eventId: eventId || 0, sector: sectorKey } },
-      update: { rate: depFlowRate, flowtype: depFlowType },
-      create: { eventId: eventId || 0, sector: sectorKey, rate: depFlowRate, flowtype: depFlowType }
-    });
+    // Sync flow type + rate to DepFlow table (when a flow is confirmed).
+    if (depFlowConfirmed) {
+      const sectorKey = sched.from + '-' + sched.to;
+      const flowTypeMap = { 'BOOKING_REQUIRED': 'BOOKING_ONLY', 'TIME_SLOT_REQUIRED': 'SLOTTED', 'NONE': 'NONE' };
+      const depFlowType = flowTypeMap[plan.depFlowType] || 'NONE';
+      const depFlowRate = (plan.depFlowType === 'NONE') ? 0 : (plan.depFlowRate || 0);
+      await prisma.depFlow.upsert({
+        where: { eventId_sector: { eventId: eventId || 0, sector: sectorKey } },
+        update: { rate: depFlowRate, flowtype: depFlowType },
+        create: { eventId: eventId || 0, sector: sectorKey, rate: depFlowRate, flowtype: depFlowType }
+      });
+    }
 
     // Reload schedule + flow caches
     await loadScheduleFromDb(eventId);
@@ -29388,6 +29466,12 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
   const user = req.session?.user?.data || null;
   const cid = Number(user?.cid) || null;
   const isAdmin = isAdminUser(cid);
+
+  // Sector Planning is only available to users with FIR Events Access.
+  if (!isAdmin && !userHasFirAccess(cid)) {
+    return renderForbidden(req, res, 'Sector Planning is only available to users with FIR Events Access.');
+  }
+
   const wf = String(req.params.wf || '').toUpperCase();
 
   // Find the schedule row for this WF
@@ -29528,8 +29612,8 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
     sectorFirLegs,
     routeComparison,
     checklist,
-    scheduleRoute: sched.atcRoute || '',
-    scheduleRoute2: sched.atc_route2 || '',
+    scheduleRoute: sched.atc_route_raw || '',
+    scheduleRoute2: sched.atc_route_raw2 || '',
     issues: issuesWithNames
   };
 
@@ -34296,7 +34380,7 @@ app.get('/airspace/by-area', requirePageEnabled('airspace'), async (req, res) =>
               + '<td></td>'
               + '<td>' + (l.atcRoute && l.atcRoute !== '-'
                   ? '<button type="button" class="show-route-btn" data-route="' + String(l.atcRoute).replace(/&/g, '&amp;').replace(/"/g, '&quot;') + '" data-route2="' + (l.atcRoute2 && l.atcRoute2 !== '-' ? String(l.atcRoute2).replace(/&/g, '&amp;').replace(/"/g, '&quot;') : '') + '">Show Route</button>'
-                  : '<span style="color:var(--muted);">—</span>') + '</td>'
+                  : '<span style="color:var(--muted);font-style:italic;font-size:11px;" title="This information will be available once an ATC route has been agreed between the two airports.">Pending agreement</span>') + '</td>'
               + '</tr>';
           }).join('');
 
@@ -34422,7 +34506,7 @@ app.get('/airspace/by-area', requirePageEnabled('airspace'), async (req, res) =>
           var firCount = s.firLegs.length;
           var routeHtml = (l.atcRoute && l.atcRoute !== '-')
             ? '<button type="button" class="show-route-btn" data-route="' + String(l.atcRoute).replace(/&/g, '&amp;').replace(/"/g, '&quot;') + '" data-route2="' + (l.atcRoute2 && l.atcRoute2 !== '-' ? String(l.atcRoute2).replace(/&/g, '&amp;').replace(/"/g, '&quot;') : '') + '">Show Route</button>'
-            : '<span style="color:var(--muted);">—</span>';
+            : '<span style="color:var(--muted);font-style:italic;font-size:11px;" title="This information will be available once an ATC route has been agreed between the two airports.">Pending agreement</span>';
           // Sector-level cells (WF / From / To / Date / ATC Route) render once on
           // the first FIR row with rowspan; later rows carry only FIR-specific
           // cells. The coloured WF stripe runs down the rowspan'd WF cell.
@@ -35900,7 +35984,7 @@ app.get('/my-slots', requireLogin, requirePageEnabled('my-slots'), (req, res) =>
           + '</div>'
           + '<div style="margin-top:6px;padding:10px 12px;background:var(--panel2);border:1px solid var(--border);border-radius:8px;">'
           + '<div style="font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;">Your ATC Route</div>'
-          + '<div style="font-family:monospace;font-size:12px;line-height:1.6;word-break:break-all;">' + (assignedRoute || '<span style="color:var(--muted);">Not yet published</span>') + '</div>'
+          + '<div style="font-family:monospace;font-size:12px;line-height:1.6;word-break:break-all;">' + (assignedRoute || '<span style="color:var(--muted);font-style:italic;font-family:inherit;">This information will be available once an ATC route has been agreed between the two airports.</span>') + '</div>'
           + '</div>';
         if (tobt) {
           html += '<div style="margin-top:6px;padding:8px 10px;background:rgba(245,158,11,0.06);border:1px solid rgba(245,158,11,0.2);border-radius:6px;font-size:11px;color:var(--muted);line-height:1.5;">'
