@@ -104,7 +104,7 @@ export default function renderLayout({
       </a>` : ''}
       ${pv('sector-planning') && hasFirAccess ? `<a href="/sector-planning" class="nav-item" data-tooltip="Sector Planning">
         <span class="icon">${icons.clipboard}</span>
-        <span class="label">Sector Planning${sectorPlanOutOfSync > 0 ? ` <span class="nav-badge" title="${sectorPlanOutOfSync} sector${sectorPlanOutOfSync === 1 ? '' : 's'} need re-syncing">${sectorPlanOutOfSync}</span>` : ''}</span>
+        <span class="label">Sector Planning${sectorPlanOutOfSync > 0 ? ` <span class="nav-badge" title="${sectorPlanOutOfSync} sector${sectorPlanOutOfSync === 1 ? '' : 's'} need syncing">${sectorPlanOutOfSync}</span>` : ''}</span>
       </a>` : ''}
     </div>` : ''}
 

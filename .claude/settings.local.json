@@ -290,7 +290,8 @@
       "Bash(node preview-atc.mjs)",
       "Bash(node clear-atc-routes.mjs --push)",
       "Bash(awk -F: '$1>=32580 && $1<=33120')",
-      "Bash(node check-routes.mjs)"
+      "Bash(node check-routes.mjs)",
+      "Bash(awk 'NR>=29245 && NR<=29420 && \\(/<style>/ || /<\\\\/style>/ || /\\\\.sidebar/ || /html|body/ || /height:|overflow:|position:|100vh|100%/\\)' index.js)"
     ]
   }
 }

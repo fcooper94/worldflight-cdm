@@ -24250,6 +24250,12 @@ async function _buildFirAnalysisInner() {
   for (const ap of airportRows) airportLookup[ap.icao] = ap;
 
   for (const leg of legs) {
+    // No route yet (neither proposed nor finalised) → no staffing data for this
+    // sector. Without this guard the dep + arr airports alone give points.length
+    // === 2, so a straight dep→arr line would be drawn and its crossed FIRs
+    // listed even though no route exists.
+    if (!leg.staffing_route) continue;
+
     const points = [];
 
     // Resolve route points using in-memory lookup
@@ -29064,7 +29070,7 @@ app.get('/sector-planning', requirePageEnabled('sector-planning'), async (req, r
           <p style="color:var(--muted);margin:0 0 16px;">WorldFlight sectors you're participating in — either departing/arriving in one of your FIRs or transiting through.</p>
         </div>
         ${isAdmin ? '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">'
-          + '<a href="/sector-planning/admin" class="action-btn" style="font-size:12px;padding:6px 14px;white-space:nowrap;display:inline-flex;align-items:center;gap:6px;">Admin Overview' + (sectorPlanOutOfSyncCount > 0 ? '<span style="background:#ef4444;color:#fff;font-size:10px;font-weight:700;min-width:18px;height:18px;border-radius:9px;display:inline-flex;align-items:center;justify-content:center;padding:0 5px;" title="' + sectorPlanOutOfSyncCount + ' sector' + (sectorPlanOutOfSyncCount === 1 ? '' : 's') + ' need re-syncing">' + sectorPlanOutOfSyncCount + '</span>' : '') + '</a>'
+          + '<a href="/sector-planning/admin" class="action-btn" style="font-size:12px;padding:6px 14px;white-space:nowrap;display:inline-flex;align-items:center;gap:6px;">Admin Overview' + (sectorPlanOutOfSyncCount > 0 ? '<span style="background:#ef4444;color:#fff;font-size:10px;font-weight:700;min-width:18px;height:18px;border-radius:9px;display:inline-flex;align-items:center;justify-content:center;padding:0 5px;" title="' + sectorPlanOutOfSyncCount + ' sector' + (sectorPlanOutOfSyncCount === 1 ? '' : 's') + ' need syncing">' + sectorPlanOutOfSyncCount + '</span>' : '') + '</a>'
           + (isSuperAdmin(cid) ? '<button type="button" id="spResetAllBtn" class="action-btn" style="font-size:12px;padding:6px 14px;white-space:nowrap;background:rgba(239,68,68,0.12);color:#f87171;border:1px solid rgba(239,68,68,0.4);">Reset All Data!</button>' : '')
           + '</div>' : ''}
       </div>
@@ -29205,12 +29211,17 @@ function computeSectorSync(r, plan, liveFlow) {
   const liveFlowRate = liveFlow?.rate || 0;
   const flowSynced = flowSet && liveFlow && plannedFlowType === liveFlowType && plannedFlowRate === liveFlowRate;
   const flowChanged = flowSet && (plannedFlowType !== liveFlowType || plannedFlowRate !== liveFlowRate);
+  const outOfSync = routeChanged || flowChanged || route2Changed;
+  const finalised = routeSynced && flowSynced && route2Synced;
   return {
     routeAgreed, flowSet, agreedRoute, currentScheduleRoute, routeSynced, routeChanged,
     agreedRoute2, currentScheduleRoute2, route2Synced, route2Changed,
     liveFlowType, liveFlowRate, flowSynced, flowChanged,
-    outOfSync: routeChanged || flowChanged || route2Changed,
-    finalised: routeSynced && flowSynced && route2Synced
+    outOfSync,
+    finalised,
+    // Needs an admin sync action: drifted (Re-sync prompt) OR ready for a
+    // first-time Finalise (route agreed + flow set, not yet synced).
+    needsSync: outOfSync || (routeAgreed && flowSet && !finalised)
   };
 }
 
@@ -29231,7 +29242,7 @@ async function refreshSectorPlanOutOfSyncCount() {
     const liveByKey = {}; liveFlows.forEach(f => { liveByKey[f.sector] = f; });
     let count = 0;
     for (const r of adminSheetCache) {
-      if (computeSectorSync(r, planByWf[r.number], liveByKey[r.from + '-' + r.to]).outOfSync) count++;
+      if (computeSectorSync(r, planByWf[r.number], liveByKey[r.from + '-' + r.to]).needsSync) count++;
     }
     sectorPlanOutOfSyncCount = count;
   } catch (e) {}
@@ -29243,8 +29254,8 @@ setInterval(() => { refreshSectorPlanOutOfSyncCount(); }, 45000);
 // ============================================================
 
 app.get('/sector-planning/admin', requireAdmin, async (req, res) => {
-  const user = req.session?.user || null;
-  const cid = user?.data?.cid;
+  const user = req.session?.user?.data || null;
+  const cid = Number(user?.cid) || null;
   const isAdmin = isAdminUser(cid);
   const rows = adminSheetCache || [];
   if (!rows.length) {
@@ -29310,8 +29321,9 @@ app.get('/sector-planning/admin', requireAdmin, async (req, res) => {
   const flowCount = sectorRows.filter(s => s.flowSet).length;
   const finalisedCount = sectorRows.filter(s => s.finalised).length;
 
-  const outOfSyncCount = sectorRows.filter(s => s.outOfSync).length;
-  sectorPlanOutOfSyncCount = outOfSyncCount; // keep the cached badge count fresh
+  // "Needs syncing" = drifted (Re-sync) OR ready for a first-time Finalise.
+  const needsSyncCount = sectorRows.filter(s => s.outOfSync || (s.routeAgreed && s.flowSet && !s.finalised)).length;
+  sectorPlanOutOfSyncCount = needsSyncCount; // keep the cached badge count fresh
 
   const tick = '<span style="color:var(--success);font-weight:700;">&#10003;</span>';
   const cross = '<span style="color:var(--muted);">—</span>';
@@ -29407,7 +29419,7 @@ app.get('/sector-planning/admin', requireAdmin, async (req, res) => {
       <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px;">
         <div>
           <h2 style="margin:0 0 4px;">Sector Planning — Admin Overview</h2>
-          <p style="color:var(--muted);margin:0;">All ${totalSectors} sectors for the active event. Route agreed: ${agreedCount}/${totalSectors} · Flow set: ${flowCount}/${totalSectors} · Finalised: ${finalisedCount}/${totalSectors}${outOfSyncCount > 0 ? ' · <span style="color:var(--warning);font-weight:700;">⚠ ' + outOfSyncCount + ' out of sync</span>' : ''}</p>
+          <p style="color:var(--muted);margin:0;">All ${totalSectors} sectors for the active event. Route agreed: ${agreedCount}/${totalSectors} · Flow set: ${flowCount}/${totalSectors} · Finalised: ${finalisedCount}/${totalSectors}${needsSyncCount > 0 ? ' · <span style="color:var(--warning);font-weight:700;">⚠ ' + needsSyncCount + ' need syncing</span>' : ''}</p>
         </div>
         <a href="/sector-planning" style="font-size:11px;color:var(--accent);text-decoration:none;">← Back to my sectors</a>
       </div>
@@ -30383,38 +30395,6 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
       </section>
     </div><!-- /sp-top-grid -->
 
-    <section class="card card-full">
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px;">
-        <div class="sp-side-label" style="margin-bottom:0;">Proposed ATC Routes</div>
-        <button type="button" class="action-btn sp-raise-issue-btn" style="display:none;font-size:12px;padding:6px 14px;background:rgba(239,68,68,0.15);color:#f87171;border:1px solid rgba(239,68,68,0.4);">⚠ We${userEnrouteFirs.length ? ' (' + userEnrouteFirs.join('/') + ')' : ''} have an issue with this route</button>
-      </div>
-      <div id="spComparisonBox" class="sp-comparison sp-cmp-${routeComparison.status.toLowerCase()}">
-        <!-- comparison rendered client-side -->
-      </div>
-      <div id="spDepAgreePrompt" class="sp-agree-prompt" style="display:${canEditDep && plan.arrRouteSuggestion && routeComparison.status !== 'GREEN' ? '' : 'none'};margin-top:12px;padding:10px 12px;background:rgba(56,189,248,0.05);border:1px solid rgba(56,189,248,0.25);border-radius:8px;">
-        <div style="font-size:12px;color:var(--text);margin-bottom:8px;"><strong>${arrFir || toIcao}</strong> has proposed a route. What do you want to do?</div>
-        <div style="display:flex;gap:6px;flex-wrap:wrap;">
-          <button type="button" class="action-btn sp-agree-yes" data-side="DEP" style="font-size:12px;padding:5px 12px;background:rgba(74,222,128,0.15);color:#4ade80;border:1px solid rgba(74,222,128,0.4);">✓ We agree with the route proposed by ${arrFir || toIcao}</button>
-          <button type="button" class="action-btn sp-agree-alt" data-side="DEP" style="font-size:12px;padding:5px 12px;background:rgba(245,158,11,0.15);color:#fbbf24;border:1px solid rgba(245,158,11,0.4);">⚠ We have an alternative route to suggest</button>
-        </div>
-      </div>
-      <div id="spArrAgreePrompt" class="sp-agree-prompt" style="display:${canEditArr && plan.depRouteSuggestion && routeComparison.status !== 'GREEN' ? '' : 'none'};margin-top:12px;padding:10px 12px;background:rgba(56,189,248,0.05);border:1px solid rgba(56,189,248,0.25);border-radius:8px;">
-        <div style="font-size:12px;color:var(--text);margin-bottom:8px;"><strong>${depFir || fromIcao}</strong> has proposed a route. What do you want to do?</div>
-        <div style="display:flex;gap:6px;flex-wrap:wrap;">
-          <button type="button" class="action-btn sp-agree-yes" data-side="ARR" style="font-size:12px;padding:5px 12px;background:rgba(74,222,128,0.15);color:#4ade80;border:1px solid rgba(74,222,128,0.4);">✓ We agree with the route proposed by ${depFir || fromIcao}</button>
-          <button type="button" class="action-btn sp-agree-alt" data-side="ARR" style="font-size:12px;padding:5px 12px;background:rgba(245,158,11,0.15);color:#fbbf24;border:1px solid rgba(245,158,11,0.4);">⚠ We have an alternative route to suggest</button>
-        </div>
-      </div>
-      <div id="spProposedFirsBox" style="display:none;margin-top:14px;padding-top:14px;border-top:1px dashed var(--border);">
-        <div class="sp-side-label" style="margin-bottom:8px;">FIRs Each Proposal Would Transit</div>
-        <div id="spProposedFirsContent" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;"></div>
-        <div style="margin-top:10px;padding:8px 10px;background:rgba(56,189,248,0.06);border:1px solid rgba(56,189,248,0.22);border-radius:6px;font-size:11px;color:#7dd3fc;display:flex;align-items:flex-start;gap:8px;">
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:1px;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-          <span>Once a route is agreed, the above FIRs will be notified so their controllers can flag any concerns before the event.</span>
-        </div>
-      </div>
-    </section>
-
     <details class="card card-full sp-accordion" ${openAtcRoute ? 'open' : ''}>
       <summary>
         ${chevronSvg()}
@@ -30451,6 +30431,14 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
           </div>
 
           <div class="sp-side-body">
+            <div id="spDepAgreePrompt" class="sp-agree-prompt" style="display:${canEditDep && plan.arrRouteSuggestion && routeComparison.status !== 'GREEN' ? '' : 'none'};margin-bottom:10px;padding:10px 12px;background:rgba(56,189,248,0.05);border:1px solid rgba(56,189,248,0.25);border-radius:8px;">
+              <div style="font-size:12px;color:var(--text);margin-bottom:8px;"><strong>${toIcao}</strong> has proposed a route. What do you want to do?</div>
+              <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                <button type="button" class="action-btn sp-agree-yes" data-side="DEP" style="font-size:12px;padding:5px 12px;background:rgba(74,222,128,0.15);color:#4ade80;border:1px solid rgba(74,222,128,0.4);">✓ We agree with the route proposed by ${toIcao}</button>
+                <button type="button" class="action-btn sp-agree-alt" data-side="DEP" style="font-size:12px;padding:5px 12px;background:rgba(245,158,11,0.15);color:#fbbf24;border:1px solid rgba(245,158,11,0.4);">⚠ We have an alternative route to suggest</button>
+              </div>
+              <div id="spDepAgreeRoute" style="margin-top:8px;font-family:monospace;font-size:12px;line-height:1.6;color:#4ade80;word-break:break-word;">${(plan.arrRouteSuggestion || '').replace(/</g, '&lt;')}</div>
+            </div>
             <div class="sp-textarea-wrap" id="spDepRouteWrap">
             <textarea id="spDepRoute" class="sp-textarea" ${canEditDep ? '' : 'disabled'} placeholder="${canEditDep ? 'Enter the route the departure team proposes…' : 'Read-only — no edit access to this side.'}">${(plan.depRouteSuggestion || '').replace(/</g, '&lt;')}</textarea>
             </div>
@@ -30491,6 +30479,14 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
           </div>
 
           <div class="sp-side-body">
+            <div id="spArrAgreePrompt" class="sp-agree-prompt" style="display:${canEditArr && plan.depRouteSuggestion && routeComparison.status !== 'GREEN' ? '' : 'none'};margin-bottom:10px;padding:10px 12px;background:rgba(56,189,248,0.05);border:1px solid rgba(56,189,248,0.25);border-radius:8px;">
+              <div style="font-size:12px;color:var(--text);margin-bottom:8px;"><strong>${fromIcao}</strong> has proposed a route. What do you want to do?</div>
+              <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                <button type="button" class="action-btn sp-agree-yes" data-side="ARR" style="font-size:12px;padding:5px 12px;background:rgba(74,222,128,0.15);color:#4ade80;border:1px solid rgba(74,222,128,0.4);">✓ We agree with the route proposed by ${fromIcao}</button>
+                <button type="button" class="action-btn sp-agree-alt" data-side="ARR" style="font-size:12px;padding:5px 12px;background:rgba(245,158,11,0.15);color:#fbbf24;border:1px solid rgba(245,158,11,0.4);">⚠ We have an alternative route to suggest</button>
+              </div>
+              <div id="spArrAgreeRoute" style="margin-top:8px;font-family:monospace;font-size:12px;line-height:1.6;color:#4ade80;word-break:break-word;">${(plan.depRouteSuggestion || '').replace(/</g, '&lt;')}</div>
+            </div>
             <div class="sp-textarea-wrap" id="spArrRouteWrap">
             <textarea id="spArrRoute" class="sp-textarea" ${canEditArr ? '' : 'disabled'} placeholder="${canEditArr ? 'Enter the route the arrival team proposes…' : 'Read-only — no edit access to this side.'}">${(plan.arrRouteSuggestion || '').replace(/</g, '&lt;')}</textarea>
             </div>
@@ -30746,6 +30742,7 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
       function spRenderComparison() {
         var box = document.getElementById('spComparisonBox');
         var c = window.SP.routeComparison;
+        if (box) {
         var cls = 'sp-comparison sp-cmp-' + c.status.toLowerCase();
         box.className = cls;
         var statusPill, statusText;
@@ -30826,6 +30823,7 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
           + '</div>'
           + stackedHtml
           + validationHtml;
+        }
 
         // Keep the ATC Route Agreed checklist tile in sync without a reload.
         var chk = document.getElementById('spChkAtcRoute');
@@ -30916,6 +30914,11 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
         var notAgreed = status !== 'GREEN';
         if (dep) dep.style.display = (window.SP.canEditDep && window.SP.arrRouteSuggestion && notAgreed) ? '' : 'none';
         if (arr) arr.style.display = (window.SP.canEditArr && window.SP.depRouteSuggestion && notAgreed) ? '' : 'none';
+        // Keep the green "actual proposed route" text under each prompt in sync.
+        var depR = document.getElementById('spDepAgreeRoute');
+        if (depR) depR.textContent = window.SP.arrRouteSuggestion || '';
+        var arrR = document.getElementById('spArrAgreeRoute');
+        if (arrR) arrR.textContent = window.SP.depRouteSuggestion || '';
       }
 
       document.querySelectorAll('.sp-agree-yes').forEach(function(btn) {
@@ -30958,9 +30961,7 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
             tip.textContent = 'Enter your proposed route here';
             wrap.appendChild(tip);
           }
-          // Hide the agree-prompt card
-          var prompt = btn.closest('.sp-agree-prompt');
-          if (prompt) prompt.style.display = 'none';
+          // Keep the agree buttons visible — just highlight the textarea.
           ta.scrollIntoView({ behavior: 'smooth', block: 'center' });
           setTimeout(function() { ta.focus(); }, 300);
           // Remove highlight + tooltip once the user types or blurs with content
