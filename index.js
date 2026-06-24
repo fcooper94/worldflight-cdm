@@ -29029,7 +29029,10 @@ app.get('/sector-planning', requirePageEnabled('sector-planning'), async (req, r
           <h2 style="margin:0 0 4px;">Sector Planning</h2>
           <p style="color:var(--muted);margin:0 0 16px;">WorldFlight sectors you're participating in — either departing/arriving in one of your FIRs or transiting through.</p>
         </div>
-        ${isAdmin ? '<a href="/sector-planning/admin" class="action-btn" style="font-size:12px;padding:6px 14px;white-space:nowrap;">Admin Overview</a>' : ''}
+        ${isAdmin ? '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">'
+          + '<a href="/sector-planning/admin" class="action-btn" style="font-size:12px;padding:6px 14px;white-space:nowrap;">Admin Overview</a>'
+          + (isSuperAdmin(cid) ? '<button type="button" id="spResetAllBtn" class="action-btn" style="font-size:12px;padding:6px 14px;white-space:nowrap;background:rgba(239,68,68,0.12);color:#f87171;border:1px solid rgba(239,68,68,0.4);">Reset All Data!</button>' : '')
+          + '</div>' : ''}
       </div>
 
       ${noAccess ? `
@@ -29064,6 +29067,73 @@ app.get('/sector-planning', requirePageEnabled('sector-planning'), async (req, r
         <div style="display:flex;flex-wrap:wrap;gap:10px;">${pillsHtml}</div>
       ` : ''}
     </section>
+    ${isSuperAdmin(cid) ? `
+    <div id="spResetModal" class="modal hidden">
+      <div class="modal-backdrop"></div>
+      <div class="modal-dialog" style="width:480px;max-width:94vw;padding:24px;">
+        <h3 style="margin:0 0 8px;color:#f87171;">Reset All Sector Planning Data?</h3>
+        <p style="color:var(--muted);font-size:13px;margin:0 0 12px;line-height:1.5;">This wipes <strong>all Sector Planning data for the active event</strong> and syncs the cleared state to the live schedule. It <strong>cannot be undone</strong>. It clears:</p>
+        <ul style="color:var(--text);font-size:12px;line-height:1.7;margin:0 0 14px;padding-left:18px;">
+          <li>Proposed &amp; agreed routes (departure and arrival)</li>
+          <li>Traffic splits</li>
+          <li>Flow restrictions, rates and reasons</li>
+          <li>Flow requests</li>
+          <li>Sector discussion / issues</li>
+          <li>Published ATC routes on the schedule</li>
+          <li>Live flow restrictions</li>
+        </ul>
+        <p style="color:var(--muted);font-size:11px;margin:0 0 6px;">Pilot bookings are not affected. Type <strong style="color:#f87171;">RESET</strong> to confirm.</p>
+        <input type="text" id="spResetConfirmInput" autocomplete="off" placeholder="RESET" style="width:100%;padding:10px;background:var(--panel);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;text-align:center;font-weight:700;letter-spacing:3px;box-sizing:border-box;" />
+        <div id="spResetMsg" style="display:none;font-size:13px;margin-top:10px;"></div>
+        <div class="modal-actions" style="display:flex;gap:8px;margin-top:14px;">
+          <button type="button" class="modal-btn modal-btn-cancel" id="spResetCancel">Cancel</button>
+          <button type="button" class="modal-btn" id="spResetConfirm" disabled style="background:rgba(239,68,68,0.15);color:#f87171;border:1px solid #f87171;opacity:0.5;cursor:not-allowed;">Reset All Data</button>
+        </div>
+      </div>
+    </div>
+    <script>
+    (function() {
+      var openBtn = document.getElementById('spResetAllBtn');
+      var modal = document.getElementById('spResetModal');
+      if (!openBtn || !modal) return;
+      var input = document.getElementById('spResetConfirmInput');
+      var confirmBtn = document.getElementById('spResetConfirm');
+      var cancelBtn = document.getElementById('spResetCancel');
+      var msg = document.getElementById('spResetMsg');
+      var backdrop = modal.querySelector('.modal-backdrop');
+      function setEnabled(on) {
+        confirmBtn.disabled = !on;
+        confirmBtn.style.opacity = on ? '1' : '0.5';
+        confirmBtn.style.cursor = on ? 'pointer' : 'not-allowed';
+      }
+      function close() { modal.classList.add('hidden'); input.value = ''; setEnabled(false); msg.style.display = 'none'; }
+      openBtn.addEventListener('click', function() { modal.classList.remove('hidden'); setTimeout(function() { input.focus(); }, 0); });
+      cancelBtn.addEventListener('click', close);
+      backdrop.addEventListener('click', close);
+      input.addEventListener('input', function() { setEnabled(input.value.trim().toUpperCase() === 'RESET'); });
+      confirmBtn.addEventListener('click', async function() {
+        if (confirmBtn.disabled) return;
+        setEnabled(false);
+        confirmBtn.textContent = 'Resetting...';
+        try {
+          var res = await fetch('/admin/api/sector-plan/reset-all', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin' });
+          var data = await res.json().catch(function() { return {}; });
+          if (res.ok && data.ok) {
+            msg.textContent = 'Reset complete (' + (data.sectors != null ? data.sectors + ' sectors' : 'done') + '). Reloading…';
+            msg.style.color = '#4ade80'; msg.style.display = '';
+            setTimeout(function() { location.reload(); }, 900);
+          } else {
+            msg.textContent = data.error || 'Reset failed'; msg.style.color = '#f87171'; msg.style.display = '';
+            confirmBtn.textContent = 'Reset All Data'; setEnabled(true);
+          }
+        } catch (e) {
+          msg.textContent = 'Error — please try again'; msg.style.color = '#f87171'; msg.style.display = '';
+          confirmBtn.textContent = 'Reset All Data'; setEnabled(true);
+        }
+      });
+    })();
+    </script>
+    ` : ''}
   `;
 
   res.send(renderLayout({
@@ -29397,6 +29467,58 @@ app.post('/admin/api/sector-plan/finalise', requireAdmin, async (req, res) => {
 
     res.json({ ok: true });
   } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Reset ALL Sector Planning data for the active event back to empty and sync
+// the cleared state to the live schedule (admin-only, destructive). Pilot
+// bookings (TobtBooking) are intentionally left untouched.
+app.post('/admin/api/sector-plan/reset-all', requireAdmin, async (req, res) => {
+  try {
+    // Super-admin only — this is a destructive, event-wide wipe. Granular
+    // admins (who pass requireAdmin) are not permitted.
+    const callerCid = Number(req.session?.user?.data?.cid);
+    if (!isSuperAdmin(callerCid)) return res.status(403).json({ error: 'Only super admins can reset all Sector Planning data.' });
+
+    const eventId = activeEventId || null;
+    if (!eventId) return res.status(400).json({ error: 'No active event' });
+
+    const planIds = (await prisma.sectorPlan.findMany({ where: { eventId }, select: { id: true } })).map(p => p.id);
+
+    // Wipe every SectorPlan's planning fields for the active event.
+    const reset = await prisma.sectorPlan.updateMany({
+      where: { eventId },
+      data: {
+        depRouteSuggestion: null, arrRouteSuggestion: null,
+        depSplitRoute: null, arrSplitRoute: null,
+        depSplitPct: null, arrSplitPct: null, splitAgreed: false,
+        depFlowType: null, depFlowRate: null, depFlowReason: null,
+        arrFlowRequest: null, arrFlowReason: null,
+        arrFlowRequestedBy: null, arrFlowRequestedAt: null
+      }
+    });
+
+    // Delete all sector discussion / issues for those plans.
+    if (planIds.length) {
+      await prisma.sectorPlanIssue.deleteMany({ where: { sectorPlanId: { in: planIds } } }).catch(() => {});
+    }
+
+    // Sync the cleared state to the live schedule: drop published ATC routes
+    // and remove all flow restrictions for the event.
+    await prisma.wfScheduleRow.updateMany({ where: { eventId }, data: { atcRoute: '', atcRoute2: '' } });
+    await prisma.depFlow.deleteMany({ where: { eventId: eventId || 0 } });
+
+    // Refresh in-memory caches so the reset is live immediately.
+    await loadScheduleFromDb(eventId);
+    await loadDepFlowsFromDb();
+    rebuildAllTobtSlots();
+    clearFirAnalysisCache();
+
+    console.log(`[SP RESET] Reset all Sector Planning data for event ${eventId} (${reset.count} plans)`);
+    res.json({ ok: true, sectors: reset.count });
+  } catch (e) {
+    console.error('[SP RESET]', e);
     res.status(500).json({ error: e.message });
   }
 });
