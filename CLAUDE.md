@@ -174,6 +174,43 @@ Established colours:
 - `/api/icao/:icao/controllers` returns merged + sorted by position rank: **FSS → CTR → APP/TMA/RDR → DEP → TWR → GND → RMP → DEL/CLD**. ATIS callsigns are intentionally excluded (rendered in dedicated ATIS card).
 - Position chips on the client (`atcPosType()`) are color-coded with type-specific Lucide-style SVG icons, fixed `width: 72px` so callsigns align across rows.
 
+## VATCAN bookings integration
+
+Controller-facing slot bookings are pushed live to the VATCAN bookings plugin via their HTTP API. Pilots book on planning.worldflight.center; every change auto-pushes to VATCAN so controllers see the updated list within the plugin's 3–5 min poll.
+
+**Files:**
+- `lib/vatcan-bookings.mjs` — API client (`vatcanCreateEvent`, `vatcanPushBookings`, debounce queue, last-result tracking).
+- `seed-vatcan-events.mjs` — one-time script: creates a VATCAN event per WF schedule row, stores returned `event_id` on `WfScheduleRow.vatcanEventId`.
+- Hooks in `index.js` (search `vatcanPushForSlotKey`) on all 9 booking mutation sites: book, cancel, team-cancel, team-update, admin nuke-callsign, admin remove, auto-team assign, auto-affiliate assign, single-shift book.
+- 60 s safety sweep re-pushes any sector whose last push wasn't a clean OK.
+
+**Env vars (in `.env`, `.env.dev`, `.env.prod.bak` so they survive mode switches):**
+- `VATCAN_BOOKINGS_API_KEY` — required. Per-user; only authorises events your CID owns/manages.
+- `VATCAN_BOOKINGS_API_URL` — `https://bookings.vlhtesting.com` (demo, default) or `https://bookings.vatcan.ca` (prod).
+- `VATCAN_BOOKINGS_DISABLED=true` — kill switch; disables all pushes without removing the key.
+- `VATCAN_BOOKINGS_OWNER_CID` — defaults to 1303570 (Fraser). Override only if seeding under another owner.
+
+**Switching demo → prod:**
+1. Edit `.env` (and `.env.prod.bak`): set `VATCAN_BOOKINGS_API_URL=https://bookings.vatcan.ca`.
+2. Wipe the demo event ids so the seeder rebuilds against prod:
+   ```
+   UPDATE "WfScheduleRow" SET "vatcanEventId" = NULL WHERE "eventId" = <active>;
+   ```
+   (Run on whichever DB you're using — dev SQLite or prod Postgres.)
+3. Restart `npm run dev`.
+4. `node seed-vatcan-events.mjs` (dry-run) → review → `node seed-vatcan-events.mjs --push` to create the events on prod VATCAN.
+5. Smoke-test by booking one slot and confirming it lands on `bookings.vatcan.ca`.
+
+**Switching prod → demo** is the same flow in reverse — just point the URL at `bookings.vlhtesting.com`.
+
+**Event date semantics:** Seeder sets each event's `event_date` to `dep_time_utc − 60 min` (start of the ±60 min departure window) so the event is "open" from the moment the booking window begins, not just at scheduled dep.
+
+**Admin endpoints:**
+- `GET /admin/api/vatcan/status` — per-sector booking count + last push result + ok/fail.
+- `POST /admin/api/vatcan/push/:wf` — manual re-push for one sector.
+
+**Shape of the payload** matches the existing public endpoint `/api/slots/<wf>.json` exactly — `[{cid, slot:"HHMM"}, ...]`. The slot string is the TOBT minute without colon. VATCAN replaces the full list on every push (no diffing), so always send all bookings for the sector.
+
 ## Common gotchas
 
 - Map padding for `fitBounds` is in **pixels**, not a percentage. For routes that span widely on one axis but not the other, use asymmetric padding (`[20, 50]`) and pick which axis gets more padding based on `spanLat > spanLon`.

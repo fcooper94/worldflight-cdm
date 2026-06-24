@@ -356,6 +356,7 @@ model WfScheduleRow {
   atcRoute    String @default("")
   atcRoute2   String @default("")   // secondary route for traffic split
   isWfChallenge Boolean @default(false)
+  vatcanEventId String?              // id returned by VATCAN's POST /api/event (e.g. "SCf56")
 
   @@unique([eventId, number])
   @@index([eventId])

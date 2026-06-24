@@ -105,19 +105,6 @@ export default function renderLayout({
       </a>` : ''}
     </div>` : ''}
 
-    ${isMaster ? `
-    <div class="nav-section">
-      <div class="nav-title">FIR Manager</div>
-      <a href="/user-management" class="nav-item" data-tooltip="User Management">
-        <span class="icon">${icons.users}</span>
-        <span class="label">
-          User Management
-          <span id="firManagerBadge" class="nav-badge hidden"></span>
-        </span>
-      </a>
-    </div>
-    ` : ''}
-
     ${isTeamMember ? `
     <div class="nav-section">
       <div class="nav-title">Team Member</div>
@@ -1131,20 +1118,6 @@ document.addEventListener('click', (e) => {
   }
 })();
 
-// FIR Manager badge
-(async function() {
-  var firBadge = document.getElementById('firManagerBadge');
-  if (!firBadge) return;
-  try {
-    var res = await fetch('/api/user-management/pending-count', { credentials: 'same-origin' }).catch(function() { return null; });
-    if (!res || !res.ok) return;
-    var data = await res.json();
-    if (data.count > 0) {
-      firBadge.textContent = data.count;
-      firBadge.classList.remove('hidden');
-    }
-  } catch(e) {}
-})();
 </script>
 <script>
 document.addEventListener('click', async (e) => {

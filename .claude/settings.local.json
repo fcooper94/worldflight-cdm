@@ -262,7 +262,22 @@
       "Bash(node _patch_remove_popup.mjs)",
       "Bash(DATABASE_URL=\"file:./dev.db\" npx --package=prisma@5 prisma db push --schema=prisma/schema.dev.prisma --skip-generate)",
       "Bash(DATABASE_URL=\"postgresql://postgres:eqlaWvnIHoAflvdngKPhZtHNWwojqXnv@mainline.proxy.rlwy.net:28655/railway\" npx prisma db push --schema=prisma/schema.prisma --skip-generate)",
-      "Bash(npx --package=prisma@5 prisma generate)"
+      "Bash(npx --package=prisma@5 prisma generate)",
+      "Bash(node _remove_um.mjs)",
+      "Bash(awk '/^app\\\\.get..\\\\/sector-planning\\\\/:wf/,/^app\\\\.[a-z]+..\\\\/api\\\\/sector-plan.*flow-request/' index.js)",
+      "Bash(awk '$1+0 > 28945 && $1+0 < 31118')",
+      "Bash(grep -n \"sp-checklist sp-checklist-stack\\\\|</section>\\\\s*$\\\\|</div>\\\\s*$\\\\|sp-top-row\" index.js)",
+      "Bash(awk '$1+0 > 29380 && $1+0 < 29500')",
+      "Bash(awk '$1+0 > 29870 && $1+0 < 29940')",
+      "Bash(curl -s https://planning.worldflight.center/api/slots/WF2601.json)",
+      "Bash(curl -sS -X POST https://bookings.vlhtesting.com/api/event -H 'X-API-KEY: gHinyTd7K7PKkfB2JtkNJ5XAYwJo6XQI46XXY7cGSG4HuSvYOdqIq1B6w2txARKx' -H 'Content-Type: application/json' -d '{\"event_name\":\"WF Planning Portal Smoke Test\",\"event_date\":\"2026-11-01 12:00:00\",\"event_owner\":1303570}' -w '\\\\n[HTTP %{http_code}]\\\\n')",
+      "Bash(curl -sS https://planning.worldflight.center/api/slots/WF2601.json)",
+      "Bash(curl -sS -X POST https://bookings.vlhtesting.com/api/event/SCf56/bookings -H 'X-API-KEY: gHinyTd7K7PKkfB2JtkNJ5XAYwJo6XQI46XXY7cGSG4HuSvYOdqIq1B6w2txARKx' -H 'Content-Type: application/json' --data-binary @/tmp/wf2601.json -w '\\\\n[HTTP %{http_code}]\\\\n')",
+      "Bash(grep -n \"^import.*from '\\\\./lib/\\\\|^import.*from '\\\\\\\\\\\\\\\\./lib\" index.js)",
+      "Bash(node --check seed-vatcan-events.mjs)",
+      "Bash(node --check lib/vatcan-bookings.mjs)",
+      "Bash(node seed-vatcan-events.mjs)",
+      "Bash(curl -sS -X POST https://bookings.vlhtesting.com/api/event/HWtG6/bookings -H 'X-API-KEY: gHinyTd7K7PKkfB2JtkNJ5XAYwJo6XQI46XXY7cGSG4HuSvYOdqIq1B6w2txARKx' -H 'Content-Type: application/json' --data-binary @/tmp/wf2601.json -w '\\\\n[HTTP %{http_code}]\\\\n')"
     ]
   }
 }

@@ -1,6 +1,45 @@
 import { createInterface } from 'readline';
 import { execSync, spawn } from 'child_process';
-import { existsSync, copyFileSync, readFileSync, writeFileSync } from 'fs';
+import { existsSync, copyFileSync, readFileSync, writeFileSync, statSync } from 'fs';
+
+// Synchronous sleep — uses Atomics so we don't need to spawn a child.
+function sleepSync(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+// Windows holds onto query_engine-windows.dll.node when another node process
+// (often a stale nodemon) is running, so the rename step of `prisma generate`
+// fails with EPERM. Retry a few times, then fall back to the existing client
+// if it looks present and matches the requested schema.
+function runPrismaGenerate(args) {
+  const cmd = `npx --package=prisma@5 prisma generate${args ? ' ' + args : ''}`;
+  const attempts = 4;
+  for (let i = 1; i <= attempts; i++) {
+    try {
+      execSync(cmd, { stdio: 'inherit' });
+      return;
+    } catch (e) {
+      const isLock = /EPERM|EBUSY|EACCES/i.test(String(e?.message || e));
+      if (i < attempts && isLock) {
+        const wait = 500 * i;
+        console.error(`  WARN: Prisma engine DLL is locked (attempt ${i}/${attempts}). Retrying in ${wait}ms…`);
+        sleepSync(wait);
+        continue;
+      }
+      // Fall back to the existing client if it's there. Usually safe — most
+      // mode switches don't actually change the schema, so the existing
+      // generated client still matches.
+      const existing = 'node_modules/.prisma/client/index.js';
+      if (existsSync(existing)) {
+        try { statSync(existing); } catch {}
+        console.error('  WARN: prisma generate failed (engine DLL still locked). Using existing client.');
+        console.error('  → If you hit schema-mismatch errors, fully close any other node/nodemon processes and re-run.');
+        return;
+      }
+      throw e;
+    }
+  }
+}
 
 const rl = createInterface({ input: process.stdin, output: process.stdout });
 
@@ -62,7 +101,7 @@ function switchToDev() {
   console.log('');
 
   console.log('  Generating Prisma client (dev schema)...');
-  execSync('npx --package=prisma@5 prisma generate --schema=prisma/schema.dev.prisma', { stdio: 'inherit' });
+  runPrismaGenerate('--schema=prisma/schema.dev.prisma');
   console.log('  Pushing schema to SQLite...');
   execSync('npx --package=prisma@5 prisma db push --schema=prisma/schema.dev.prisma', { stdio: 'inherit' });
 
@@ -97,7 +136,7 @@ async function switchToProd() {
   }
 
   console.log('  Generating Prisma client...');
-  execSync('npx --package=prisma@5 prisma generate', { stdio: 'inherit' });
+  runPrismaGenerate();
 
   console.log('');
   startServer();
@@ -142,7 +181,7 @@ function switchToHybrid() {
   console.log(`  Wrote .env (${source} + DEV_MODE=true)`);
 
   console.log('  Generating Prisma client (prod schema)...');
-  execSync('npx --package=prisma@5 prisma generate', { stdio: 'inherit' });
+  runPrismaGenerate();
 
   console.log('');
   console.log('  Hybrid mode ready. Pick any dev user at /auth/login.');

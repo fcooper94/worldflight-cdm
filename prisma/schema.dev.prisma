@@ -350,6 +350,7 @@ model WfScheduleRow {
   atcRoute    String @default("")
   atcRoute2   String @default("")
   isWfChallenge Boolean @default(false)
+  vatcanEventId String?
 
   @@unique([eventId, number])
   @@index([eventId])

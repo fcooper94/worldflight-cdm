@@ -358,6 +358,7 @@ import polygonClipping from 'polygon-clipping';
 import _renderLayout from './layout.js';
 import { getAirportGround, detectStandOccupancy } from './lib/osm-ground.mjs';
 import { fetchAndParseFirManagement } from './lib/fir-management.mjs';
+import { vatcanIsEnabled, vatcanCreateEvent, vatcanQueueSectorPush, vatcanPushSectorNow, vatcanGetLastResult, vatcanAllLastResults } from './lib/vatcan-bookings.mjs';
 function renderLayout(opts) {
   const cid = Number(opts.user?.cid);
   const active = wfEvents.find(e => e.id === activeEventId) || null;
@@ -2037,6 +2038,7 @@ async function autoAssignTeamBookings({ reason = '' } = {}) {
         if (!tobtBookingsByCid[teamCid]) tobtBookingsByCid[teamCid] = new Set();
         tobtBookingsByCid[teamCid].add(bookingKey);
         created++;
+        vatcanPushForSlotKey(slotKey);
       }
     }
 
@@ -2152,6 +2154,7 @@ async function autoAssignAffiliateBookings({ reason = '' } = {}) {
         if (!tobtBookingsByCid[cidNum]) tobtBookingsByCid[cidNum] = new Set();
         tobtBookingsByCid[cidNum].add(bookingKey);
         created++;
+        vatcanPushForSlotKey(slotKey);
       }
     }
 
@@ -2368,6 +2371,7 @@ async function assignAffiliatePilotToSector(affiliate, scheduleRow, claimCid) {
   tobtBookingsByCid[newCid].add(bookingKey);
 
   try { io.emit('bookingCreated', { slotKey }); } catch {}
+  vatcanPushForSlotKey(slotKey);
 }
 
 /* ===== BOOKING-ONLY CAPACITY ===== */
@@ -5892,6 +5896,7 @@ socket.on('createBookingOnly', async ({ sector, callsign: enteredCid, teamBookin
   tobtBookingsByCid[bookingCid].add(bookingKey);
 
   io.emit('bookingCreated', { slotKey, assignedRoute });
+  vatcanPushForSlotKey(slotKey);
 });
 
 
@@ -9011,10 +9016,14 @@ app.get('/sector/:wf/:from/:to', async (req, res) => {
 
           var pts = routeData.points;
 
-          // Fix antimeridian: ensure consecutive points don't jump >180 degrees
+          // Fix antimeridian: ensure consecutive points don't jump >180 degrees.
+          // Track whether any segment had to be shifted — the FIR boundary code
+          // below uses this to render mirrored copies so the route doesn't sit
+          // outside the visible world wrap.
+          var crossesAntimeridian = false;
           for (var i = 1; i < pts.length; i++) {
-            while (pts[i].lon - pts[i-1].lon > 180) pts[i].lon -= 360;
-            while (pts[i].lon - pts[i-1].lon < -180) pts[i].lon += 360;
+            while (pts[i].lon - pts[i-1].lon > 180)  { pts[i].lon -= 360; crossesAntimeridian = true; }
+            while (pts[i].lon - pts[i-1].lon < -180) { pts[i].lon += 360; crossesAntimeridian = true; }
           }
 
           var coords = pts.map(function(p) { return [p.lat, p.lon]; });
@@ -16366,14 +16375,14 @@ app.post('/wf-schedule/refresh-schedule', requireAdmin, async (req, res) => {
 
 // Live JSON export of bookings per sector — e.g. /wf2631.json
 // Returns array of { cid, slot } — slot is HHMM string or empty for booking-only
-app.get('/api/slots/:wfNum.json', (req, res) => {
-  const wfNum = req.params.wfNum.toUpperCase();
-  const sched = (adminSheetCache || []).find(r => r?.number === wfNum);
-  if (!sched) return res.status(404).json({ error: 'Sector not found' });
-
+// Build the slot-bookings array for a WF sector. Same shape used by both
+// the public /api/slots/<wf>.json endpoint AND the VATCAN push integration.
+function buildSlotsForWf(wfNum) {
+  const wf = String(wfNum).toUpperCase();
+  const sched = (adminSheetCache || []).find(r => r?.number === wf);
+  if (!sched) return null;
   const sectorPrefix = sched.from + '-' + sched.to + '|';
   const bookings = [];
-
   for (const [key, b] of Object.entries(tobtBookingsByKey)) {
     if (!key.includes(':')) continue;
     if (!b.slotKey || !b.slotKey.startsWith(sectorPrefix)) continue;
@@ -16382,12 +16391,94 @@ app.get('/api/slots/:wfNum.json', (req, res) => {
       : '';
     bookings.push({ cid: b.cid, slot });
   }
-
   bookings.sort((a, b) => (a.slot || 'zzzz').localeCompare(b.slot || 'zzzz'));
+  return { sched, bookings };
+}
 
+app.get('/api/slots/:wfNum.json', (req, res) => {
+  const out = buildSlotsForWf(req.params.wfNum);
+  if (!out) return res.status(404).json({ error: 'Sector not found' });
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-  res.json(bookings);
+  res.json(out.bookings);
 });
+
+// ── VATCAN push hooks ────────────────────────────────────────────────────
+// Each call queues a debounced push to VATCAN for the given WF sector.
+// A flurry of book/cancel within ~750ms coalesces into one push, so a
+// "bulk cancel" or rapid re-booking only generates one network call.
+//
+// We also track which sectors changed since their last successful push so
+// the periodic safety sweep below can re-push if a one-off network blip
+// dropped the update silently.
+const vatcanDirtyWfs = new Set();
+
+function vatcanResolveEventIdForWf(wfNum) {
+  return (async () => {
+    const wf = String(wfNum).toUpperCase();
+    const row = await prisma.wfScheduleRow.findFirst({
+      where: { eventId: activeEventId || undefined, number: wf },
+      select: { vatcanEventId: true }
+    }).catch(() => null);
+    return row?.vatcanEventId || null;
+  })();
+}
+
+// Slot keys look like "FROM-TO|DATE|DEPTIME". Walk adminSheetCache to find
+// the WF number for one. Returns null if no matching schedule row.
+function wfNumberForSlotKey(slotKey) {
+  if (!slotKey || typeof slotKey !== 'string') return null;
+  const parts = slotKey.split('|');
+  if (parts.length < 3) return null;
+  const fromTo = parts[0].split('-');
+  if (fromTo.length !== 2) return null;
+  const [from, to] = fromTo;
+  const date = parts[1], depTime = parts[2];
+  const sched = (adminSheetCache || []).find(r =>
+    r?.from === from && r?.to === to && r?.date_utc === date && r?.dep_time_utc === depTime
+  );
+  return sched?.number || null;
+}
+
+// Convenience: queue a VATCAN push given any slotKey (looks up the WF).
+function vatcanPushForSlotKey(slotKey) {
+  if (!vatcanIsEnabled()) return;
+  const wf = wfNumberForSlotKey(slotKey);
+  if (wf) vatcanPushForWf(wf);
+}
+
+function vatcanPushForWf(wf) {
+  if (!vatcanIsEnabled()) return;
+  vatcanDirtyWfs.add(String(wf).toUpperCase());
+  vatcanQueueSectorPush({
+    wf: String(wf).toUpperCase(),
+    getEventId: () => vatcanResolveEventIdForWf(wf),
+    getBookings: () => {
+      const out = buildSlotsForWf(wf);
+      return out ? out.bookings : [];
+    },
+    onLog: (lvl, msg) => (lvl === 'error' ? console.error : console.log)(msg)
+  });
+  // Mark clean after a successful push (the lib stamps LAST_RESULT.ok).
+  setTimeout(() => {
+    const r = vatcanGetLastResult(String(wf).toUpperCase());
+    if (r?.ok) vatcanDirtyWfs.delete(String(wf).toUpperCase());
+  }, 2000);
+}
+
+// Periodic safety sweep — re-push any sector whose last push wasn't a clean
+// OK in the last 5 min. Catches rare cases where the debounced push lost
+// to a crash, timeout, or transient VATCAN 5xx.
+if (vatcanIsEnabled()) {
+  setInterval(() => {
+    if (!vatcanDirtyWfs.size) return;
+    for (const wf of [...vatcanDirtyWfs]) {
+      const r = vatcanGetLastResult(wf);
+      const fresh = r?.ok && (Date.now() - r.at) < 5 * 60 * 1000;
+      if (fresh) { vatcanDirtyWfs.delete(wf); continue; }
+      vatcanPushForWf(wf);
+    }
+  }, 60 * 1000);
+}
 
 app.post('/api/tobt/cancel', requireLogin, async (req, res) => {
   try {
@@ -16433,6 +16524,7 @@ app.post('/api/tobt/cancel', requireLogin, async (req, res) => {
       buildUnassignedTobtsForICAO(booking.from)
     );
 
+    vatcanPushForSlotKey(slotKey);
     return res.json({ success: true });
 
   } catch (err) {
@@ -16495,6 +16587,7 @@ app.post('/api/tobt/team-cancel', requireLogin, requireTeamMember, async (req, r
     emitToIcao(booking.from, 'departures:update');
     emitToIcao(booking.from, 'unassignedTobtUpdate', buildUnassignedTobtsForICAO(booking.from));
 
+    vatcanPushForSlotKey(slotKey);
     return res.json({ success: true });
   } catch (err) {
     console.error('[TOBT] Team cancel failed:', err);
@@ -16798,6 +16891,7 @@ tobtBookingsByCid[storedCid].add(bookingKey);
     emitToIcao(fromIcao, 'departures:update');
     emitToIcao(fromIcao, 'unassignedTobtUpdate', buildUnassignedTobtsForICAO(fromIcao));
 
+    vatcanPushForSlotKey(slotKey);
     return res.json({ success: true });
 
   } catch (err) {
@@ -17004,6 +17098,7 @@ app.post('/api/team/bookings/update', requireLogin, requireTeamMember, async (re
     if (!tobtBookingsByCid[newCid]) tobtBookingsByCid[newCid] = new Set();
     tobtBookingsByCid[newCid].add(newBookingKey);
 
+    vatcanPushForSlotKey(slotKey);
     return res.json({ success: true });
   } catch (err) {
     console.error('[TEAM] Update booking failed:', err);
@@ -20185,368 +20280,6 @@ app.get('/team/bookings', requireLogin, requireTeamMember, async (req, res) => {
   `;
   const pageTitle = teamName ? `${teamName} - Bookings` : 'Our Bookings';
   res.send(renderLayout({ title: pageTitle, user, isAdmin, content, layoutClass: 'dashboard-full' }));
-});
-
-/* ===== USER MANAGEMENT (MASTER USERS) ===== */
-app.get('/user-management', requireLogin, async (req, res) => {
-  const user = req.session.user.data;
-  const cid = Number(user.cid);
-  if (!isMasterUser(cid)) return res.redirect('/');
-  const isAdmin = isAdminUser(cid);
-
-  // Get this user's divisions
-  const staffReqs = await prisma.staffAccessRequest.findMany({
-    where: { cid, status: 'APPROVED' }, select: { division: true }
-  });
-  const hasGlobal = !!(await prisma.documentationPermission.findFirst({ where: { cid, pattern: '****' } }));
-  const userDivisions = staffReqs.map(r => r.division);
-
-  // Build the list of ICAO patterns this user can manage
-  const managedPatterns = hasGlobal
-    ? Object.values(DIVISION_ICAO_MAP)
-    : userDivisions.map(d => DIVISION_ICAO_MAP[d]).filter(Boolean);
-  const managedDivisions = hasGlobal
-    ? Object.keys(DIVISION_ICAO_MAP)
-    : userDivisions;
-
-  const content = `
-    <section class="card card-full staff-access-page">
-      <h2>User Management</h2>
-      <p style="color:var(--muted);margin-bottom:16px;">Manage user permissions and access requests for your division(s): ${managedDivisions.map(d => '<span class="fir-badge" style="font-size:11px;padding:2px 8px;">' + d + '</span>').join(' ')}</p>
-
-      <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
-        <input type="text" id="umSearchInput" placeholder="Search by CID..." style="padding:8px 12px;background:var(--panel);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;width:200px;" />
-        <button class="action-btn primary" id="umSearchBtn">Search</button>
-      </div>
-
-      <div id="umResults" style="display:none;">
-        <div id="umResultsHeader" style="font-size:13px;color:var(--muted);margin-bottom:8px;"></div>
-        <div style="overflow-x:auto;">
-          <table class="admin-table">
-            <thead><tr><th>Pattern</th><th>Actions</th></tr></thead>
-            <tbody id="umResultsBody"></tbody>
-          </table>
-        </div>
-      </div>
-
-      <div id="umMasterSection" style="display:none;margin-top:16px;padding:12px;background:var(--panel2);border:1px solid var(--border);border-radius:8px;">
-        <div style="display:flex;justify-content:space-between;align-items:center;">
-          <div>
-            <div style="font-weight:700;font-size:13px;">Master User</div>
-            <div style="font-size:11px;color:var(--muted);">Grants access to User Management for this division</div>
-          </div>
-          <select id="umMasterSelect" style="padding:6px 12px;background:var(--panel);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;min-width:120px;">
-            <option value="disabled">Disabled</option>
-            <option value="enabled">Enabled</option>
-          </select>
-        </div>
-      </div>
-
-      <div id="umAddSection" style="display:none;margin-top:16px;padding:12px;background:var(--panel2);border:1px solid var(--border);border-radius:8px;">
-        <div style="font-size:13px;font-weight:600;margin-bottom:8px;" id="umAddLabel">Add Permission</div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;">
-          <select id="umAddPattern" style="padding:8px 12px;background:var(--panel);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;">
-            ${managedPatterns.map(p => '<option value="' + p + '">' + p + '</option>').join('')}
-          </select>
-          <button class="action-btn primary" id="umAddBtn">Add</button>
-        </div>
-        <div id="umAddMsg" style="display:none;margin-top:8px;font-size:12px;"></div>
-      </div>
-    </section>
-
-    <section class="card card-full staff-access-page" style="margin-top:24px;">
-      <h2>Pending Access Requests</h2>
-      <p style="color:var(--muted);margin-bottom:16px;">Requests from users wanting access to your division(s).</p>
-
-      <div style="overflow-x:auto;">
-        <table class="admin-table" id="umRequestsTable">
-          <thead>
-            <tr><th>CID</th><th>Name</th><th>Email</th><th>Division</th><th>Role</th><th>Rating</th><th>Requested</th><th>Actions</th></tr>
-          </thead>
-          <tbody id="umRequestsBody">
-            <tr><td colspan="8" style="color:var(--muted);text-align:center;padding:20px;">Loading...</td></tr>
-          </tbody>
-        </table>
-      </div>
-    </section>
-
-    <script>
-    (function() {
-      var managedDivisions = ${JSON.stringify(managedDivisions)};
-      var managedPatterns = ${JSON.stringify(managedPatterns)};
-      var searchedCid = null;
-
-      // Search by CID
-      document.getElementById('umSearchBtn').addEventListener('click', doSearch);
-      document.getElementById('umSearchInput').addEventListener('keydown', function(e) { if (e.key === 'Enter') doSearch(); });
-
-      function doSearch() {
-        var cid = document.getElementById('umSearchInput').value.trim();
-        if (!cid || !/^[0-9]+$/.test(cid)) return;
-        searchedCid = Number(cid);
-
-        fetch('/api/user-management/search?cid=' + cid, { credentials: 'same-origin' })
-          .then(function(r) { return r.json(); })
-          .then(function(data) {
-            document.getElementById('umResults').style.display = '';
-            document.getElementById('umAddSection').style.display = '';
-            document.getElementById('umAddLabel').textContent = 'Add Permission for CID ' + searchedCid;
-            document.getElementById('umMasterSection').style.display = '';
-
-            var headerParts = [data.cid];
-            if (data.name) headerParts.push(data.name);
-            document.getElementById('umResultsHeader').textContent = headerParts.join(' \u2014 ');
-
-            var body = document.getElementById('umResultsBody');
-            var perms = data.permissions || [];
-            if (!perms.length) {
-              body.innerHTML = '<tr><td colspan="2" style="color:var(--muted);text-align:center;padding:16px;">No permissions for your divisions</td></tr>';
-            } else {
-              body.innerHTML = perms.map(function(r) {
-                return '<tr>'
-                  + '<td><span style="font-family:monospace;font-weight:600;">' + r.pattern + '</span></td>'
-                  + '<td><button class="action-btn um-revoke-btn" data-id="' + r.id + '" style="font-size:11px;padding:3px 10px;background:rgba(239,68,68,0.15);color:#f87171;border-color:#f87171;">Revoke</button></td>'
-                  + '</tr>';
-              }).join('');
-            }
-
-            // Master user toggle
-            var masterSel = document.getElementById('umMasterSelect');
-            var newMasterSel = masterSel.cloneNode(true);
-            masterSel.parentNode.replaceChild(newMasterSel, masterSel);
-            newMasterSel.value = data.masterUser ? 'enabled' : 'disabled';
-            newMasterSel.addEventListener('change', async function() {
-              var enabled = this.value === 'enabled';
-              try {
-                if (enabled) {
-                  var tokenRes = await fetch('/api/user-management/grant-master', {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    credentials: 'same-origin', body: JSON.stringify({ cid: searchedCid })
-                  });
-                } else {
-                  await fetch('/api/user-management/revoke-master', {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    credentials: 'same-origin', body: JSON.stringify({ cid: searchedCid })
-                  });
-                }
-                doSearch();
-              } catch (err) { this.value = enabled ? 'disabled' : 'enabled'; }
-            });
-          });
-      }
-
-      // Revoke permission
-      document.getElementById('umResultsBody').addEventListener('click', async function(e) {
-        var btn = e.target.closest('.um-revoke-btn');
-        if (!btn) return;
-        btn.disabled = true; btn.textContent = 'Revoking...';
-        try {
-          var res = await fetch('/api/user-management/revoke-permission/' + btn.dataset.id, { method: 'DELETE', credentials: 'same-origin' });
-          if (res.ok) doSearch();
-        } catch (err) { btn.disabled = false; btn.textContent = 'Revoke'; }
-      });
-
-      // Add permission
-      document.getElementById('umAddBtn').addEventListener('click', async function() {
-        var pattern = document.getElementById('umAddPattern').value;
-        var msg = document.getElementById('umAddMsg');
-        if (!searchedCid || !pattern) return;
-        msg.style.display = 'none';
-        try {
-          var res = await fetch('/api/user-management/add-permission', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            credentials: 'same-origin', body: JSON.stringify({ cid: searchedCid, pattern: pattern })
-          });
-          var data = await res.json();
-          if (res.ok) { msg.textContent = 'Added'; msg.style.color = '#4ade80'; msg.style.display = ''; doSearch(); }
-          else { msg.textContent = data.error || 'Failed'; msg.style.color = '#f87171'; msg.style.display = ''; }
-        } catch (err) { msg.textContent = 'Error'; msg.style.color = '#f87171'; msg.style.display = ''; }
-      });
-
-      // Load pending requests
-      function loadRequests() {
-        fetch('/api/user-management/requests', { credentials: 'same-origin' })
-          .then(function(r) { return r.json(); })
-          .then(function(rows) {
-            var tbody = document.getElementById('umRequestsBody');
-            if (!rows.length) {
-              tbody.innerHTML = '<tr><td colspan="8" style="color:var(--muted);text-align:center;padding:20px;">No pending requests</td></tr>';
-              return;
-            }
-            tbody.innerHTML = rows.map(function(r) {
-              var date = new Date(r.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-              var roleDisplay = r.role ? r.role.charAt(0).toUpperCase() + r.role.slice(1) : '\u2014';
-              return '<tr>'
-                + '<td>' + r.cid + '</td>'
-                + '<td>' + (r.name || '\u2014') + '</td>'
-                + '<td style="font-size:12px;">' + (r.email || '\u2014') + '</td>'
-                + '<td><span class="fir-badge" style="font-size:11px;padding:2px 8px;">' + r.division + '</span></td>'
-                + '<td>' + roleDisplay + '</td>'
-                + '<td>' + (r.rating || '\u2014') + '</td>'
-                + '<td style="font-size:12px;">' + date + '</td>'
-                + '<td style="white-space:nowrap;">'
-                + '<button class="action-btn primary um-approve-btn" data-id="' + r.id + '" style="font-size:11px;padding:3px 10px;">Approve</button>'
-                + ' <button class="action-btn um-deny-btn" data-id="' + r.id + '" style="font-size:11px;padding:3px 10px;background:rgba(239,68,68,0.15);color:#f87171;border-color:#f87171;">Deny</button>'
-                + '</td></tr>';
-            }).join('');
-          });
-      }
-
-      document.getElementById('umRequestsBody').addEventListener('click', async function(e) {
-        var approveBtn = e.target.closest('.um-approve-btn');
-        var denyBtn = e.target.closest('.um-deny-btn');
-        var btn = approveBtn || denyBtn;
-        if (!btn) return;
-        var action = approveBtn ? 'approve' : 'deny';
-        btn.disabled = true; btn.textContent = action === 'approve' ? 'Approving...' : 'Denying...';
-        try {
-          var res = await fetch('/api/user-management/requests/' + btn.dataset.id + '/' + action, {
-            method: 'POST', credentials: 'same-origin'
-          });
-          if (res.ok) loadRequests();
-        } catch (err) { btn.disabled = false; btn.textContent = action === 'approve' ? 'Approve' : 'Deny'; }
-      });
-
-      loadRequests();
-    })();
-    </script>
-  `;
-
-  res.send(renderLayout({ title: 'User Management', user, isAdmin, content, layoutClass: 'dashboard-full' }));
-});
-
-// User Management APIs (for master users)
-app.get('/api/user-management/search', requireLogin, async (req, res) => {
-  const myCid = Number(req.session.user.data.cid);
-  if (!isMasterUser(myCid)) return res.status(403).json({ error: 'Forbidden' });
-
-  const targetCid = Number(req.query.cid);
-  if (!targetCid) return res.status(400).json({ error: 'CID required' });
-
-  // Get managed patterns for this master user
-  const myStaff = await prisma.staffAccessRequest.findMany({ where: { cid: myCid, status: 'APPROVED' }, select: { division: true } });
-  const myGlobal = !!(await prisma.documentationPermission.findFirst({ where: { cid: myCid, pattern: '****' } }));
-  const myPatterns = myGlobal ? Object.values(DIVISION_ICAO_MAP) : myStaff.map(r => DIVISION_ICAO_MAP[r.division]).filter(Boolean);
-
-  const [perms, anyStaffReq, anyDocReq] = await Promise.all([
-    prisma.documentationPermission.findMany({ where: { cid: targetCid } }),
-    prisma.staffAccessRequest.findFirst({ where: { cid: targetCid }, orderBy: { createdAt: 'desc' } }),
-    prisma.documentationAccessRequest.findFirst({ where: { cid: targetCid }, orderBy: { createdAt: 'desc' } })
-  ]);
-
-  const filtered = perms.filter(p => myPatterns.includes(p.pattern));
-  const name = anyStaffReq?.name || anyDocReq?.name || null;
-
-  res.json({
-    cid: targetCid,
-    name,
-    masterUser: masterUserCids.has(targetCid),
-    permissions: filtered
-  });
-});
-
-app.get('/api/user-management/pending-count', requireLogin, async (req, res) => {
-  const myCid = Number(req.session.user.data.cid);
-  if (!isMasterUser(myCid)) return res.json({ count: 0 });
-
-  const myStaff = await prisma.staffAccessRequest.findMany({ where: { cid: myCid, status: 'APPROVED' }, select: { division: true } });
-  const myGlobal = !!(await prisma.documentationPermission.findFirst({ where: { cid: myCid, pattern: '****' } }));
-  const myDivisions = myGlobal ? Object.keys(DIVISION_ICAO_MAP) : myStaff.map(r => r.division);
-
-  if (!myDivisions.length) return res.json({ count: 0 });
-  const count = await prisma.staffAccessRequest.count({
-    where: { division: { in: myDivisions }, status: 'PENDING' }
-  });
-  res.json({ count });
-});
-
-app.get('/api/user-management/requests', requireLogin, async (req, res) => {
-  const myCid = Number(req.session.user.data.cid);
-  if (!isMasterUser(myCid)) return res.status(403).json({ error: 'Forbidden' });
-
-  const myStaff = await prisma.staffAccessRequest.findMany({ where: { cid: myCid, status: 'APPROVED' }, select: { division: true } });
-  const myGlobal = !!(await prisma.documentationPermission.findFirst({ where: { cid: myCid, pattern: '****' } }));
-  const myDivisions = myGlobal ? Object.keys(DIVISION_ICAO_MAP) : myStaff.map(r => r.division);
-
-  const requests = await prisma.staffAccessRequest.findMany({
-    where: { division: { in: myDivisions }, status: 'PENDING' },
-    orderBy: { createdAt: 'desc' }
-  });
-  res.json(requests);
-});
-
-app.post('/api/user-management/requests/:id/:action', requireLogin, async (req, res) => {
-  const myCid = Number(req.session.user.data.cid);
-  if (!isMasterUser(myCid)) return res.status(403).json({ error: 'Forbidden' });
-
-  const id = Number(req.params.id);
-  const action = req.params.action;
-  if (action !== 'approve' && action !== 'deny') return res.status(400).json({ error: 'Invalid action' });
-
-  const request = await prisma.staffAccessRequest.findUnique({ where: { id } });
-  if (!request) return res.status(404).json({ error: 'Not found' });
-
-  await prisma.staffAccessRequest.update({
-    where: { id },
-    data: { status: action === 'approve' ? 'APPROVED' : 'DENIED', reviewedBy: myCid, reviewedAt: new Date() }
-  });
-
-  // If approved, grant doc permission
-  if (action === 'approve') {
-    const pattern = DIVISION_ICAO_MAP[request.division];
-    if (pattern) {
-      const existing = await prisma.documentationPermission.findFirst({ where: { cid: request.cid, pattern } });
-      if (!existing) await prisma.documentationPermission.create({ data: { cid: request.cid, pattern } });
-    }
-  }
-
-  res.json({ ok: true });
-});
-
-app.post('/api/user-management/add-permission', requireLogin, async (req, res) => {
-  const myCid = Number(req.session.user.data.cid);
-  if (!isMasterUser(myCid)) return res.status(403).json({ error: 'Forbidden' });
-
-  const { cid, pattern } = req.body;
-  if (!cid || !pattern) return res.status(400).json({ error: 'CID and pattern required' });
-  if (pattern === '****') return res.status(400).json({ error: 'Cannot grant global access' });
-
-  const existing = await prisma.documentationPermission.findFirst({ where: { cid: Number(cid), pattern } });
-  if (existing) return res.status(409).json({ error: 'Permission already exists' });
-
-  await prisma.documentationPermission.create({ data: { cid: Number(cid), pattern } });
-  res.json({ ok: true });
-});
-
-app.delete('/api/user-management/revoke-permission/:id', requireLogin, async (req, res) => {
-  const myCid = Number(req.session.user.data.cid);
-  if (!isMasterUser(myCid)) return res.status(403).json({ error: 'Forbidden' });
-  await prisma.documentationPermission.delete({ where: { id: Number(req.params.id) } });
-  res.json({ ok: true });
-});
-
-app.post('/api/user-management/grant-master', requireLogin, async (req, res) => {
-  const myCid = Number(req.session.user.data.cid);
-  if (!isMasterUser(myCid)) return res.status(403).json({ error: 'Forbidden' });
-  const { cid } = req.body;
-  if (!cid) return res.status(400).json({ error: 'CID required' });
-  if (masterUserCids.has(Number(cid))) return res.status(409).json({ error: 'Already a master user' });
-  const token = crypto.randomBytes(16).toString('hex');
-  await prisma.masterToken.create({ data: { token, cid: Number(cid), label: 'Granted by CID ' + myCid, usedAt: new Date() } });
-  masterUserCids.add(Number(cid));
-  res.json({ ok: true });
-});
-
-app.post('/api/user-management/revoke-master', requireLogin, async (req, res) => {
-  const myCid = Number(req.session.user.data.cid);
-  if (!isMasterUser(myCid)) return res.status(403).json({ error: 'Forbidden' });
-  const { cid } = req.body;
-  if (!cid) return res.status(400).json({ error: 'CID required' });
-  // Don't allow revoking admins
-  if (ADMIN_CIDS.includes(Number(cid))) return res.status(403).json({ error: 'Cannot revoke admin master status' });
-  await prisma.masterToken.deleteMany({ where: { cid: Number(cid) } });
-  masterUserCids.delete(Number(cid));
-  res.json({ ok: true });
 });
 
 app.get('/admin/control-panel', requireAdmin, async (req, res) => {
@@ -26432,6 +26165,59 @@ app.get('/admin/api/controller-pack/download/:filename', requireAdmin, (req, res
   res.download(zipPath, filename);
 });
 
+// ── VATCAN bookings integration status + manual re-push ───────────────────
+app.get('/admin/api/vatcan/status', requireAdmin, async (req, res) => {
+  try {
+    const rows = await prisma.wfScheduleRow.findMany({
+      where: { eventId: activeEventId || undefined },
+      orderBy: { sortOrder: 'asc' },
+      select: { number: true, from: true, to: true, vatcanEventId: true }
+    });
+    const lastResults = vatcanAllLastResults();
+    const sectors = rows.map(r => {
+      const wf = r.number;
+      const out = buildSlotsForWf(wf);
+      return {
+        wf,
+        from: r.from,
+        to: r.to,
+        eventId: r.vatcanEventId || null,
+        bookings: out ? out.bookings.length : 0,
+        lastPush: lastResults[wf] || null
+      };
+    });
+    res.json({
+      enabled: vatcanIsEnabled(),
+      baseUrl: process.env.VATCAN_BOOKINGS_API_URL || 'https://bookings.vlhtesting.com',
+      sectorCount: sectors.length,
+      withEvent: sectors.filter(s => s.eventId).length,
+      sectors
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/admin/api/vatcan/push/:wf', requireAdmin, async (req, res) => {
+  try {
+    const wf = String(req.params.wf || '').toUpperCase();
+    const out = buildSlotsForWf(wf);
+    if (!out) return res.status(404).json({ error: 'WF not found' });
+    const row = await prisma.wfScheduleRow.findFirst({
+      where: { eventId: activeEventId || undefined, number: wf },
+      select: { vatcanEventId: true }
+    });
+    if (!row?.vatcanEventId) return res.status(400).json({ error: 'No vatcanEventId for this WF — run seed-vatcan-events.mjs first.' });
+    const result = await vatcanPushSectorNow({
+      wf, eventId: row.vatcanEventId, bookings: out.bookings,
+      onLog: (lvl, msg) => (lvl === 'error' ? console.error : console.log)(msg)
+    });
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.post('/admin/api/controller-pack/cleanup', requireAdmin, express.json(), (req, res) => {
   const esDir = path.resolve('Euroscope_Files');
   try {
@@ -28339,6 +28125,7 @@ app.post('/api/tobt/clear-manual', requireLogin, async (req, res) => {
   // 3) Remove from in-memory cache so the UI updates
   for (const slotKey of matchingSlotKeys) {
     delete tobtBookingsByKey[slotKey];
+    vatcanPushForSlotKey(slotKey);
   }
 
   // 4) Clear TSAT using normalized callsign
@@ -28392,6 +28179,7 @@ app.post('/api/tobt/remove', async (req, res) => {
   });
 
   delete tobtBookingsByKey[slotKey];
+  vatcanPushForSlotKey(slotKey);
 
   emitToIcao(booking.from, 'departures:update');
 
@@ -29487,6 +29275,58 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
   const depWindowLocal = localWindow(fromIcao, sched.dep_time_utc);
   const arrWindowLocal = localWindow(toIcao, sched.arr_time_utc);
 
+  // ── Status strip + per-section status pills ────────────────────────────
+  // Tone classes feed both the top dashboard strip and each accordion header.
+  const routeStatusPill = (() => {
+    switch (routeComparison.status) {
+      case 'GREEN':   return { tone: 'green', label: 'Routes agreed' };
+      case 'AMBER':   return { tone: 'amber', label: 'Routes differ — ' + routeComparison.matchPct + '% match' };
+      case 'RED':     return { tone: 'red',   label: 'Routes conflict — ' + routeComparison.matchPct + '% match' };
+      case 'PARTIAL': return { tone: 'amber', label: 'Awaiting other side' };
+      default:        return { tone: 'muted', label: 'No routes proposed' };
+    }
+  })();
+  const splitProposed = !!(plan.depSplitRoute || plan.arrSplitRoute);
+  const splitStatusPill = !splitProposed
+    ? null
+    : { tone: plan.splitAgreed ? 'green' : 'amber',
+        label: plan.splitAgreed ? 'Split agreed' : 'Split proposed' };
+  const depFlowSet = checklist.depFlowSet;
+  const flowStatusPill = (() => {
+    if (!plan.depFlowType || plan.depFlowType === 'NONE') return { tone: 'green', label: 'No flow' };
+    const label = (FLOW_LABELS[plan.depFlowType] || plan.depFlowType);
+    if (plan.depFlowType === 'BOOKING_REQUIRED') {
+      if (plan.depFlowRate) return { tone: 'blue', label: label + ' · ' + plan.depFlowRate + '/h' };
+      return { tone: 'amber', label: label + ' · rate missing' };
+    }
+    return { tone: 'blue', label };
+  })();
+  const openIssuesCount = (issuesWithNames || []).filter(i => i.status !== 'RESOLVED').length;
+  const issueStatusPill = openIssuesCount > 0
+    ? { tone: 'red', label: openIssuesCount + ' open issue' + (openIssuesCount === 1 ? '' : 's') }
+    : { tone: 'muted', label: 'No issues' };
+  const sceneryOk = checklist.scenery.dep && checklist.scenery.arr;
+  const sceneryPill = { tone: sceneryOk ? 'green' : 'red',
+    label: 'Scenery ' + (checklist.scenery.dep ? '✓' : '✗') + fromIcao + ' / ' + (checklist.scenery.arr ? '✓' : '✗') + toIcao };
+  const docsAny = checklist.docs.dep || checklist.docs.arr;
+  const docsPill = { tone: docsAny ? 'green' : 'muted',
+    label: 'Docs ' + (checklist.docs.dep ? '✓' : '·') + fromIcao + ' / ' + (checklist.docs.arr ? '✓' : '·') + toIcao };
+
+  function pillHtml(p) {
+    if (!p) return '';
+    return `<span class="sp-status-pill ${p.tone}"><span class="dot"></span>${p.label}</span>`;
+  }
+  function chevronSvg() {
+    return '<svg class="sp-acc-chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>';
+  }
+
+  // Decide which accordions open by default — open if the section needs
+  // attention, collapsed if everything looks fine.
+  const openAtcRoute = routeComparison.status !== 'GREEN';
+  const openSplit    = splitProposed;
+  const openFlow     = !depFlowSet || (plan.arrFlowReason || plan.arrFlowRequest);
+  const openIssues   = openIssuesCount > 0 || canRaiseIssue;
+
   const content = `
     <style>
       #spDetailWrap { display:flex; flex-direction:column; gap:10px; }
@@ -29611,18 +29451,116 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
         border-right: 5px solid transparent;
         border-top: 5px solid #f59e0b;
       }
-      .sp-top-row {
-        display: flex; gap: 16px; align-items: stretch;
-        margin: 0 0 16px;
+      /* Override legacy .sp-map-card { height: 260px } so the grid can stretch
+         the map card to the row height (matches the tallest column). */
+      .sp-top-map.sp-map-card {
+        min-width: 0; height: 100% !important; min-height: 320px;
+        display: flex; flex-direction: column;
+        padding: 0 !important; overflow: hidden;
       }
-      .sp-top-map.sp-map-card { flex: 0 0 calc(70% - 8px); min-width: 0; height: auto; min-height: 320px; display: flex; }
       .sp-top-map #spMap { flex: 1 1 auto; width: 100%; height: 100%; min-height: 320px; }
-      .sp-top-checklist { flex: 1 1 calc(30% - 8px); min-width: 0; display: flex; flex-direction: column; }
       .sp-checklist-stack { display: flex !important; flex-direction: column; gap: 8px; flex: 1 1 auto; }
-      @media (max-width: 900px) {
-        .sp-top-row { flex-direction: column; }
-        .sp-top-map.sp-map-card, .sp-top-checklist { flex: 1 1 auto; }
+
+      /* 3-col top row: Map · Checklist · Enroute FIRs */
+      .sp-top-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr) minmax(0, 1fr);
+        gap: 12px;
+        align-items: stretch;
       }
+      .sp-top-grid > .card { display: flex; flex-direction: column; min-width: 0; }
+      @media (max-width: 1100px) {
+        .sp-top-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+        .sp-top-grid > .sp-top-map { grid-column: 1 / -1; }
+      }
+      @media (max-width: 720px) {
+        .sp-top-grid { grid-template-columns: 1fr; }
+        .sp-top-grid > .sp-top-map { grid-column: 1; }
+      }
+      .sp-top-checklist-card h3 { margin: 0 0 8px; font-size: 13px; }
+      .sp-top-checklist-card .sp-checklist { gap: 6px; }
+      .sp-top-checklist-card .sp-check { padding: 6px 8px; }
+      .sp-top-checklist-card .sp-check-title { font-size: 11px; }
+      .sp-top-checklist-card .sp-check-sub { font-size: 10px; line-height: 1.35; }
+      .sp-top-checklist-card .sp-check-tag { font-size: 9px; padding: 1px 5px; }
+
+      .sp-firs-card { padding: 12px 14px; }
+      .sp-firs-card .sp-firs-head {
+        display: flex; justify-content: space-between; align-items: center;
+        gap: 6px; margin-bottom: 8px;
+      }
+      .sp-firs-card .sp-firs-head h3 { margin: 0; font-size: 13px; }
+      .sp-firs-overview-btn {
+        display: inline-flex; align-items: center; gap: 4px;
+        padding: 3px 8px; border-radius: 6px;
+        background: rgba(56,189,248,0.12); color: var(--accent);
+        border: 1px solid rgba(56,189,248,0.35);
+        font-size: 10px; font-weight: 700; letter-spacing: 0.04em;
+        text-transform: uppercase; text-decoration: none;
+        white-space: nowrap;
+      }
+      .sp-firs-overview-btn:hover { background: rgba(56,189,248,0.2); }
+      .sp-fir-row {
+        display: grid; grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center; gap: 4px 10px;
+        padding: 6px 8px; border-radius: 6px;
+        background: rgba(255,255,255,0.02); border: 1px solid var(--border);
+      }
+      .sp-fir-row + .sp-fir-row { margin-top: 4px; }
+      .sp-fir-row .name { font-weight: 700; font-size: 12px; color: var(--text); }
+      .sp-fir-row .div  { font-size: 9px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); padding: 1px 5px; background: rgba(255,255,255,0.04); border-radius: 3px; }
+      .sp-fir-row .win  { grid-column: 1 / -1; display: flex; gap: 8px; font-family: monospace; font-size: 11px; color: var(--muted); }
+      .sp-fir-row .win .utc { color: #38bdf8; }
+      .sp-fir-row .win .lcl { color: var(--muted); }
+      .sp-fir-empty { font-size: 11px; color: var(--muted); text-align: center; padding: 12px 4px; }
+
+      /* ── Status strip (top dashboard of section verdicts) ─────────────── */
+      .sp-status-strip {
+        display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+        padding: 10px 14px !important;
+      }
+      .sp-status-pill {
+        display: inline-flex; align-items: center; gap: 6px;
+        padding: 4px 10px; border-radius: 999px;
+        font-size: 11px; font-weight: 700; letter-spacing: 0.02em;
+        border: 1px solid var(--border);
+        background: rgba(255,255,255,0.03);
+        color: var(--muted);
+        white-space: nowrap;
+      }
+      .sp-status-pill.green  { background: rgba(74,222,128,0.12); color:#4ade80; border-color: rgba(74,222,128,0.45); }
+      .sp-status-pill.amber  { background: rgba(245,158,11,0.12); color:#fbbf24; border-color: rgba(245,158,11,0.45); }
+      .sp-status-pill.red    { background: rgba(239,68,68,0.12);  color:#f87171; border-color: rgba(239,68,68,0.45); }
+      .sp-status-pill.blue   { background: rgba(56,189,248,0.12); color:#38bdf8; border-color: rgba(56,189,248,0.45); }
+      .sp-status-pill.muted  { background: rgba(255,255,255,0.03); color: var(--muted); }
+      .sp-status-pill .dot   { width: 7px; height: 7px; border-radius: 50%; background: currentColor; opacity: 0.85; }
+
+      /* ── Accordion sections (native <details>) ────────────────────────── */
+      details.sp-accordion { padding: 0 !important; overflow: hidden; }
+      details.sp-accordion > summary {
+        list-style: none; cursor: pointer; user-select: none;
+        display: flex; align-items: center; gap: 10px; padding: 12px 14px;
+        background: rgba(255,255,255,0.02);
+        border-radius: 10px;
+      }
+      details.sp-accordion[open] > summary {
+        border-radius: 10px 10px 0 0;
+        border-bottom: 1px solid var(--border);
+      }
+      details.sp-accordion > summary::-webkit-details-marker { display: none; }
+      details.sp-accordion > summary > .sp-acc-chev {
+        flex: 0 0 auto; transition: transform .15s;
+        opacity: 0.7;
+      }
+      details.sp-accordion[open] > summary > .sp-acc-chev { transform: rotate(90deg); }
+      details.sp-accordion > summary > .sp-acc-title {
+        flex: 1 1 auto; font-size: 13px; font-weight: 700; color: var(--text);
+        display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+      }
+      details.sp-accordion > summary > .sp-acc-title small {
+        font-weight: 500; color: var(--muted); font-size: 11px;
+      }
+      details.sp-accordion > .sp-acc-body { padding: 14px; }
       .sp-check-sub   { font-size:10px; color:var(--muted); margin-top:1px; }
       .sp-readonly-note {
         display: flex; align-items: flex-start; gap: 10px;
@@ -29737,12 +29675,13 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
       </div>
     </section>
 
-    <div class="sp-top-row">
+    <div class="sp-top-grid">
       <section class="card sp-map-card sp-top-map">
         <div id="spMap"></div>
       </section>
-      <section class="card sp-top-checklist">
-        <h3 style="margin:0 0 8px;font-size:14px;">Sector Readiness Checklist</h3>
+
+      <section class="card sp-top-checklist-card">
+        <h3>Sector Readiness</h3>
         <div class="sp-checklist sp-checklist-stack">
           <div class="sp-check ${checklist.atcRouteAgreed ? 'done' : 'missing-required'}" id="spChkAtcRoute">
             <div class="sp-check-icon">${checklist.atcRouteAgreed ? '✓' : '—'}</div>
@@ -29808,8 +29747,33 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
             </div>
           </div>
         </div>
+      </section><!-- /sp-top-checklist-card -->
+
+      <section class="card sp-firs-card">
+        <div class="sp-firs-head">
+          <h3>Enroute FIRs</h3>
+          <a href="/airspace/by-sector?wf=${encodeURIComponent(wf)}" target="_blank" rel="noopener" class="sp-firs-overview-btn" title="Open the full Staffing Overview view for this sector">↗ Staffing Overview</a>
+        </div>
+        ${sectorFirLegs.length ? `
+          <div>
+            ${sectorFirLegs.map(fl => {
+              const isDep = fl.fir === depFir;
+              const isArr = fl.fir === arrFir;
+              const tag = isDep ? ' <span class="div" style="color:#fbbf24;background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.35);">DEP</span>'
+                       : isArr ? ' <span class="div" style="color:#fbcfe8;background:rgba(244,114,182,0.12);border:1px solid rgba(244,114,182,0.35);">ARR</span>'
+                       : '';
+              const win = fl.staffStart && fl.staffEnd ? `<span class="utc">${fl.staffStart}–${fl.staffEnd}z</span>` : '';
+              const localWin = fl.staffStartLocal && fl.staffEndLocal ? `<span class="lcl">${fl.staffStartLocal}–${fl.staffEndLocal} local</span>` : '';
+              return `<div class="sp-fir-row">
+                <span class="name">${fl.fir}${tag}</span>
+                <span class="div">${fl.division || ''}</span>
+                <span class="win">${win}${localWin}</span>
+              </div>`;
+            }).join('')}
+          </div>
+        ` : '<div class="sp-fir-empty">No FIRs found for this sector yet.</div>'}
       </section>
-    </div>
+    </div><!-- /sp-top-grid -->
 
     <section class="card card-full">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px;">
@@ -29843,8 +29807,12 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
       </div>
     </section>
 
-    <section class="card card-full">
-      <div style="margin-bottom:6px;"><span class="sp-side-label" style="margin-bottom:0;">1. Propose ATC Route</span></div>
+    <details class="card card-full sp-accordion" ${openAtcRoute ? 'open' : ''}>
+      <summary>
+        ${chevronSvg()}
+        <span class="sp-acc-title">1. Propose ATC Route ${pillHtml(routeStatusPill)}</span>
+      </summary>
+      <div class="sp-acc-body">
       <div class="sp-sides">
         <div class="sp-side dep ${canEditDep ? '' : 'readonly'}" data-side="DEP">
           <div class="sp-side-head">
@@ -29926,10 +29894,15 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
           ${!canEditArr ? '<div style="font-size:10px;color:var(--warning);margin-top:6px;display:flex;align-items:center;gap:4px;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg> View only — managed by ' + (arrFir || toIcao) + '</div>' : ''}
         </div>
       </div>
-    </section>
+      </div><!-- /sp-acc-body -->
+    </details>
 
-    <section class="card card-full">
-      <div style="margin-bottom:6px;"><span class="sp-side-label" style="margin-bottom:0;">2. Propose Route Split</span> <span style="font-size:10px;color:var(--muted);font-style:italic;">Optional</span></div>
+    <details class="card card-full sp-accordion" ${openSplit ? 'open' : ''}>
+      <summary>
+        ${chevronSvg()}
+        <span class="sp-acc-title">2. Propose Route Split ${pillHtml(splitStatusPill) || '<small>Optional · no split set</small>'}</span>
+      </summary>
+      <div class="sp-acc-body">
       <div class="sp-sides">
         <div class="sp-side dep ${canEditDep ? '' : 'readonly'}" data-side="DEP">
           <div class="sp-side-head" style="margin-bottom:4px;">
@@ -30010,10 +29983,15 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
           </div>
         </div>
       </div>
-    </section>
+      </div><!-- /sp-acc-body -->
+    </details>
 
-    <section class="card card-full">
-      <div style="margin-bottom:6px;"><span class="sp-side-label" style="margin-bottom:0;">3. Flow Restrictions</span></div>
+    <details class="card card-full sp-accordion" ${openFlow ? 'open' : ''}>
+      <summary>
+        ${chevronSvg()}
+        <span class="sp-acc-title">3. Flow Restrictions ${pillHtml(flowStatusPill)}</span>
+      </summary>
+      <div class="sp-acc-body">
       <div class="sp-sides">
         <div class="sp-side dep ${canEditDep ? '' : 'readonly'}" data-side="DEP">
           <div class="sp-side-head" style="margin-bottom:4px;">
@@ -30107,13 +30085,18 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
           ${!canEditArr ? '<div style="font-size:10px;color:var(--warning);margin-top:6px;display:flex;align-items:center;gap:4px;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg> View only — managed by ' + (arrFir || toIcao) + '</div>' : ''}
         </div>
       </div>
-    </section>
+      </div><!-- /sp-acc-body -->
+    </details>
 
-    <section id="spIssuesSection" class="card card-full">
+    <details id="spIssuesSection" class="card card-full sp-accordion" ${openIssues ? 'open' : ''}>
+      <summary>
+        ${chevronSvg()}
+        <span class="sp-acc-title">Route Issues ${pillHtml(issueStatusPill)}</span>
+      </summary>
+      <div class="sp-acc-body">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:8px;">
         <div>
-          <h3 style="margin:0;font-size:14px;">Route Issues</h3>
-          <div style="font-size:11px;color:var(--muted);margin-top:2px;">Enroute FIR managers can flag issues with the agreed route here.</div>
+          <div style="font-size:11px;color:var(--muted);">Enroute FIR managers can flag issues with the agreed route here.</div>
         </div>
         <button type="button" class="action-btn sp-raise-issue-btn" style="display:none;font-size:12px;padding:6px 14px;background:rgba(239,68,68,0.15);color:#f87171;border:1px solid rgba(239,68,68,0.4);">⚠ We${userEnrouteFirs.length ? ' (' + userEnrouteFirs.join('/') + ')' : ''} have an issue with this route</button>
       </div>
@@ -30129,7 +30112,8 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
       </div>
 
       <div id="spIssuesList"><!-- rendered client-side --></div>
-    </section>
+      </div><!-- /sp-acc-body -->
+    </details>
 
     <div id="spConfirmModal" class="route-modal" hidden>
       <div class="route-modal-backdrop"></div>
@@ -32466,17 +32450,23 @@ app.get('/airspace/by-sector', requirePageEnabled('airspace'), async (req, res) 
         }
       });
 
-      // Restore selection from URL (?wf=WF2601)
+      // Restore selection from URL (?wf=WF2601). Leaflet loads with the defer
+      // attribute, so L is not available until after deferred scripts run.
+      // Wait for DOMContentLoaded (or run now if past it) before rendering.
       (function() {
         var params = new URLSearchParams(location.search);
         var wf = params.get('wf');
-        if (wf) {
+        if (!wf) return;
+        function go() {
           var sel = document.getElementById('sectorPicker');
           for (var i = 0; i < sel.options.length; i++) {
             if (sel.options[i].value === wf) { sel.selectedIndex = i; break; }
           }
           renderSector(wf);
         }
+        if (typeof L !== 'undefined') go();
+        else if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', go);
+        else window.addEventListener('load', go);
       })();
 
       // ===== ATC ROUTE MODAL =====
