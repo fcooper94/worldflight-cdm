@@ -29081,8 +29081,9 @@ app.get('/sector-planning', requirePageEnabled('sector-planning'), async (req, r
           <li>Sector discussion / issues</li>
           <li>Published ATC routes on the schedule</li>
           <li>Live flow restrictions</li>
+          <li>All pilot bookings / slots (backed up first, so they can be restored)</li>
         </ul>
-        <p style="color:var(--muted);font-size:11px;margin:0 0 6px;">Pilot bookings are not affected. Type <strong style="color:#f87171;">RESET</strong> to confirm.</p>
+        <p style="color:var(--muted);font-size:11px;margin:0 0 6px;">Type <strong style="color:#f87171;">RESET</strong> to confirm.</p>
         <input type="text" id="spResetConfirmInput" autocomplete="off" placeholder="RESET" style="width:100%;padding:10px;background:var(--panel);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;text-align:center;font-weight:700;letter-spacing:3px;box-sizing:border-box;" />
         <div id="spResetMsg" style="display:none;font-size:13px;margin-top:10px;"></div>
         <div class="modal-actions" style="display:flex;gap:8px;margin-top:14px;">
@@ -29509,14 +29510,36 @@ app.post('/admin/api/sector-plan/reset-all', requireAdmin, async (req, res) => {
     await prisma.wfScheduleRow.updateMany({ where: { eventId }, data: { atcRoute: '', atcRoute2: '' } });
     await prisma.depFlow.deleteMany({ where: { eventId: eventId || 0 } });
 
+    // Cancel ALL pilot bookings / slots, backing them up first (same pattern as
+    // an event switch) so they can be restored if this was a mistake.
+    const existingBookings = await prisma.tobtBooking.findMany();
+    const affectedWfs = new Set();
+    existingBookings.forEach(b => { const wf = wfNumberForSlotKey(b.slotKey); if (wf) affectedWfs.add(wf); });
+    if (existingBookings.length > 0) {
+      await prisma.tobtBookingBackup.deleteMany({ where: { eventId } });
+      await prisma.tobtBookingBackup.createMany({
+        data: existingBookings.map(b => ({
+          eventId, slotKey: b.slotKey, cid: b.cid, callsign: b.callsign,
+          from: b.from, to: b.to, dateUtc: b.dateUtc, depTimeUtc: b.depTimeUtc,
+          tobtTimeUtc: b.tobtTimeUtc, originalId: b.id
+        }))
+      });
+    }
+    await prisma.tobtBooking.deleteMany({});
+    clearAllBookings();
+    Object.keys(tobtBookingsByCid).forEach(k => delete tobtBookingsByCid[k]);
+
     // Refresh in-memory caches so the reset is live immediately.
     await loadScheduleFromDb(eventId);
     await loadDepFlowsFromDb();
     rebuildAllTobtSlots();
     clearFirAnalysisCache();
 
-    console.log(`[SP RESET] Reset all Sector Planning data for event ${eventId} (${reset.count} plans)`);
-    res.json({ ok: true, sectors: reset.count });
+    // Push the now-empty booking lists to VATCAN for every affected sector.
+    affectedWfs.forEach(wf => { try { vatcanPushForWf(wf); } catch (e) {} });
+
+    console.log(`[SP RESET] Reset all Sector Planning data for event ${eventId} (${reset.count} plans, ${existingBookings.length} bookings cancelled)`);
+    res.json({ ok: true, sectors: reset.count, bookings: existingBookings.length });
   } catch (e) {
     console.error('[SP RESET]', e);
     res.status(500).json({ error: e.message });
