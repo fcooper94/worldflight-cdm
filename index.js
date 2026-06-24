@@ -6151,6 +6151,8 @@ async function loadScheduleFromDb(eventId) {
   //   route_agreed              — true when a published route is available.
   const plans = await prisma.sectorPlan.findMany({ where: { eventId } }).catch(() => []);
   const normRoute = s => (s || '').toUpperCase().replace(/\s+/g, ' ').trim();
+  const planByWf = {};
+  plans.forEach(p => { planByWf[p.wf] = p; });
   const agreedByWf = {};
   for (const p of plans) {
     if (compareRoutes(p.depRouteSuggestion, p.arrRouteSuggestion).status === 'GREEN') {
@@ -6167,6 +6169,26 @@ async function loadScheduleFromDb(eventId) {
     const agreed = agreedByWf[r.number];
     const published  = !!(agreed && r.atcRoute && normRoute(r.atcRoute) === normRoute(agreed.route));
     const published2 = !!(published && agreed.route2 && r.atcRoute2 && normRoute(r.atcRoute2) === normRoute(agreed.route2));
+
+    // Effective route for staffing/airspace: the finalised route if published,
+    // else the proposed route from Sector Planning (dep side preferred, noting
+    // the proposer). route_state drives how the staffing pages render it:
+    //   'finalised' (normal) · 'proposed' (dashed/orange + note) · 'none'.
+    const plan = planByWf[r.number] || {};
+    const depProp = (plan.depRouteSuggestion || '').trim();
+    const arrProp = (plan.arrRouteSuggestion || '').trim();
+    let route_state, proposedRoute = '', proposed_by = '';
+    if (published) {
+      route_state = 'finalised';
+    } else if (depProp || arrProp) {
+      route_state = 'proposed';
+      if (depProp) { proposedRoute = depProp; proposed_by = r.from; }
+      else { proposedRoute = arrProp; proposed_by = r.to; }
+    } else {
+      route_state = 'none';
+    }
+    const staffing_route = published ? rawRoute : stripSidStar(proposedRoute, r.from, r.to);
+
     return {
       number: r.number,
       from: r.from,
@@ -6181,6 +6203,9 @@ async function loadScheduleFromDb(eventId) {
       atc_route_raw: rawRoute,
       atc_route_raw2: rawRoute2,
       route_agreed: published,
+      staffing_route,
+      route_state,
+      proposed_by,
       is_wf_challenge: r.isWfChallenge === true
     };
   });
@@ -24211,8 +24236,8 @@ async function _buildFirAnalysisInner() {
   for (const leg of legs) {
     allIcaos.add(leg.from);
     allIcaos.add(leg.to);
-    if (leg.atc_route) {
-      for (const tok of leg.atc_route.split(/\s+/).filter(Boolean)) {
+    if (leg.staffing_route) {
+      for (const tok of leg.staffing_route.split(/\s+/).filter(Boolean)) {
         if (/^[A-Z]{4}$/.test(tok.toUpperCase())) allIcaos.add(tok.toUpperCase());
       }
     }
@@ -24231,8 +24256,8 @@ async function _buildFirAnalysisInner() {
     const depAp = airportLookup[leg.from];
     if (depAp) points.push({ name: leg.from, lat: depAp.lat, lon: depAp.lon });
 
-    if (leg.atc_route) {
-      const tokens = leg.atc_route.split(/\s+/).filter(Boolean);
+    if (leg.staffing_route) {
+      const tokens = leg.staffing_route.split(/\s+/).filter(Boolean);
       for (const tok of tokens) {
         const lastPt = points.length > 0 ? points[points.length - 1] : (depAp || { lat: 0, lon: 0 });
         const llFix = parseNavLatLon(tok);
@@ -24344,8 +24369,10 @@ async function _buildFirAnalysisInner() {
         date: leg.date_utc,
         depTime: leg.dep_time_utc || '',
         arrTime: leg.arr_time_utc || '',
-        atcRoute: leg.atc_route || '',
+        atcRoute: leg.staffing_route || '',
         atcRoute2: leg.atc_route2 || '',
+        route_state: leg.route_state || 'none',
+        proposed_by: leg.proposed_by || '',
         entryFrac: seg.entryFrac,
         exitFrac: seg.exitFrac,
         depFlow: sharedDepFlows[sectorKey] || 0,
@@ -29706,6 +29733,18 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
     }
   }
 
+  // Order the FIR legs by transit sequence (departure FIR first → enroute →
+  // arrival FIR last) using each leg's staffing-start time. Anchored to the
+  // departure FIR's start so post-midnight FIRs sort after the late-evening
+  // ones instead of wrapping back to the front.
+  {
+    const parseHHMM = (t) => { const m = /^(\d{1,2}):(\d{2})/.exec(t || ''); return m ? Number(m[1]) * 60 + Number(m[2]) : null; };
+    const depLeg = sectorFirLegs.find(fl => fl.fir === depFir);
+    const anchorMin = parseHHMM(depLeg?.staffStart) ?? parseHHMM(sched.dep_time_utc) ?? 0;
+    const transitMin = (t) => { const m = parseHHMM(t); if (m == null) return Infinity; return m < anchorMin ? m + 1440 : m; };
+    sectorFirLegs.sort((a, b) => transitMin(a.staffStart) - transitMin(b.staffStart));
+  }
+
   const routeComparison = compareRoutes(plan.depRouteSuggestion, plan.arrRouteSuggestion);
 
   // Gate: enroute-only viewers (no DEP/ARR edit, not admin) can't see the
@@ -32046,6 +32085,13 @@ app.post('/api/sector-plan/:wf/route', requireLogin, async (req, res) => {
       ? { depRouteSuggestion: cleaned || null, depUpdatedBy: cid, depUpdatedAt: new Date() }
       : { arrRouteSuggestion: cleaned || null, arrUpdatedBy: cid, arrUpdatedAt: new Date() };
     const updated = await prisma.sectorPlan.update({ where: { id: plan.id }, data });
+    // A proposal changes the effective staffing route + sync state. Rebuild the
+    // schedule cache (recomputes staffing_route/route_state), invalidate the FIR
+    // analysis cache, and refresh the out-of-sync badge so the staffing pages
+    // and badges reflect the proposal.
+    await loadScheduleFromDb(activeEventId);
+    clearFirAnalysisCache();
+    refreshSectorPlanOutOfSyncCount().catch(() => {});
     const cmp = compareRoutes(updated.depRouteSuggestion, updated.arrRouteSuggestion);
     res.json({ success: true, routeComparison: cmp, cleanedRoute: cleaned, sidStarStripped: stripped });
   } catch (e) {
@@ -32544,24 +32590,30 @@ app.get('/airspace/by-sector', requirePageEnabled('airspace'), async (req, res) 
     }
   }
 
-  // Unique sectors for dropdown options. Sort by WF number ascending.
-  const seen = new Map();
-  for (const l of allLegs) {
-    const key = `${l.wf}:${l.from}:${l.to}`;
-    if (!seen.has(key)) seen.set(key, { wf: l.wf, from: l.from, to: l.to, date: l.date });
-  }
-  const sectors = [...seen.values()].sort((a, b) => {
-    const an = parseInt(String(a.wf || '').replace(/\D/g, ''), 10);
-    const bn = parseInt(String(b.wf || '').replace(/\D/g, ''), 10);
-    if (isFinite(an) && isFinite(bn) && an !== bn) return an - bn;
-    return String(a.wf || '').localeCompare(String(b.wf || ''));
-  });
+  // Dropdown lists EVERY schedule sector (not just routed ones) so a sector
+  // with no route is still selectable — selecting it shows the placeholder
+  // rather than any FIR data. Sort by WF number ascending.
+  const sectors = (adminSheetCache || [])
+    .filter(r => r?.from && r?.to)
+    .map(r => ({ wf: r.number, from: r.from, to: r.to, date: r.date_utc }))
+    .sort((a, b) => {
+      const an = parseInt(String(a.wf || '').replace(/\D/g, ''), 10);
+      const bn = parseInt(String(b.wf || '').replace(/\D/g, ''), 10);
+      if (isFinite(an) && isFinite(bn) && an !== bn) return an - bn;
+      return String(a.wf || '').localeCompare(String(b.wf || ''));
+    });
 
   const optionsHtml = sectors.map(s =>
     `<option value="${s.wf}">${s.wf} — ${s.from} → ${s.to}${s.date ? ' · ' + s.date : ''}</option>`
   ).join('');
 
-  const content = `
+  const content = !sectors.length ? `
+    <section class="card card-full" style="padding:64px 24px;text-align:center;">
+      <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="opacity:0.5;margin-bottom:14px;"><circle cx="12" cy="12" r="10"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg>
+      <div style="font-size:17px;font-weight:700;color:var(--text);margin-bottom:8px;">No staffing data yet</div>
+      <div style="font-size:14px;color:var(--muted);max-width:540px;margin:0 auto;line-height:1.55;">Data will show here after the ATC route has been proposed / agreed by both airports.</div>
+    </section>
+  ` : `
     <style>
       .sector-picker-card {
         margin-bottom: 20px;
@@ -32727,6 +32779,14 @@ app.get('/airspace/by-sector', requirePageEnabled('airspace'), async (req, res) 
       </div>
     </section>
 
+    <section id="sectorNoRouteState" class="card card-full" hidden>
+      <div class="sector-empty-state">
+        <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 8v4"></path><path d="M12 16h.01"></path></svg>
+        <div style="font-size:16px;color:var(--text);margin-bottom:6px;">No route for this sector yet</div>
+        <div style="font-size:14px;max-width:520px;margin:0 auto;line-height:1.5;">Data will show here after the ATC route has been proposed / agreed by both airports.</div>
+      </div>
+    </section>
+
     <div id="routeModal" class="route-modal" hidden>
       <div class="route-modal-backdrop"></div>
       <div class="route-modal-card" role="dialog" aria-modal="true" aria-labelledby="routeModalTitle">
@@ -32874,10 +32934,13 @@ app.get('/airspace/by-sector', requirePageEnabled('airspace'), async (req, res) 
                 });
 
                 var allCoords = pts.map(function(p) { return [p.lat, p.lon]; });
-                var ROUTE_LINE = '#ffffff';
+                // Proposed (unfinalised) routes draw dashed + orange to flag they're provisional.
+                var isProposed = leg && leg.route_state === 'proposed';
+                var ROUTE_LINE = isProposed ? '#f59e0b' : '#ffffff';
+                var ROUTE_DASH = isProposed ? '6,8' : null;
 
-                // Full dimmed route in white so the per-FIR colour fills stay the visual focus
-                var dim = L.polyline(allCoords, { color: ROUTE_LINE, weight: 2, opacity: 0.5 }).addTo(routeMapInstance);
+                // Full dimmed route so the per-FIR colour fills stay the visual focus
+                var dim = L.polyline(allCoords, { color: ROUTE_LINE, weight: 2, opacity: 0.5, dashArray: ROUTE_DASH }).addTo(routeMapInstance);
                 if (L.polylineDecorator) {
                   L.polylineDecorator(dim, {
                     patterns: [{
@@ -32902,7 +32965,7 @@ app.get('/airspace/by-sector', requirePageEnabled('airspace'), async (req, res) 
                   else if (a.inDiv && !b.inDiv) { var c1 = findCrossing([a.lat, a.lon], [b.lat, b.lon]); seg = [[a.lat, a.lon], c1]; bounds.push([a.lat, a.lon], c1); }
                   else if (!a.inDiv && b.inDiv) { var c2 = findCrossing([b.lat, b.lon], [a.lat, a.lon]); seg = [c2, [b.lat, b.lon]]; bounds.push(c2, [b.lat, b.lon]); }
                   if (seg) {
-                    L.polyline(seg, { color: ROUTE_LINE, weight: 3, opacity: 1 }).addTo(routeMapInstance);
+                    L.polyline(seg, { color: ROUTE_LINE, weight: 3, opacity: 1, dashArray: ROUTE_DASH }).addTo(routeMapInstance);
                   }
                 }
 
@@ -32930,20 +32993,29 @@ app.get('/airspace/by-sector', requirePageEnabled('airspace'), async (req, res) 
           return String(a.staffStart || '').localeCompare(String(b.staffStart || ''));
         });
         var empty = document.getElementById('sectorEmptyState');
+        var noRoute = document.getElementById('sectorNoRouteState');
         var section = document.getElementById('sectorDetailSection');
 
         if (!legs.length) {
+          // Sector selected but no proposed/finalised route → show the placeholder.
           section.hidden = true;
-          empty.hidden = false;
+          empty.hidden = true;
+          if (noRoute) noRoute.hidden = false;
           return;
         }
         empty.hidden = true;
+        if (noRoute) noRoute.hidden = true;
         section.hidden = false;
 
         var first = legs[0];
         document.getElementById('sectorDetailTitle').textContent = wf + ' — ' + first.from + ' → ' + first.to;
-        document.getElementById('sectorDetailMeta').textContent =
-          (first.date || '') + ' · ' + legs.length + ' FIR' + (legs.length !== 1 ? 's' : '') + ' transited';
+        var metaText = (first.date || '') + ' · ' + legs.length + ' FIR' + (legs.length !== 1 ? 's' : '') + ' transited';
+        var metaEl = document.getElementById('sectorDetailMeta');
+        if (first.route_state === 'proposed') {
+          metaEl.innerHTML = metaText + ' · <span style="color:#f59e0b;font-weight:700;">⚠ Proposed route by ' + (first.proposed_by || 'one side') + ' — not yet finalised</span>';
+        } else {
+          metaEl.textContent = metaText;
+        }
 
         // Per-FIR colour assignments, shared across map polygons, FIR chips
         // under the map, and the FIR badge stripes in the table.
@@ -33016,6 +33088,7 @@ app.get('/airspace/by-sector', requirePageEnabled('airspace'), async (req, res) 
         if (wf) renderSector(wf);
         else {
           document.getElementById('sectorDetailSection').hidden = true;
+          document.getElementById('sectorNoRouteState').hidden = true;
           document.getElementById('sectorEmptyState').hidden = false;
         }
       });
@@ -34557,7 +34630,7 @@ app.get('/airspace/by-area', requirePageEnabled('airspace'), async (req, res) =>
             var flowLabel = l.flowType === 'BOOKING_ONLY' ? 'Booking' : (l.flowType === 'SLOTTED' ? 'Slotted' : 'None');
             var wfColor = SINGLE_ROUTE_COLORS[idx % SINGLE_ROUTE_COLORS.length];
             return '<tr>'
-              + '<td style="font-weight:700;color:' + wfColor + ';border-left:3px solid ' + wfColor + ';padding-left:10px;">' + l.wf + '</td>'
+              + '<td style="font-weight:700;color:' + wfColor + ';border-left:3px solid ' + wfColor + ';padding-left:10px;">' + l.wf + (l.route_state === 'proposed' ? ' <span style="font-size:9px;font-weight:700;color:#f59e0b;background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.4);border-radius:3px;padding:1px 4px;vertical-align:middle;" title="Proposed route by ' + (l.proposed_by || 'one side') + ' — not yet finalised">PROPOSED</span>' : '') + '</td>'
               + '<td>' + l.from + '</td>'
               + '<td>' + l.to + '</td>'
               + '<td>' + (l.date || '-') + '</td>'
@@ -34774,7 +34847,7 @@ app.get('/airspace/by-area', requirePageEnabled('airspace'), async (req, res) =>
       overlay.className = 'fir-route-modal-overlay';
       overlay.innerHTML = '<div class="fir-route-modal">'
         + '<div class="fir-route-modal-header">'
-        + '<h3>' + leg.wf + ': ' + leg.from + ' → ' + leg.to + ' through ' + firId + '</h3>'
+        + '<h3>' + leg.wf + ': ' + leg.from + ' → ' + leg.to + ' through ' + firId + (leg.route_state === 'proposed' ? ' <span style="font-size:11px;color:#f59e0b;font-weight:700;">(proposed by ' + (leg.proposed_by || 'one side') + ')</span>' : '') + '</h3>'
         + '<button class="fir-route-modal-close">&times;</button>'
         + '</div>'
         + '<div class="fir-route-modal-map" id="firRouteModalMap"></div>'
@@ -34834,7 +34907,7 @@ app.get('/airspace/by-area', requirePageEnabled('airspace'), async (req, res) =>
 
                 // Draw full route dim (with antimeridian-aware wrapping)
                 var allCoords = pts.map(function(p) { return [p.lat, p.lon]; });
-                var routeLine = L.polyline(allCoords, { color: '#60a5fa', weight: 2.5, opacity: 0.6 }).addTo(modalMap);
+                var routeLine = L.polyline(allCoords, { color: '#60a5fa', weight: 2.5, opacity: 0.6, dashArray: leg.route_state === 'proposed' ? '6,8' : null }).addTo(modalMap);
 
                 // If route crosses antimeridian, center map on the route midpoint
                 var hasWrapped = pts.some(function(p) { return p.lon > 180 || p.lon < -180; });
@@ -35028,6 +35101,7 @@ app.get('/airspace/by-area', requirePageEnabled('airspace'), async (req, res) =>
             var html = '<div style="font-family:inherit;min-width:280px;max-width:340px;color:#fff;">'
               + '<div style="font-weight:700;font-size:14px;margin-bottom:4px;color:' + color + ';">' + leg.wf + ': ' + leg.from + ' \u2192 ' + leg.to + '</div>'
               + '<div style="font-size:12px;color:#cbd5e1;margin-bottom:4px;">' + (leg.date || '') + '</div>'
+              + (leg.route_state === 'proposed' ? '<div style="font-size:11px;color:#f59e0b;font-weight:700;margin-bottom:6px;">\u26a0 Proposed route by ' + (leg.proposed_by || 'one side') + ' \u2014 not yet finalised</div>' : '')
               + '<div style="font-size:12px;color:#94a3b8;margin-bottom:10px;">Dep <strong style="color:#fff;">' + (leg.depTime || '-') + '</strong> UTC \u00a0\u2022\u00a0 Arr <strong style="color:#fff;">' + (leg.arrTime || '-') + '</strong> UTC</div>'
               + '<table style="width:100%;font-size:12px;border-collapse:collapse;color:#fff;">'
               + '<tr style="border-bottom:1px solid #334155;"><th style="text-align:left;padding:3px 6px;color:#94a3b8;">FIR</th><th style="text-align:left;padding:3px 6px;color:#94a3b8;">Staff Window</th><th style="text-align:left;padding:3px 6px;color:#94a3b8;">Duration</th><th style="text-align:left;padding:3px 6px;color:#94a3b8;">Flow</th></tr>';
@@ -35072,9 +35146,10 @@ app.get('/airspace/by-area', requirePageEnabled('airspace'), async (req, res) =>
                 var popupContent = buildRoutePopup(leg, color);
                 var popupKey = leg.wf + ':' + leg.from + ':' + leg.to;
 
-                // Full route dim
+                // Full route dim (dashed when the route is only proposed, not finalised)
+                var dash = leg.route_state === 'proposed' ? '6,8' : null;
                 var allCoords = pts.map(function(p) { return [p.lat, p.lon]; });
-                var routeLine = L.polyline(allCoords, { color: color, weight: 1.5, opacity: 0.25 }).addTo(divisionMap);
+                var routeLine = L.polyline(allCoords, { color: color, weight: 1.5, opacity: 0.25, dashArray: dash }).addTo(divisionMap);
                 addChevrons(routeLine, color, divisionMap);
 
                 // Dep/Arr markers
@@ -35108,7 +35183,7 @@ app.get('/airspace/by-area', requirePageEnabled('airspace'), async (req, res) =>
                     bounds.push(cross, [b.lat, b.lon]);
                   }
                   if (seg) {
-                    L.polyline(seg, { color: color, weight: 2.5, opacity: 0.85 }).addTo(divisionMap);
+                    L.polyline(seg, { color: color, weight: 2.5, opacity: 0.85, dashArray: dash }).addTo(divisionMap);
                     L.polyline(seg, { color: color, weight: 16, opacity: 0 }).addTo(divisionMap)
                       .on('mouseover', function() {
                     var infoEl = document.getElementById('divisionRouteInfo');

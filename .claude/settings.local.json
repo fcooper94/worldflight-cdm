@@ -288,7 +288,9 @@
       "Bash(node -e \"import\\('pg'\\).then\\(m=>{const{Client}=m.default||m;}\\).then\\(\\(\\)=>console.log\\('pg available'\\)\\).catch\\(\\(\\)=>console.log\\('pg NOT available'\\)\\)\")",
       "Bash(node /tmp/preview-atc.mjs)",
       "Bash(node preview-atc.mjs)",
-      "Bash(node clear-atc-routes.mjs --push)"
+      "Bash(node clear-atc-routes.mjs --push)",
+      "Bash(awk -F: '$1>=32580 && $1<=33120')",
+      "Bash(node check-routes.mjs)"
     ]
   }
 }
