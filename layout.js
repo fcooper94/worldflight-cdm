@@ -5,6 +5,7 @@ export default function renderLayout({
   isMaster = false,
   isTeamMember = false,
   isAffiliate = false,
+  isWfAtc = false,
   canManageAffiliateMembers = false,
   content,
   layoutClass = '',
@@ -103,6 +104,14 @@ export default function renderLayout({
         <span class="icon">${icons.clipboard}</span>
         <span class="label">Sector Planning</span>
       </a>` : ''}
+    </div>` : ''}
+
+    ${isWfAtc && pv('vatcan-codes') ? `<div class="nav-section">
+      <div class="nav-title">WF ATC</div>
+      <a href="/wf-atc/vatcan-codes" class="nav-item" data-tooltip="VATCAN Codes">
+        <span class="icon">${icons.headphones}</span>
+        <span class="label">VATCAN Codes</span>
+      </a>
     </div>` : ''}
 
     ${isTeamMember ? `
@@ -910,7 +919,7 @@ window.location.href = '/icao/' + icao;
 
   <!-- TIME -->
   <div class="fp-strip-row">
-    <span class="fp-label">TOBT</span>
+    <span class="fp-label">TCT</span>
     <span class="fp-value" id="fpTobt"></span>
 
     <span class="fp-label">TSAT</span>

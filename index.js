@@ -369,6 +369,7 @@ function renderLayout(opts) {
     isMaster: cid ? isMasterUser(cid) : false,
     isTeamMember: cid ? isTeamMember(cid) : false,
     isAffiliate: cid ? isAffiliate(cid) : false,
+    isWfAtc: cid ? (isWfAtc(cid) || isAdminUser(cid)) : false,
     canManageAffiliateMembers: cid ? canManageAffiliateMembers(cid) : false,
     activeEvent: active ? { id: active.id, name: active.name, year: active.year } : null
   });
@@ -663,7 +664,7 @@ io.use((socket, next) => {
 
 
 /* ===== PAGE VISIBILITY (GLOBAL) ===== */
-const PAGE_KEYS = ['schedule', 'world-map', 'my-slots', 'atc', 'suggest-airport', 'arrival-info', 'departure-info', 'airspace', 'sector-planning', 'fake-pilots', 'wf-portal-banner', 'flow-restrictions', 'atc-route', 'worldflight-challenge'];
+const PAGE_KEYS = ['schedule', 'world-map', 'my-slots', 'atc', 'suggest-airport', 'arrival-info', 'departure-info', 'airspace', 'sector-planning', 'fake-pilots', 'wf-portal-banner', 'flow-restrictions', 'atc-route', 'worldflight-challenge', 'vatcan-codes'];
 
 // Per-key default mode used when no DB row exists yet. Most keys default to
 // 'visible'; ATC Route defaults to 'hidden' because routes are typically
@@ -1599,17 +1600,9 @@ function rebuildAllTobtSlots() {
       depTimeUtc: dep_time_utc
     });
 
-    if (!slots) continue; // no flow defined → no TOBTs
+    if (!slots) continue; // no flow defined → no TCTs
 
-    for (const tobt of slots) {
-      const slotKey = makeTobtSlotKey({
-        from,
-        to,
-        dateUtc: date_utc,
-        depTimeUtc: dep_time_utc,
-        tobtTimeUtc: tobt
-      });
-
+    for (const { tobt, slotKey } of slots) {
       allTobtSlots[slotKey] = {
         from,
         to,
@@ -1931,6 +1924,32 @@ function requireTeamMember(req, res, next) {
   next();
 }
 
+/* ===== WF ATC ROLE =====
+   Grants access to the WF ATC sidebar section (e.g. VATCAN Codes page).
+   Admins always pass; everyone else must hold the WF_ATC role via the
+   admin Access Management → Additional Permissions checkbox. */
+const wfAtcCids = new Set();
+
+async function loadWfAtcMembers() {
+  try {
+    const rows = await prisma.userAdditionalRole.findMany({ where: { role: 'WF_ATC' } });
+    wfAtcCids.clear();
+    rows.forEach(r => wfAtcCids.add(r.cid));
+    console.log(`[WF-ATC] Loaded ${wfAtcCids.size} WF ATC role holders`);
+  } catch (e) {}
+}
+
+function isWfAtc(cid) {
+  return !!cid && wfAtcCids.has(Number(cid));
+}
+
+function requireWfAtcOrAdmin(req, res, next) {
+  const cid = Number(req.session?.user?.data?.cid);
+  if (!cid) return renderForbidden(req, res, 'Sign in required.');
+  if (isAdminUser(cid) || isWfAtc(cid)) return next();
+  return renderForbidden(req, res, 'This page is for WF ATC role holders only.');
+}
+
 /* ===== WF AFFILIATE MEMBERSHIP ===== */
 const affiliateCids = new Set();
 const affiliateOwnerCids = new Set(); // CIDs that own >=1 Affiliate with hasMembers=true
@@ -2030,9 +2049,25 @@ async function autoAssignTeamBookings({ reason = '' } = {}) {
     }
     if (!teamsByName.size) return 0;
 
+    // All callsigns per teamName — a team can have multiple callsigns
+    // (BAW37C, BAW47C). The "team already has a booking on this sector"
+    // check must look at ANY of the team's callsigns, because the cid on
+    // an existing booking may be a team member (not the mainCid) if a
+    // pilot has already been reassigned to it. Without this, the auto-job
+    // creates a duplicate booking on the next available slot whenever a
+    // team booking has been reassigned away from mainCid.
+    const teamCallsignsByName = new Map();
+    for (const t of teamRows) {
+      const name = String(t.teamName || '').trim().toUpperCase();
+      if (!name || !t.callsign) continue;
+      if (!teamCallsignsByName.has(name)) teamCallsignsByName.set(name, new Set());
+      teamCallsignsByName.get(name).add(String(t.callsign).toUpperCase());
+    }
+
     let created = 0;
     for (const team of teamsByName.values()) {
       const teamCid = team.mainCid;
+      const teamCallsigns = teamCallsignsByName.get(team.teamName) || new Set([team.callsign]);
 
       for (const row of adminSheetCache) {
         const flow = sharedFlowTypes[`${row.from}-${row.to}`] || 'NONE';
@@ -2040,9 +2075,12 @@ async function autoAssignTeamBookings({ reason = '' } = {}) {
 
         const sectorPrefix = `${row.from}-${row.to}|${row.date_utc}|${row.dep_time_utc}`;
 
-        // Skip if team already has any booking for this sector (any tobt / booking-only)
+        // Skip if any of the team's callsigns is already booked on this sector,
+        // regardless of which cid currently owns the row (team owner OR
+        // reassigned member). Callsign is the team marker; cid is who's flying.
         const alreadyBooked = Object.values(tobtBookingsByKey).some(b =>
-          b && b.cid === teamCid && typeof b.slotKey === 'string' && b.slotKey.startsWith(sectorPrefix)
+          b && typeof b.slotKey === 'string' && b.slotKey.startsWith(sectorPrefix)
+            && teamCallsigns.has(String(b.callsign || '').toUpperCase())
         );
         if (alreadyBooked) continue;
 
@@ -2158,9 +2196,13 @@ async function autoAssignAffiliateBookings({ reason = '' } = {}) {
 
         const sectorPrefix = `${row.from}-${row.to}|${row.date_utc}|${row.dep_time_utc}`;
 
-        // Skip if this CID already has a booking for this sector
+        // Skip if the affiliate's callsign is already booked on this sector,
+        // regardless of which cid owns the row. Mirrors the team-side fix —
+        // a booking reassigned away from the affiliate's main cid must still
+        // count as "this affiliate is booked here".
         const alreadyBooked = Object.values(tobtBookingsByKey).some(b =>
-          b && Number(b.cid) === cidNum && typeof b.slotKey === 'string' && b.slotKey.startsWith(sectorPrefix)
+          b && typeof b.slotKey === 'string' && b.slotKey.startsWith(sectorPrefix)
+            && String(b.callsign || '').toUpperCase() === callsign
         );
         if (alreadyBooked) continue;
 
@@ -2269,7 +2311,7 @@ function buildAffiliateSimbriefUrl(scheduleRow, affiliate, claimedCid, includeRo
 
   const remarkParts = ['WorldFlight Affiliate'];
   if (flow !== 'NONE') {
-    if (tobt) remarkParts.push(`WF TOBT/${String(tobt).replace(':', '')}z`);
+    if (tobt) remarkParts.push(`WF TCT/${String(tobt).replace(':', '')}z`);
     else if (booking) remarkParts.push('WF Booking Confirmed');
   }
   remarkParts.push('WWW.PLANNING.WORLDFLIGHT.CENTER');
@@ -2309,7 +2351,7 @@ function getFlowStatus(scheduleRow, claimedCid) {
   if (!booking) return { text: '—', kind: 'empty' };
   if (booking.tobtTimeUtc) {
     const t = String(booking.tobtTimeUtc);
-    return { text: `TOBT ${t}z`, kind: 'tobt', label: 'TOBT', time: `${t}z` };
+    return { text: `TCT ${t}z`, kind: 'tobt', label: 'TCT', time: `${t}z` };
   }
   return { text: 'Booking Confirmed', kind: 'confirmed' };
 }
@@ -2688,6 +2730,7 @@ async function bootstrap() {
   await loadMasterUsers();
   await loadTeamMembers();
   await loadAffiliates();
+  await loadWfAtcMembers();
   await loadAffiliateOwners();
   await loadAdminPermissions();
 
@@ -6034,7 +6077,11 @@ async function refreshSheetForEvent(event) {
   }
 
   try {
-    const res = await axios.get(event.sheetUrl);
+    // Bounded fetch: without a timeout, axios waits forever on a stalled
+    // connection (Google slow/unreachable, or offline), which hangs the
+    // whole bootstrap at the "Loading event schedule" step. On timeout we
+    // fall through to the catch below and load the schedule from the DB.
+    const res = await axios.get(event.sheetUrl, { timeout: 10000 });
     const rows = parseSheetCsv(res.data);
 
     // Sync rows to DB
@@ -7099,30 +7146,58 @@ function subtractMinutes(timeStr, minutes) {
 function generateTobtSlots({ from, to, dateUtc, depTimeUtc }) {
   const dep = parseUtcDateTime(dateUtc, depTimeUtc);
 
-  // Inclusive window
+  // Slot capacity = flow rate × 2-hour departure window (e.g. 80/hr → 160).
+  // Connection times are spread over only the FIRST 90 MIN of the window
+  // (dep − 60min → dep + 30min) so the last 30 min is left free for pilots
+  // to push/depart. Slot count is NOT capped — high flow rates produce
+  // multiple bookable slots at the same HH:MM minute. Each slot's slotKey
+  // is suffixed with #2, #3, … to keep it unique while the displayed
+  // `tobt` stays as plain HH:MM.
   const windowStart = new Date(dep.getTime() - 60 * 60 * 1000);
-  const windowEnd   = new Date(dep.getTime() + 60 * 60 * 1000);
+  const WINDOW_MIN = 90;        // slots spread across this many minutes
+  const WINDOW_HOURS = 2;        // capacity is flow × this
 
   const flowKey = `${from}-${to}`;
   const flow = Number(sharedDepFlows[flowKey]);
 
-if (!flow || flow <= 0) {
-  return null; // Explicitly signal "no flow defined"
-}
+  if (!flow || flow <= 0) {
+    return null; // Explicitly signal "no flow defined"
+  }
 
-  const intervalMinutes = Math.max(1, Math.floor(60 / flow));
+  // Exact target capacity, no minute-cap. flow=80 → 160 slots.
+  const targetCount = Math.max(1, Math.round(flow * WINDOW_HOURS));
+  // Even spacing across the 90-min window. With N slots, the first sits at
+  // windowStart and the last at windowStart + 90min.
+  const stepSec = (WINDOW_MIN * 60) / Math.max(1, targetCount - 1 || targetCount);
 
+  // Each returned slot has:
+  //   tobt   — clean HH:MM, what pilots/controllers see and what gets stored
+  //            in TobtBooking.tobtTimeUtc and pushed to VATCAN.
+  //   slotKey — internal unique identifier; gets a #2/#3/… suffix when
+  //            multiple slots share the same minute (only happens above
+  //            flow ≈ 45/hr where the 90 min can't host 1 slot per pilot).
   const slots = [];
-
-  // Use a fresh cursor and NEVER mutate windowStart
-  let cursor = new Date(windowStart);
-
-  while (cursor <= windowEnd) {
-    slots.push(formatUtcHHMM(cursor));
-    cursor = new Date(cursor.getTime() + intervalMinutes * 60000);
+  const seen = new Map(); // hhmm -> how many times we've already emitted it
+  for (let i = 0; i < targetCount; i++) {
+    const t = new Date(windowStart.getTime() + Math.round(i * stepSec) * 1000);
+    const hhmm = formatUtcHHMM(t);
+    const seq = (seen.get(hhmm) || 0) + 1;
+    seen.set(hhmm, seq);
+    const slotKey = makeTobtSlotKey({ from, to, dateUtc, depTimeUtc, tobtTimeUtc: hhmm });
+    slots.push({ tobt: hhmm, slotKey: seq === 1 ? slotKey : `${slotKey}#${seq}` });
   }
 
   return slots;
+}
+
+// Strip the slot-disambiguation suffix from a TCT or slotKey string.
+// `"21:00"` → `"21:00"`, `"21:00#2"` → `"21:00"`. Defensive — most call
+// sites should already only see clean values now that the suffix lives in
+// the slotKey identifier rather than the tobt field.
+function displayTobt(tobt) {
+  if (!tobt || typeof tobt !== 'string') return tobt;
+  const i = tobt.indexOf('#');
+  return i === -1 ? tobt : tobt.slice(0, i);
 }
 
 
@@ -9007,7 +9082,7 @@ app.get('/sector/:wf/:from/:to', async (req, res) => {
                 + '</div>'
                 + '<div style="display:flex;flex-direction:column;gap:10px;">'
                 + '<div style="display:flex;justify-content:space-between;font-size:13px;"><span style="color:var(--muted);">Sector</span><strong>' + wfNum + ' \u2014 ' + fromIcao + ' \u2192 ' + toIcao + '</strong></div>'
-                + (bookingTobt ? '<div style="display:flex;justify-content:space-between;font-size:13px;"><span style="color:var(--muted);">TOBT</span><strong style="color:#fbbf24;">' + bookingTobt + ' UTC</strong></div>' : '')
+                + (bookingTobt ? '<div style="display:flex;justify-content:space-between;font-size:13px;"><span style="color:var(--muted);">TCT</span><strong style="color:#fbbf24;">' + bookingTobt + ' UTC</strong></div>' : '')
                 + '<div style="display:flex;justify-content:space-between;font-size:13px;"><span style="color:var(--muted);">Assigned CID</span><strong>' + (userBooking ? userBooking.cid : '') + '</strong></div>'
                 + (leg && leg.atc_route2 && leg.atc_route2 !== '-'
                   ? '<div style="display:flex;justify-content:space-between;font-size:13px;"><span style="color:var(--muted);">Assigned Route</span><strong style="color:#4ade80;">' + bookingRouteLabel + '</strong></div>'
@@ -9062,6 +9137,14 @@ app.get('/sector/:wf/:from/:to', async (req, res) => {
       var route2 = ${leg && (isAdmin || isPageEnabled('atc-route')) ? JSON.stringify(leg.atc_route2 || '') : "''"};
 
       var map = L.map('sectorMap', {
+        // Render the route line, FIR boundaries and markers to a <canvas>
+        // instead of one huge SVG overlay pane. The global FIR-boundary
+        // GeoJSON produces thousands of SVG paths; Chrome promotes that
+        // oversized pane to a composited layer and then stops invalidating
+        // the surrounding HTML cards, so the page goes stale and only the
+        // strip under the cursor repaints on mouse-move. Canvas rendering
+        // (matching the app's other maps) avoids the giant SVG layer.
+        preferCanvas: true,
         zoomControl: false,
         scrollWheelZoom: false,
         doubleClickZoom: false,
@@ -9765,7 +9848,7 @@ app.get('/schedule', requirePageEnabled('schedule'), async (req, res) => {
               '&deph=' + hh +
               '&depm=' + mm +
               '&manualrmk=' + encodeURIComponent(
-                'WF TOBT [SLOT] ' + hh + ':' + mm + ' UTC - Route validated from www.worldflight.center'
+                'WF TCT [SLOT] ' + hh + ':' + mm + ' UTC - Route validated from www.worldflight.center'
               );
           }
         }
@@ -15949,10 +16032,12 @@ app.post('/admin/api/user-additional-roles/toggle', requireAdmin, async (req, re
     });
     if (role === 'WF_TEAM') teamMemberCids.add(cid);
     if (role === 'WF_AFFILIATE') affiliateCids.add(cid);
+    if (role === 'WF_ATC') wfAtcCids.add(cid);
   } else {
     await prisma.userAdditionalRole.deleteMany({ where: { cid, role } });
     if (role === 'WF_TEAM') teamMemberCids.delete(cid);
     if (role === 'WF_AFFILIATE') affiliateCids.delete(cid);
+    if (role === 'WF_ATC') wfAtcCids.delete(cid);
   }
   res.json({ ok: true });
 });
@@ -16397,15 +16482,10 @@ app.get('/api/tobt/slots', (req, res) => {
     b.tobtTimeUtc === null
   );
 
-  slots.forEach(tobt => {
-    const slotKey = makeTobtSlotKey({
-      from,
-      to,
-      dateUtc,
-      depTimeUtc,
-      tobtTimeUtc: tobt
-    });
-
+  // generateTobtSlots now returns [{ tobt, slotKey }] — tobt is clean HH:MM,
+  // slotKey is the unique identifier (may have a #2/#3 suffix when the same
+  // minute hosts multiple slots at high flow rates).
+  slots.forEach(({ tobt, slotKey }) => {
     const myBookingKey = `${cid}:${slotKey}`;
     const myBooking = tobtBookingsByKey[myBookingKey];
     const anyBooking = getAnyBookingForSlot(slotKey);
@@ -16461,7 +16541,7 @@ function buildSlotsForWf(wfNum) {
     if (key === b.slotKey) continue;                                      // skip raw-slotKey alias
     if (!b.slotKey || !b.slotKey.startsWith(sectorPrefix)) continue;
     const slot = (b.tobtTimeUtc && b.tobtTimeUtc !== 'BOOKING_ONLY' && b.tobtTimeUtc !== 'null')
-      ? b.tobtTimeUtc.replace(':', '')
+      ? displayTobt(b.tobtTimeUtc).replace(':', '')
       : '';
     bookings.push({ cid: b.cid, slot });
   }
@@ -16955,7 +17035,7 @@ for (const existing of Object.values(tobtBookingsByKey)) {
 
   } catch (err) {
     console.error('[TOBT] Booking failed:', err.message || err);
-    return res.status(500).json({ error: 'Failed to book TOBT slot: ' + (err.message || 'Unknown error') });
+    return res.status(500).json({ error: 'Failed to book TCT slot: ' + (err.message || 'Unknown error') });
   }
 });
 
@@ -17081,8 +17161,9 @@ app.delete('/api/team/members/:cid', requireLogin, requireTeamManager, async (re
 app.post('/api/team/bookings/update', requireLogin, requireTeamMember, async (req, res) => {
   try {
     const sessionCid = Number(req.session.user.data.cid);
-    const { slotKey, cid: newCidRaw, callsign: newCallsignRaw } = req.body || {};
+    const { slotKey, cid: newCidRaw, callsign: newCallsignRaw, bookingCid: bookingCidRaw } = req.body || {};
     if (!slotKey) return res.status(400).json({ error: 'Missing slotKey' });
+    const origBookingCid = bookingCidRaw != null ? Number(bookingCidRaw) : null;
     const newCid = Number(newCidRaw);
     const newCallsign = String(newCallsignRaw || '').trim().toUpperCase();
     if (!newCid || !Number.isInteger(newCid)) return res.status(400).json({ error: 'Invalid CID' });
@@ -17118,12 +17199,23 @@ app.post('/api/team/bookings/update', requireLogin, requireTeamMember, async (re
       return res.status(403).json({ error: 'Pilot is not a member of your team.' });
     }
 
-    // Find the booking for this slotKey owned by a team callsign
-    const dbBooking = await prisma.tobtBooking.findFirst({ where: { slotKey } });
-    if (!dbBooking) return res.status(404).json({ error: 'Booking not found' });
-    if (!teamCallsignSet.has(String(dbBooking.callsign || '').toUpperCase())) {
-      return res.status(403).json({ error: "Not your team's booking" });
-    }
+    // Find the booking for this slotKey owned by a team callsign. We can't
+    // use bare `findFirst({slotKey})` because BOOKING_ONLY sectors have many
+    // bookings sharing one slotKey — that would non-deterministically pick
+    // some other pilot's row and bail out with a false "Not your team's
+    // booking" error.
+    //
+    // Prefer the client-supplied origBookingCid (deterministic — picks the
+    // exact row the user clicked Edit on). Fall back to "any team-owned
+    // booking on this slot" for backward compat.
+    const dbBooking = origBookingCid != null
+      ? await prisma.tobtBooking.findFirst({
+          where: { slotKey, cid: origBookingCid, callsign: { in: [...teamCallsignSet] } }
+        })
+      : await prisma.tobtBooking.findFirst({
+          where: { slotKey, callsign: { in: [...teamCallsignSet] } }
+        });
+    if (!dbBooking) return res.status(404).json({ error: "Booking not found for your team on this slot" });
 
     const oldCid = Number(dbBooking.cid);
 
@@ -17627,7 +17719,7 @@ app.get('/affiliates/hq', requireLogin, async (req, res) => {
                     <td><span class="flowtype-pill flowtype-${flow.cls}">${escapeHtml(flow.label)}</span></td>
                     <td><span class="aff-flow-status aff-flow-${status.kind}">${
                       status.kind === 'tobt'
-                        ? `<span class="aff-tobt-label">${escapeHtml(status.label)}</span><span class="aff-tobt-time">${escapeHtml(status.time)}</span><span class="tobt-help">?<span class="tobt-tooltip">This is a TOBT (Target Off-Blocks Time).<br>Please connect at least 30 minutes before this time.<br>You should be ready to push at this time.<br><b>The actual push time may differ depending on<br>ramp and airfield congestion.</b></span></span>`
+                        ? `<span class="aff-tobt-label">${escapeHtml(status.label)}</span><span class="aff-tobt-time">${escapeHtml(status.time)}</span><span class="tobt-help">?<span class="tobt-tooltip">This is your TCT (Target Connection Time).<br>Connect to VATSIM at this time.<br>We use TCT to stagger pilot connections at this airport so the network and controllers aren&#39;t overwhelmed.</span></span>`
                         : escapeHtml(status.text)
                     }</span></td>
                     ${showAtcRoute ? `<td>${(() => {
@@ -18399,7 +18491,7 @@ app.get('/affiliates/hq', requireLogin, async (req, res) => {
           if (status.kind === 'tobt' && status.time) {
             var l = document.createElement('span');
             l.className = 'aff-tobt-label';
-            l.textContent = status.label || 'TOBT';
+            l.textContent = status.label || 'TCT';
             var t = document.createElement('span');
             t.className = 'aff-tobt-time';
             t.textContent = status.time;
@@ -18408,7 +18500,7 @@ app.get('/affiliates/hq', requireLogin, async (req, res) => {
             h.textContent = '?';
             var tt = document.createElement('span');
             tt.className = 'tobt-tooltip';
-            tt.innerHTML = 'This is a TOBT (Target Off-Blocks Time).<br>Please connect at least 30 minutes before this time.<br>You should be ready to push at this time.<br><b>The actual push time may differ depending on<br>ramp and airfield congestion.</b>';
+            tt.innerHTML = 'This is your TCT (Target Connection Time).<br>Connect to VATSIM at this time.<br>We use TCT to stagger pilot connections at this airport so the network and controllers aren&#39;t overwhelmed.';
             h.appendChild(tt);
             span.appendChild(l);
             span.appendChild(t);
@@ -19279,7 +19371,10 @@ app.get('/team/management', requireLogin, requireTeamMember, async (req, res) =>
       };
     }
   });
-  const teamMembers = [...memberCids].map(c => ({
+  // Team Members list = owners + explicit member-role holders. Owners are
+  // always included so the team owner is visible on the roster even when
+  // they don't hold a separate WF_TEAM role row. Sort puts owners first.
+  const teamMembers = [...new Set([...ownerCids, ...memberCids])].map(c => ({
     cid: c,
     name: nameByCid[c] || '',
     isOwner: ownerCids.has(c),
@@ -19327,9 +19422,9 @@ app.get('/team/management', requireLogin, requireTeamMember, async (req, res) =>
               </thead>
               <tbody>
                 ${teamMembers.map(m => `
-                  <tr>
+                  <tr${m.isOwner ? ' style="background:rgba(245,158,11,0.04);"' : ''}>
                     <td>${m.cid}</td>
-                    <td>${esc(m.name) || '<span style="color:var(--muted);">Unknown</span>'}</td>
+                    <td>${esc(m.name) || '<span style="color:var(--muted);">Unknown</span>'}${m.isOwner ? ' <span style="display:inline-flex;align-items:center;gap:3px;margin-left:6px;padding:2px 7px;background:rgba(245,158,11,0.16);color:#fbbf24;border:1px solid rgba(245,158,11,0.4);border-radius:4px;font-size:10px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;vertical-align:middle;"><svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M5 16L3 7l5.5 5L12 4l3.5 8L21 7l-2 9H5zm0 2h14v2H5v-2z"/></svg>Owner</span>' : ''}</td>
                     <td>${(m.isOwner || m.perms.participating)
                       ? '<span style="color:#4ade80;font-weight:600;">Yes</span>'
                       : '<span style="color:var(--muted);">No</span>'}</td>
@@ -19859,7 +19954,7 @@ app.get('/team/bookings', requireLogin, requireTeamMember, async (req, res) => {
       const pilotCid = booking.cid || null;
       const cidPart = pilotCid ? ` - CID ${pilotCid}` : '';
       const remark = (tobt
-        ? `WF Official Team - TOBT ${tobt}z`
+        ? `WF Official Team - TCT ${tobt}z`
         : 'WF Official Team'
       ) + `${cidPart} - planning.worldflight.center`;
       const sbParams = new URLSearchParams({
@@ -20004,7 +20099,7 @@ app.get('/team/bookings', requireLogin, requireTeamMember, async (req, res) => {
                   <td>${r.dateUtc}</td>
                   <td>${r.depWindow || '—'}</td>
                   <td>${r.tobt
-                    ? `Slotted - <span style="color:#4ade80;font-weight:600;">${r.tobt.replace(':','')}z</span> <span class="tobt-help">?<span class="tobt-tooltip">This is a TOBT (Target Off-Blocks Time).<br>Please connect at least 30 minutes before this time.<br>You should be ready to push at this time.<br><b>The actual push time may differ depending on<br>ramp and airfield congestion.</b></span></span>`
+                    ? `Slotted - <span style="color:#4ade80;font-weight:600;">${r.tobt.replace(':','')}z</span> <span class="tobt-help">?<span class="tobt-tooltip">This is your TCT (Target Connection Time).<br>Connect to VATSIM at this time.<br>We use TCT to stagger pilot connections at this airport so the network and controllers aren&#39;t overwhelmed.</span></span>`
                     : `<span style="color:#4ade80;font-weight:600;">Booking Confirmed</span> <span class="tobt-help">?<span class="tobt-tooltip">You have a booking for this sector. Slots are not required.<br><b>Plan to depart within the Dep Window.</b></span></span>`}</td>
                   ${showAtcRoute ? `<td>${hasRoute
                     ? `<button type="button" class="show-route-btn" data-route="${routeAttr}" data-route2="${route2Attr}">Show Route</button>`
@@ -20265,9 +20360,11 @@ app.get('/team/bookings', requireLogin, requireTeamMember, async (req, res) => {
       var cancelBtn = document.getElementById('teamCsCancel');
       var backdrop = modal.querySelector('.route-modal-backdrop');
       var currentSlotKey = null;
+      var currentBookingCid = null;
 
       function open(slotKey, callsign, cid) {
         currentSlotKey = slotKey;
+        currentBookingCid = cid != null ? Number(cid) : null;
         csInput.value = callsign || '';
         if (cid != null && cidInput.querySelector('option[value="' + cid + '"]')) {
           cidInput.value = String(cid);
@@ -20279,7 +20376,7 @@ app.get('/team/bookings', requireLogin, requireTeamMember, async (req, res) => {
         modal.hidden = false;
         setTimeout(function() { csInput.focus(); csInput.select(); }, 0);
       }
-      function close() { modal.hidden = true; currentSlotKey = null; }
+      function close() { modal.hidden = true; currentSlotKey = null; currentBookingCid = null; }
 
       document.addEventListener('click', function(e) {
         var btn = e.target.closest('.team-cs-edit-btn');
@@ -20314,7 +20411,7 @@ app.get('/team/bookings', requireLogin, requireTeamMember, async (req, res) => {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'same-origin',
-            body: JSON.stringify({ slotKey: currentSlotKey, callsign: callsign, cid: Number(cid) })
+            body: JSON.stringify({ slotKey: currentSlotKey, callsign: callsign, cid: Number(cid), bookingCid: currentBookingCid })
           });
           if (!res.ok) {
             var data = await res.json().catch(function() { return {}; });
@@ -25303,7 +25400,8 @@ app.get('/admin/settings', requireAdmin, async (req, res) => {
         { key: 'atc',             label: 'WF Flow Control',     icon: '🎧', desc: 'Controller departure management view' },
         { key: 'suggest-airport', label: 'Suggest Airport',     icon: '💡', desc: 'Community airport suggestions' },
         { key: 'airspace',        label: 'Staffing Overview', icon: '🌐', desc: 'FIR staffing requirements and timelines' },
-        { key: 'sector-planning', label: 'Sector Planning',   icon: '📋', desc: 'Per-user sector list. Shows WF sectors the user is participating in (Dep/Arr/Enroute) based on their FIR Events Access grants.' }
+        { key: 'sector-planning', label: 'Sector Planning',   icon: '📋', desc: 'Per-user sector list. Shows WF sectors the user is participating in (Dep/Arr/Enroute) based on their FIR Events Access grants.' },
+        { key: 'vatcan-codes',    label: 'VATCAN Codes',      icon: '🎧', desc: 'Per-sector VATCAN booking-plugin event IDs (under sidebar "WF ATC" category). Controllers paste these into the VATCAN plugin to see live slot data.' }
       ]
     },
     {
@@ -25760,7 +25858,7 @@ app.get('/admin/test-pilots', requireAdmin, (req, res) => {
     <a href="/admin" class="back-link">\u2190 Back to Admin</a>
     <section class="card">
       <h2>Test Pilot Data</h2>
-      <p style="color:var(--muted);margin-bottom:20px;">Generate fake pilot departures at all WorldFlight airports for testing flow control, TOBT assignments, and departure management.</p>
+      <p style="color:var(--muted);margin-bottom:20px;">Generate fake pilot departures at all WorldFlight airports for testing flow control, TCT assignments, and departure management.</p>
 
       <div class="settings-row" data-page="fake-pilots">
         <div class="settings-row-info">
@@ -26685,8 +26783,8 @@ if (isEventFlight) {
   data-callsign="${p.callsign}"
   data-cid="${tobtBooking.cid}"
   data-icao="${pageIcao}"
-  title="Remove manual TOBT"
-  aria-label="Remove manual TOBT"
+  title="Remove manual TCT"
+  aria-label="Remove manual TCT"
 >
 
   <svg
@@ -26756,7 +26854,7 @@ let primaryStatusHtml = '';
     primaryStatusHtml = `
       <span
         class="status-pill manual"
-        title="TOBT manually assigned by ATC"
+        title="TCT manually assigned by ATC"
       >
         Manual
       </span>`;
@@ -27019,15 +27117,15 @@ const filedRoute = p.flight_plan.route || '';
           <div class="tsat-col tsat-panel" ${pageFlowMode !== 'SLOTTED' ? 'style="display:none;"' : ''}>
             <div class="tsat-panel-header">
               <div>
-                <h3 id="unassignedTobtHeading">Available WF TOBTs</h3>
+                <h3 id="unassignedTobtHeading">Available WF TCTs</h3>
                 <div style="font-size:11px;color:rgba(255,255,255,0.5);font-weight:400;">Click to assign</div>
               </div>
             </div>
             <div id="unassignedTobtGrid" class="tobt-grid">
-              <div style="grid-column:1/-1;padding:20px;text-align:center;color:var(--muted);font-size:12px;">No spare TOBTs available</div>
+              <div style="grid-column:1/-1;padding:20px;text-align:center;color:var(--muted);font-size:12px;">No spare TCTs available</div>
             </div>
             <table class="departures-table" id="unassignedTobtTable" style="display:none;">
-              <thead><tr><th>TOBT</th><th>Dest</th><th>TOBT</th><th>Dest</th></tr></thead>
+              <thead><tr><th>TCT</th><th>Dest</th><th>TCT</th><th>Dest</th></tr></thead>
               <tbody></tbody>
             </table>
           </div>
@@ -27066,7 +27164,7 @@ const filedRoute = p.flight_plan.route || '';
                 <th class="sortable-th" data-col="1">Callsign <span class="sort-arrow"></span></th>
                 <th class="sortable-th" data-col="2">A/C Type <span class="sort-arrow"></span></th>
                 <th class="sortable-th" data-col="3">Dest <span class="sort-arrow"></span></th>
-                ${pageFlowMode === 'SLOTTED' ? '<th class="sortable-th" data-col="4">WF TOBT <span class="col-help" title="WorldFlight Target Off-Block Time">?</span> <span class="sort-arrow"></span></th>' : pageFlowMode === 'BOOKING_ONLY' ? '<th class="sortable-th" data-col="4" style="text-align:center;">Has Booking? <span class="sort-arrow"></span></th>' : ''}
+                ${pageFlowMode === 'SLOTTED' ? '<th class="sortable-th" data-col="4">WF TCT <span class="col-help" title="WorldFlight Target Connection Time — the time you should connect to VATSIM. Used to stagger pilot connections at this airport.">?</span> <span class="sort-arrow"></span></th>' : pageFlowMode === 'BOOKING_ONLY' ? '<th class="sortable-th" data-col="4" style="text-align:center;">Has Booking? <span class="sort-arrow"></span></th>' : ''}
                 ${pageFlowMode !== 'NONE' ? '<th class="col-toggle">READY?</th>' : ''}
                 ${pageFlowMode === 'SLOTTED' ? '<th class="sortable-th" data-col="6">TSAT <span class="col-help" title="Target Startup Approval Time&#10;The time to start the pilot">?</span> <span class="sort-arrow"></span></th>' : ''}
                 <th class="col-route">ATC Route</th>
@@ -27471,12 +27569,12 @@ function renderUnassignedTobtTable(data) {
   var heading = document.getElementById('unassignedTobtHeading');
   if (heading) {
     heading.textContent = data.length
-      ? 'Available WF TOBTs'
-      : 'Available WF TOBTs';
+      ? 'Available WF TCTs'
+      : 'Available WF TCTs';
   }
 
   if (!data.length) {
-    grid.innerHTML = '<div style="grid-column:1/-1;padding:20px;text-align:center;color:var(--muted);font-size:12px;">No spare TOBTs available</div>';
+    grid.innerHTML = '<div style="grid-column:1/-1;padding:20px;text-align:center;color:var(--muted);font-size:12px;">No spare TCTs available</div>';
     return;
   }
 
@@ -27531,7 +27629,7 @@ function renderUnassignedTobtTable(data) {
       overlay.className = 'modal';
       overlay.innerHTML = '<div class="modal-backdrop"></div>'
         + '<div class="modal-dialog" style="width:360px;padding:20px;">'
-        + '<h3 style="margin:0 0 8px;">Assign ' + tobt + ' TOBT</h3>'
+        + '<h3 style="margin:0 0 8px;">Assign ' + tobt + ' TCT</h3>'
         + '<p style="color:var(--muted);font-size:12px;margin-bottom:12px;">Pilots without a slot:</p>'
         + '<div class="tobt-assign-list">'
         + nonBooked.map(function(p) {
@@ -27749,8 +27847,8 @@ document.addEventListener('click', async e => {
   const icao = btn.dataset.icao;
 
   const ok = await openConfirmModal({
-    title: 'Remove Manual TOBT',
-    message: 'Remove manual TOBT for ' + callsign + '?'
+    title: 'Remove Manual TCT',
+    message: 'Remove manual TCT for ' + callsign + '?'
   });
 
   if (!ok) return;
@@ -27765,7 +27863,7 @@ document.addEventListener('click', async e => {
 
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
-    alert(data.error || 'Failed to remove TOBT');
+    alert(data.error || 'Failed to remove TCT');
     return;
   }
 
@@ -27790,7 +27888,7 @@ document.addEventListener('click', async e => {
 
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
-    alert(data.error || 'Failed to book TOBT');
+    alert(data.error || 'Failed to book TCT');
     select.value = '';
     return;
   }
@@ -28229,7 +28327,7 @@ app.post('/api/tobt/remove', async (req, res) => {
   // 🔒 Only ATC-assigned TOBTs (cid === null)
   if (booking.cid !== null) {
     return res.status(403).json({
-      error: 'Pilot-booked TOBTs cannot be removed by ATC'
+      error: 'Pilot-booked TCTs cannot be removed by ATC'
     });
   }
 
@@ -28380,7 +28478,7 @@ app.get('/atc', requirePageEnabled('atc'), (req, res) => {
             </div>
           </div>
           <div style="border:1px solid var(--border);border-radius:10px;padding:14px;background:var(--panel2);min-height:200px;">
-            <div style="font-size:13px;font-weight:700;color:var(--accent);letter-spacing:0.6px;margin-bottom:4px;">AVAILABLE WF TOBTS</div>
+            <div style="font-size:13px;font-weight:700;color:var(--accent);letter-spacing:0.6px;margin-bottom:4px;">AVAILABLE WF TCTS</div>
             <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">Click to assign</div>
             <div style="display:grid;grid-template-columns:repeat(6, minmax(0, 1fr));gap:6px;">
               ${demoTobts.map(t => `<div style="border:1px solid rgba(56,189,248,0.3);border-radius:6px;padding:8px 4px;text-align:center;background:rgba(56,189,248,0.05);">
@@ -28398,7 +28496,7 @@ app.get('/atc', requirePageEnabled('atc'), (req, res) => {
               <th style="padding:10px 8px;border-bottom:1px solid var(--border);">Callsign</th>
               <th style="padding:10px 8px;border-bottom:1px solid var(--border);">A/C Type</th>
               <th style="padding:10px 8px;border-bottom:1px solid var(--border);">Dest</th>
-              <th style="padding:10px 8px;border-bottom:1px solid var(--border);">WF TOBT</th>
+              <th style="padding:10px 8px;border-bottom:1px solid var(--border);">WF TCT</th>
               <th style="padding:10px 8px;border-bottom:1px solid var(--border);">TSAT</th>
               <th style="padding:10px 8px;border-bottom:1px solid var(--border);">ATC Route</th>
             </tr>
@@ -28613,6 +28711,137 @@ async function getUserOwnedFirs(cid) {
   csvFirs.forEach(f => owned.add(f));
   return owned;
 }
+
+// ── WF ATC: VATCAN Codes — list every WF sector with its VATCAN event_id ──
+// Gated on (admin OR WF_ATC role) — the page-visibility key is also honoured
+// so admins can still hide the page entirely via the admin Page Visibility
+// panel (e.g. before the route is released).
+app.get('/wf-atc/vatcan-codes', requirePageEnabled('vatcan-codes'), requireWfAtcOrAdmin, async (req, res) => {
+  const user = req.session?.user?.data || null;
+  const cid = Number(user?.cid) || null;
+  const isAdmin = isAdminUser(cid);
+
+  let rows = [];
+  try {
+    rows = await prisma.wfScheduleRow.findMany({
+      where: { eventId: activeEventId || undefined },
+      orderBy: { sortOrder: 'asc' },
+      select: { number: true, from: true, to: true, dateUtc: true, depTimeUtc: true, vatcanEventId: true }
+    });
+  } catch (e) {
+    console.error('[VATCAN CODES] failed to load schedule rows:', e);
+  }
+
+  const total = rows.length;
+  const withCode = rows.filter(r => r.vatcanEventId).length;
+  const withoutCode = total - withCode;
+
+  const tableBody = rows.length
+    ? rows.map(r => {
+        const code = r.vatcanEventId
+          ? `<code class="vatcan-code">${r.vatcanEventId}</code>`
+          : `<span style="color:var(--muted);font-style:italic;font-size:12px;">— not seeded —</span>`;
+        return `<tr>
+          <td><span class="fir-badge" style="font-size:11px;padding:2px 8px;">${r.number}</span></td>
+          <td>${r.from}</td>
+          <td>${r.to}</td>
+          <td>${r.dateUtc || '-'}</td>
+          <td style="font-family:monospace;font-size:12px;">${r.depTimeUtc || '-'}</td>
+          <td>${code}</td>
+        </tr>`;
+      }).join('')
+    : `<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--muted);">No schedule rows loaded yet.</td></tr>`;
+
+  const content = `
+    <style>
+      .vatcan-code {
+        display: inline-flex; align-items: center; gap: 6px;
+        font-family: monospace; font-size: 13px; font-weight: 700;
+        padding: 3px 10px; border-radius: 6px;
+        background: rgba(56,189,248,0.12); color: var(--accent);
+        border: 1px solid rgba(56,189,248,0.35);
+        cursor: pointer;
+        transition: background .12s, transform .08s;
+      }
+      .vatcan-code:hover { background: rgba(56,189,248,0.22); }
+      .vatcan-code:active { transform: scale(0.97); }
+      .vatcan-code.copied { background: rgba(74,222,128,0.22); color: #4ade80; border-color: rgba(74,222,128,0.5); }
+      .vc-summary {
+        display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px;
+      }
+      .vc-summary .pill {
+        display: inline-flex; align-items: center; gap: 6px;
+        padding: 4px 10px; border-radius: 999px; font-size: 11px; font-weight: 700;
+        border: 1px solid var(--border); background: rgba(255,255,255,0.03);
+      }
+      .vc-summary .pill .dot { width: 7px; height: 7px; border-radius: 50%; }
+      .vc-summary .pill.green { background: rgba(74,222,128,0.12); color: #4ade80; border-color: rgba(74,222,128,0.4); }
+      .vc-summary .pill.green .dot { background: #4ade80; }
+      .vc-summary .pill.amber { background: rgba(245,158,11,0.12); color: #fbbf24; border-color: rgba(245,158,11,0.4); }
+      .vc-summary .pill.amber .dot { background: #fbbf24; }
+      .vc-summary .pill.muted { color: var(--muted); }
+      .vc-summary .pill.muted .dot { background: var(--muted); }
+    </style>
+
+    <section class="card card-full">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:6px;">
+        <div>
+          <h2 style="margin:0 0 4px;">VATCAN Codes</h2>
+          <p style="color:var(--muted);font-size:13px;margin:0;">Per-sector VATCAN booking-plugin event IDs. Controllers paste these into the VATCAN bookings plugin to see live slot data for the sector.</p>
+        </div>
+      </div>
+
+      <div class="vc-summary">
+        <span class="pill muted"><span class="dot"></span>${total} sector${total === 1 ? '' : 's'}</span>
+        <span class="pill ${withCode === total ? 'green' : 'amber'}"><span class="dot"></span>${withCode} with event id</span>
+        ${withoutCode > 0 ? `<span class="pill amber"><span class="dot"></span>${withoutCode} unseeded</span>` : ''}
+      </div>
+
+      <div class="table-scroll">
+        <table class="departures-table">
+          <thead>
+            <tr>
+              <th style="width:90px;">Sector</th>
+              <th style="width:70px;">From</th>
+              <th style="width:70px;">To</th>
+              <th style="width:130px;">Date</th>
+              <th style="width:90px;">Dep</th>
+              <th>VATCAN Event ID</th>
+            </tr>
+          </thead>
+          <tbody>${tableBody}</tbody>
+        </table>
+      </div>
+    </section>
+
+    <script>
+      // Click any VATCAN code → copy to clipboard with brief visual confirmation.
+      document.addEventListener('click', function(e) {
+        var el = e.target.closest('.vatcan-code');
+        if (!el) return;
+        var text = el.textContent.trim();
+        if (!text) return;
+        navigator.clipboard.writeText(text).then(function() {
+          var prev = el.textContent;
+          el.classList.add('copied');
+          el.textContent = 'Copied ' + prev;
+          setTimeout(function() {
+            el.classList.remove('copied');
+            el.textContent = prev;
+          }, 1100);
+        }).catch(function() {});
+      });
+    </script>
+  `;
+
+  res.send(renderLayout({
+    title: 'VATCAN Codes',
+    user,
+    isAdmin,
+    content,
+    layoutClass: 'dashboard-full'
+  }));
+});
 
 app.get('/sector-planning', requirePageEnabled('sector-planning'), async (req, res) => {
   const user = req.session?.user?.data || null;
@@ -28893,14 +29122,18 @@ app.get('/sector-planning/admin', requireAdmin, async (req, res) => {
     const readyPct = Math.round((readyScore / readyMax) * 100);
     const readyColor = readyPct === 100 ? 'var(--success)' : readyPct >= 50 ? 'var(--warning)' : 'var(--danger)';
     let finBtn;
-    if (s.routeAgreed && s.flowSet) {
-      if (s.finalised) {
-        finBtn = '<span style="font-size:10px;color:var(--success);font-weight:700;">&#10003; Synced</span>';
-      } else if (s.outOfSync) {
-        finBtn = '<button type="button" class="action-btn sp-finalise-btn" data-wf="' + s.wf + '" data-route="' + (s.agreedRoute || '').replace(/"/g, '&quot;') + '" style="font-size:10px;padding:3px 8px;background:rgba(245,158,11,0.15);color:var(--warning);border:1px solid rgba(245,158,11,0.4);">&#9888; Re-sync</button>';
-      } else {
-        finBtn = '<button type="button" class="action-btn sp-finalise-btn" data-wf="' + s.wf + '" data-route="' + (s.agreedRoute || '').replace(/"/g, '&quot;') + '" style="font-size:10px;padding:3px 8px;background:rgba(74,222,128,0.15);color:var(--success);border:1px solid rgba(74,222,128,0.4);">Finalise</button>';
-      }
+    // Re-sync is always offered when something has drifted from the live
+    // schedule — even if other readiness items (route agreed, scenery) are
+    // still missing. That way an admin can push a flow-only update without
+    // needing the route to be agreed first.
+    if (s.outOfSync) {
+      finBtn = '<button type="button" class="action-btn sp-finalise-btn" data-wf="' + s.wf + '" data-route="' + (s.agreedRoute || '').replace(/"/g, '&quot;') + '" style="font-size:10px;padding:3px 8px;background:rgba(245,158,11,0.15);color:var(--warning);border:1px solid rgba(245,158,11,0.4);">&#9888; Re-sync</button>';
+    } else if (s.finalised) {
+      finBtn = '<span style="font-size:10px;color:var(--success);font-weight:700;">&#10003; Synced</span>';
+    } else if (s.routeAgreed && s.flowSet) {
+      // First-time push — require both route agreed AND flow set, since
+      // there's nothing live to compare against yet.
+      finBtn = '<button type="button" class="action-btn sp-finalise-btn" data-wf="' + s.wf + '" data-route="' + (s.agreedRoute || '').replace(/"/g, '&quot;') + '" style="font-size:10px;padding:3px 8px;background:rgba(74,222,128,0.15);color:var(--success);border:1px solid rgba(74,222,128,0.4);">Finalise</button>';
     } else {
       finBtn = '<span style="font-size:10px;color:var(--muted);">Not ready</span>';
     }
@@ -29304,7 +29537,7 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
   const FLOW_TOOLTIPS = {
     'NONE': 'Any pilot can take part without restrictions.',
     'BOOKING_REQUIRED': 'To depart within the departure window, pilots must have a booking.',
-    'TIME_SLOT_REQUIRED': 'Pilots must hold a TOBT slot at the departure airport to depart.'
+    'TIME_SLOT_REQUIRED': 'Pilots must hold a TCT slot at the departure airport to depart.'
   };
   const TIME_SLOT_AIRPORT = 'YSSY';
   const depWindowUtc = sched.dep_time_utc ? buildTimeWindow(sched.dep_time_utc) : '';
@@ -34932,14 +35165,14 @@ const selected = value === preselectedKey ? 'selected' : '';
       </select>
 </div>
       <div style="padding:14px 18px;margin-bottom:16px;background:linear-gradient(135deg,rgba(239,68,68,0.08),rgba(239,68,68,0.03));border:1px solid rgba(239,68,68,0.25);border-radius:10px;line-height:1.6;">
-        <div style="font-size:14px;font-weight:700;color:#f87171;margin-bottom:6px;">What is a TOBT (Target Off-Blocks Time)?</div>
-        <div style="font-size:13px;color:var(--text);">This is your scheduled departure time. Please connect at least <strong>30 minutes</strong> before this time. You should be ready to push back at this time. The actual push time may differ depending on ramp and airfield congestion.</div>
+        <div style="font-size:14px;font-weight:700;color:#f87171;margin-bottom:6px;">What is a TCT (Target Connection Time)?</div>
+        <div style="font-size:13px;color:var(--text);">This is the time you should connect to VATSIM. We use TCT to stagger pilot connections at this airport so the network and controllers aren&#39;t overwhelmed by everyone logging in at once.</div>
       </div>
       <table class="tobt-table">
         <thead>
           <tr>
-            <th>Off-Blocks Time</th><th>Book</th>
-            <th>Off-Blocks Time</th><th>Book</th>
+            <th>Target Connection Time</th><th>Book</th>
+            <th>Target Connection Time</th><th>Book</th>
           </tr>
         </thead>
         <tbody id="tobtBody"></tbody>
@@ -35451,7 +35684,7 @@ app.get('/my-slots', requireLogin, requirePageEnabled('my-slots'), (req, res) =>
           '&deph=' + hh +
           '&depm=' + mm +
           '&manualrmk=' + encodeURIComponent(
-            `WF TOBT [SLOT] ${hh}:${mm} UTC - Route validated from www.worldflight.center`
+            `WF TCT [SLOT] ${hh}:${mm} UTC - Route validated from www.worldflight.center`
           );
       }
 
@@ -35539,7 +35772,7 @@ app.get('/my-slots', requireLogin, requirePageEnabled('my-slots'), (req, res) =>
                   <td>${r.dateDisplay}</td>
                   <td>${r.depWindow || '—'}</td>
                   <td>${r.tobt && r.tobt !== '—' && r.tobt !== 'N/A'
-                    ? `Slotted - <span style="color:var(--success);font-weight:600;">${r.tobt.replace(':','')}z</span> <span class="tobt-help">?<span class="tobt-tooltip">This is a TOBT (Target Off-Blocks Time).<br>Please connect at least 30 minutes before this time.<br>You should be ready to push at this time.<br><b>The actual push time may differ depending on<br>ramp and airfield congestion.</b></span></span>`
+                    ? `Slotted - <span style="color:var(--success);font-weight:600;">${r.tobt.replace(':','')}z</span> <span class="tobt-help">?<span class="tobt-tooltip">This is your TCT (Target Connection Time).<br>Connect to VATSIM at this time.<br>We use TCT to stagger pilot connections at this airport so the network and controllers aren&#39;t overwhelmed.</span></span>`
                     : `<span style="color:var(--success);font-weight:600;">Booking Confirmed</span> <span class="tobt-help">?<span class="tobt-tooltip">You have a booking for this sector. Slots are not required.<br><b>Plan to depart within the Dep Window.</b></span></span>`}</td>
                   <td>
                     <button type="button" class="show-route-btn"
@@ -35661,7 +35894,7 @@ app.get('/my-slots', requireLogin, requirePageEnabled('my-slots'), (req, res) =>
           + '<div style="display:flex;justify-content:space-between;font-size:13px;"><span style="color:var(--muted);">Assigned CID</span><strong>' + cidVal + '</strong></div>'
           + (dateVal ? '<div style="display:flex;justify-content:space-between;font-size:13px;"><span style="color:var(--muted);">Date</span><strong>' + dateVal + '</strong></div>' : '')
           + (tobt
-            ? '<div style="display:flex;justify-content:space-between;font-size:13px;"><span style="color:var(--muted);">TOBT</span><strong style="color:var(--warning);">' + tobt + ' UTC</strong></div>'
+            ? '<div style="display:flex;justify-content:space-between;font-size:13px;"><span style="color:var(--muted);">TCT</span><strong style="color:var(--warning);">' + tobt + ' UTC</strong></div>'
             : (depWindow ? '<div style="display:flex;justify-content:space-between;font-size:13px;"><span style="color:var(--muted);">Dep Window</span><strong>' + depWindow + '</strong></div>' : ''))
           + (hasSplit ? '<div style="display:flex;justify-content:space-between;font-size:13px;"><span style="color:var(--muted);">Assigned Route</span><strong style="color:var(--success);">' + assignedLabel + '</strong></div>' : '')
           + '</div>'
@@ -35671,7 +35904,7 @@ app.get('/my-slots', requireLogin, requirePageEnabled('my-slots'), (req, res) =>
           + '</div>';
         if (tobt) {
           html += '<div style="margin-top:6px;padding:8px 10px;background:rgba(245,158,11,0.06);border:1px solid rgba(245,158,11,0.2);border-radius:6px;font-size:11px;color:var(--muted);line-height:1.5;">'
-            + '<strong style="color:var(--warning);">TOBT</strong> is your Target Off-Blocks Time. Please connect at least <strong>30 minutes</strong> before this time. You should be ready to push at this time. The actual push time may differ depending on ramp and airfield congestion.'
+            + '<strong style="color:var(--warning);">TCT</strong> is your Target Connection Time. Connect to VATSIM at this time. We use TCT to stagger pilot connections at this airport so the network and controllers aren&#39;t overwhelmed.'
             + '</div>';
         } else {
           html += '<div style="margin-top:6px;padding:8px 10px;background:rgba(56,189,248,0.06);border:1px solid rgba(56,189,248,0.2);border-radius:6px;font-size:11px;color:var(--muted);line-height:1.5;">'

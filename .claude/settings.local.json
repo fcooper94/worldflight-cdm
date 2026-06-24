@@ -278,7 +278,12 @@
       "Bash(node --check lib/vatcan-bookings.mjs)",
       "Bash(node seed-vatcan-events.mjs)",
       "Bash(curl -sS -X POST https://bookings.vlhtesting.com/api/event/HWtG6/bookings -H 'X-API-KEY: gHinyTd7K7PKkfB2JtkNJ5XAYwJo6XQI46XXY7cGSG4HuSvYOdqIq1B6w2txARKx' -H 'Content-Type: application/json' --data-binary @/tmp/wf2601.json -w '\\\\n[HTTP %{http_code}]\\\\n')",
-      "Bash(grep -v \"delete tobtBookingsByKey\\\\[k\\\\]\\\\] *$\\\\|delete tobtBookingsByKey\\\\[bk\\\\]\\\\] *$\")"
+      "Bash(grep -v \"delete tobtBookingsByKey\\\\[k\\\\]\\\\] *$\\\\|delete tobtBookingsByKey\\\\[bk\\\\]\\\\] *$\")",
+      "Bash(grep -v \":0$\")",
+      "Bash(grep -vE \"\\\\[TOBT\\\\]|console\\\\.|^[^:]+:[0-9]+:\\\\s*//\")",
+      "Bash(awk 'NR>=9440 && NR<=9560 && /renderLayout|layoutClass|res.send/' index.js)",
+      "Bash(awk -F: '$1>=9440 && $1<=9600')",
+      "Bash(git check-ignore *)"
     ]
   }
 }
