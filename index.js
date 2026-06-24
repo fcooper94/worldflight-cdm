@@ -528,7 +528,7 @@ function generateFakeTestPilots() {
         const bk = cid + ':' + bookingSlotKey;
         if (!tobtBookingsByKey[bk]) {
           const tobt = flowType === 'SLOTTED' ? generateFakeTobt(leg.dep_time_utc) : null;
-          tobtBookingsByKey[bk] = {
+          setBooking({
             bookingKey: bk,
             slotKey: bookingSlotKey,
             cid: cid,
@@ -540,7 +540,7 @@ function generateFakeTestPilots() {
             tobtTimeUtc: tobt,
             createdAtISO: new Date().toISOString(),
             _fake: true
-          };
+          });
           if (!tobtBookingsByCid[cid]) tobtBookingsByCid[cid] = new Set();
           tobtBookingsByCid[cid].add(bk);
         }
@@ -620,9 +620,7 @@ async function loadTobtBookingsFromDb() {
     createdAtISO: b.createdAt.toISOString()
   };
 
-  // Store under both keys so slot availability checks work
-  tobtBookingsByKey[bookingKey] = bookingData;
-  tobtBookingsByKey[b.slotKey] = bookingData;
+  setBooking(bookingData);
 
   if (!tobtBookingsByCid[b.cid]) {
     tobtBookingsByCid[b.cid] = new Set();
@@ -820,9 +818,82 @@ async function loadDepFlowsFromDb() {
 
 
 // MODEL 2 (per-user bookings)
-// bookingKey = `${cid}:${slotKey}`
+//
+// Canonical store, keyed by bookingKey = `${cid}:${slotKey}`. Holds one
+// entry per (pilot, slot). DO NOT add raw slotKey aliases to this map —
+// the old code did, but it caused (a) duplicate iteration, (b) silent
+// data loss for BOOKING_ONLY sectors where many pilots share one slotKey
+// ("last writer wins"), and (c) fragile cleanup (every delete had to
+// remember both forms or leak memory).
 const tobtBookingsByKey = {};  // bookingKey -> booking
 const tobtBookingsByCid = {};  // cid -> Set(bookingKey)
+
+// Reverse index: slotKey -> Set<bookingKey>. Lets us answer "who has this
+// slot?" correctly for both slotted bookings (one bookingKey per slot) AND
+// BOOKING_ONLY (many bookingKeys per slot). Kept in sync by the helpers
+// below — never written to directly.
+const bookingsBySlotKey = new Map();
+
+function setBooking(b) {
+  if (!b || b.cid == null || !b.slotKey) throw new Error('setBooking: cid + slotKey required');
+  const bk = `${b.cid}:${b.slotKey}`;
+  // If there was a previous entry under this exact bookingKey for a
+  // different slotKey (shouldn't happen but be defensive), drop the stale
+  // slot-index entry first.
+  const prev = tobtBookingsByKey[bk];
+  if (prev && prev.slotKey !== b.slotKey) {
+    const prevSet = bookingsBySlotKey.get(prev.slotKey);
+    if (prevSet) {
+      prevSet.delete(bk);
+      if (prevSet.size === 0) bookingsBySlotKey.delete(prev.slotKey);
+    }
+  }
+  tobtBookingsByKey[bk] = b;
+  let set = bookingsBySlotKey.get(b.slotKey);
+  if (!set) { set = new Set(); bookingsBySlotKey.set(b.slotKey, set); }
+  set.add(bk);
+  return bk;
+}
+
+function deleteBookingByBookingKey(bk) {
+  const b = tobtBookingsByKey[bk];
+  if (!b) return false;
+  delete tobtBookingsByKey[bk];
+  const set = bookingsBySlotKey.get(b.slotKey);
+  if (set) {
+    set.delete(bk);
+    if (set.size === 0) bookingsBySlotKey.delete(b.slotKey);
+  }
+  return true;
+}
+
+// "Is anyone on this slot?" — replaces old `tobtBookingsByKey[slotKey]`
+// truthy-checks (which were unreliable for BOOKING_ONLY).
+function isSlotTaken(slotKey) {
+  const set = bookingsBySlotKey.get(slotKey);
+  return !!(set && set.size > 0);
+}
+
+// All bookings on a slot (multi-pilot for BOOKING_ONLY, singleton otherwise).
+function getBookingsForSlot(slotKey) {
+  const set = bookingsBySlotKey.get(slotKey);
+  if (!set || !set.size) return [];
+  return [...set].map(bk => tobtBookingsByKey[bk]).filter(Boolean);
+}
+
+// Convenience: get one booking for a slot — replaces old
+// `tobtBookingsByKey[slotKey]` reads where the caller just wanted "any".
+function getAnyBookingForSlot(slotKey) {
+  const set = bookingsBySlotKey.get(slotKey);
+  if (!set || !set.size) return null;
+  return tobtBookingsByKey[set.values().next().value] || null;
+}
+
+// Bulk clear (used by reseed paths).
+function clearAllBookings() {
+  for (const k of Object.keys(tobtBookingsByKey)) delete tobtBookingsByKey[k];
+  bookingsBySlotKey.clear();
+}
 
 
 /**
@@ -1093,7 +1164,7 @@ function getNextAvailableTobts(from, to, limit = 5) {
     .filter(([slotKey, slot]) =>
       slot.from === from &&
       slot.to === to &&
-      !tobtBookingsByKey[slotKey]
+      !isSlotTaken(slotKey)
     )
     .map(([slotKey, slot]) => ({
       slotKey,
@@ -1616,7 +1687,7 @@ function buildUnassignedTobtsForICAO(icao) {
     .filter(([key, slot]) => {
       return (
         slot.from === normalizedIcao &&
-        !tobtBookingsByKey[key]   // ✅ NOT BOOKED
+        !isSlotTaken(key)   // ✅ NOT BOOKED
       );
     })
     .map(([key, slot]) => ({
@@ -1991,7 +2062,7 @@ async function autoAssignTeamBookings({ reason = '' } = {}) {
           let bestDiff = Infinity;
           for (const [k, s] of Object.entries(allTobtSlots)) {
             if (!k.startsWith(sectorSlotPrefix)) continue;
-            if (tobtBookingsByKey[k]) continue; // taken
+            if (isSlotTaken(k)) continue; // taken
             const [th, tm] = s.tobt.split(':').map(Number);
             const diff = Math.abs((th * 60 + tm) - depMin);
             if (diff < bestDiff) { best = s; bestDiff = diff; }
@@ -2033,8 +2104,7 @@ async function autoAssignTeamBookings({ reason = '' } = {}) {
           createdAtISO: new Date().toISOString()
         };
         const bookingKey = `${teamCid}:${slotKey}`;
-        tobtBookingsByKey[bookingKey] = bookingData;
-        tobtBookingsByKey[slotKey] = bookingData;
+        setBooking(bookingData);
         if (!tobtBookingsByCid[teamCid]) tobtBookingsByCid[teamCid] = new Set();
         tobtBookingsByCid[teamCid].add(bookingKey);
         created++;
@@ -2109,7 +2179,7 @@ async function autoAssignAffiliateBookings({ reason = '' } = {}) {
           let bestDiff = Infinity;
           for (const [k, s] of Object.entries(allTobtSlots)) {
             if (!k.startsWith(sectorSlotPrefix)) continue;
-            if (tobtBookingsByKey[k]) continue; // taken
+            if (isSlotTaken(k)) continue; // taken
             const [th, tm] = s.tobt.split(':').map(Number);
             const diff = Math.abs((th * 60 + tm) - depMin);
             if (diff < bestDiff) { best = s; bestDiff = diff; }
@@ -2149,8 +2219,7 @@ async function autoAssignAffiliateBookings({ reason = '' } = {}) {
           createdAtISO: new Date().toISOString()
         };
         const bookingKey = `${cidNum}:${slotKey}`;
-        tobtBookingsByKey[bookingKey] = bookingData;
-        tobtBookingsByKey[slotKey] = bookingData;
+        setBooking(bookingData);
         if (!tobtBookingsByCid[cidNum]) tobtBookingsByCid[cidNum] = new Set();
         tobtBookingsByCid[cidNum].add(bookingKey);
         created++;
@@ -2283,7 +2352,7 @@ async function assignAffiliatePilotToSector(affiliate, scheduleRow, claimCid) {
     // In-memory caches
     const oldBookingKey = `${oldCid}:${existing.slotKey}`;
     const newBookingKey = `${newCid}:${existing.slotKey}`;
-    const memBooking = tobtBookingsByKey[oldBookingKey] || tobtBookingsByKey[existing.slotKey] || existing;
+    const memBooking = tobtBookingsByKey[oldBookingKey] || getAnyBookingForSlot(existing.slotKey) || existing;
     const updated = {
       slotKey: existing.slotKey,
       cid: newCid,
@@ -2295,10 +2364,9 @@ async function assignAffiliatePilotToSector(affiliate, scheduleRow, claimCid) {
       tobtTimeUtc: existing.tobtTimeUtc,
       createdAtISO: memBooking.createdAtISO || new Date().toISOString()
     };
-    delete tobtBookingsByKey[oldBookingKey];
+    deleteBookingByBookingKey(oldBookingKey);
     if (tobtBookingsByCid[oldCid]) tobtBookingsByCid[oldCid].delete(oldBookingKey);
-    tobtBookingsByKey[newBookingKey] = updated;
-    tobtBookingsByKey[existing.slotKey] = updated;
+    setBooking(updated);
     if (!tobtBookingsByCid[newCid]) tobtBookingsByCid[newCid] = new Set();
     tobtBookingsByCid[newCid].add(newBookingKey);
 
@@ -2325,7 +2393,7 @@ async function assignAffiliatePilotToSector(affiliate, scheduleRow, claimCid) {
     let bestDiff = Infinity;
     for (const [k, s] of Object.entries(allTobtSlots)) {
       if (!k.startsWith(sectorSlotPrefix)) continue;
-      if (tobtBookingsByKey[k]) continue; // taken
+      if (isSlotTaken(k)) continue; // taken
       const [th, tm] = s.tobt.split(':').map(Number);
       const diff = Math.abs((th * 60 + tm) - depMin);
       if (diff < bestDiff) { best = s; bestDiff = diff; }
@@ -2365,8 +2433,7 @@ async function assignAffiliatePilotToSector(affiliate, scheduleRow, claimCid) {
     createdAtISO: new Date().toISOString()
   };
   const bookingKey = `${newCid}:${slotKey}`;
-  tobtBookingsByKey[bookingKey] = bookingData;
-  tobtBookingsByKey[slotKey] = bookingData;
+  setBooking(bookingData);
   if (!tobtBookingsByCid[newCid]) tobtBookingsByCid[newCid] = new Set();
   tobtBookingsByCid[newCid].add(bookingKey);
 
@@ -5887,8 +5954,7 @@ socket.on('createBookingOnly', async ({ sector, callsign: enteredCid, teamBookin
   };
 
   const bookingKey = `${bookingCid}:${slotKey}`;
-  tobtBookingsByKey[bookingKey] = bookingData;
-  tobtBookingsByKey[slotKey] = bookingData; // last writer wins for raw key
+  setBooking(bookingData);
 
   if (!tobtBookingsByCid[bookingCid]) {
     tobtBookingsByCid[bookingCid] = new Set();
@@ -8811,7 +8877,7 @@ app.get('/sector/:wf/:from/:to', async (req, res) => {
     for (const [k, s] of Object.entries(allTobtSlots)) {
       if (k.startsWith(slotPrefix)) {
         slotTotal++;
-        if (!tobtBookingsByKey[k]) slotsLeft++;
+        if (!isSlotTaken(k)) slotsLeft++;
       }
     }
   }
@@ -9650,7 +9716,7 @@ app.get('/schedule', requirePageEnabled('schedule'), async (req, res) => {
                 for (const [k, s] of Object.entries(allTobtSlots)) {
                   if (k.startsWith(slotSectorPrefix)) {
                     slotTotal++;
-                    if (!tobtBookingsByKey[k]) slotsLeft++;
+                    if (!isSlotTaken(k)) slotsLeft++;
                   }
                 }
                 const slotRemainLabel = slotTotal > 0 ? slotsLeft + ' Slot' + (slotsLeft !== 1 ? 's' : '') + ' Left' : '';
@@ -16342,7 +16408,7 @@ app.get('/api/tobt/slots', (req, res) => {
 
     const myBookingKey = `${cid}:${slotKey}`;
     const myBooking = tobtBookingsByKey[myBookingKey];
-    const anyBooking = tobtBookingsByKey[slotKey];
+    const anyBooking = getAnyBookingForSlot(slotKey);
 
     results.push({
       tobt,
@@ -16377,6 +16443,14 @@ app.post('/wf-schedule/refresh-schedule', requireAdmin, async (req, res) => {
 // Returns array of { cid, slot } — slot is HHMM string or empty for booking-only
 // Build the slot-bookings array for a WF sector. Same shape used by both
 // the public /api/slots/<wf>.json endpoint AND the VATCAN push integration.
+//
+// tobtBookingsByKey double-stores each booking — once under `${cid}:${slotKey}`
+// (the canonical bookingKey, what we want) and once under the raw `slotKey`
+// alone (a "who has this slot" lookup, last-writer-wins for BOOKING_ONLY).
+// We must dedup by skipping the raw-slotKey aliases — those are exactly the
+// entries where the iteration key equals the booking's own slotKey. The old
+// `if (!key.includes(':')) continue;` filter was a no-op because slotKey
+// itself contains a colon (the HH:MM time), so dupes leaked through.
 function buildSlotsForWf(wfNum) {
   const wf = String(wfNum).toUpperCase();
   const sched = (adminSheetCache || []).find(r => r?.number === wf);
@@ -16384,7 +16458,7 @@ function buildSlotsForWf(wfNum) {
   const sectorPrefix = sched.from + '-' + sched.to + '|';
   const bookings = [];
   for (const [key, b] of Object.entries(tobtBookingsByKey)) {
-    if (!key.includes(':')) continue;
+    if (key === b.slotKey) continue;                                      // skip raw-slotKey alias
     if (!b.slotKey || !b.slotKey.startsWith(sectorPrefix)) continue;
     const slot = (b.tobtTimeUtc && b.tobtTimeUtc !== 'BOOKING_ONLY' && b.tobtTimeUtc !== 'null')
       ? b.tobtTimeUtc.replace(':', '')
@@ -16506,8 +16580,7 @@ app.post('/api/tobt/cancel', requireLogin, async (req, res) => {
     });
 
     // 🔥 Delete from memory
-    delete tobtBookingsByKey[bookingKey];
-    delete tobtBookingsByKey[slotKey];
+    deleteBookingByBookingKey(bookingKey);
 
     if (tobtBookingsByCid[cid]) {
       tobtBookingsByCid[cid].delete(bookingKey);
@@ -16573,8 +16646,7 @@ app.post('/api/tobt/team-cancel', requireLogin, requireTeamMember, async (req, r
     await prisma.tobtBooking.deleteMany({ where: { cid: targetCid, slotKey } });
 
     // Delete from memory
-    delete tobtBookingsByKey[bookingKey];
-    delete tobtBookingsByKey[slotKey];
+    deleteBookingByBookingKey(bookingKey);
 
     if (tobtBookingsByCid[targetCid]) {
       tobtBookingsByCid[targetCid].delete(bookingKey);
@@ -16788,7 +16860,7 @@ const wantsManual = !isBookingOnly && manual === true;
     }
 
     // 5️⃣ Prevent double booking (TOBT slots only — booking-only allows multiple users)
-    if (!isBookingOnly && tobtBookingsByKey[slotKey]) {
+    if (!isBookingOnly && isSlotTaken(slotKey)) {
       return res.status(409).json({ error: 'Slot already booked' });
     }
 
@@ -16854,7 +16926,9 @@ for (const existing of Object.values(tobtBookingsByKey)) {
     });
 
     // 🔟 Update in-memory cache
-    tobtBookingsByKey[slotKey] = {
+    const bookingKey = `${storedCid}:${slotKey}`;
+    setBooking({
+      bookingKey,
       slotKey,
       cid: storedCid,
       callsign: normalizedCallsign,
@@ -16864,27 +16938,12 @@ for (const existing of Object.values(tobtBookingsByKey)) {
       depTimeUtc,
       tobtTimeUtc,
       manual: wantsManual
-    };
+    });
 
-    const bookingKey = `${storedCid}:${slotKey}`;
-
-tobtBookingsByKey[bookingKey] = {
-  bookingKey,
-  slotKey,
-  cid: storedCid,
-  callsign: normalizedCallsign,
-  from: fromIcao,
-  to: to.toUpperCase(),
-  dateUtc,
-  depTimeUtc,
-  tobtTimeUtc,
-  manual: wantsManual
-};
-
-if (!tobtBookingsByCid[storedCid]) {
-  tobtBookingsByCid[storedCid] = new Set();
-}
-tobtBookingsByCid[storedCid].add(bookingKey);
+    if (!tobtBookingsByCid[storedCid]) {
+      tobtBookingsByCid[storedCid] = new Set();
+    }
+    tobtBookingsByCid[storedCid].add(bookingKey);
 
 
     // 1️⃣2️⃣ Notify clients
@@ -17077,7 +17136,7 @@ app.post('/api/team/bookings/update', requireLogin, requireTeamMember, async (re
     // Update in-memory caches
     const oldBookingKey = `${oldCid}:${slotKey}`;
     const newBookingKey = `${newCid}:${slotKey}`;
-    const existing = tobtBookingsByKey[oldBookingKey] || tobtBookingsByKey[slotKey];
+    const existing = tobtBookingsByKey[oldBookingKey] || getAnyBookingForSlot(slotKey);
     const updated = {
       ...(existing || {}),
       slotKey,
@@ -17090,11 +17149,10 @@ app.post('/api/team/bookings/update', requireLogin, requireTeamMember, async (re
       tobtTimeUtc: dbBooking.tobtTimeUtc
     };
     if (oldCid !== newCid) {
-      delete tobtBookingsByKey[oldBookingKey];
+      deleteBookingByBookingKey(oldBookingKey);
       if (tobtBookingsByCid[oldCid]) tobtBookingsByCid[oldCid].delete(oldBookingKey);
     }
-    tobtBookingsByKey[newBookingKey] = updated;
-    tobtBookingsByKey[slotKey] = updated;
+    setBooking(updated);
     if (!tobtBookingsByCid[newCid]) tobtBookingsByCid[newCid] = new Set();
     tobtBookingsByCid[newCid].add(newBookingKey);
 
@@ -18579,8 +18637,7 @@ app.post('/api/affiliates/hq/solo-toggle', requireLogin, requireAffiliate, async
     for (const b of bookings) {
       await prisma.tobtBooking.delete({ where: { id: b.id } }).catch(() => null);
       const oldKey = `${Number(b.cid)}:${b.slotKey}`;
-      delete tobtBookingsByKey[oldKey];
-      delete tobtBookingsByKey[b.slotKey];
+      deleteBookingByBookingKey(oldKey);
       if (tobtBookingsByCid[Number(b.cid)]) tobtBookingsByCid[Number(b.cid)].delete(oldKey);
       try { io.emit('bookingCancelled', { slotKey: b.slotKey }); } catch {}
     }
@@ -24806,7 +24863,7 @@ app.post('/admin/api/wf-events/:id/activate', requireAdmin, async (req, res) => 
   await prisma.tobtBooking.deleteMany({});
 
   // 3. Clear all in-memory state
-  Object.keys(tobtBookingsByKey).forEach(k => delete tobtBookingsByKey[k]);
+  clearAllBookings();
   Object.keys(tobtBookingsByCid).forEach(k => delete tobtBookingsByCid[k]);
   Object.keys(sharedToggles).forEach(k => delete sharedToggles[k]);
   Object.keys(sharedTSAT).forEach(k => delete sharedTSAT[k]);
@@ -25676,7 +25733,7 @@ app.post('/api/admin/page-visibility', requireAdmin, async (req, res) => {
     for (const bk of Object.keys(tobtBookingsByKey)) {
       if (tobtBookingsByKey[bk]._fake) {
         const cid = tobtBookingsByKey[bk].cid;
-        delete tobtBookingsByKey[bk];
+        deleteBookingByBookingKey(bk);
         if (tobtBookingsByCid[cid]) delete tobtBookingsByCid[cid];
       }
     }
@@ -25780,7 +25837,7 @@ app.post('/admin/api/test-pilots/toggle', requireAdmin, express.json(), async (r
     for (const bk of Object.keys(tobtBookingsByKey)) {
       if (tobtBookingsByKey[bk]._fake) {
         const cid = tobtBookingsByKey[bk].cid;
-        delete tobtBookingsByKey[bk];
+        deleteBookingByBookingKey(bk);
         if (tobtBookingsByCid[cid]) delete tobtBookingsByCid[cid];
       }
     }
@@ -28108,12 +28165,13 @@ app.post('/api/tobt/clear-manual', requireLogin, async (req, res) => {
   }
 
   // Identify matching manual bookings — match by CID (most reliable) or callsign
-  const matchingSlotKeys = Object.keys(tobtBookingsByKey).filter(k => {
-    const b = tobtBookingsByKey[k];
+  const matchingBookingKeys = Object.keys(tobtBookingsByKey).filter(bk => {
+    const b = tobtBookingsByKey[bk];
     if (!b || b.from !== from || !b.manual) return false;
     if (targetCid && b.cid === targetCid) return true;
     return b.callsign === cs || String(b.cid) === cs;
   });
+  const matchingSlotKeys = matchingBookingKeys.map(bk => tobtBookingsByKey[bk]?.slotKey).filter(Boolean);
 
   // Delete from DB
   if (targetCid) {
@@ -28123,9 +28181,10 @@ app.post('/api/tobt/clear-manual', requireLogin, async (req, res) => {
   }
 
   // 3) Remove from in-memory cache so the UI updates
-  for (const slotKey of matchingSlotKeys) {
-    delete tobtBookingsByKey[slotKey];
-    vatcanPushForSlotKey(slotKey);
+  for (const bk of matchingBookingKeys) {
+    const sk = tobtBookingsByKey[bk]?.slotKey;
+    deleteBookingByBookingKey(bk);
+    if (sk) vatcanPushForSlotKey(sk);
   }
 
   // 4) Clear TSAT using normalized callsign
@@ -28178,7 +28237,11 @@ app.post('/api/tobt/remove', async (req, res) => {
     where: { slotKey }
   });
 
-  delete tobtBookingsByKey[slotKey];
+  // ATC-assigned TOBTs (cid=null) may not be in the in-memory cache, but
+  // anything that IS in the cache for this slot should be removed.
+  for (const b of getBookingsForSlot(slotKey)) {
+    deleteBookingByBookingKey(`${b.cid}:${b.slotKey}`);
+  }
   vatcanPushForSlotKey(slotKey);
 
   emitToIcao(booking.from, 'departures:update');
