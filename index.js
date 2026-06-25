@@ -6213,6 +6213,11 @@ async function loadScheduleFromDb(eventId) {
   eventSheetCaches[eventId] = rows;
   if (eventId === activeEventId) {
     adminSheetCache = rows;
+    // The schedule cache (routes, dep/block times) just changed, so the FIR
+    // staffing-window analysis derived from it is stale — invalidate it so the
+    // next buildFirAnalysis() recomputes. Covers sheet syncs and schedule edits
+    // (finalise/reset/propose already clear it explicitly).
+    clearFirAnalysisCache();
   }
   return rows;
 }
@@ -32676,6 +32681,8 @@ app.get('/airspace/by-sector', requirePageEnabled('airspace'), async (req, res) 
         box-shadow: 0 2px 8px rgba(0,0,0,0.4);
       }
       .leaflet-tooltip.fir-tooltip::before { display: none; }
+      .leaflet-tooltip.wpt-label { background: rgba(15,23,42,0.82); border: none; color: #cbd5e1; font-weight: 600; font-size: 9px; letter-spacing: 0.03em; padding: 0 4px; border-radius: 3px; box-shadow: none; }
+      .leaflet-tooltip.wpt-label::before { display: none; }
 
       #firDetailTable { border-collapse: collapse; width: max-content; min-width: 100%; }
       #firDetailTable th, #firDetailTable td { padding: 6px 10px; text-align: left; border-top: 1px solid var(--border); white-space: nowrap; }
@@ -32931,7 +32938,7 @@ app.get('/airspace/by-sector', requirePageEnabled('airspace'), async (req, res) 
                   return;
                 }
                 var pts = routeData.points.map(function(p) {
-                  return { lat: p.lat, lon: p.lon, inDiv: pointInTransitedFirs(p.lat, p.lon) };
+                  return { name: p.name, lat: p.lat, lon: p.lon, inDiv: pointInTransitedFirs(p.lat, p.lon) };
                 });
 
                 var allCoords = pts.map(function(p) { return [p.lat, p.lon]; });
@@ -32969,6 +32976,16 @@ app.get('/airspace/by-sector', requirePageEnabled('airspace'), async (req, res) 
                     L.polyline(seg, { color: ROUTE_LINE, weight: 3, opacity: 1, dashArray: ROUTE_DASH }).addTo(routeMapInstance);
                   }
                 }
+
+                // Waypoint dots + name labels (skip dep/arr endpoints and
+                // DCT / speed-level tokens).
+                pts.forEach(function(p, i) {
+                  if (!p.name || i === 0 || i === pts.length - 1) return;
+                  if (/^(DCT|N\d)/.test(p.name)) return;
+                  L.circleMarker([p.lat, p.lon], { radius: 3, color: ROUTE_LINE, fillColor: ROUTE_LINE, fillOpacity: 0.9, weight: 1 })
+                    .bindTooltip(p.name, { permanent: true, direction: 'top', className: 'wpt-label', offset: [0, -4] })
+                    .addTo(routeMapInstance);
+                });
 
                 // Fit to whole route (so users see Dep, transit, and Arr)
                 routeMapInstance.fitBounds(allCoords, { padding: [30, 30], maxZoom: 6 });
@@ -33195,6 +33212,8 @@ app.get('/airspace/by-area', requirePageEnabled('airspace'), async (req, res) =>
 
   const content = `
   <style>
+    .leaflet-tooltip.wpt-label { background: rgba(15,23,42,0.82); border: none; color: #cbd5e1; font-weight: 600; font-size: 9px; letter-spacing: 0.03em; padding: 0 4px; border-radius: 3px; box-shadow: none; }
+    .leaflet-tooltip.wpt-label::before { display: none; }
     .airspace-page { }
     .airspace-search-row { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; }
     .airspace-search-row input, .airspace-search-row select {
@@ -35141,7 +35160,7 @@ app.get('/airspace/by-area', requirePageEnabled('airspace'), async (req, res) =>
                 if (!routeData.points || routeData.points.length < 2) { checkDone(); return; }
 
                 var pts = routeData.points.map(function(p) {
-                  return { lat: p.lat, lon: p.lon, inDiv: pointInDivision(p.lat, p.lon) };
+                  return { name: p.name, lat: p.lat, lon: p.lon, inDiv: pointInDivision(p.lat, p.lon) };
                 });
 
                 var popupContent = buildRoutePopup(leg, color);
@@ -35156,6 +35175,17 @@ app.get('/airspace/by-area', requirePageEnabled('airspace'), async (req, res) =>
                 // Dep/Arr markers
                 L.circleMarker(allCoords[0], { radius: 4, color: color, fillColor: color, fillOpacity: 0.9, weight: 1 }).addTo(divisionMap);
                 L.circleMarker(allCoords[allCoords.length - 1], { radius: 4, color: color, fillColor: color, fillOpacity: 0.9, weight: 1 }).addTo(divisionMap);
+
+                // Waypoint dots; waypoints inside this area/FIR get a permanent
+                // name label, the rest show their name on hover (keeps multi-route
+                // maps readable). Skip dep/arr endpoints and DCT / speed tokens.
+                pts.forEach(function(p, i) {
+                  if (!p.name || i === 0 || i === pts.length - 1) return;
+                  if (/^(DCT|N\d)/.test(p.name)) return;
+                  L.circleMarker([p.lat, p.lon], { radius: 2.5, color: color, fillColor: color, fillOpacity: 0.9, weight: 1 })
+                    .bindTooltip(p.name, { permanent: !!p.inDiv, direction: 'top', className: 'wpt-label', offset: [0, -4] })
+                    .addTo(divisionMap);
+                });
 
                 // Invisible wide hit target for hover
                 L.polyline(allCoords, { color: color, weight: 16, opacity: 0 }).addTo(divisionMap)
