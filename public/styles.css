@@ -1094,11 +1094,10 @@ select{ cursor:pointer; }
   overflow-wrap:anywhere;
   line-height:1.65;
   font-size:12px;
-  padding-right:36px;
 }
 
 .departures-table thead th.col-route{
-  font-size:15px;
+  font-size:13px;
   color:#fff;
 }
 
@@ -5907,12 +5906,10 @@ html[data-map-theme="light"] .ac-label {
   background: rgba(255,255,255,0.98);
   border-color: rgba(15,23,42,0.12);
 }
-.schedule-page .col-date      { width: 10%; }
-.schedule-page .col-window    { width: 10%; }
-.schedule-page .col-flight    { width: 8%; text-align: center; }
-.schedule-page .col-block     { width: 6%; text-align: center; }
-/* Show-Route button column — narrow, no longer carries inline route text */
-.schedule-page .col-route     { width: 10%; min-width: 0; padding-right: 8px; text-align: center; }
+.schedule-page .col-date      { width: 12%; }
+.schedule-page .col-window    { width: 11%; }
+.schedule-page .col-flight    { width: 10%; text-align: center; white-space: nowrap; }
+.schedule-page .col-block     { width: 10%; text-align: center; white-space: nowrap; overflow: visible; }
 .schedule-page .col-book      { width: 14%; text-align: center; overflow: visible; }
 .schedule-page .col-details   { width: 13%; text-align: center; }
 .sector-details-btn {
@@ -6323,17 +6320,15 @@ html[data-map-theme="light"] .ac-label {
 }
 .sector-wpt-label::before { display: none !important; }
 
-/* ATC Route: gets all remaining space */
+/* ATC Route column — fixed width, normal font (route text is in the modal) */
 .schedule-page .col-route {
-  width: auto !important;
+  width: 11% !important;
   min-width: 0 !important;
   padding-right: 8px !important;
-  white-space: normal;
-  overflow-wrap: anywhere;
-  word-break: break-word;
-  line-height: 1.5;
+  text-align: center;
+  font-family: inherit;
   font-size: 12px;
-  font-family: monospace;
+  white-space: nowrap;
 }
 .schedule-page .route-text {
   max-width: none !important;

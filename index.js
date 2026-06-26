@@ -2776,8 +2776,16 @@ await (async () => {
   // affiliates fill remaining slots. Both are idempotent — safe to re-run.
   autoAssignTeamThenAffiliate({ reason: 'startup' }).catch(() => {});
 
-  // Pre-warm FIR analysis cache in background
-  buildFirAnalysis().then(() => console.log('[AIRSPACE] FIR analysis cache warmed')).catch(() => {});
+  // Fetch winds aloft then pre-warm FIR analysis cache (wind data baked in)
+  refreshWindAdjustments()
+    .then(() => buildFirAnalysis())
+    .then(() => console.log('[AIRSPACE] FIR analysis cache warmed (wind-adjusted)'))
+    .catch(() => buildFirAnalysis().catch(() => {})); // fallback: warm without wind
+
+  // Refresh wind data every 3 hours and rebuild FIR cache
+  setInterval(() => {
+    refreshWindAdjustments().catch(() => {});
+  }, 3 * 60 * 60 * 1000);
 
   setInterval(refreshPilots, 60000);
 
@@ -24211,6 +24219,173 @@ app.get('/api/resolve-route', async (req, res) => {
 
 // ===== AIRSPACE MANAGEMENT API =====
 // Cache FIR analysis per event to avoid recomputing on every page load
+// ── Wind-adjusted block times ────────────────────────────────────────────────
+// Map of wfNumber -> { adjustedBlockMins, deltaMin, headwindKt, speedKt, dirDeg, routeBearing }
+// Populated by refreshWindAdjustments() on startup and every 3 hours.
+let windAdjustedBlocks = {}; // wf -> adjustment data
+let windAdjustedAt = null;   // Date of last refresh
+
+async function refreshWindAdjustments() {
+  const legs = (adminSheetCache || []).filter(r => r?.from && r?.to && (r?.staffing_route || r?.atc_route_raw) && r?.block_time && r?.dep_time_utc);
+  if (!legs.length) { console.log('[WIND] No routed sectors found — skipping wind adjustment'); return; }
+
+  console.log(`[WIND] Refreshing wind-adjusted block times for ${legs.length} sectors...`);
+  const toRad = Math.PI / 180;
+
+  function hvNm(lat1, lon1, lat2, lon2) {
+    const dLat = (lat2 - lat1) * toRad, dLon = (lon2 - lon1) * toRad;
+    const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * toRad) * Math.cos(lat2 * toRad) * Math.sin(dLon / 2) ** 2;
+    return 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)) * 3440.065;
+  }
+
+  function routeBearing(lat1, lon1, lat2, lon2) {
+    const dLon = (lon2 - lon1) * toRad;
+    const y = Math.sin(dLon) * Math.cos(lat2 * toRad);
+    const x = Math.cos(lat1 * toRad) * Math.sin(lat2 * toRad) - Math.sin(lat1 * toRad) * Math.cos(lat2 * toRad) * Math.cos(dLon);
+    return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+  }
+
+  // Build airport lookup (may already exist as airportLookup but we need it here)
+  const allIcaos = new Set();
+  for (const leg of legs) { allIcaos.add(leg.from); allIcaos.add(leg.to); }
+  let apLookup = {};
+  try {
+    const aps = await prisma.airport.findMany({ where: { icao: { in: [...allIcaos] } }, select: { icao: true, lat: true, lon: true } });
+    for (const ap of aps) apLookup[ap.icao] = ap;
+  } catch {}
+
+  const newMap = {};
+
+  // Process legs in batches to avoid hammering Open-Meteo
+  for (const leg of legs) {
+    try {
+      const route = leg.staffing_route || leg.atc_route_raw || '';
+      const blockParts = leg.block_time.split(':');
+      const depParts = leg.dep_time_utc.split(':');
+      const blockMins = blockParts.length >= 2 ? Number(blockParts[0]) * 60 + Number(blockParts[1]) : 0;
+      const depMins  = depParts.length >= 2  ? Number(depParts[0])  * 60 + Number(depParts[1])  : 0;
+      if (blockMins <= 0) continue;
+
+      // Resolve route waypoints
+      const points = [];
+      const depAp = apLookup[leg.from] || airportLookup?.[leg.from];
+      if (depAp) points.push({ lat: depAp.lat, lon: depAp.lon });
+
+      for (const tok of route.split(/\s+/).filter(Boolean)) {
+        const lastPt = points.length > 0 ? points[points.length - 1] : { lat: 0, lon: 0 };
+        const llFix = parseNavLatLon(tok);
+        if (llFix) { points.push({ lat: llFix.lat, lon: llFix.lon }); continue; }
+        const upper = tok.toUpperCase();
+        if (upper === 'DCT') continue;
+        if (/^[A-Z]{1,2}\d/.test(upper) && upper.length <= 6) continue;
+        const fix = closestFix(upper, lastPt.lat, lastPt.lon);
+        if (fix) { points.push({ lat: fix.lat, lon: fix.lon }); continue; }
+        if (/^[A-Z]{4}$/.test(upper)) {
+          const ap = apLookup[upper] || airportLookup?.[upper];
+          if (ap) { points.push({ lat: ap.lat, lon: ap.lon }); continue; }
+        }
+      }
+
+      const arrAp = apLookup[leg.to] || airportLookup?.[leg.to];
+      if (arrAp) points.push({ lat: arrAp.lat, lon: arrAp.lon });
+      if (points.length < 2) continue;
+
+      // Fix antimeridian crossings
+      for (let k = 1; k < points.length; k++) {
+        const diff = points[k].lon - points[k - 1].lon;
+        if (diff > 180) points[k].lon -= 360;
+        else if (diff < -180) points[k].lon += 360;
+      }
+
+      // Cumulative distances
+      let totalDist = 0;
+      const cumDist = [0];
+      for (let i = 1; i < points.length; i++) {
+        totalDist += hvNm(points[i-1].lat, points[i-1].lon, points[i].lat, points[i].lon);
+        cumDist.push(totalDist);
+      }
+
+      function interp(frac) {
+        const target = frac * totalDist;
+        let si = 0;
+        for (let i = 1; i < cumDist.length; i++) {
+          if (cumDist[i] >= target) { si = i - 1; break; }
+          if (i === cumDist.length - 1) si = i - 1;
+        }
+        const sl = cumDist[si + 1] - cumDist[si];
+        const sf = sl > 0 ? (target - cumDist[si]) / sl : 0;
+        return { lat: points[si].lat + (points[si+1].lat - points[si].lat) * sf,
+                 lon: points[si].lon + (points[si+1].lon - points[si].lon) * sf };
+      }
+
+      const samplePts = [0.25, 0.5, 0.75].map(f => interp(f));
+      const bearing = routeBearing(points[0].lat, points[0].lon, points[points.length-1].lat, points[points.length-1].lon);
+      const midMins = depMins + blockMins / 2;
+      const midHour = Math.floor(((midMins % 1440) + 1440) % 1440 / 60);
+      const dateUtc = leg.date_utc || '';
+
+      // Fetch winds at each sample point
+      const windSamples = [];
+      for (const pt of samplePts) {
+        try {
+          const url = `https://api.open-meteo.com/v1/forecast?latitude=${pt.lat.toFixed(3)}&longitude=${pt.lon.toFixed(3)}&hourly=wind_speed_250hPa,wind_direction_250hPa&forecast_days=1&timezone=UTC&wind_speed_unit=kn`;
+          const resp = await fetch(url, { signal: AbortSignal.timeout(10000) });
+          if (!resp.ok) continue;
+          const json = await resp.json();
+          const times = json.hourly?.time || [];
+          const speeds = json.hourly?.wind_speed_250hPa || [];
+          const dirs = json.hourly?.wind_direction_250hPa || [];
+          // Use today's date — Open-Meteo only forecasts 16 days ahead, so
+          // sector dates months away always miss. Live winds at the same UTC
+          // hour give a directionally-correct headwind/tailwind estimate.
+          const todayUtc = new Date().toISOString().slice(0, 10);
+          const targetStr = `${todayUtc}T${String(midHour).padStart(2, '0')}:00`;
+          let idx = times.findIndex(t => t === targetStr);
+          if (idx < 0) idx = 0;
+          windSamples.push({ speed: speeds[idx] || 0, dir: dirs[idx] || 0 });
+        } catch {}
+      }
+
+      if (!windSamples.length) continue;
+
+      // Vector-average wind
+      let sumU = 0, sumV = 0;
+      for (const w of windSamples) {
+        sumU += w.speed * Math.sin(w.dir * toRad);
+        sumV += w.speed * Math.cos(w.dir * toRad);
+      }
+      const avgSpeed = Math.sqrt(sumU ** 2 + sumV ** 2) / windSamples.length;
+      const avgDir = (Math.atan2(sumU / windSamples.length, sumV / windSamples.length) * 180 / Math.PI + 360) % 360;
+      const angleDiff = ((avgDir - bearing + 180 + 360) % 360) - 180;
+      const headwindKt = avgSpeed * Math.cos(angleDiff * toRad);
+
+      // Typical WF TAS ~450 kt at FL340 (Mach 0.78)
+      const TAS_KT = 450;
+      const gs = Math.max(TAS_KT - headwindKt, 100);
+      const adjustedBlockMins = Math.round(blockMins * (TAS_KT / gs));
+      const deltaMin = adjustedBlockMins - blockMins;
+
+      newMap[leg.number] = {
+        adjustedBlockMins,
+        deltaMin,
+        headwindKt: Math.round(headwindKt),
+        speedKt: Math.round(avgSpeed),
+        dirDeg: Math.round(avgDir),
+        routeBearing: Math.round(bearing)
+      };
+    } catch (e) {
+      // Non-fatal — sector keeps filed block time
+      console.warn(`[WIND] Failed for ${leg.number}: ${e.message}`);
+    }
+  }
+
+  windAdjustedBlocks = newMap;
+  windAdjustedAt = new Date();
+  const count = Object.keys(newMap).length;
+  console.log(`[WIND] Adjusted block times for ${count}/${legs.length} sectors. Invalidating FIR cache.`);
+  clearFirAnalysisCache();
+}
+
 let firAnalysisCache = { eventId: null, data: null, building: null };
 
 async function buildFirAnalysis() {
@@ -24341,11 +24516,14 @@ async function _buildFirAnalysisInner() {
       }
     }
 
-    // Parse dep/block times
+    // Parse dep/block times — use wind-adjusted block if available
     const depParts = (leg.dep_time_utc || '').split(':');
     const blockParts = (leg.block_time || '').split(':');
     const depMins = depParts.length >= 2 ? Number(depParts[0]) * 60 + Number(depParts[1]) : null;
-    const blockMins = blockParts.length >= 2 ? Number(blockParts[0]) * 60 + Number(blockParts[1]) : null;
+    const filedBlockMins = blockParts.length >= 2 ? Number(blockParts[0]) * 60 + Number(blockParts[1]) : null;
+    const windAdj = windAdjustedBlocks[leg.number];
+    const blockMins = (windAdj && filedBlockMins) ? windAdj.adjustedBlockMins : filedBlockMins;
+    const legWindAdjusted = !!(windAdj && filedBlockMins);
 
     const sectorKey = `${leg.from}-${leg.to}`;
 
@@ -24387,7 +24565,9 @@ async function _buildFirAnalysisInner() {
         entryFrac: seg.entryFrac,
         exitFrac: seg.exitFrac,
         depFlow: sharedDepFlows[sectorKey] || 0,
-        flowType: sharedFlowTypes[sectorKey] || 'NONE'
+        flowType: sharedFlowTypes[sectorKey] || 'NONE',
+        windAdjusted: legWindAdjusted,
+        windDeltaMin: windAdj ? windAdj.deltaMin : 0
       };
 
       if (depMins !== null && blockMins !== null && blockMins > 0) {
@@ -29744,7 +29924,9 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
           staffStartLocal: leg.staffStartLocal, staffEndLocal: leg.staffEndLocal,
           staffMins: leg.staffMins,
           flowType: leg.flowType, depFlow: leg.depFlow,
-          combinedWith: leg.combinedWith || []
+          combinedWith: leg.combinedWith || [],
+          windAdjusted: leg.windAdjusted || false,
+          windDeltaMin: leg.windDeltaMin || 0
         });
       }
     }
@@ -30133,7 +30315,7 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
       .sp-fir-row + .sp-fir-row { margin-top: 4px; }
       .sp-fir-row .name { font-weight: 700; font-size: 12px; color: var(--text); }
       .sp-fir-row .div  { font-size: 9px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); padding: 1px 5px; background: rgba(255,255,255,0.04); border-radius: 3px; }
-      .sp-fir-row .win  { grid-column: 1 / -1; display: flex; gap: 8px; font-family: monospace; font-size: 11px; color: var(--muted); }
+      .sp-fir-row .win  { grid-column: 1 / -1; display: flex; gap: 8px; font-family: monospace; font-size: 11px; color: var(--muted); flex-wrap: wrap; align-items: center; }
       .sp-fir-row .win .utc { color: #38bdf8; }
       .sp-fir-row .win .lcl { color: var(--muted); }
       .sp-fir-empty { font-size: 11px; color: var(--muted); text-align: center; padding: 12px 4px; }
@@ -30379,6 +30561,21 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
           <h3>Enroute FIRs</h3>
           <a href="/airspace/by-sector?wf=${encodeURIComponent(wf)}" target="_blank" rel="noopener" class="sp-firs-overview-btn" title="Open the full Staffing Overview view for this sector">↗ Staffing Overview</a>
         </div>
+        ${(() => {
+          const wa = windAdjustedBlocks[wf];
+          if (!wa) return '';
+          const isHead = wa.deltaMin > 0;
+          const col = isHead ? '#fb923c' : '#4ade80';
+          const bg = isHead ? 'rgba(251,146,60,0.08)' : 'rgba(74,222,128,0.08)';
+          const bc = isHead ? 'rgba(251,146,60,0.3)' : 'rgba(74,222,128,0.3)';
+          const label = isHead
+            ? 'Staff windows adjusted for live winds aloft (FL340) \u2014 <strong style="font-size:13px;">+' + wa.deltaMin + ' min headwind</strong> on this sector'
+            : 'Staff windows adjusted for live winds aloft (FL340) \u2014 <strong style="font-size:13px;">' + wa.deltaMin + ' min tailwind</strong> on this sector';
+          return `<div style="display:flex;align-items:center;gap:8px;font-size:11px;font-weight:600;padding:6px 12px;border-radius:6px;border:1px solid ${bc};background:${bg};color:${col};margin-bottom:8px;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="${col}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M17.7 7.7a2.5 2.5 0 1 1 1.8 4.3H2"/><path d="M9.6 4.6A2 2 0 1 1 11 8H2"/><path d="M12.6 19.4A2 2 0 1 0 14 16H2"/></svg>
+            <span>${label}</span>
+          </div>`;
+        })()}
         ${sectorFirLegs.length ? `
           <div>
             ${sectorFirLegs.map(fl => {
@@ -32061,6 +32258,7 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
       if (typeof L !== 'undefined') spInitMap();
       else if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', spInitMap);
       else window.addEventListener('load', spInitMap);
+
     </script>
   `;
 
@@ -32474,6 +32672,197 @@ app.post('/api/sector-plan/:wf/arr-flow-reason', requireLogin, async (req, res) 
   }
 });
 
+// ── Wind-adjusted staffing windows ──────────────────────────────────────────
+// Fetches winds aloft (Open-Meteo, 250hPa ≈ FL340) at 3 sample points along
+// the sector route, computes avg headwind/tailwind vs route bearing, adjusts
+// blockTime, and returns recalculated staffing windows per FIR with delta.
+app.get('/api/sector-plan/:wf/wind-adjustment', requireLogin, async (req, res) => {
+  try {
+    const wf = String(req.params.wf || '').toUpperCase();
+    const sched = (adminSheetCache || []).find(r => r?.number === wf);
+    if (!sched) return res.status(404).json({ error: 'Sector not found' });
+
+    const route = sched.atc_route_raw || sched.atcRoute || '';
+    const blockTime = sched.blockTime || sched.block_time || '';
+    const depTime = sched.dep_time_utc || '';
+    const fromIcao = sched.from;
+    const toIcao = sched.to;
+    const dateUtc = sched.date_utc || '';
+
+    if (!route || !blockTime || !depTime) {
+      return res.status(400).json({ error: 'Sector is missing route, block time or dep time' });
+    }
+
+    // Resolve route waypoints to lat/lon (reuse same logic as buildFirAnalysis)
+    const points = [];
+    const depAp = airportLookup[fromIcao];
+    if (depAp) points.push({ name: fromIcao, lat: depAp.lat, lon: depAp.lon });
+
+    const tokens = route.split(/\s+/).filter(Boolean);
+    for (const tok of tokens) {
+      const lastPt = points.length > 0 ? points[points.length - 1] : { lat: 0, lon: 0 };
+      const llFix = parseNavLatLon(tok);
+      if (llFix) { points.push({ name: tok, lat: llFix.lat, lon: llFix.lon }); continue; }
+      const upper = tok.toUpperCase();
+      if (upper === 'DCT') continue;
+      if (/^[A-Z]{1,2}\d/.test(upper) && upper.length <= 6) continue; // airway
+      const fix = closestFix(upper, lastPt.lat, lastPt.lon);
+      if (fix) { points.push({ name: upper, lat: fix.lat, lon: fix.lon }); continue; }
+      if (/^[A-Z]{4}$/.test(upper)) {
+        const ap = airportLookup[upper];
+        if (ap) { points.push({ name: upper, lat: ap.lat, lon: ap.lon }); continue; }
+      }
+    }
+    const arrAp = airportLookup[toIcao];
+    if (arrAp) points.push({ name: toIcao, lat: arrAp.lat, lon: arrAp.lon });
+
+    if (points.length < 2) return res.status(400).json({ error: 'Could not resolve route waypoints' });
+
+    // Fix antimeridian crossings
+    for (let k = 1; k < points.length; k++) {
+      const diff = points[k].lon - points[k - 1].lon;
+      if (diff > 180) points[k].lon -= 360;
+      else if (diff < -180) points[k].lon += 360;
+    }
+
+    // Cumulative distances
+    const toRad = Math.PI / 180;
+    function hvNm(lat1, lon1, lat2, lon2) {
+      const dLat = (lat2 - lat1) * toRad, dLon = (lon2 - lon1) * toRad;
+      const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * toRad) * Math.cos(lat2 * toRad) * Math.sin(dLon / 2) ** 2;
+      return 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)) * 3440.065;
+    }
+    let totalDist = 0;
+    const cumDist = [0];
+    for (let i = 1; i < points.length; i++) {
+      totalDist += hvNm(points[i - 1].lat, points[i - 1].lon, points[i].lat, points[i].lon);
+      cumDist.push(totalDist);
+    }
+
+    // Interpolate lat/lon at a fractional distance along the route
+    function interpPoint(frac) {
+      const target = frac * totalDist;
+      let segIdx = 0;
+      for (let i = 1; i < cumDist.length; i++) {
+        if (cumDist[i] >= target) { segIdx = i - 1; break; }
+        if (i === cumDist.length - 1) segIdx = i - 1;
+      }
+      const segLen = cumDist[segIdx + 1] - cumDist[segIdx];
+      const sf = segLen > 0 ? (target - cumDist[segIdx]) / segLen : 0;
+      return {
+        lat: points[segIdx].lat + (points[segIdx + 1].lat - points[segIdx].lat) * sf,
+        lon: points[segIdx].lon + (points[segIdx + 1].lon - points[segIdx].lon) * sf
+      };
+    }
+
+    // Sample at 25%, 50%, 75% along the route
+    const sampleFracs = [0.25, 0.5, 0.75];
+    const samplePts = sampleFracs.map(f => interpPoint(f));
+
+    // Overall route bearing (dep → arr, great circle initial bearing)
+    function bearing(lat1, lon1, lat2, lon2) {
+      const dLon = (lon2 - lon1) * toRad;
+      const y = Math.sin(dLon) * Math.cos(lat2 * toRad);
+      const x = Math.cos(lat1 * toRad) * Math.sin(lat2 * toRad) - Math.sin(lat1 * toRad) * Math.cos(lat2 * toRad) * Math.cos(dLon);
+      return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+    }
+    const routeBearing = bearing(points[0].lat, points[0].lon, points[points.length - 1].lat, points[points.length - 1].lon);
+
+    // Build dep date/time for the Open-Meteo hourly time lookup
+    const blockParts = blockTime.split(':');
+    const depParts = depTime.split(':');
+    const blockMins = blockParts.length >= 2 ? Number(blockParts[0]) * 60 + Number(blockParts[1]) : 0;
+    const depMins = depParts.length >= 2 ? Number(depParts[0]) * 60 + Number(depParts[1]) : 0;
+    // Cruise is roughly mid-flight, expressed as UTC hours
+    const midMins = depMins + blockMins / 2;
+    const midHour = Math.floor(((midMins % 1440) + 1440) % 1440 / 60);
+
+    // Fetch winds from Open-Meteo for each sample point
+    // 250hPa ≈ FL340 — closest freely available level to typical WF cruise
+    async function fetchWind(lat, lon) {
+      const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat.toFixed(3)}&longitude=${lon.toFixed(3)}&hourly=wind_speed_250hPa,wind_direction_250hPa&forecast_days=7&timezone=UTC&wind_speed_unit=kn`;
+      const resp = await fetch(url, { signal: AbortSignal.timeout(8000) });
+      if (!resp.ok) throw new Error(`Open-Meteo HTTP ${resp.status}`);
+      const json = await resp.json();
+      // Find the time slot closest to midHour on the flight's date
+      const times = json.hourly?.time || [];
+      const speeds = json.hourly?.wind_speed_250hPa || [];
+      const dirs = json.hourly?.wind_direction_250hPa || [];
+      // Match date + hour
+      const todayUtc = new Date().toISOString().slice(0, 10);
+      const targetStr = `${todayUtc}T${String(midHour).padStart(2, '0')}:00`;
+      let idx = times.findIndex(t => t === targetStr);
+      if (idx < 0) idx = 0;
+      return { speed: speeds[idx] || 0, dir: dirs[idx] || 0 };
+    }
+
+    const windSamples = await Promise.all(samplePts.map(p => fetchWind(p.lat, p.lon)));
+
+    // Average wind speed and direction (vector mean)
+    let sumU = 0, sumV = 0;
+    for (const w of windSamples) {
+      const rad = w.dir * toRad;
+      sumU += w.speed * Math.sin(rad);
+      sumV += w.speed * Math.cos(rad);
+    }
+    const avgSpeed = Math.sqrt(sumU ** 2 + sumV ** 2) / windSamples.length;
+    const avgDir = (Math.atan2(sumU / windSamples.length, sumV / windSamples.length) * 180 / Math.PI + 360) % 360;
+
+    // Headwind component: positive = headwind (slows), negative = tailwind (speeds up)
+    const angleDiff = ((avgDir - routeBearing + 180 + 360) % 360) - 180;
+    const headwindKt = avgSpeed * Math.cos(angleDiff * toRad);
+
+    // Typical WorldFlight cruise TAS ~ Mach 0.78 at FL340 ≈ 450 kt TAS
+    const TAS_KT = 450;
+    const groundspeed = Math.max(TAS_KT - headwindKt, 100); // floor at 100kt
+    const windFactor = TAS_KT / groundspeed; // >1 = headwind, <1 = tailwind
+    const adjustedBlockMins = Math.round(blockMins * windFactor);
+    const deltaMin = adjustedBlockMins - blockMins;
+
+    // Recompute staffing windows per FIR using adjusted block time
+    const allFirs = await buildFirAnalysis().catch(() => []);
+    const adjustedFirLegs = [];
+    for (const fir of allFirs) {
+      for (const leg of (fir.legs || [])) {
+        if (leg.wf !== wf) continue;
+        if (!leg.entryFrac || leg.staffStart == null) continue;
+        const entryMins = depMins + leg.entryFrac * adjustedBlockMins;
+        const exitMins = depMins + leg.exitFrac * adjustedBlockMins;
+        const staffStart = Math.floor((entryMins - 60) / 5) * 5;
+        const staffEnd = Math.ceil((exitMins + 60) / 5) * 5;
+        const fmt = m => String(Math.floor(((m % 1440) + 1440) % 1440 / 60)).padStart(2, '0') + ':' + String(Math.floor(((m % 1440) + 1440) % 1440 % 60)).padStart(2, '0');
+        const origStart = leg.staffStart;
+        const origEnd = leg.staffEnd;
+        adjustedFirLegs.push({
+          fir: fir.fir,
+          origStart, origEnd,
+          adjStart: fmt(staffStart),
+          adjEnd: fmt(staffEnd),
+          adjMins: Math.round(staffEnd - staffStart)
+        });
+      }
+    }
+
+    res.json({
+      ok: true,
+      wind: {
+        speedKt: Math.round(avgSpeed),
+        dirDeg: Math.round(avgDir),
+        headwindKt: Math.round(headwindKt),
+        routeBearing: Math.round(routeBearing)
+      },
+      blockMins,
+      adjustedBlockMins,
+      deltaMin,
+      samplePoints: samplePts.map((p, i) => ({ lat: p.lat.toFixed(3), lon: p.lon.toFixed(3), ...windSamples[i] })),
+      firLegs: adjustedFirLegs
+    });
+  } catch (e) {
+    console.error('[wind-adjustment]', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.get('/airspace', requirePageEnabled('airspace'), async (req, res) => {
   const user = req.session?.user?.data || null;
   const cid = Number(user?.cid) || null;
@@ -32771,6 +33160,7 @@ app.get('/airspace/by-sector', requirePageEnabled('airspace'), async (req, res) 
         <div id="sectorRouteFirChips" style="margin-top:10px;display:flex;flex-wrap:wrap;gap:6px;font-size:11px;"></div>
       </div>
 
+      <div id="windInfoBanner" style="display:none;align-items:center;gap:8px;font-size:11px;font-weight:600;padding:6px 12px;border-radius:6px;border:1px solid transparent;margin-bottom:10px;"></div>
       <div style="overflow-x:auto;">
         <table id="firDetailTable">
           <thead id="firDetailHead"></thead>
@@ -33057,6 +33447,29 @@ app.get('/airspace/by-sector', requirePageEnabled('airspace'), async (req, res) 
           return { fir: l._fir, staffStart: l.staffStart, staffEnd: l.staffEnd, staffMins: l.staffMins, flowType: l.flowType };
         });
         renderSectorRouteMap(first, firLegsForMap, ROUTE_COLORS[0], colorByFir);
+
+        // Wind adjustment info banner (if wind data is available for this sector)
+        var windInfoEl = document.getElementById('windInfoBanner');
+        if (windInfoEl) {
+          var windLeg = legs.find(function(l) { return l.windAdjusted && l.windDeltaMin; });
+          if (windLeg) {
+            var isHeadwind = windLeg.windDeltaMin > 0;
+            var label = isHeadwind
+              ? 'Staff windows adjusted for live winds aloft (FL340) \u2014 <strong style="font-size:13px;">+' + windLeg.windDeltaMin + ' min headwind</strong> on this sector'
+              : 'Staff windows adjusted for live winds aloft (FL340) \u2014 <strong style="font-size:13px;">' + windLeg.windDeltaMin + ' min tailwind</strong> on this sector';
+            var col = isHeadwind ? '#fb923c' : '#4ade80';
+            var bg = isHeadwind ? 'rgba(251,146,60,0.08)' : 'rgba(74,222,128,0.08)';
+            var bc = isHeadwind ? 'rgba(251,146,60,0.3)' : 'rgba(74,222,128,0.3)';
+            windInfoEl.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="' + col + '" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M17.7 7.7a2.5 2.5 0 1 1 1.8 4.3H2"/><path d="M9.6 4.6A2 2 0 1 1 11 8H2"/><path d="M12.6 19.4A2 2 0 1 0 14 16H2"/></svg>'
+              + '<span>' + label + '</span>';
+            windInfoEl.style.display = 'flex';
+            windInfoEl.style.background = bg;
+            windInfoEl.style.borderColor = bc;
+            windInfoEl.style.color = col;
+          } else {
+            windInfoEl.style.display = 'none';
+          }
+        }
 
         // Header: FIR-only columns. WF/From/To/Date redundant with title,
         // ATC Route now lives in the title bar action button above.
@@ -34655,7 +35068,7 @@ app.get('/airspace/by-area', requirePageEnabled('airspace'), async (req, res) =>
               + '<td>' + l.to + '</td>'
               + '<td>' + (l.date || '-') + '</td>'
               + '<td><span class="fir-badge">' + displayFir(data.fir) + '</span></td>'
-              + '<td class="staff-window">' + (l.staffStart && l.staffEnd ? l.staffStart + ' – ' + l.staffEnd : '-') + combinedIcon(l.combinedWith) + '</td>'
+              + '<td class="staff-window">' + (l.staffStart && l.staffEnd ? l.staffStart + ' – ' + l.staffEnd : '-') + (l.windAdjusted && l.windDeltaMin ? ' <span style="font-size:9px;padding:1px 4px;border-radius:3px;background:' + (l.windDeltaMin > 0 ? 'rgba(251,146,60,0.12)' : 'rgba(74,222,128,0.12)') + ';color:' + (l.windDeltaMin > 0 ? '#fb923c' : '#4ade80') + ';border:1px solid ' + (l.windDeltaMin > 0 ? 'rgba(251,146,60,0.3)' : 'rgba(74,222,128,0.3)') + ';" title="Wind adjusted (FL340)">' + (l.windDeltaMin > 0 ? '+' : '') + l.windDeltaMin + 'm</span>' : '') + combinedIcon(l.combinedWith) + '</td>'
               + '<td class="staff-window" style="color:var(--muted);">' + (l.staffStartLocal && l.staffEndLocal ? l.staffStartLocal + ' – ' + l.staffEndLocal : '-') + '</td>'
               + '<td class="">' + (l.staffMins ? l.staffMins + ' min' : '-') + '</td>'
               + '<td class="">' + (l.depFlow || '-') + '</td>'
@@ -34807,7 +35220,7 @@ app.get('/airspace/by-area', requirePageEnabled('airspace'), async (req, res) =>
                 + '<td rowspan="' + firCount + '" style="vertical-align:top;">' + (l.date || '-') + '</td>';
             }
             html += '<td><span class="fir-badge fir-badge-link" data-view-fir="' + fl.fir + '" style="cursor:pointer;">' + displayFir(fl.fir) + '</span></td>'
-              + '<td class="staff-window">' + (fl.staffStart && fl.staffEnd ? fl.staffStart + ' \u2013 ' + fl.staffEnd : '-') + combinedIcon(fl.combinedWith) + '</td>'
+              + '<td class="staff-window">' + (fl.staffStart && fl.staffEnd ? fl.staffStart + ' \u2013 ' + fl.staffEnd : '-') + (fl.windAdjusted && fl.windDeltaMin ? ' <span style="font-size:9px;padding:1px 4px;border-radius:3px;background:' + (fl.windDeltaMin > 0 ? 'rgba(251,146,60,0.12)' : 'rgba(74,222,128,0.12)') + ';color:' + (fl.windDeltaMin > 0 ? '#fb923c' : '#4ade80') + ';border:1px solid ' + (fl.windDeltaMin > 0 ? 'rgba(251,146,60,0.3)' : 'rgba(74,222,128,0.3)') + ';" title="Wind adjusted (FL340)">' + (fl.windDeltaMin > 0 ? '+' : '') + fl.windDeltaMin + 'm</span>' : '') + combinedIcon(fl.combinedWith) + '</td>'
               + '<td class="staff-window" style="color:var(--muted);">' + (fl.staffStartLocal && fl.staffEndLocal ? fl.staffStartLocal + ' \u2013 ' + fl.staffEndLocal : '-') + '</td>'
               + '<td>' + (fl.staffMins ? fl.staffMins + ' min' : '-') + '</td>'
               + '<td>' + (fl.depFlow || '-') + '</td>'
