@@ -14094,6 +14094,10 @@ app.get('/icao/:icao', async (req, res) => {
       <svg class="icao-tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="13" y2="17"/></svg>
       <span>Pilot Documents &amp; Scenery</span>
     </button>
+    ${process.env.CHARTFOX_API_TOKEN ? `<button class="icao-tab" data-tab="charts" role="tab" type="button">
+      <svg class="icao-tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+      <span>Charts</span>
+    </button>` : ''}
   </div>
 
   <div class="icao-tab-panel active" data-panel="map">
@@ -14187,6 +14191,26 @@ app.get('/icao/:icao', async (req, res) => {
       </div>
     </section>
   </div>
+
+  ${process.env.CHARTFOX_API_TOKEN ? `<div class="icao-tab-panel" data-panel="charts" style="overflow-x:auto;">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;padding:0 2px;">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+      <span style="font-size:11px;color:var(--muted);">Click the dark strip on the left side of the viewer to open the chart browser sidebar.</span>
+    </div>
+    <section class="card" style="padding:0;overflow:hidden;border-radius:var(--radius);">
+      <iframe
+        id="chartfoxEmbed"
+        src="https://api.chartfox.org/v2/interfaces/airport/${encodeURIComponent(icao)}?token=${encodeURIComponent(process.env.CHARTFOX_API_TOKEN)}&darkMode=true"
+        style="width:100%;height:65vh;border:none;display:block;"
+        allow="fullscreen"
+        loading="lazy"
+        title="ChartFox Charts for ${icao}"
+      ></iframe>
+    </section>
+    <div style="text-align:right;margin-top:6px;font-size:10px;color:var(--muted);">
+      Powered by <a href="https://chartfox.org" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none;">ChartFox</a>
+    </div>
+  </div>` : ''}
 
   <style>
     .icao-portal-header {
@@ -14566,6 +14590,7 @@ app.get('/icao/:icao', async (req, res) => {
     (function() {
       var tabs = document.querySelectorAll('.icao-tab');
       var panels = document.querySelectorAll('.icao-tab-panel');
+      var chartfoxLoaded = false;
       tabs.forEach(function(btn) {
         btn.addEventListener('click', function() {
           var target = btn.dataset.tab;
@@ -14574,8 +14599,31 @@ app.get('/icao/:icao', async (req, res) => {
           if (target === 'map' && window._icaoMapInstance) {
             setTimeout(function() { window._icaoMapInstance.invalidateSize(); }, 50);
           }
+          // Sync ChartFox iframe dark mode with current theme
+          if (target === 'charts') {
+            var iframe = document.getElementById('chartfoxEmbed');
+            if (iframe) {
+              var isDark = document.documentElement.getAttribute('data-theme') !== 'light';
+              var src = iframe.src;
+              iframe.src = src.replace(/darkMode=(true|false)/, 'darkMode=' + isDark);
+            }
+          }
         });
       });
+
+      // Also sync when theme toggle changes
+      var observer = new MutationObserver(function(mutations) {
+        mutations.forEach(function(m) {
+          if (m.attributeName === 'data-theme') {
+            var iframe = document.getElementById('chartfoxEmbed');
+            if (iframe && iframe.closest('.icao-tab-panel.active')) {
+              var isDark = document.documentElement.getAttribute('data-theme') !== 'light';
+              iframe.src = iframe.src.replace(/darkMode=(true|false)/, 'darkMode=' + isDark);
+            }
+          }
+        });
+      });
+      observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
     })();
   </script>
 
