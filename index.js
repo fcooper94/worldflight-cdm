@@ -9174,7 +9174,7 @@ app.get('/sector/:wf/:from/:to', async (req, res) => {
                 + '</div>'
                 + '<div style="display:flex;flex-direction:column;gap:10px;">'
                 + '<div style="display:flex;justify-content:space-between;font-size:13px;"><span style="color:var(--muted);">Sector</span><strong>' + wfNum + ' \u2014 ' + fromIcao + ' \u2192 ' + toIcao + '</strong></div>'
-                + (bookingTobt ? '<div style="display:flex;justify-content:space-between;font-size:13px;"><span style="color:var(--muted);">TCT</span><strong style="color:#fbbf24;">' + bookingTobt + ' UTC</strong></div>' : '')
+                + (bookingTobt ? '<div style="display:flex;justify-content:space-between;font-size:13px;"><span style="color:var(--muted);">TCT \u2014 Connect at <span class="tobt-help" style="cursor:help;font-size:11px;">?<span class="tobt-tooltip" style="width:240px;">TCT is your Target Connection Time. Connect to VATSIM at this time. We use TCT to stagger pilot connections so the network and controllers aren\'t overwhelmed.</span></span></span><strong style="color:#fbbf24;">' + bookingTobt + ' UTC</strong></div>' : '')
                 + '<div style="display:flex;justify-content:space-between;font-size:13px;"><span style="color:var(--muted);">Assigned CID</span><strong>' + (userBooking ? userBooking.cid : '') + '</strong></div>'
                 + (leg && leg.atc_route2 && leg.atc_route2 !== '-'
                   ? '<div style="display:flex;justify-content:space-between;font-size:13px;"><span style="color:var(--muted);">Assigned Route</span><strong style="color:#4ade80;">' + bookingRouteLabel + '</strong></div>'
@@ -9736,6 +9736,16 @@ app.get('/schedule', requirePageEnabled('schedule'), async (req, res) => {
     }
   }
 
+  // Load agreed split percentages for sectors with a secondary route
+  const _splitPlans = await prisma.sectorPlan.findMany({
+    where: { eventId: activeEventId, splitAgreed: true },
+    select: { wf: true, depSplitPct: true }
+  }).catch(() => []);
+  const splitPctByWf = {};
+  for (const sp of _splitPlans) {
+    if (sp.depSplitPct != null) splitPctByWf[sp.wf] = sp.depSplitPct;
+  }
+
   const content = `
   <section class="card card-full">
     <h2>WorldFlight Event Schedule</h2>
@@ -9788,7 +9798,25 @@ app.get('/schedule', requirePageEnabled('schedule'), async (req, res) => {
                 </span>
               </td>
 
-              <td class="col-date">${r.date_utc}</td>
+              <td class="col-date">${(() => {
+                // Show date of window start, not dep time — if dep is 00:45
+                // the window opens 23:45 the day before
+                if (r.dep_time_utc && r.date_utc) {
+                  const [hh, mm] = r.dep_time_utc.split(':').map(Number);
+                  if (hh * 60 + mm < 60) {
+                    const parsed = parseServerDate(r.date_utc);
+                    if (parsed) {
+                      parsed.setUTCDate(parsed.getUTCDate() - 1);
+                      const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+                      const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+                      const day = parsed.getUTCDate();
+                      const suffix = day === 1 || day === 21 || day === 31 ? 'st' : day === 2 || day === 22 ? 'nd' : day === 3 || day === 23 ? 'rd' : 'th';
+                      return days[parsed.getUTCDay()] + ' ' + day + suffix + ' ' + months[parsed.getUTCMonth()];
+                    }
+                  }
+                }
+                return r.date_utc;
+              })()}</td>
               <td class="col-window">${(() => {
                 const utcStr = buildTimeWindow(r.dep_time_utc);
                 const lw = depWindowLocalByKey[r.number];
@@ -9821,8 +9849,9 @@ app.get('/schedule', requirePageEnabled('schedule'), async (req, res) => {
                   ? String(r.atc_route).replace(/&/g, '&amp;').replace(/"/g, '&quot;')
                   : '';
                 const route2Attr = r.atc_route2 && r.atc_route2 !== '-' ? String(r.atc_route2).replace(/&/g, '&amp;').replace(/"/g, '&quot;') : '';
+                const splitAttr = route2Attr && splitPctByWf[r.number] != null ? ' data-split-pct="' + splitPctByWf[r.number] + '"' : '';
                 return '<td class="col-route">' + (hasRoute
-                  ? '<button type="button" class="show-route-btn" data-route="' + routeAttr + '" data-route2="' + route2Attr + '">Show Route</button>'
+                  ? '<button type="button" class="show-route-btn" data-route="' + routeAttr + '" data-route2="' + route2Attr + '"' + splitAttr + '>Show Route</button>'
                   : '<span style="color:var(--muted);font-size:11px;font-style:italic;" title="This information will be available once an ATC route has been agreed between the two airports.">Pending agreement</span>') + '</td>';
               })() : ''}
 
@@ -10317,14 +10346,20 @@ document.addEventListener('DOMContentLoaded', () => {
   var closeActionBtn = document.getElementById('routeModalCloseAction');
   var backdrop = modal.querySelector('.route-modal-backdrop');
 
-  function open(route, route2) {
+  function open(route, route2, splitPct) {
     body.textContent = '';
     body.innerHTML = '';
     if (route) {
       if (route2) {
         var lbl1 = document.createElement('div');
-        lbl1.style.cssText = 'font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--accent);font-family:inherit;margin-bottom:6px;';
+        lbl1.style.cssText = 'display:flex;align-items:center;gap:8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--accent);font-family:inherit;margin-bottom:6px;';
         lbl1.textContent = 'Primary Route';
+        if (splitPct != null) {
+          var pctBadge1 = document.createElement('span');
+          pctBadge1.style.cssText = 'font-size:10px;padding:1px 6px;border-radius:4px;background:rgba(56,189,248,0.12);color:var(--accent);border:1px solid rgba(56,189,248,0.3);letter-spacing:0;text-transform:none;';
+          pctBadge1.textContent = splitPct + '%';
+          lbl1.appendChild(pctBadge1);
+        }
         body.appendChild(lbl1);
       }
       var r1 = document.createElement('span');
@@ -10333,8 +10368,14 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     if (route2) {
       var sep = document.createElement('div');
-      sep.style.cssText = 'margin:12px 0 8px;padding-top:10px;border-top:1px solid var(--border);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--accent);font-family:inherit;';
+      sep.style.cssText = 'display:flex;align-items:center;gap:8px;margin:12px 0 8px;padding-top:10px;border-top:1px solid var(--border);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--accent);font-family:inherit;';
       sep.textContent = 'Secondary Route';
+      if (splitPct != null) {
+        var pctBadge2 = document.createElement('span');
+        pctBadge2.style.cssText = 'font-size:10px;padding:1px 6px;border-radius:4px;background:rgba(56,189,248,0.12);color:var(--accent);border:1px solid rgba(56,189,248,0.3);letter-spacing:0;text-transform:none;';
+        pctBadge2.textContent = (100 - splitPct) + '%';
+        sep.appendChild(pctBadge2);
+      }
       body.appendChild(sep);
       var r2 = document.createElement('span');
       r2.textContent = route2;
@@ -10346,7 +10387,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
   document.addEventListener('click', function(e) {
     var btn = e.target.closest('.show-route-btn');
-    if (btn) { open(btn.getAttribute('data-route') || '', btn.getAttribute('data-route2') || ''); }
+    if (btn) {
+      var pct = btn.getAttribute('data-split-pct');
+      open(btn.getAttribute('data-route') || '', btn.getAttribute('data-route2') || '', pct != null ? Number(pct) : null);
+    }
   });
   closeBtn.addEventListener('click', close);
   if (closeActionBtn) closeActionBtn.addEventListener('click', close);
@@ -19544,29 +19588,33 @@ app.get('/team/management', requireLogin, requireTeamMember, async (req, res) =>
 
     ${teamName ? `
     <div class="tm-grid">
-      <section class="card my-slots-card">
+      <section class="card card-full" style="grid-column:1/-1;">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px;">
-          <h2 style="margin:0;">Our Team Members</h2>
+          <h2 style="margin:0;">Team Members</h2>
           ${viewerCanManage ? '<button type="button" class="action-btn primary" id="tmAddBtn" style="font-size:12px;padding:6px 14px;">Add Member</button>' : ''}
         </div>
         ${teamMembers.length === 0 ? `
           <p style="color:var(--muted);font-size:13px;"><em>No team members yet.</em></p>
         ` : `
-          <div class="my-slots-table-wrapper">
-            <table class="my-slots-table" style="min-width:0;table-layout:auto;">
+          <div style="overflow-x:auto;">
+            <table class="tm-table">
               <thead>
                 <tr>
                   <th>CID</th>
                   <th>Full Name</th>
+                  <th>Role</th>
                   <th>Active?</th>
                   ${viewerCanManage ? '<th style="text-align:right;">Actions</th>' : ''}
                 </tr>
               </thead>
               <tbody>
                 ${teamMembers.map(m => `
-                  <tr${m.isOwner ? ' style="background:rgba(245,158,11,0.04);"' : ''}>
-                    <td>${m.cid}</td>
-                    <td>${esc(m.name) || '<span style="color:var(--muted);">Unknown</span>'}${m.isOwner ? ' <span style="display:inline-flex;align-items:center;gap:3px;margin-left:6px;padding:2px 7px;background:rgba(245,158,11,0.16);color:#fbbf24;border:1px solid rgba(245,158,11,0.4);border-radius:4px;font-size:10px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;vertical-align:middle;"><svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M5 16L3 7l5.5 5L12 4l3.5 8L21 7l-2 9H5zm0 2h14v2H5v-2z"/></svg>Owner</span>' : ''}</td>
+                  <tr${m.isOwner ? ' class="tm-owner-row"' : ''}>
+                    <td style="font-family:monospace;font-size:13px;">${m.cid}</td>
+                    <td><strong>${esc(m.name) || '<span style="color:var(--muted);">Unknown</span>'}</strong></td>
+                    <td>${m.isOwner
+                      ? '<span class="tm-role-badge tm-role-owner"><svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M5 16L3 7l5.5 5L12 4l3.5 8L21 7l-2 9H5zm0 2h14v2H5v-2z"/></svg>Owner</span>'
+                      : '<span class="tm-role-badge tm-role-member">Member</span>'}</td>
                     <td>${(m.isOwner || m.perms.participating)
                       ? '<span style="color:#4ade80;font-weight:600;">Yes</span>'
                       : '<span style="color:var(--muted);">No</span>'}</td>
@@ -19598,13 +19646,13 @@ app.get('/team/management', requireLogin, requireTeamMember, async (req, res) =>
         `}
       </section>
 
-      <section class="card my-slots-card">
-        <h2>Our Fleet</h2>
+      <section class="card">
+        <h2>Fleet</h2>
         ${fleet.length === 0 ? `
           <p style="color:var(--muted);font-size:13px;"><em>No aircraft registered for this team yet.</em></p>
         ` : `
-          <div class="my-slots-table-wrapper">
-            <table class="my-slots-table" style="min-width:0;table-layout:auto;">
+          <div style="overflow-x:auto;">
+            <table class="tm-table">
               <thead>
                 <tr><th>Callsign</th><th>A/C Type</th><th>Active?</th></tr>
               </thead>
@@ -19612,7 +19660,7 @@ app.get('/team/management', requireLogin, requireTeamMember, async (req, res) =>
                 ${fleet.map(f => `
                   <tr>
                     <td><strong>${esc(f.callsign)}</strong></td>
-                    <td>${esc(f.aircraftType) || '—'}</td>
+                    <td>${esc(f.aircraftType) || '\u2014'}</td>
                     <td>${f.active
                       ? '<span style="color:#4ade80;font-weight:600;">Yes</span>'
                       : '<span style="color:var(--muted);">No</span>'}</td>
@@ -19708,10 +19756,20 @@ app.get('/team/management', requireLogin, requireTeamMember, async (req, res) =>
     <style>
       .tm-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+        grid-template-columns: 1fr 1fr;
         gap: 20px;
         align-items: start;
       }
+      @media (max-width: 800px) { .tm-grid { grid-template-columns: 1fr; } }
+      .tm-table { width: 100%; border-collapse: collapse; }
+      .tm-table th { font-size: 12px; font-weight: 600; color: var(--muted); text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--border); }
+      .tm-table td { font-size: 13px; padding: 10px 12px; border-bottom: 1px solid var(--border); }
+      .tm-table tbody tr:last-child td { border-bottom: none; }
+      .tm-table tbody tr:hover { background: rgba(255,255,255,0.02); }
+      .tm-owner-row { background: rgba(245,158,11,0.04); }
+      .tm-role-badge { display: inline-flex; align-items: center; gap: 3px; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; }
+      .tm-role-owner { background: rgba(245,158,11,0.16); color: #fbbf24; border: 1px solid rgba(245,158,11,0.4); }
+      .tm-role-member { background: rgba(56,189,248,0.1); color: var(--accent); border: 1px solid rgba(56,189,248,0.3); }
       .route-modal[hidden] { display: none; }
       .route-modal {
         position: fixed; inset: 0; z-index: 500;
@@ -20376,13 +20434,20 @@ app.get('/team/bookings', requireLogin, requireTeamMember, async (req, res) => {
         });
         return btn;
       }
-      function open(route, route2) {
+      function makePctBadge(pct) {
+        var s = document.createElement('span');
+        s.style.cssText = 'font-size:10px;padding:1px 6px;border-radius:4px;background:rgba(56,189,248,0.12);color:var(--accent);border:1px solid rgba(56,189,248,0.3);letter-spacing:0;text-transform:none;margin-left:6px;';
+        s.textContent = pct + '%';
+        return s;
+      }
+      function open(route, route2, splitPct) {
         body.textContent = '';
         body.innerHTML = '';
         if (route) {
           var lbl1 = document.createElement('div');
           lbl1.style.cssText = 'display:flex;align-items:center;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--accent);font-family:inherit;margin-bottom:6px;';
           lbl1.textContent = route2 ? 'Primary Route' : 'ATC Route';
+          if (route2 && splitPct != null) lbl1.appendChild(makePctBadge(splitPct));
           lbl1.appendChild(makeCopyBtn(route));
           body.appendChild(lbl1);
           var r1 = document.createElement('span');
@@ -20393,6 +20458,7 @@ app.get('/team/bookings', requireLogin, requireTeamMember, async (req, res) => {
           var sep = document.createElement('div');
           sep.style.cssText = 'display:flex;align-items:center;margin:12px 0 8px;padding-top:10px;border-top:1px solid var(--border);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--accent);font-family:inherit;';
           sep.textContent = 'Secondary Route';
+          if (splitPct != null) sep.appendChild(makePctBadge(100 - splitPct));
           sep.appendChild(makeCopyBtn(route2));
           body.appendChild(sep);
           var r2 = document.createElement('span');
@@ -20405,7 +20471,11 @@ app.get('/team/bookings', requireLogin, requireTeamMember, async (req, res) => {
 
       document.addEventListener('click', function(e) {
         var btn = e.target.closest('.show-route-btn');
-        if (btn) { open(btn.getAttribute('data-route') || '', btn.getAttribute('data-route2') || ''); return; }
+        if (btn) {
+          var pct = btn.getAttribute('data-split-pct');
+          open(btn.getAttribute('data-route') || '', btn.getAttribute('data-route2') || '', pct != null ? Number(pct) : null);
+          return;
+        }
       });
       closeBtn.addEventListener('click', close);
       if (closeActionBtn) closeActionBtn.addEventListener('click', close);
@@ -21457,7 +21527,87 @@ app.delete('/api/admin/official-teams/:id', requireAdmin, async (req, res) => {
   const id = Number(req.params.id);
   if (!id) return res.status(400).json({ error: 'Invalid id' });
 
+  // Look up the aircraft being deleted so we can reassign its bookings
+  const deletedRow = await prisma.officialTeam.findUnique({ where: { id } }).catch(() => null);
   await prisma.officialTeam.delete({ where: { id } }).catch(() => null);
+
+  // Reassign bookings from the deleted callsign to another active aircraft
+  // in the same team, or cancel them if no other aircraft exists
+  if (deletedRow?.callsign && deletedRow?.teamName) {
+    const deletedCs = String(deletedRow.callsign).toUpperCase();
+    const teamName = String(deletedRow.teamName).trim().toUpperCase();
+
+    // Find remaining active aircraft in the same team
+    const remaining = await prisma.officialTeam.findMany({
+      where: { participatingWf26: true },
+      select: { teamName: true, callsign: true, mainCid: true }
+    });
+    const sameTeam = remaining.filter(r =>
+      String(r.teamName || '').trim().toUpperCase() === teamName &&
+      String(r.callsign || '').toUpperCase() !== deletedCs
+    );
+
+    // Find all bookings with the deleted callsign
+    const bookings = await prisma.tobtBooking.findMany({
+      where: { callsign: deletedCs }
+    });
+
+    if (bookings.length > 0) {
+      if (sameTeam.length > 0) {
+        // Reassign to the first available aircraft in the team
+        const newCs = String(sameTeam[0].callsign).toUpperCase();
+        const newCid = Number(sameTeam[0].mainCid);
+        let reassigned = 0;
+        for (const bk of bookings) {
+          try {
+            await prisma.tobtBooking.update({
+              where: { id: bk.id },
+              data: { callsign: newCs, cid: newCid }
+            });
+            // Update in-memory cache
+            const memKey = bk.cid + ':' + bk.slotKey;
+            const memBk = tobtBookingsByKey[memKey];
+            if (memBk) {
+              delete tobtBookingsByKey[memKey];
+              memBk.callsign = newCs;
+              memBk.cid = newCid;
+              const newKey = newCid + ':' + bk.slotKey;
+              tobtBookingsByKey[newKey] = memBk;
+              // Update cid index
+              if (tobtBookingsByCid[bk.cid]) {
+                tobtBookingsByCid[bk.cid] = tobtBookingsByCid[bk.cid].filter(b => b !== memBk);
+                if (!tobtBookingsByCid[bk.cid].length) delete tobtBookingsByCid[bk.cid];
+              }
+              if (!tobtBookingsByCid[newCid]) tobtBookingsByCid[newCid] = [];
+              tobtBookingsByCid[newCid].push(memBk);
+            }
+            reassigned++;
+          } catch {}
+        }
+        console.log(`[TEAM] Deleted ${deletedCs} from ${teamName} — reassigned ${reassigned} bookings to ${newCs}`);
+      } else {
+        // No other aircraft — cancel all bookings
+        let cancelled = 0;
+        for (const bk of bookings) {
+          try {
+            await prisma.tobtBooking.delete({ where: { id: bk.id } });
+            const memKey = bk.cid + ':' + bk.slotKey;
+            const memBk = tobtBookingsByKey[memKey];
+            if (memBk) {
+              delete tobtBookingsByKey[memKey];
+              if (tobtBookingsByCid[bk.cid]) {
+                tobtBookingsByCid[bk.cid] = tobtBookingsByCid[bk.cid].filter(b => b !== memBk);
+                if (!tobtBookingsByCid[bk.cid].length) delete tobtBookingsByCid[bk.cid];
+              }
+            }
+            cancelled++;
+          } catch {}
+        }
+        console.log(`[TEAM] Deleted ${deletedCs} from ${teamName} — cancelled ${cancelled} bookings (no remaining aircraft)`);
+      }
+    }
+  }
+
   return res.json({ success: true });
 });
 
@@ -30827,15 +30977,6 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
       <div id="spSplitComparisonWrap" style="display:${(plan.depSplitRoute || plan.arrSplitRoute) ? 'block' : 'none'};margin-top:14px;padding-top:14px;border-top:1px dashed var(--border);">
         <div class="sp-side-label" style="margin-bottom:8px;">Route Split Proposals</div>
         <div id="spSplitComparisonBox"></div>
-        <div style="margin-top:12px;">
-          <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
-            <span style="display:inline-block;width:24px;height:3px;background:#fbbf24;border-radius:2px;border-top:2px dashed #fbbf24;"></span>
-            <span style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;">Route B — Transited FIRs</span>
-          </div>
-          <div id="spSplitFirsContent" style="margin-top:4px;">
-            <div style="font-size:11px;color:var(--muted);">No split route proposed yet.</div>
-          </div>
-        </div>
       </div>
       </div><!-- /sp-acc-body -->
     </details>
@@ -31239,6 +31380,29 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
         if (!ds && !as) { wrap.style.display = 'none'; box.innerHTML = ''; return; }
         wrap.style.display = 'block';
 
+        // Determine agreement status + responder action state
+        var agreed = window.SP.splitAgreed;
+        var oneProposed = !!(ds || as) && !(ds && as);
+        var proposerSide = ds ? 'DEP' : 'ARR';
+        var responderSide = ds ? 'ARR' : 'DEP';
+        var canRespond = oneProposed ? (responderSide === 'DEP' ? window.SP.canEditDep : window.SP.canEditArr) : false;
+
+        // Build action buttons HTML (inserted into responder's column)
+        var actionBtnsHtml = '';
+        if (oneProposed && canRespond) {
+          var proposerLabel = proposerSide === 'DEP' ? (window.SP.depFir || window.SP.fromIcao) : (window.SP.arrFir || window.SP.toIcao);
+          actionBtnsHtml += '<div style="margin-top:10px;padding:8px 10px;background:rgba(56,189,248,0.05);border:1px solid rgba(56,189,248,0.25);border-radius:6px;">';
+          actionBtnsHtml += '<div style="font-size:11px;color:var(--text);margin-bottom:6px;"><strong>' + proposerLabel + '</strong> has proposed a split:</div>';
+          actionBtnsHtml += '<div style="display:flex;gap:5px;flex-wrap:wrap;">';
+          actionBtnsHtml += '<button type="button" id="spSplitActionAgree" data-side="' + responderSide + '" class="action-btn" style="font-size:11px;padding:4px 10px;background:rgba(74,222,128,0.15);color:#4ade80;border:1px solid rgba(74,222,128,0.4);">\u2713 Agree</button>';
+          actionBtnsHtml += '<button type="button" id="spSplitActionChangeRoute" data-side="' + responderSide + '" class="action-btn" style="font-size:11px;padding:4px 10px;background:rgba(245,158,11,0.15);color:#fbbf24;border:1px solid rgba(245,158,11,0.4);">\u270f Diff route</button>';
+          actionBtnsHtml += '<button type="button" id="spSplitActionChangePct" data-side="' + responderSide + '" class="action-btn" style="font-size:11px;padding:4px 10px;background:rgba(129,140,248,0.15);color:#a5b4fc;border:1px solid rgba(129,140,248,0.4);">\u2696 Diff %</button>';
+          actionBtnsHtml += '<button type="button" id="spSplitActionReject" data-side="' + responderSide + '" class="action-btn" style="font-size:11px;padding:4px 10px;background:rgba(239,68,68,0.15);color:#f87171;border:1px solid rgba(239,68,68,0.4);">\u2717 Reject</button>';
+          actionBtnsHtml += '</div>';
+          actionBtnsHtml += '<span id="spSplitActionMsg" style="font-size:11px;color:var(--muted);margin-top:4px;display:block;"></span>';
+          actionBtnsHtml += '</div>';
+        }
+
         var html = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">';
         // Dep proposal
         html += '<div style="padding:10px 12px;background:rgba(129,140,248,0.06);border:1px solid rgba(129,140,248,0.25);border-radius:6px;">';
@@ -31249,6 +31413,7 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
         } else {
           html += '<div style="font-size:12px;color:var(--muted);font-style:italic;">No split proposed</div>';
         }
+        if (responderSide === 'DEP') html += actionBtnsHtml;
         html += '</div>';
         // Arr proposal
         html += '<div style="padding:10px 12px;background:rgba(244,114,182,0.06);border:1px solid rgba(244,114,182,0.25);border-radius:6px;">';
@@ -31259,10 +31424,10 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
         } else {
           html += '<div style="font-size:12px;color:var(--muted);font-style:italic;">No split proposed</div>';
         }
+        if (responderSide === 'ARR') html += actionBtnsHtml;
         html += '</div></div>';
 
-        // Agreement status + action buttons
-        var agreed = window.SP.splitAgreed;
+        // Agreement status (both sides proposed)
         if (ds && as) {
           var routeMatch = ds.trim().toUpperCase().replace(/\s+/g, ' ') === as.trim().toUpperCase().replace(/\s+/g, ' ');
           var pctMatch = (dp != null ? dp : 50) === (ap != null ? ap : 50);
@@ -31279,24 +31444,6 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
             if (!pctMatch) diffs.push('percentages differ');
             html += '<div style="margin-top:10px;padding:8px 12px;background:rgba(245,158,11,0.10);border:1px solid rgba(245,158,11,0.35);border-radius:6px;font-size:12px;color:#fbbf24;">\u26a0 Proposals don\u2019t match \u2014 ' + diffs.join(' and ') + '.</div>';
           }
-        } else if (ds || as) {
-          // Only one side proposed — show action buttons for the other side
-          var proposerSide = ds ? 'DEP' : 'ARR';
-          var responderSide = ds ? 'ARR' : 'DEP';
-          var canRespond = responderSide === 'DEP' ? window.SP.canEditDep : window.SP.canEditArr;
-          var proposerLabel = proposerSide === 'DEP' ? (window.SP.depFir || window.SP.fromIcao) : (window.SP.arrFir || window.SP.toIcao);
-          html += '<div style="margin-top:10px;padding:10px 12px;background:rgba(56,189,248,0.05);border:1px solid rgba(56,189,248,0.25);border-radius:8px;">';
-          html += '<div style="font-size:12px;color:var(--text);margin-bottom:8px;"><strong>' + proposerLabel + '</strong> has proposed a route split. What do you want to do?</div>';
-          if (canRespond) {
-            html += '<div style="display:flex;gap:6px;flex-wrap:wrap;">';
-            html += '<button type="button" id="spSplitActionAgree" data-side="' + responderSide + '" class="action-btn" style="font-size:12px;padding:5px 12px;background:rgba(74,222,128,0.15);color:#4ade80;border:1px solid rgba(74,222,128,0.4);">\u2713 Agree with this split</button>';
-            html += '<button type="button" id="spSplitActionChangeRoute" data-side="' + responderSide + '" class="action-btn" style="font-size:12px;padding:5px 12px;background:rgba(245,158,11,0.15);color:#fbbf24;border:1px solid rgba(245,158,11,0.4);">\u270f Suggest different route</button>';
-            html += '<button type="button" id="spSplitActionChangePct" data-side="' + responderSide + '" class="action-btn" style="font-size:12px;padding:5px 12px;background:rgba(129,140,248,0.15);color:#a5b4fc;border:1px solid rgba(129,140,248,0.4);">\u2696 Suggest different %</button>';
-            html += '<button type="button" id="spSplitActionReject" data-side="' + responderSide + '" class="action-btn" style="font-size:12px;padding:5px 12px;background:rgba(239,68,68,0.15);color:#f87171;border:1px solid rgba(239,68,68,0.4);">\u2717 Reject split</button>';
-            html += '</div>';
-          }
-          html += '<span id="spSplitActionMsg" style="font-size:11px;color:var(--muted);margin-top:6px;display:block;"></span>';
-          html += '</div>';
         }
         box.innerHTML = html;
 
@@ -33601,13 +33748,26 @@ app.get('/airspace/by-sector', requirePageEnabled('airspace'), async (req, res) 
         var closeActionBtn = document.getElementById('routeModalCloseAction');
         var backdrop = modal.querySelector('.route-modal-backdrop');
 
-        function open(route, route2) {
+        function open(route, route2, splitPct) {
           body.textContent = '';
-          if (route) { body.textContent = route; }
+          body.innerHTML = '';
+          if (route) {
+            if (route2) {
+              var lbl1 = document.createElement('div');
+              lbl1.style.cssText = 'display:flex;align-items:center;gap:8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--accent);font-family:inherit;margin-bottom:6px;';
+              lbl1.textContent = 'Primary Route';
+              if (splitPct != null) { var b1 = document.createElement('span'); b1.style.cssText = 'font-size:10px;padding:1px 6px;border-radius:4px;background:rgba(56,189,248,0.12);color:var(--accent);border:1px solid rgba(56,189,248,0.3);letter-spacing:0;text-transform:none;'; b1.textContent = splitPct + '%'; lbl1.appendChild(b1); }
+              body.appendChild(lbl1);
+            }
+            var r1 = document.createElement('span');
+            r1.textContent = route;
+            body.appendChild(r1);
+          }
           if (route2) {
             var sep = document.createElement('div');
-            sep.style.cssText = 'margin:12px 0 8px;padding-top:10px;border-top:1px solid var(--border);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted);font-family:inherit;';
+            sep.style.cssText = 'display:flex;align-items:center;gap:8px;margin:12px 0 8px;padding-top:10px;border-top:1px solid var(--border);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--accent);font-family:inherit;';
             sep.textContent = 'Secondary Route';
+            if (splitPct != null) { var b2 = document.createElement('span'); b2.style.cssText = 'font-size:10px;padding:1px 6px;border-radius:4px;background:rgba(56,189,248,0.12);color:var(--accent);border:1px solid rgba(56,189,248,0.3);letter-spacing:0;text-transform:none;'; b2.textContent = (100 - splitPct) + '%'; sep.appendChild(b2); }
             body.appendChild(sep);
             var r2 = document.createElement('span');
             r2.textContent = route2;
@@ -33619,7 +33779,10 @@ app.get('/airspace/by-sector', requirePageEnabled('airspace'), async (req, res) 
 
         document.addEventListener('click', function(e) {
           var btn = e.target.closest('.show-route-btn');
-          if (btn) open(btn.getAttribute('data-route') || '', btn.getAttribute('data-route2') || '');
+          if (btn) {
+            var pct = btn.getAttribute('data-split-pct');
+            open(btn.getAttribute('data-route') || '', btn.getAttribute('data-route2') || '', pct != null ? Number(pct) : null);
+          }
         });
         closeBtn.addEventListener('click', close);
         if (closeActionBtn) closeActionBtn.addEventListener('click', close);
@@ -36735,7 +36898,7 @@ app.get('/my-slots', requireLogin, requirePageEnabled('my-slots'), (req, res) =>
           + '<div style="display:flex;justify-content:space-between;font-size:13px;"><span style="color:var(--muted);">Assigned CID</span><strong>' + cidVal + '</strong></div>'
           + (dateVal ? '<div style="display:flex;justify-content:space-between;font-size:13px;"><span style="color:var(--muted);">Date</span><strong>' + dateVal + '</strong></div>' : '')
           + (tobt
-            ? '<div style="display:flex;justify-content:space-between;font-size:13px;"><span style="color:var(--muted);">TCT</span><strong style="color:var(--warning);">' + tobt + ' UTC</strong></div>'
+            ? '<div style="display:flex;justify-content:space-between;font-size:13px;"><span style="color:var(--muted);">TCT \u2014 Connect at <span class="tobt-help" style="cursor:help;font-size:11px;">?<span class="tobt-tooltip" style="width:240px;">TCT is your Target Connection Time. Connect to VATSIM at this time. We use TCT to stagger pilot connections so the network and controllers aren\'t overwhelmed.</span></span></span><strong style="color:var(--warning);">' + tobt + ' UTC</strong></div>'
             : (depWindow ? '<div style="display:flex;justify-content:space-between;font-size:13px;"><span style="color:var(--muted);">Dep Window</span><strong>' + depWindow + '</strong></div>' : ''))
           + (hasSplit ? '<div style="display:flex;justify-content:space-between;font-size:13px;"><span style="color:var(--muted);">Assigned Route</span><strong style="color:var(--success);">' + assignedLabel + '</strong></div>' : '')
           + '</div>'
