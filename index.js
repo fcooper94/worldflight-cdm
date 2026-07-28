@@ -16735,6 +16735,62 @@ function buildSlotsForWf(wfNum) {
   return { sched, bookings };
 }
 
+// ── Public schedule JSON ─────────────────────────────────────────────────
+app.get('/api/schedule.json', async (req, res) => {
+  if (!adminSheetCache || !adminSheetCache.length) {
+    return res.status(503).json({ error: 'Schedule not loaded yet' });
+  }
+
+  // Fetch split percentages for published splits
+  const plans = await prisma.sectorPlan.findMany({
+    where: { eventId: activeEventId || undefined },
+    select: { wf: true, depSplitPct: true, splitAgreed: true }
+  }).catch(() => []);
+  const splitPctByWf = {};
+  for (const sp of plans) {
+    if (sp.splitAgreed && sp.depSplitPct != null) splitPctByWf[sp.wf] = sp.depSplitPct;
+  }
+
+  const sectors = adminSheetCache.map(r => {
+    const depWindow = r.dep_time_utc
+      ? { open: subtractMinutes(r.dep_time_utc, 60), close: addMinutes(r.dep_time_utc, 60) }
+      : null;
+    const arrWindow = r.arr_time_utc
+      ? { open: subtractMinutes(r.arr_time_utc, 60), close: addMinutes(r.arr_time_utc, 60) }
+      : null;
+
+    const sector = {
+      sector: r.number,
+      from: r.from,
+      to: r.to,
+      dateUtc: r.date_utc,
+      departureWindow: depWindow,
+      arrivalWindow: arrWindow,
+      blockTime: r.block_time,
+      flightTime: r.flight_time,
+      atcRoute: r.atc_route || null,
+      isWfChallenge: r.is_wf_challenge
+    };
+
+    if (r.atc_route2) {
+      sector.atcRoute2 = r.atc_route2;
+      const pct = splitPctByWf[r.number];
+      if (pct != null) {
+        sector.splitPct = { routeA: pct, routeB: 100 - pct };
+      }
+    }
+
+    return sector;
+  });
+
+  res.setHeader('Cache-Control', 'public, max-age=60');
+  res.json({
+    event: 'WorldFlight 2026',
+    generatedAt: new Date().toISOString(),
+    sectors
+  });
+});
+
 app.get('/api/slots/:wfNum.json', (req, res) => {
   const out = buildSlotsForWf(req.params.wfNum);
   if (!out) return res.status(404).json({ error: 'Sector not found' });
