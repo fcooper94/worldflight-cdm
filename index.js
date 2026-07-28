@@ -16741,14 +16741,15 @@ app.get('/api/schedule.json', async (req, res) => {
     return res.status(503).json({ error: 'Schedule not loaded yet' });
   }
 
-  // Fetch split percentages for published splits
+  // Fetch split percentages and flow type from sector plans
+  const FLOW_MAP = { 'BOOKING_REQUIRED': 'BOOKING_ONLY', 'TIME_SLOT_REQUIRED': 'SLOTTED', 'NONE': 'NONE' };
   const plans = await prisma.sectorPlan.findMany({
     where: { eventId: activeEventId || undefined },
-    select: { wf: true, depSplitPct: true, splitAgreed: true }
+    select: { wf: true, depSplitPct: true, splitAgreed: true, depFlowType: true, depFlowRate: true }
   }).catch(() => []);
-  const splitPctByWf = {};
+  const planByWf = {};
   for (const sp of plans) {
-    if (sp.splitAgreed && sp.depSplitPct != null) splitPctByWf[sp.wf] = sp.depSplitPct;
+    planByWf[sp.wf] = sp;
   }
 
   const sectors = adminSheetCache.map(r => {
@@ -16772,9 +16773,18 @@ app.get('/api/schedule.json', async (req, res) => {
       isWfChallenge: r.is_wf_challenge
     };
 
+    const plan = planByWf[r.number];
+
+    // Flow type
+    const rawFlow = plan?.depFlowType || 'NONE';
+    sector.flowType = FLOW_MAP[rawFlow] || 'NONE';
+    if (sector.flowType !== 'NONE' && plan?.depFlowRate) {
+      sector.flowRate = plan.depFlowRate;
+    }
+
     if (r.atc_route2) {
       sector.atcRoute2 = r.atc_route2;
-      const pct = splitPctByWf[r.number];
+      const pct = plan?.splitAgreed && plan?.depSplitPct != null ? plan.depSplitPct : null;
       if (pct != null) {
         sector.splitPct = { routeA: pct, routeB: 100 - pct };
       }
