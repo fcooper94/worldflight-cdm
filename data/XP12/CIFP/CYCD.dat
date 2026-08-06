@@ -1,3 +1,10 @@
+SID:010,5,IMADU1,RW34,IMADU,CY,P,C,EB  , ,   ,DF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000,-,240,    ,   , , , , , , , , ;
+SID:010,6,IMADU1,ILATI,IMADU,CY,P,C,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000,-,240,    ,   , , , , , , , , ;
+SID:020,6,IMADU1,ILATI,ILATI,CY,E,A,EE  , ,   ,DF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
+SID:010,6,IMADU1,UQQ,IMADU,CY,P,C,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000,-,240,    ,   , , , , , , , , ;
+SID:020,6,IMADU1,UQQ,ESTOT,CY,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
+SID:030,6,IMADU1,UQQ,IKNOS,CY,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
+SID:040,6,IMADU1,UQQ,UQQ,CY,D, ,VE  , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 SID:010,5,LADY2,RW16,UKROT,CY,P,C,EY  , ,   ,DF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , , , , ;
 SID:020,5,LADY2,RW16,GABOD,CY,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 SID:030,5,LADY2,RW16,SILGI,CY,P,C,EE  , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;

@@ -116,10 +116,6 @@ STAR:010,2,MAMU1V,RW19,MAMUK,LE,E,A,E C , ,   ,IF, , , , , ,      ,    ,    ,   
 STAR:020,2,MAMU1V,RW19,D258M,LE,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,-,FL100,     ,     ,-,250,    ,   , , , , , , , , ;
 STAR:030,2,MAMU1V,RW19,D258F,LE,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:040,2,MAMU1V,RW19,GIR,LE,D, ,VE H, ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     ,-,220,    ,   , , , , , , , , ;
-STAR:010,2,MAMU1Y,RW01,MAMUK,LE,E,A,E C , ,   ,IF, , , , , ,      ,    ,    ,    ,    ,B,FL150,FL100,     , ,   ,    ,   , , , , , , , , ;
-STAR:020,2,MAMU1Y,RW01,D293L,LE,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,-,FL100,     ,     ,-,250,    ,   , , , , , , , , ;
-STAR:030,2,MAMU1Y,RW01,D293E,LE,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
-STAR:040,2,MAMU1Y,RW01,CLE,LE,D, ,VE H, ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     ,-,220,    ,   , , , , , , , , ;
 STAR:010,5,MAMU1Z,RW19,MAMUK,LE,E,A,E C , ,   ,IF, , , , , ,      ,    ,    ,    ,    ,B,FL150,FL100,     , ,   ,    ,   , , , , , , , , ;
 STAR:020,5,MAMU1Z,RW19,GE804,LE,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,FL080,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:030,5,MAMU1Z,RW19,GE805,LE,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,FL070,     ,     , ,   ,    ,   , , , , , , , , ;
@@ -191,8 +187,8 @@ APPCH:050,I,I19-X, ,GRN,LE,D,B,E   ,L,   ,DF, , , , , ,      ,    ,    ,    ,   
 APPCH:060,I,I19-X, ,GRN,LE,D,B,EE H,L,   ,HM, , , , , ,      ,    ,    ,1940,T010,+,05000,     ,     , ,   ,    ,   , , , , , ,0,D,S;
 APPCH:010,A,I19-Y,BANOL,BANOL,LE,P,C,E CC, ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,04500,     ,     , ,   ,    ,   , , , , , ,0,D,S;
 APPCH:040,A,I19-Y,BANOL,NASGO,LE,P,C,EE B, ,   ,CF, ,IGN,LE,P,I,      ,0138,0124,1940,0022,+,03600,     ,     , ,   ,    ,   , , , , , ,0,D,S;
-APPCH:010,A,I19-Y,GIR,GIR,LE,D, ,V  C, ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,05600,     ,     ,-,160,    ,   , , , , , ,0,D,S;
-APPCH:020,A,I19-Y,GIR,GIR,LE,D, ,V   , ,   ,FD, ,GIR,LE,D, ,      ,0000,0000,0240,0120, ,     ,     ,     , ,   ,    ,   , , , , , ,0,D,S;
+APPCH:010,A,I19-Y,GIR,GIR,LE,D, ,V  C, ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,05600,     ,     ,-,220,    ,   , , , , , ,0,D,S;
+APPCH:020,A,I19-Y,GIR,GIR,LE,D, ,V   , ,   ,FD, ,GIR,LE,D, ,      ,0000,0000,0320,0120, ,     ,     ,     , ,   ,    ,   , , , , , ,0,D,S;
 APPCH:040,A,I19-Y,GIR,NASGO,LE,P,C,EE B,L,   ,CF,Y,IGN,LE,P,I,      ,0138,0124,1940,0020,+,03600,     ,     , ,   ,    ,   , , , , , ,0,D,S;
 APPCH:010,I,I19-Y, ,NASGO,LE,P,C,E  I, ,   ,IF, ,IGN,LE,P,I,      ,0138,0124,    ,    ,J,03600,02500,     , ,   ,    ,   , , , , , ,0,D,S;
 APPCH:020,I,I19-Y, ,FI19,LE,P,C,E  F, ,   ,CF, ,IGN,LE,P,I,      ,0138,0075,1940,0050,H,02500,02500,     , ,   ,-300,   ,GIR,LE,D, , ,0,D,S;

@@ -1928,7 +1928,7 @@ APPCH:020,A,I20LZ,REGIR,RUMAD,VT,P,C,E  B, ,   ,TF, , , , , ,      ,    ,    ,  
 APPCH:030,A,I20LZ,REGIR,REVMO,VT,P,C,EE  , ,   ,TF, ,ISWN,VT,P,I,      ,    ,    ,    ,    ,+,03000,     ,     , ,180,    ,   , , , , , ,0,D,S;
 APPCH:010,I,I20LZ, ,REVMO,VT,P,C,E  I, ,   ,IF, ,ISWN,VT,P,I,      ,0154,0130,    ,    ,J,03000,01600,13000, ,180,    ,   , , , , , ,0,D,S;
 APPCH:020,I,I20LZ, ,BS780,VT,P,C,E  F, ,   ,CF, ,ISWN,VT,P,I,      ,0154,0071,1950,0060,G,01600,01600,     , ,   ,-300,   ,VTBS,VT,P,A, ,0,D,S;
-APPCH:030,I,I20LZ, ,RW20L,VT,P,G,GY M, ,   ,CF, ,ISWN,VT,P,I,      ,0154,0022,1950,0049, ,00054,     ,     , ,   ,-300,   , , , , , ,0,D,S;
+APPCH:030,I,I20LZ, ,RW20L,VT,P,G,GY M, ,   ,CF, ,ISWN,VT,P,I,      ,0155,0022,1950,0049, ,00054,     ,     , ,   ,-300,   , , , , , ,0,D,S;
 APPCH:040,I,I20LZ, ,DE20L,VT,P,C,EYM , ,   ,CF, ,BKK,VT,D, ,      ,1497,0156,1950,0020, ,     ,     ,     , ,   ,    ,   , , , , , ,0,D,S;
 APPCH:060,I,I20LZ, ,BS601,VT,P,C,E   , ,   ,DF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , ,0,D,S;
 APPCH:070,I,I20LZ, ,BS602,VT,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,-,03000,     ,     ,-,210,    ,   , , , , , ,0,D,S;

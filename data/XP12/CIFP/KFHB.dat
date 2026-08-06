@@ -6,7 +6,7 @@ STAR:010,5,MARQO3,ALL,MARQO,K7,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    
 STAR:020,5,MARQO3,ALL,COROE,K7,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,-,11000,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:030,5,MARQO3,ALL,GWIIZ,K7,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:040,5,MARQO3,ALL,EGAGE,K7,E,A,EY  , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,04000,     ,     , ,210,    ,   , , , , , , , , ;
-STAR:050,5,MARQO3,ALL,EGAGE,K7,E,A,EE  , ,   ,FM, ,SGJ,K7,D, ,      ,3390,0418,0770,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
+STAR:050,5,MARQO3,ALL,EGAGE,K7,E,A,EE  , ,   ,FM, ,SAV,K7,D, ,      ,2014,0973,0770,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:010,4,QUBEN2,HAINY,HAINY,K7,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,FL240,     ,18000, ,   ,    ,   , , , , , , , , ;
 STAR:020,4,QUBEN2,HAINY,MISCL,K7,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:025,4,QUBEN2,HAINY,MEAAT,K7,E,A,E  H, ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
@@ -17,13 +17,13 @@ STAR:015,4,QUBEN2,MEAAT,BASSS,K7,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,  
 STAR:020,4,QUBEN2,MEAAT,POGIE,K7,E,A,EE  , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,13000,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:010,5,QUBEN2,ALL,POGIE,K7,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,13000,     ,18000, ,   ,    ,   , , , , , , , , ;
 STAR:015,5,QUBEN2,ALL,QUBEN,K7,E,A,EY  , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
-STAR:020,5,QUBEN2,ALL,QUBEN,K7,E,A,EE  , ,   ,FM, ,SGJ,K7,D, ,      ,2721,0174,3600,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
+STAR:020,5,QUBEN2,ALL,QUBEN,K7,E,A,EE  , ,   ,FM, ,SAV,K7,D, ,      ,1964,1345,3600,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:010,4,TEBOW2,HILIS,HILIS,K7,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , , , , ;
 STAR:020,4,TEBOW2,HILIS,FABES,K7,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:030,4,TEBOW2,HILIS,MCFIE,K7,E,A,EE  , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,12000,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:010,5,TEBOW2,ALL,MCFIE,K7,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,12000,     ,18000, ,   ,    ,   , , , , , , , , ;
 STAR:020,5,TEBOW2,ALL,TEBOW,K7,E,A,EY  , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
-STAR:030,5,TEBOW2,ALL,TEBOW,K7,E,A,EE  , ,   ,FM, ,SGJ,K7,D, ,      ,2883,0397,0460,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
+STAR:030,5,TEBOW2,ALL,TEBOW,K7,E,A,EE  , ,   ,FM, ,SAV,K7,D, ,      ,2064,1308,0460,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 APPCH:010,A,R04,WILNA,WILNA,K7,P,C,EE C,R,   ,HF, , , , , ,      ,    ,    ,0410,0040,+,02100,     ,18000, ,   ,    ,   , , , , , ,A,J,S;
 APPCH:010,R,R04, ,WILNA,K7,P,C,E  I, ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,02100,     ,18000, ,   ,    ,   , , , , , ,A,J,S;
 APPCH:020,R,R04, ,SHOAT,K7,P,C,E  F, ,010,TF, , , , , ,      ,    ,    ,0410,0070,+,01800,     ,     , ,   ,    ,   , , , , , ,A,J,S;

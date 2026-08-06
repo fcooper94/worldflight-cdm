@@ -52,7 +52,7 @@ APPCH:020,R,RNVC, ,JUTEB,K2,P,C,E  F, ,   ,TF, , , , , ,      ,    ,    ,0780,00
 APPCH:025,R,RNVC, ,WEPLI,K2,P,C,E S , ,   ,TF, , , , , ,      ,    ,    ,0780,0054,+,07300,     ,     , ,   ,-811,   , , , , , ,B,J,C;
 APPCH:030,R,RNVC, ,RW08,K2,P,G,GY M, ,   ,TF, , , , , ,      ,    ,    ,0780,0035, ,04270,     ,     , ,   ,-811,   , , , , , ,B,J,C;
 APPCH:040,R,RNVC, , , , , ,  M , ,   ,CA, , , , , ,      ,    ,    ,0780,    ,+,04637,     ,     , ,   ,    ,   , , , , , ,B,J,C;
-APPCH:050,R,RNVC, ,MOJVL,K2,E,A,E   , ,   ,DF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , ,B,J,C;
+APPCH:050,R,RNVC, ,MOJVL,K2,P,C,E   , ,   ,DF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , ,B,J,C;
 APPCH:060,R,RNVC, ,BVL,K2,D, ,VY  , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,09000,     ,     , ,   ,    ,   , , , , , ,B,J,C;
 APPCH:070,R,RNVC, ,BVL,K2,D, ,VE H,R,   ,HM, , , , , ,      ,    ,    ,2470,0070, ,     ,     ,     , ,   ,    ,   , , , , , ,B,J,C;
 APPCH:010,A,T26,BAGGI,BAGGI,K2,E,A,E  A, ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , ,0,D,S;

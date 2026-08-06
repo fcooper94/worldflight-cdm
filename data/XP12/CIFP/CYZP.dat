@@ -43,7 +43,7 @@ APPCH:020,A,R13,TIDOM,EBKIM,CY,P,C,EE B, ,010,TF, , , , , ,      ,    ,    ,    
 APPCH:010,A,R13,URVIG,URVIG,CY,P,C,E  A, ,010,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000,-,210,    ,   , , , , , ,A,J,S;
 APPCH:020,A,R13,URVIG,EBKIM,CY,P,C,EE B, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,02600,     ,     , ,   ,    ,   , , , , , ,A,J,S;
 APPCH:010,R,R13, ,EBKIM,CY,P,C,E  I, ,010,IF, , , , , ,      ,    ,    ,    ,    ,+,02600,     ,18000, ,   ,    ,   , , , , , ,A,J,S;
-APPCH:020,R,R13, ,SETMU,CY,P,C,E  F, ,010,TF, , , , , ,      ,    ,    ,1250,0060,+,01700,     ,     , ,   ,    ,   ,RW13,CY,P,G, ,A,J,S;
+APPCH:020,R,R13, ,SETMU,CY,P,C,E  F, ,010,TF, , , , , ,      ,    ,    ,1250,0060,+,01700,     ,     , ,   ,    ,   ,RW13,CY,P,G,A,A,J,S;
 PRDAT:A,       LPV, ,          ,A,      LNAV, ,   , ,   , ,   , ,   ,J,S;
 APPCH:025,R,R13, ,OTPIL,CY,P,C,E S , ,302,TF, , , , , ,      ,    ,    ,1250,0026,+,00870,     ,     , ,   ,-300,   , , , , , ,A,J,S;
 APPCH:030,R,R13, ,RW13,CY,P,G,GY M, ,302,TF, , , , , ,      ,    ,    ,1250,0025, ,00069,     ,     , ,   ,-300,   , , , , , ,A,J,S;
@@ -56,7 +56,7 @@ APPCH:020,A,R31,BIMVI,MOGAB,CY,P,C,EE B, ,010,TF, , , , , ,      ,    ,    ,    
 APPCH:010,A,R31,BIPSU,BIPSU,CY,P,C,E  A, ,010,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000,-,210,    ,   , , , , , ,A,J,S;
 APPCH:020,A,R31,BIPSU,MOGAB,CY,P,C,EE B, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,02600,     ,     , ,   ,    ,   , , , , , ,A,J,S;
 APPCH:010,R,R31, ,MOGAB,CY,P,C,E  I, ,010,IF, , , , , ,      ,    ,    ,    ,    ,+,02600,     ,18000, ,   ,    ,   , , , , , ,A,J,S;
-APPCH:020,R,R31, ,IKDIL,CY,P,C,E  F, ,010,TF, , , , , ,      ,    ,    ,3050,0050,+,01700,     ,     , ,   ,    ,   ,RW31,CY,P,G, ,A,J,S;
+APPCH:020,R,R31, ,IKDIL,CY,P,C,E  F, ,010,TF, , , , , ,      ,    ,    ,3050,0050,+,01700,     ,     , ,   ,    ,   ,RW31,CY,P,G,A,A,J,S;
 PRDAT:A,       LPV, ,          ,A,      LNAV, ,   , ,   , ,   , ,   ,J,S;
 APPCH:030,R,R31, ,RW31,CY,P,G,GY M, ,302,TF, , , , , ,      ,    ,    ,3050,0051, ,00071,     ,     , ,   ,-300,   , , , , , ,A,J,S;
 APPCH:040,R,R31, ,DERMU,CY,P,C,EYM , ,010,TF, , , , , ,      ,    ,    ,    ,    , ,05000,     ,     , ,   ,    ,   , , , , , ,A,J,S;

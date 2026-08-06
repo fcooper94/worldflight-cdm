@@ -3,7 +3,7 @@ STAR:020,4,HOTAR1,BASLE,WYTOK,K7,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,  
 STAR:030,4,HOTAR1,BASLE,JABOR,K7,E,A,EE  , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:010,5,HOTAR1,ALL,JABOR,K7,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , , , , ;
 STAR:020,5,HOTAR1,ALL,HOTAR,K7,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
-STAR:030,5,HOTAR1,ALL,HABIK,K7,E,A,EY  , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
+STAR:030,5,HOTAR1,ALL,HABIK,K7,P,C,EY  , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:040,5,HOTAR1,ALL,KSGJ,K7,P,A,AE  , ,   ,VM, , , , , ,      ,    ,    ,2030,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 APPCH:010,A,I31,COBOK,COBOK,K7,E,A,E  A, ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,03000,     ,18000, ,   ,    ,   , , , , , ,0,D,S;
 APPCH:020,A,I31,COBOK,JOSEX,K7,P,C,EE B, ,   ,CF, ,IGUH,K7,P,I,      ,1315,0113,3120,0045,+,03000,     ,     , ,   ,    ,   , , , , , ,0,D,S;

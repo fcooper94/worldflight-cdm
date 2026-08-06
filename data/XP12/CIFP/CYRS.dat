@@ -1,11 +1,11 @@
 APPCH:010,A,R09,IGSOT,IGSOT,CY,P,C,E  A, ,010,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000,-,210,    ,   , , , , , ,A,J,S;
-APPCH:020,A,R09,IGSOT,ALVAB,CY,P,C,EE B, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,02300,     ,     ,-,200,    ,   , , , , , ,A,J,S;
+APPCH:020,A,R09,IGSOT,ALVAB,CY,P,C,EE B, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,02100,     ,     ,-,200,    ,   , , , , , ,A,J,S;
 APPCH:010,A,R09,VISUB,VISUB,CY,P,C,E  A, ,010,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000,-,210,    ,   , , , , , ,A,J,S;
-APPCH:020,A,R09,VISUB,ALVAB,CY,P,C,EE B, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,02300,     ,     ,-,200,    ,   , , , , , ,A,J,S;
-APPCH:010,R,R09, ,ALVAB,CY,P,C,E  D, ,010,IF, , , , , ,      ,    ,    ,    ,    ,+,02300,     ,18000,-,200,    ,   , , , , , ,A,J,S;
-APPCH:020,R,R09, ,UDPAD,CY,P,C,E  F, ,010,TF, , , , , ,      ,    ,    ,0870,0060,+,02300,     ,     , ,   ,    ,   ,RW09,CY,P,G, ,A,J,S;
+APPCH:020,A,R09,VISUB,ALVAB,CY,P,C,EE B, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,02100,     ,     ,-,200,    ,   , , , , , ,A,J,S;
+APPCH:010,R,R09, ,ALVAB,CY,P,C,E  D, ,010,IF, , , , , ,      ,    ,    ,    ,    ,+,02100,     ,18000,-,200,    ,   , , , , , ,A,J,S;
+APPCH:020,R,R09, ,UDPAD,CY,P,C,E  F, ,010,TF, , , , , ,      ,    ,    ,0870,0060,+,02100,     ,     , ,   ,    ,   ,RW09,CY,P,G, ,A,J,S;
 PRDAT:A,       LPV, ,          ,A,      LNAV, ,   , ,   , ,   , ,   ,J,S;
-APPCH:030,R,R09, ,RW09,CY,P,G,GY M, ,302,TF, , , , , ,      ,    ,    ,0870,0041, ,00793,     ,     , ,   ,-350,   , , , , , ,A,J,S;
+APPCH:030,R,R09, ,RW09,CY,P,G,GY M, ,302,TF, , , , , ,      ,    ,    ,0870,0041, ,00793,     ,     , ,   ,-304,   , , , , , ,A,J,S;
 APPCH:040,R,R09, ,DUPOG,CY,P,C,EYM , ,010,TF, , , , , ,      ,    ,    ,    ,    , ,02200,     ,     , ,   ,    ,   , , , , , ,A,J,S;
 APPCH:050,R,R09, ,DUPOG,CY,P,C,EE H,R,010,HM, , , , , ,      ,    ,    ,0870,T010, ,     ,     ,     ,-,230,    ,   , , , , , ,A,J,S;
 APPCH:010,A,R27,IPSED,IPSED,CY,P,C,E  A, ,010,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000,-,210,    ,   , , , , , ,A,J,S;
@@ -15,7 +15,7 @@ APPCH:020,A,R27,KARED,ALVUB,CY,P,C,EE B, ,010,TF, , , , , ,      ,    ,    ,    
 APPCH:010,R,R27, ,ALVUB,CY,P,C,E  D, ,010,IF, , , , , ,      ,    ,    ,    ,    ,+,02100,     ,18000, ,   ,    ,   , , , , , ,A,J,S;
 APPCH:020,R,R27, ,METVI,CY,P,C,E  F, ,010,TF, , , , , ,      ,    ,    ,2680,0060,+,02100,     ,     , ,   ,    ,   ,RW27,CY,P,G, ,A,J,S;
 PRDAT:A,       LPV, ,          ,A,      LNAV, ,   , ,   , ,   , ,   ,J,S;
-APPCH:030,R,R27, ,RW27,CY,P,G,GY M, ,302,TF, , , , , ,      ,    ,    ,2670,0041, ,00790,     ,     , ,   ,-300,   , , , , , ,A,J,S;
+APPCH:030,R,R27, ,RW27,CY,P,G,GY M, ,302,TF, , , , , ,      ,    ,    ,2670,0041, ,00791,     ,     , ,   ,-300,   , , , , , ,A,J,S;
 APPCH:040,R,R27, ,OTMOX,CY,P,C,EYM , ,010,TF, , , , , ,      ,    ,    ,    ,    , ,02200,     ,     , ,   ,    ,   , , , , , ,A,J,S;
 APPCH:050,R,R27, ,OTMOX,CY,P,C,EE H,R,010,HM, , , , , ,      ,    ,    ,2670,T010, ,     ,     ,     ,-,230,    ,   , , , , , ,A,J,S;
 RWY:RW09 ,     ,      ,00737, ,    , ,   ;N54100150,W093335659,0000;

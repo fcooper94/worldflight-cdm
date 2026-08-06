@@ -70,7 +70,7 @@ STAR:010,5,COST3Q,RW31,COSTA,SG,E,A,E C , ,010,IF, , , , , ,      ,    ,    ,   
 STAR:030,5,COST3Q,RW31,ISUBA,SA,P,C,EEC , ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,03000,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:010,5,DIDO2M,RW13,DIDOM,SB,E,A,E C , ,010,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   ,SARI,SA,P,A, , , , ;
 STAR:020,5,DIDO2M,RW13,ANBAV,SB,E,A,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,FL040,     ,     ,-,220,    ,   , , , , , , , , ;
-STAR:030,5,DIDO2M,RW13,DOLMU,SB,P,C,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,03500,     ,     , ,   ,    ,   , , , , , , , , ;
+STAR:030,5,DIDO2M,RW13,DOLMU,SA,P,C,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,03500,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:040,5,DIDO2M,RW13,KOVRA,SA,P,C,EEC , ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,03000,     ,     ,-,185,    ,   , , , , , , , , ;
 STAR:010,5,DOKB3M,RW13,DOKBA,SA,E,A,E C , ,010,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   ,SARI,SA,P,A, , , , ;
 STAR:020,5,DOKB3M,RW13,NEGEX,SA,E,A,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
@@ -82,11 +82,11 @@ STAR:030,5,ELAM2Q,RW31,LANUB,SA,P,C,E  H, ,010,TF, , , , , ,      ,    ,    ,   
 STAR:040,5,ELAM2Q,RW31,ISUBA,SA,P,C,EEC , ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,03000,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:010,5,ILMI2M,RW13,ILMIS,SB,E,A,E C , ,010,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   ,SARI,SA,P,A, , , , ;
 STAR:020,5,ILMI2M,RW13,ANBAV,SB,E,A,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,FL040,     ,     ,-,220,    ,   , , , , , , , , ;
-STAR:030,5,ILMI2M,RW13,DOLMU,SB,P,C,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,03500,     ,     , ,   ,    ,   , , , , , , , , ;
+STAR:030,5,ILMI2M,RW13,DOLMU,SA,P,C,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,03500,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:040,5,ILMI2M,RW13,KOVRA,SA,P,C,EEC , ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,03000,     ,     ,-,185,    ,   , , , , , , , , ;
 STAR:010,5,KAMI2M,RW13,KAMIL,SB,E,A,E C , ,010,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   ,SARI,SA,P,A, , , , ;
 STAR:020,5,KAMI2M,RW13,ANBAV,SB,E,A,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,FL040,     ,     ,-,220,    ,   , , , , , , , , ;
-STAR:030,5,KAMI2M,RW13,DOLMU,SB,P,C,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,03500,     ,     , ,   ,    ,   , , , , , , , , ;
+STAR:030,5,KAMI2M,RW13,DOLMU,SA,P,C,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,03500,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:040,5,KAMI2M,RW13,KOVRA,SA,P,C,EEC , ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,03000,     ,     ,-,185,    ,   , , , , , , , , ;
 STAR:010,5,KOLN1Q,RW31,KOLNA,SA,E,A,E C , ,010,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   ,SARI,SA,P,A, , , , ;
 STAR:020,5,KOLN1Q,RW31,JOALI,SA,P,C,EEC , ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,03000,     ,     ,-,220,    ,   , , , , , , , , ;
@@ -109,7 +109,7 @@ STAR:020,5,UDEN3Q,RW31,KEXAK,SA,P,C,E   , ,010,TF, , , , , ,      ,    ,    ,   
 STAR:030,5,UDEN3Q,RW31,ISUBA,SA,P,C,EEC , ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,03000,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:010,5,UPOR1M,RW13,UPORU,SB,E,A,E C , ,010,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   ,SARI,SA,P,A, , , , ;
 STAR:020,5,UPOR1M,RW13,ANBAV,SB,E,A,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,FL040,     ,     ,-,220,    ,   , , , , , , , , ;
-STAR:030,5,UPOR1M,RW13,DOLMU,SB,P,C,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,03500,     ,     , ,   ,    ,   , , , , , , , , ;
+STAR:030,5,UPOR1M,RW13,DOLMU,SA,P,C,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,03500,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:040,5,UPOR1M,RW13,KOVRA,SA,P,C,EEC , ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,03000,     ,     ,-,185,    ,   , , , , , , , , ;
 STAR:010,5,VUGL1Q,RW31,VUGLA,SB,E,A,E   , ,010,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   ,SARI,SA,P,A, , , , ;
 STAR:020,5,VUGL1Q,RW31,JOALI,SA,P,C,EEC , ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,03000,     ,     ,-,220,    ,   , , , , , , , , ;

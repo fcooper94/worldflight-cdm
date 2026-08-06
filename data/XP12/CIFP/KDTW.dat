@@ -612,8 +612,8 @@ STAR:030,4,CUUGR2,BOBTA,GGUCE,CY,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,  
 STAR:040,4,CUUGR2,BOBTA,WLFMN,K5,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,FL240,     ,     , ,280,    ,   , , , , , , , , ;
 STAR:050,4,CUUGR2,BOBTA,MAVVV,K5,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:060,4,CUUGR2,BOBTA,TPGUN,K5,P,C,EE H, ,   ,TF, , , , , ,      ,    ,    ,    ,    ,B,FL230,16000,     , ,280,    ,   , , , , , , , , ;
-STAR:010,4,CUUGR2,DONEO,DONEO,K6,P,C,E  H, ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , , , , ;
-STAR:020,4,CUUGR2,DONEO,VYPRE,K6,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
+STAR:010,4,CUUGR2,DONEO,DONEO,CY,E,A,E  H, ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , , , , ;
+STAR:020,4,CUUGR2,DONEO,VYPRE,CY,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:030,4,CUUGR2,DONEO,GGUCE,CY,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:040,4,CUUGR2,DONEO,WLFMN,K5,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,FL240,     ,     , ,280,    ,   , , , , , , , , ;
 STAR:050,4,CUUGR2,DONEO,MAVVV,K5,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
@@ -870,8 +870,8 @@ STAR:030,4,TPGUN2,BOBTA,GGUCE,CY,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,  
 STAR:040,4,TPGUN2,BOBTA,WLFMN,K5,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,FL240,     ,     , ,280,    ,   , , , , , , , , ;
 STAR:050,4,TPGUN2,BOBTA,MAVVV,K5,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:060,4,TPGUN2,BOBTA,TPGUN,K5,P,C,EE H, ,   ,TF, , , , , ,      ,    ,    ,    ,    ,B,14000,11000,     , ,280,    ,   , , , , , , , , ;
-STAR:010,4,TPGUN2,DONEO,DONEO,K6,P,C,E  H, ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , , , , ;
-STAR:020,4,TPGUN2,DONEO,VYPRE,K6,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
+STAR:010,4,TPGUN2,DONEO,DONEO,CY,E,A,E  H, ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , , , , ;
+STAR:020,4,TPGUN2,DONEO,VYPRE,CY,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:030,4,TPGUN2,DONEO,GGUCE,CY,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:040,4,TPGUN2,DONEO,WLFMN,K5,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,FL240,     ,     , ,280,    ,   , , , , , , , , ;
 STAR:050,4,TPGUN2,DONEO,MAVVV,K5,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;

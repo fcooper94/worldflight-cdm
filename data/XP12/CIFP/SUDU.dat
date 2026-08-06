@@ -23,7 +23,7 @@ APPCH:050,R,R10, ,GEMOT,SU,P,C,EECH,L,   ,HM, , , , , ,      ,    ,    ,2760,T01
 APPCH:010,A,R21,BISOK,BISOK,SU,E,A,E CA, ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , ,B,J,S;
 APPCH:020,A,R21,BISOK,BUTSI,SU,P,C,EEC , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,04000,     ,     , ,   ,    ,   , , , , , ,B,J,S;
 APPCH:010,A,R21,BUTSI,BUTSI,SU,P,C,EECC,L,   ,HF, , , , , ,      ,    ,    ,2140,T010,+,03630,     ,     , ,   ,    ,   , , , , , ,B,J,S;
-APPCH:010,A,R21,MUMET,MUMET,SU,E,A,E CA, ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , ,B,J,S;
+APPCH:010,A,R21,MUMET,MUMET,SU,P,C,E CA, ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , ,B,J,S;
 APPCH:020,A,R21,MUMET,BUTSI,SU,P,C,EEC , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,04000,     ,     , ,   ,    ,   , , , , , ,B,J,S;
 APPCH:010,R,R21, ,BUTSI,SU,P,C,E CI, ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,03630,     ,     , ,   ,    ,   , , , , , ,B,J,S;
 APPCH:020,R,R21, ,ESORI,SU,P,C,E CF, ,   ,TF, , , , , ,      ,    ,    ,2140,0050,+,01970,     ,     , ,   ,    ,   ,RW21,SU,P,G, ,B,J,S;

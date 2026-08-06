@@ -11,7 +11,7 @@ SID:010,4,DEEZZ6,RW22B, , , , ,    , ,   ,VM, , , , , ,      ,    ,    ,2240,   
 SID:020,4,DEEZZ6,RW22B,DEEZZ,K6,E,A,EE H,R,   ,DF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 SID:010,4,DEEZZ6,RW31B, , , , ,    , ,   ,VA, , , , , ,      ,    ,    ,3140,    ,+,00520,     ,18000, ,   ,    ,   ,KJFK,K6,P,A, , , , ;
 SID:020,4,DEEZZ6,RW31B,SKORR,K6,E,A,E   , ,   ,DF, , , , , ,      ,    ,    ,    ,    ,+,02500,     ,     ,-,210,    ,   , , , , , , , , ;
-SID:030,4,DEEZZ6,RW31B,CESID,K6,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,02500,     ,     ,-,250,    ,   , , , , , , , , ;
+SID:030,4,DEEZZ6,RW31B,CESID,K6,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,02500,     ,     ,-,250,    ,   , , , , , , , , ;
 SID:040,4,DEEZZ6,RW31B,YNKEE,K6,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 SID:050,4,DEEZZ6,RW31B,YNKEE,K6,E,A,E   , ,   ,FM, ,CCC,K6,D, ,      ,2542,0549,1870,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 SID:060,4,DEEZZ6,RW31B,DEEZZ,K6,E,A,EE H,L,   ,DF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
@@ -35,10 +35,10 @@ SID:020,1,JFK5,RW31B,CRI,K6,D, ,VE  ,L,   ,DF, , , , , ,      ,    ,    ,    ,  
 SID:010,4,SKORR6,RW31B, , , , ,    , ,   ,VA, , , , , ,      ,    ,    ,3140,    ,+,00520,     ,18000, ,   ,    ,   ,KJFK,K6,P,A, , , , ;
 SID:020,4,SKORR6,RW31B,SKORR,K6,E,A,EE  ,L,   ,DF, , , , , ,      ,    ,    ,    ,    ,+,02500,     ,     ,-,210,    ,   , , , , , , , , ;
 SID:010,6,SKORR6,RNGRR,SKORR,K6,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,02500,     ,18000,-,210,    ,   ,KJFK,K6,P,A, , , , ;
-SID:020,6,SKORR6,RNGRR,METSS,K6,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,02500,     ,     ,-,250,    ,   , , , , , , , , ;
+SID:020,6,SKORR6,RNGRR,METSS,K6,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,02500,     ,     ,-,250,    ,   , , , , , , , , ;
 SID:030,6,SKORR6,RNGRR,RNGRR,K6,E,A,EE  , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 SID:010,6,SKORR6,YNKEE,SKORR,K6,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,02500,     ,18000,-,210,    ,   ,KJFK,K6,P,A, , , , ;
-SID:020,6,SKORR6,YNKEE,CESID,K6,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,02500,     ,     ,-,250,    ,   , , , , , , , , ;
+SID:020,6,SKORR6,YNKEE,CESID,K6,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,02500,     ,     ,-,250,    ,   , , , , , , , , ;
 SID:030,6,SKORR6,YNKEE,YNKEE,K6,E,A,EE  , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:010,2,CAMRN5,ALL,SIE,K6,D, ,V   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , , , , ;
 STAR:020,2,CAMRN5,ALL,BOTON,K6,E,A,E  H, ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;

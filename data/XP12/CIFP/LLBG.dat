@@ -464,12 +464,12 @@ APPCH:040,A,R21-Y,GINTU,VATAT,LL,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,  
 APPCH:050,A,R21-Y,GINTU,NAMIM,LL,P,C,EE B,L,010,TF, , , , , ,      ,    ,    ,    ,    ,+,02500,     ,     ,-,185,    ,   , , , , , ,B,J,S;
 APPCH:010,A,R21-Y,TADOV,TADOV,LL,P,C,E  A, ,   ,IF, , , , , ,      ,    ,    ,    ,    ,B,08000,05000,20000, ,   ,    ,   , , , , , ,B,J,S;
 APPCH:020,A,R21-Y,TADOV,VATAT,LL,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,03500,     ,     , ,   ,    ,   , , , , , ,B,J,S;
-APPCH:030,A,R21-Y,TADOV,NAMIM,LL,P,C,EE B, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,02500,     ,     , ,   ,    ,   , , , , , ,B,J,S;
-APPCH:010,R,R21-Y, ,NAMIM,LL,P,C,E  I, ,010,IF, , , , , ,      ,    ,    ,    ,    ,+,02500,     ,20000, ,   ,    ,   ,BGN,LL,D, , ,B,J,S;
+APPCH:030,A,R21-Y,TADOV,NAMIM,LL,P,C,EE B, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,02500,     ,     ,-,185,    ,   , , , , , ,B,J,S;
+APPCH:010,R,R21-Y, ,NAMIM,LL,P,C,E  I, ,010,IF, , , , , ,      ,    ,    ,    ,    ,+,02500,     ,20000,-,185,    ,   ,BGN,LL,D, , ,B,J,S;
 APPCH:015,R,R21-Y, ,BG217,LL,P,C,E   , ,010,TF, , , , , ,      ,    ,    ,1750,0042,+,01200,     ,     ,-,185,    ,   , , , , , ,B,J,S;
 APPCH:020,R,R21-Y, ,BG216,LL,P,C,E  F,R,010,RF, , , , , ,002550,    ,    ,    ,0013,+,01200,     ,     ,-,185,-300,   ,BG999,LL,P,C, ,B,J,S;
 PRDAT: ,          ,A, LNAV/VNAV,A,      LNAV, ,   , ,   , ,   , ,   ,J,S;
-APPCH:030,R,R21-Y, ,RW21,LL,P,G,GY M, ,302,TF, , , , , ,      ,    ,    ,2040,0031, ,00184,     ,     , ,   ,-300,   , , , , , ,B,J,S;
+APPCH:030,R,R21-Y, ,RW21,LL,P,G,GY M, ,302,TF, , , , , ,      ,    ,    ,2040,0031, ,00184,     ,     ,-,190,-300,   , , , , , ,B,J,S;
 APPCH:040,R,R21-Y, , , , , ,  M , ,   ,CA, , , , , ,      ,    ,    ,2040,    ,+,01000,     ,     ,-,190,    ,   , , , , , ,B,J,S;
 APPCH:050,R,R21-Y, ,GEMDA,LL,E,A,EY  ,L,   ,DF, , , , , ,      ,    ,    ,    ,    , ,05000,     ,     ,-,190,    ,   , , , , , ,B,J,S;
 APPCH:060,R,R21-Y, ,GEMDA,LL,E,A,EE H,L,   ,HM, , , , , ,      ,    ,    ,3480,T010, ,05000,     ,     ,-,230,    ,   , , , , , ,B,J,S;

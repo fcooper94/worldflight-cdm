@@ -190,7 +190,7 @@ APPCH:010,A,I36LX,VIGER,VIGER,RO,E,A,E  C, ,   ,IF, , , , , ,      ,    ,    ,  
 APPCH:020,A,I36LX,VIGER,D183O,RO,P,C,E   ,L,   ,AF, ,NHC,RO,D, ,      ,1852,0150,1960,    , ,     ,     ,     , ,   ,    ,   , , , , , ,0,D,S;
 APPCH:030,A,I36LX,VIGER,BLISS,RO,P,C,EE B, ,   ,CF, ,IOW,RO,P,I,      ,1826,0095,0030,0053,+,02000,     ,     , ,   ,    ,   , , , , , ,0,D,S;
 APPCH:010,I,I36LX, ,BLISS,RO,P,C,E  I, ,   ,IF, ,IOW,RO,P,I,      ,1826,0095,    ,    ,J,02000,01300,14000, ,   ,    ,   , , , , , ,0,D,S;
-APPCH:020,I,I36LX, ,BOOST,RJ,P,C,E  F, ,   ,CF, ,IOW,RO,P,I,      ,1826,0055,0030,0041,H,01300,01300,     , ,   ,-300,   ,NHC,RO,D, , ,0,D,S;
+APPCH:020,I,I36LX, ,BOOST,RO,P,C,E  F, ,   ,CF, ,IOW,RO,P,I,      ,1826,0055,0030,0041,H,01300,01300,     , ,   ,-300,   ,NHC,RO,D, , ,0,D,S;
 APPCH:030,I,I36LX, ,RW36L,RO,P,G,G  M, ,   ,CF, ,IOW,RO,P,I,      ,1826,0016,0030,0038, ,00069,     ,     , ,   ,-300,   , , , , , ,0,D,S;
 APPCH:040,I,I36LX, , , , , ,  M , ,   ,CA, , , , , ,      ,    ,    ,0030,    ,+,00520,     ,     , ,   ,    ,   , , , , , ,0,D,S;
 APPCH:050,I,I36LX, ,NHC,RO,D, ,V   , ,   ,FD, ,NHC,RO,D, ,      ,0000,0000,3080,0085,-,01200,     ,     , ,   ,    ,   , , , , , ,0,D,S;
@@ -206,7 +206,7 @@ APPCH:010,A,I36LY,VIGER,VIGER,RO,E,A,E  C, ,   ,IF, , , , , ,      ,    ,    ,  
 APPCH:020,A,I36LY,VIGER,D183O,RO,P,C,E   ,L,   ,AF, ,NHC,RO,D, ,      ,1852,0150,1960,    , ,     ,     ,     , ,   ,    ,   , , , , , ,0,D,S;
 APPCH:030,A,I36LY,VIGER,BLISS,RO,P,C,EE B, ,   ,CF, ,IOW,RO,P,I,      ,1826,0095,0030,0053,+,02000,     ,     , ,   ,    ,   , , , , , ,0,D,S;
 APPCH:010,I,I36LY, ,BLISS,RO,P,C,E  I, ,   ,IF, ,IOW,RO,P,I,      ,1826,0095,    ,    ,J,02000,01300,14000, ,   ,    ,   , , , , , ,0,D,S;
-APPCH:020,I,I36LY, ,BOOST,RJ,P,C,E  F, ,   ,CF, ,IOW,RO,P,I,      ,1826,0055,0030,0041,H,01300,01300,     , ,   ,-300,   ,NHC,RO,D, , ,0,D,S;
+APPCH:020,I,I36LY, ,BOOST,RO,P,C,E  F, ,   ,CF, ,IOW,RO,P,I,      ,1826,0055,0030,0041,H,01300,01300,     , ,   ,-300,   ,NHC,RO,D, , ,0,D,S;
 APPCH:030,I,I36LY, ,RW36L,RO,P,G,G  M, ,   ,CF, ,IOW,RO,P,I,      ,1826,0016,0030,0038, ,00069,     ,     , ,   ,-300,   , , , , , ,0,D,S;
 APPCH:040,I,I36LY, , , , , ,  M , ,   ,CA, , , , , ,      ,    ,    ,0030,    ,+,00520,     ,     , ,   ,    ,   , , , , , ,0,D,S;
 APPCH:050,I,I36LY, ,NHC,RO,D, ,V   , ,   ,FD, ,NHC,RO,D, ,      ,0000,0000,3080,0085,-,01200,     ,     , ,   ,    ,   , , , , , ,0,D,S;
@@ -221,7 +221,7 @@ APPCH:020,A,I36LZ,UTAKI,BLISS,RO,P,C,EE B, ,010,TF, ,IOW,RO,P,I,      ,    ,    
 APPCH:010,A,I36LZ,VIGER,VIGER,RO,E,A,E  C, ,010,IF, , , , , ,      ,    ,    ,    ,    ,+,02000,     ,14000, ,   ,    ,   , , , , , ,0,D,S;
 APPCH:020,A,I36LZ,VIGER,BLISS,RO,P,C,EE B, ,010,TF, ,IOW,RO,P,I,      ,    ,    ,    ,    ,+,02000,     ,     ,-,210,    ,   , , , , , ,0,D,S;
 APPCH:010,I,I36LZ, ,BLISS,RO,P,C,E  I, ,   ,IF, ,IOW,RO,P,I,      ,1826,0095,    ,    ,J,02000,01300,14000,-,210,    ,   , , , , , ,0,D,S;
-APPCH:020,I,I36LZ, ,BOOST,RJ,P,C,E  F, ,   ,CF, ,IOW,RO,P,I,      ,1826,0055,0030,0041,H,01300,01300,     , ,   ,-300,   ,NHC,RO,D, , ,0,D,S;
+APPCH:020,I,I36LZ, ,BOOST,RO,P,C,E  F, ,   ,CF, ,IOW,RO,P,I,      ,1826,0055,0030,0041,H,01300,01300,     , ,   ,-300,   ,NHC,RO,D, , ,0,D,S;
 APPCH:030,I,I36LZ, ,RW36L,RO,P,G,G  M, ,   ,CF, ,IOW,RO,P,I,      ,1826,0016,0030,0038, ,00069,     ,     , ,   ,-300,   , , , , , ,0,D,S;
 APPCH:040,I,I36LZ, , , , , ,  M , ,   ,CA, , , , , ,      ,    ,    ,0030,    ,+,00520,     ,     , ,   ,    ,   , , , , , ,0,D,S;
 APPCH:050,I,I36LZ, ,NHC,RO,D, ,V   , ,   ,FD, ,NHC,RO,D, ,      ,0000,0000,3080,0085,-,01200,     ,     , ,   ,    ,   , , , , , ,0,D,S;

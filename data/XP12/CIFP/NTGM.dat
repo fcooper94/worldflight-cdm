@@ -18,7 +18,7 @@ APPCH:020,A,R11,MAKOM,GM403,NT,P,C,E   , ,010,TF, , , , , ,      ,    ,    ,    
 APPCH:030,A,R11,MAKOM,AKUSA,NT,P,C,E C , ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,01500,     ,     , ,   ,    ,   , , , , , ,B,J,S;
 APPCH:040,A,R11,MAKOM,AKARI,NT,P,C,EECB,R,010,TF, , , , , ,      ,    ,    ,    ,    ,+,01500,     ,     , ,   ,    ,   , , , , , ,B,J,S;
 APPCH:010,R,R11, ,AKARI,NT,P,C,E CD, ,010,IF, , , , , ,      ,    ,    ,    ,    ,+,01500,     ,     , ,   ,    ,   , , , , , ,B,J,S;
-APPCH:020,R,R11, ,GM401,NT,P,C,E  F, ,010,TF, , , , , ,      ,    ,    ,1110,0050, ,01500,     ,     , ,   ,    ,   ,MAKOM,NT,P,C, ,B,J,S;
+APPCH:020,R,R11, ,FGM11,NT,P,C,E  F, ,010,TF, , , , , ,      ,    ,    ,1110,0050, ,01500,     ,     , ,   ,    ,   ,MAKOM,NT,P,C, ,B,J,S;
 PRDAT: ,          , ,          ,A,      LNAV, ,   , ,   , ,   , ,   ,J,S;
 APPCH:030,R,R11, ,RW11,NT,P,G,GY M, ,302,TF, , , , , ,      ,    ,    ,1110,0045, ,00058,     ,     , ,   ,-300,   , , , , , ,B,J,S;
 APPCH:040,R,R11, , , , , ,  M , ,010,CA, , , , , ,      ,    ,    ,1110,    ,+,00800,     ,     , ,   ,    ,   , , , , , ,B,J,S;
@@ -31,7 +31,7 @@ APPCH:020,A,R29,MAKOM,GM404,NT,P,C,E   , ,010,TF, , , , , ,      ,    ,    ,    
 APPCH:030,A,R29,MAKOM,EGOVA,NT,P,C,E C , ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,01500,     ,     , ,   ,    ,   , , , , , ,B,J,S;
 APPCH:040,A,R29,MAKOM,IBUKI,NT,P,C,EECB,R,010,TF, , , , , ,      ,    ,    ,    ,    ,+,01500,     ,     , ,   ,    ,   , , , , , ,B,J,S;
 APPCH:010,R,R29, ,IBUKI,NT,P,C,E CD, ,010,IF, , , , , ,      ,    ,    ,    ,    ,+,01500,     ,     , ,   ,    ,   , , , , , ,B,J,S;
-APPCH:020,R,R29, ,GM402,NT,P,C,E  F, ,010,TF, , , , , ,      ,    ,    ,2910,0050, ,01500,     ,     , ,   ,    ,   ,MAKOM,NT,P,C, ,B,J,S;
+APPCH:020,R,R29, ,FGM29,NT,P,C,E  F, ,010,TF, , , , , ,      ,    ,    ,2910,0050, ,01500,     ,     , ,   ,    ,   ,MAKOM,NT,P,C, ,B,J,S;
 PRDAT: ,          , ,          ,A,      LNAV, ,   , ,   , ,   , ,   ,J,S;
 APPCH:030,R,R29, ,RW29,NT,P,G,GY M, ,302,TF, , , , , ,      ,    ,    ,2910,0045, ,00060,     ,     , ,   ,-300,   , , , , , ,B,J,S;
 APPCH:040,R,R29, , , , , ,  M , ,010,CA, , , , , ,      ,    ,    ,2910,    ,+,00800,     ,     , ,   ,    ,   , , , , , ,B,J,S;

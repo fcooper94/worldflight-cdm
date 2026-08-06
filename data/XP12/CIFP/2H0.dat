@@ -1,14 +1,3 @@
-APPCH:010,A,NDBA,AXC,AXC,K5,D, ,V   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , ,0, ,C;
-APPCH:020,A,NDBA,AXC,SYZ,K5,D,B,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,02400,     ,     , ,   ,    ,   , , , , , ,0, ,C;
-APPCH:030,A,NDBA,AXC,SYZ,K5,D,B,E  A,L,   ,PI, ,OOM,K5,D, ,      ,2813,1051,2350,0100,+,02400,     ,     , ,   ,    ,   , , , , , ,0, ,C;
-APPCH:040,A,NDBA,AXC,FF010,K5,P,C,EE  , ,   ,CF, ,OOM,K5,D, ,      ,2784,1053,0100,0046,+,02400,     ,     , ,   ,    ,   , , , , , ,0, ,C;
-APPCH:010,A,NDBA,BIB,BIB,K5,D, ,V   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , ,0, ,C;
-APPCH:020,A,NDBA,BIB,SYZ,K5,D,B,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,02400,     ,     , ,   ,    ,   , , , , , ,0, ,C;
-APPCH:030,A,NDBA,BIB,SYZ,K5,D,B,E  A,L,   ,PI, ,OOM,K5,D, ,      ,2813,1051,2350,0100,+,02400,     ,     , ,   ,    ,   , , , , , ,0, ,C;
-APPCH:040,A,NDBA,BIB,FF010,K5,P,C,EE  , ,   ,CF, ,OOM,K5,D, ,      ,2784,1053,0100,0046,+,02400,     ,     , ,   ,    ,   , , , , , ,0, ,C;
-APPCH:020,N,NDBA, ,FF010,K5,P,C,E  F, ,   ,IF, ,SYZ,K5,D,B,      ,    ,    ,    ,    ,+,02400,     ,18000, ,   ,    ,   ,SYZ,K5,D,B, ,0, ,C;
-APPCH:030,N,NDBA, ,SYZ,K5,D,B,EY M, ,   ,CF, ,SYZ,K5,D,B,      ,    ,    ,0100,0054, ,01340,     ,     , ,   , 000,   , , , , , ,0, ,C;
-APPCH:040,N,NDBA, ,SYZ,K5,D,B,EEMH,L,   ,HM, , , , , ,      ,    ,    ,0100,T010,+,02400,     ,     , ,   ,    ,   , , , , , ,0, ,C;
 APPCH:010,A,R36,AXC,AXC,K5,D, ,V   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , ,B,J,S;
 APPCH:020,A,R36,AXC,EROXY,K5,P,C,EY  , ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,02400,     ,     , ,   ,    ,   , , , , , ,B,J,S;
 APPCH:030,A,R36,AXC,EROXY,K5,P,C,EE C,L,   ,HF, , , , , ,      ,    ,    ,0020,0040,+,02400,     ,     , ,   ,    ,   , , , , , ,B,J,S;

@@ -1,12 +1,3 @@
-SID:010,5,DASENB,RW16,D158J,HA,P,C,E C , ,   ,DF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,14000, ,   ,    ,   ,HAAX,HA,P,A, , , , ;
-SID:020,5,DASENB,RW16,DEBRE,HA,E,A,E C , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,12000,     ,     , ,   ,    ,   , , , , , , , , ;
-SID:030,5,DASENB,RW16,DASEN,HA,E,A,EEC , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,FL180,     ,     , ,   ,    ,   , , , , , , , , ;
-SID:010,5,NAISOB,RW16,D158J,HA,P,C,E C , ,   ,DF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,14000, ,   ,    ,   ,HAAX,HA,P,A, , , , ;
-SID:020,5,NAISOB,RW16,DEBRE,HA,E,A,E C , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,12000,     ,     , ,   ,    ,   , , , , , , , , ;
-SID:030,5,NAISOB,RW16,NAISO,HA,E,A,EEC , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,FL165,     ,     , ,   ,    ,   , , , , , , , , ;
-SID:010,5,NIWAYB,RW16,D158J,HA,P,C,E C , ,   ,DF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,14000, ,   ,    ,   ,HAAX,HA,P,A, , , , ;
-SID:020,5,NIWAYB,RW16,DEBRE,HA,E,A,E C , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,12000,     ,     , ,   ,    ,   , , , , , , , , ;
-SID:030,5,NIWAYB,RW16,NIWAY,HA,E,A,EEC , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,FL160,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:010,5,APKA2A,RW34,APKAM,HA,E,A,E C , ,010,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   ,HAAX,HA,P,A, , , , ;
 STAR:020,5,APKA2A,RW34,AX001,HA,P,C,EECH, ,010,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:010,5,APKA2B,RW34,APKAM,HA,E,A,E C , ,010,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   ,HAAX,HA,P,A, , , , ;

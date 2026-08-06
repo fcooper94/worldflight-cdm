@@ -15,7 +15,7 @@ APPCH:010,A,R10-Z,NOVIR,NOVIR,CY,P,C,E  A, ,010,IF, , , , , ,      ,    ,    ,  
 APPCH:020,A,R10-Z,NOVIR,PUPUP,CY,P,C,EE B, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,05800,     ,     , ,   ,    ,   , , , , , ,A,J,S;
 APPCH:010,R,R10-Z, ,PUPUP,CY,P,C,E  I, ,010,IF, , , , , ,      ,    ,    ,    ,    ,+,05800,     ,18000, ,   ,    ,   , , , , , ,A,J,S;
 APPCH:020,R,R10-Z, ,IKMUX,CY,P,C,E  F, ,010,TF, , , , , ,      ,    ,    ,0950,0050,+,04500,     ,     , ,   ,    ,   ,RW10,CY,P,G, ,A,J,S;
-PRDAT: ,          ,A, LNAV/VNAV,A,      LNAV, ,   , ,   , ,   , ,   ,J,S;
+PRDAT:A,       LPV,A, LNAV/VNAV,A,      LNAV, ,   , ,   , ,   , ,   ,J,S;
 APPCH:030,R,R10-Z, ,RW10,CY,P,G,GY M, ,302,TF, , , , , ,      ,    ,    ,0950,0060, ,02404,     ,     , ,   ,-330,   , , , , , ,A,J,S;
 APPCH:040,R,R10-Z, ,LEPEN,CY,P,C,EYM , ,010,TF, , , , , ,      ,    ,    ,    ,    , ,08000,     ,     , ,   ,    ,   , , , , , ,A,J,S;
 APPCH:050,R,R10-Z, ,LEPEN,CY,P,C,EE H,L,010,HM, , , , , ,      ,    ,    ,0950,T010, ,     ,     ,     ,-,230,    ,   , , , , , ,A,J,S;
@@ -36,7 +36,7 @@ APPCH:010,A,R28-Z,MONOR,MONOR,CY,P,C,E  A, ,010,IF, , , , , ,      ,    ,    ,  
 APPCH:020,A,R28-Z,MONOR,DUPIP,CY,P,C,EE B, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,05700,     ,     , ,   ,    ,   , , , , , ,A,J,S;
 APPCH:010,R,R28-Z, ,DUPIP,CY,P,C,E  I, ,010,IF, , , , , ,      ,    ,    ,    ,    ,+,05700,     ,18000, ,   ,    ,   , , , , , ,A,J,S;
 APPCH:020,R,R28-Z, ,ALUDO,CY,P,C,E  F, ,010,TF, , , , , ,      ,    ,    ,2750,0060,+,04700,     ,     , ,   ,    ,   ,RW28,CY,P,G, ,A,J,S;
-PRDAT: ,          ,A, LNAV/VNAV,A,      LNAV, ,   , ,   , ,   , ,   ,J,S;
+PRDAT:A,       LPV,A, LNAV/VNAV,A,      LNAV, ,   , ,   , ,   , ,   ,J,S;
 APPCH:030,R,R28-Z, ,RW28,CY,P,G,GY M, ,302,TF, , , , , ,      ,    ,    ,2750,0058, ,02385,     ,     , ,   ,-377,   , , , , , ,A,J,S;
 APPCH:040,R,R28-Z, , , , , ,  M , ,010,VA, , , , , ,      ,    ,    ,2750,    ,+,03100,     ,     , ,   ,    ,   , , , , , ,A,J,S;
 APPCH:050,R,R28-Z, ,ILETA,CY,P,C,EY  , ,010,DF, , , , , ,      ,    ,    ,    ,    , ,06900,     ,     , ,   ,    ,   , , , , , ,A,J,S;

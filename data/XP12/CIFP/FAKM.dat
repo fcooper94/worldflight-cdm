@@ -8,7 +8,7 @@ SID:020,5,UNRA1A,RW02,KM361,FA,P,C,EY  , ,   ,CF, ,KYV,FA,D, ,      ,0244,0041,0
 SID:030,5,UNRA1A,RW02,KM362,FA,P,C,E   , ,   ,CF, ,KYV,FA,D, ,      ,0835,0316,0950,0290,-,FL190,     ,     , ,   ,    ,   , , , , , , , , ;
 SID:040,5,UNRA1A,RW02,UNRAG,FA,E,A,EE  , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,FL200,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:010,5,EVES1A,RW02,EVESI,FA,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,FL200,     ,     , ,   ,    ,   ,FAKM,FA,P,A, , , , ;
-STAR:015,5,EVES1A,RW02,EVE15,HE,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     ,-,250,    ,   , , , , , , , , ;
+STAR:015,5,EVES1A,RW02,EVE15,FA,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     ,-,250,    ,   , , , , , , , , ;
 STAR:020,5,EVES1A,RW02,ETBAB,FA,P,C,EE  , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,FL090,     ,     ,-,210,    ,   , , , , , , , , ;
 STAR:010,5,IBKE1A,RW02,IBKEL,FA,P,C,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,FL240,     ,     , ,   ,    ,   ,FAKM,FA,P,A, , , , ;
 STAR:020,5,IBKE1A,RW02,KM368,FA,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,FL140,     ,     , ,   ,    ,   , , , , , , , , ;

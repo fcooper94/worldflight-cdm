@@ -176,9 +176,6 @@ STAR:060,5,IPT1C,RW05,PELLO,LT,P,C,EE  , ,010,TF, , , , , ,      ,    ,    ,    
 STAR:010,5,IPT1J,RW23,IPT,LT,D, ,V  H, ,010,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   ,CRD,LT,D, , , , , ;
 STAR:020,5,IPT1J,RW23,AY604,LT,P,C,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,08000,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:030,5,IPT1J,RW23,VEGUT,LT,P,C,EE  , ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,06000,     ,     , ,   ,    ,   , , , , , , , , ;
-STAR:010,2,KOZL1A,ALL,KOZLU,LT,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   ,CRD,LT,D, , , , , ;
-STAR:020,2,KOZL1A,ALL,D130J,LT,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
-STAR:030,2,KOZL1A,ALL,CRD,LT,D, ,VE H, ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:010,5,KOZL1B,RW05,KOZLU,LT,E,A,E   , ,010,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   ,CRD,LT,D, , , , , ;
 STAR:020,5,KOZL1B,RW05,EVPAN,LT,P,C,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:030,5,KOZL1B,RW05,ELVIT,LT,P,C,E  H, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,09000,     ,     , ,   ,    ,   , , , , , , , , ;
@@ -195,6 +192,9 @@ STAR:020,5,KOZL1J,RW23,EKVOT,LT,P,C,E   , ,010,TF, , , , , ,      ,    ,    ,   
 STAR:030,5,KOZL1J,RW23,REPGO,LT,P,C,E  H, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,09000,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:040,5,KOZL1J,RW23,AY604,LT,P,C,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,08000,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:050,5,KOZL1J,RW23,VEGUT,LT,P,C,EE  , ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,06000,     ,     , ,   ,    ,   , , , , , , , , ;
+STAR:010,2,KOZL1T,ALL,KOZLU,LT,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   ,CRD,LT,D, , , , , ;
+STAR:020,2,KOZL1T,ALL,D130J,LT,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
+STAR:030,2,KOZL1T,ALL,CRD,LT,D, ,VE H, ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:010,2,PELI1U,ALL,PELIL,LT,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   ,CRD,LT,D, , , , , ;
 STAR:020,2,PELI1U,ALL,D078J,LT,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:030,2,PELI1U,ALL,CRD,LT,D, ,VE H, ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;

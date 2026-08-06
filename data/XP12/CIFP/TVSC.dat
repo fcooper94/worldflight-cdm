@@ -1,7 +1,7 @@
 APPCH:010,A,N13-X,CAI,CAI,TV,D,B,E  C, ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,02000,     ,     , ,   ,    ,   , , , , , ,0, ,S;
 APPCH:020,A,N13-X,CAI,CAI,TV,D,B,EY  , ,   ,FC, ,CAI,TV,D,B,      ,0000,0000,2910,0070,+,01800,     ,     , ,   ,    ,   , , , , , ,0, ,S;
-APPCH:030,A,N13-X,CAI,FF13,TT,P,C,EE  ,R,   ,CF,Y,CAI,TV,D,B,      ,3170,0063,1370,0010,+,01800,     ,     , ,   ,    ,   , , , , , ,0, ,S;
-APPCH:020,N,N13-X, ,FF13,TT,P,C,E  F, ,   ,IF, ,CAI,TV,D,B,      ,    ,    ,    ,    ,+,01800,     ,     , ,   ,    ,   ,CAI,TV,D,B, ,0, ,S;
+APPCH:030,A,N13-X,CAI,FF13,TV,P,C,EE  ,R,   ,CF,Y,CAI,TV,D,B,      ,3170,0063,1370,0010,+,01800,     ,     , ,   ,    ,   , , , , , ,0, ,S;
+APPCH:020,N,N13-X, ,FF13,TV,P,C,E  F, ,   ,IF, ,CAI,TV,D,B,      ,    ,    ,    ,    ,+,01800,     ,     , ,   ,    ,   ,CAI,TV,D,B, ,0, ,S;
 APPCH:030,N,N13-X, ,RW13,TV,P,G,G  M, ,   ,CF, ,CAI,TV,D,B,      ,    ,    ,1370,0055, ,00061,     ,     , ,   ,-300,   , , , , , ,0, ,S;
 APPCH:040,N,N13-X, ,CAI,TV,D,B,EYM , ,   ,CF, ,CAI,TV,D,B,      ,0000,0000,1370,0008, ,     ,     ,     , ,   ,    ,   , , , , , ,0, ,S;
 APPCH:050,N,N13-X, , , , , ,    , ,   ,CA, , , , , ,      ,    ,    ,1370,    ,+,02000,     ,     , ,   ,    ,   , , , , , ,0, ,S;
@@ -9,8 +9,8 @@ APPCH:060,N,N13-X, ,CAI,TV,D,B,E   ,R,   ,DF, , , , , ,      ,    ,    ,    ,   
 APPCH:070,N,N13-X, ,CAI,TV,D,B,EE H,R,   ,HM, , , , , ,      ,    ,    ,3170,T010,-,04000,     ,     ,-,230,    ,   , , , , , ,0, ,S;
 APPCH:010,A,N13-Y,CAI,CAI,TV,D,B,E  C, ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,02000,     ,     , ,   ,    ,   , , , , , ,0, ,S;
 APPCH:020,A,N13-Y,CAI,CAI,TV,D,B,EY  , ,   ,FC, ,CAI,TV,D,B,      ,0000,0000,3050,0090,+,01800,     ,     , ,   ,    ,   , , , , , ,0, ,S;
-APPCH:030,A,N13-Y,CAI,FF13,TT,P,C,EE  ,R,   ,CF,Y,CAI,TV,D,B,      ,3170,0063,1370,0027,+,01800,     ,     , ,   ,    ,   , , , , , ,0, ,S;
-APPCH:020,N,N13-Y, ,FF13,TT,P,C,E  F, ,   ,IF, ,CAI,TV,D,B,      ,    ,    ,    ,    ,+,01800,     ,     , ,   ,    ,   ,CAI,TV,D,B, ,0, ,S;
+APPCH:030,A,N13-Y,CAI,FF13,TV,P,C,EE  ,R,   ,CF,Y,CAI,TV,D,B,      ,3170,0063,1370,0027,+,01800,     ,     , ,   ,    ,   , , , , , ,0, ,S;
+APPCH:020,N,N13-Y, ,FF13,TV,P,C,E  F, ,   ,IF, ,CAI,TV,D,B,      ,    ,    ,    ,    ,+,01800,     ,     , ,   ,    ,   ,CAI,TV,D,B, ,0, ,S;
 APPCH:030,N,N13-Y, ,RW13,TV,P,G,G  M, ,   ,CF, ,CAI,TV,D,B,      ,    ,    ,1370,0055, ,00061,     ,     , ,   ,-300,   , , , , , ,0, ,S;
 APPCH:040,N,N13-Y, ,CAI,TV,D,B,EYM , ,   ,CF, ,CAI,TV,D,B,      ,0000,0000,1370,0008, ,     ,     ,     , ,   ,    ,   , , , , , ,0, ,S;
 APPCH:050,N,N13-Y, , , , , ,    , ,   ,CA, , , , , ,      ,    ,    ,1370,    ,+,02000,     ,     , ,   ,    ,   , , , , , ,0, ,S;

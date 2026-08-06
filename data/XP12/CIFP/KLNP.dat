@@ -8,9 +8,8 @@ APPCH:030,L,L24, ,RW24,K6,P,G,G  M, ,   ,CF, ,IOWN,K6,P,I,      ,0622,0009,2420,
 APPCH:040,L,L24, , , , , ,  M , ,   ,CA, , , , , ,      ,    ,    ,2420,    ,+,03300,     ,     , ,   ,    ,   , , , , , ,0,D,S;
 APPCH:050,L,L24, ,JUBTO,K6,P,C,E   ,R,   ,DF, , , , , ,      ,    ,    ,    ,    ,+,04600,     ,     , ,   ,    ,   , , , , , ,0,D,S;
 APPCH:060,L,L24, ,JUBTO,K6,P,C,EE H,R,   ,HM, , , , , ,      ,    ,    ,2420,T010, ,     ,     ,     , ,   ,    ,   , , , , , ,0,D,S;
-APPCH:010,A,R06,HILTO,HILTO,K6,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , ,A,J,S;
-APPCH:020,A,R06,HILTO,HODNU,K6,P,C,E  A, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,06000,     ,     , ,   ,    ,   , , , , , ,A,J,S;
-APPCH:030,A,R06,HILTO,TOYOR,K6,P,C,EE B, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,05500,     ,     , ,   ,    ,   , , , , , ,A,J,S;
+APPCH:010,A,R06,HODNU,HODNU,K6,P,C,E  A, ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , ,A,J,S;
+APPCH:020,A,R06,HODNU,TOYOR,K6,P,C,EE B, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,05500,     ,     , ,   ,    ,   , , , , , ,A,J,S;
 APPCH:010,A,R06,RISTE,RISTE,K5,E,A,E  A, ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , ,A,J,S;
 APPCH:020,A,R06,RISTE,TOYOR,K6,P,C,EE B, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,05500,     ,     , ,   ,    ,   , , , , , ,A,J,S;
 APPCH:010,R,R06, ,TOYOR,K6,P,C,E  I, ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,05500,     ,18000, ,   ,    ,   , , , , , ,A,J,S;

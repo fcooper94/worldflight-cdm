@@ -565,9 +565,9 @@ APPCH:060,A,I08R,ROK08,BEGEN,ED,P,C,EE  ,L,   ,CF,Y,IMSE,ED,P,I,      ,2604,0136
 APPCH:010,I,I08R, ,BEGEN,ED,P,C,E  I, ,   ,IF, ,IMSE,ED,P,I,      ,2604,0136,    ,    ,J,05000,05000,     , ,   ,    ,   , , , , , ,0,D,S;
 APPCH:020,I,I08R, ,FI08R,ED,P,C,E  F, ,   ,CF, ,IMSE,ED,P,I,      ,2604,0066,0800,0069,H,05000,02780,     , ,   ,-300,   ,MNW,ED,P,N, ,0,D,S;
 APPCH:030,I,I08R, ,RW08R,ED,P,G,G  M, ,   ,CF, ,IMSE,ED,P,I,      ,2604,0027,0800,0039, ,01541,     ,     , ,   ,-300,   , , , , , ,0,D,S;
-APPCH:040,I,I08R, ,D080B,ED,P,C,E M , ,   ,CF, ,MAH,ED,D, ,      ,0729,0202,0800,0021, ,     ,     ,     , ,   ,    ,   , , , , , ,0,D,S;
-APPCH:050,I,I08R, ,D080B,ED,P,C,E   , ,   ,FA, ,MAH,ED,D, ,      ,0729,0202,0800,    ,+,01900,     ,     , ,   ,    ,   , , , , , ,0,D,S;
-APPCH:070,I,I08R, ,OTT,ED,D, ,VE H,R,   ,DF, , , , , ,      ,    ,    ,    ,    , ,05000,     ,     , ,   ,    ,   , , , , , ,0,D,S;
+APPCH:040,I,I08R, ,D080B,ED,P,C,E M , ,   ,CF, ,MAH,ED,D, ,      ,0728,0202,0800,0021, ,     ,     ,     , ,   ,    ,   , , , , , ,0,D,S;
+APPCH:050,I,I08R, ,D080B,ED,P,C,E   , ,   ,FA, ,MAH,ED,D, ,      ,0728,0202,0800,    ,+,01900,     ,     , ,   ,    ,   , , , , , ,0,D,S;
+APPCH:060,I,I08R, ,OTT,ED,D, ,VE H,R,   ,DF, , , , , ,      ,    ,    ,    ,    , ,05000,     ,     , ,   ,    ,   , , , , , ,0,D,S;
 APPCH:010,A,I26L,BET26,BETOS,ED,E,A,E  H, ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , ,0,D,S;
 APPCH:020,A,I26L,BET26,DM452,ED,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , ,0,D,S;
 APPCH:030,A,I26L,BET26,DM459,ED,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , ,0,D,S;
@@ -720,9 +720,9 @@ APPCH:020,Q,Q08R, ,BEGEN,ED,P,C,E  F, ,   ,IF, ,MSE,ED,P,N,      ,    ,    ,    
 APPCH:023,Q,Q08R, ,MSE,ED,P,N,E S , ,   ,CF, ,MSE,ED,P,N,      ,    ,    ,0800,0069,+,02780,     ,     , ,   ,-300,   , , , , , ,0, ,S;
 APPCH:027,Q,Q08R, ,36DME,ED,P,C,E S , ,   ,CF, ,MSE,ED,P,N,      ,    ,    ,0800,0014,+,02340,     ,     , ,   ,-300,   , , , , , ,0, ,S;
 APPCH:030,Q,Q08R, ,MQ08R,ED,P,C,E  M, ,   ,CF, ,DMS,ED,D, ,      ,    ,0016,0800,0020, ,01699,     ,     , ,   ,-300,   , , , , , ,0, ,S;
-APPCH:040,Q,Q08R, ,D080B,ED,P,C,EYM , ,   ,CF, ,MAH,ED,D, ,      ,0729,0202,0800,0026, ,     ,     ,     , ,   ,    ,   , , , , , ,0, ,S;
-APPCH:050,Q,Q08R, ,D080B,ED,P,C,E   , ,   ,FA, ,MAH,ED,D, ,      ,0729,0202,0800,    ,+,01900,     ,     , ,   ,    ,   , , , , , ,0, ,S;
-APPCH:070,Q,Q08R, ,OTT,ED,D, ,VE H,R,   ,DF, , , , , ,      ,    ,    ,    ,    , ,05000,     ,     , ,   ,    ,   , , , , , ,0, ,S;
+APPCH:040,Q,Q08R, ,D080B,ED,P,C,E M , ,   ,CF, ,MAH,ED,D, ,      ,0728,0202,0800,0026, ,     ,     ,     , ,   ,    ,   , , , , , ,0, ,S;
+APPCH:050,Q,Q08R, ,D080B,ED,P,C,E   , ,   ,FA, ,MAH,ED,D, ,      ,0728,0202,0800,    ,+,01900,     ,     , ,   ,    ,   , , , , , ,0, ,S;
+APPCH:060,Q,Q08R, ,OTT,ED,D, ,VE H,R,   ,DF, , , , , ,      ,    ,    ,    ,    , ,05000,     ,     , ,   ,    ,   , , , , , ,0, ,S;
 APPCH:010,A,Q26L,BET26,BETOS,ED,E,A,E  H, ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , ,0, ,S;
 APPCH:020,A,Q26L,BET26,DM452,ED,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , ,0, ,S;
 APPCH:030,A,Q26L,BET26,DM459,ED,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , ,0, ,S;

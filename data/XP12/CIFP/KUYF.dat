@@ -1,13 +1,12 @@
 APPCH:010,A,R09,BONEE,BONEE,K5,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , ,A,J,S;
-APPCH:020,A,R09,BONEE,NOGJO,K5,P,C,E  A, ,020,TF, , , , , ,      ,    ,    ,    ,    ,+,03000,     ,     , ,   ,    ,   , , , , , ,A,J,S;
+APPCH:020,A,R09,BONEE,NOGJO,K5,P,C,E  A, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,03000,     ,     , ,   ,    ,   , , , , , ,A,J,S;
 APPCH:030,A,R09,BONEE,FENLU,K5,P,C,EE B, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,03000,     ,     , ,   ,    ,   , , , , , ,A,J,S;
-APPCH:010,A,R09,FENLU,FENLU,K5,P,C,E  A, ,   ,IF, , , , , ,      ,    ,    ,    ,    ,-,08000,     ,18000, ,   ,    ,   , , , , , ,A,J,S;
-APPCH:020,A,R09,FENLU,FENLU,K5,P,C,EE H,R,   ,HF, , , , , ,      ,    ,    ,0920,0040,+,03000,     ,     , ,   ,    ,   , , , , , ,A,J,S;
+APPCH:010,A,R09,FENLU,FENLU,K5,P,C,EE C,R,   ,HF, , , , , ,      ,    ,    ,0920,0040,+,03000,     ,18000, ,   ,    ,   , , , , , ,A,J,S;
 APPCH:010,A,R09,JOGER,JOGER,K5,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , ,A,J,S;
-APPCH:020,A,R09,JOGER,OHOZE,K5,P,C,E  A, ,020,TF, , , , , ,      ,    ,    ,    ,    ,+,03000,     ,     , ,   ,    ,   , , , , , ,A,J,S;
+APPCH:020,A,R09,JOGER,OHOZE,K5,P,C,E  A, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,03000,     ,     , ,   ,    ,   , , , , , ,A,J,S;
 APPCH:030,A,R09,JOGER,FENLU,K5,P,C,EE B, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,03000,     ,     , ,   ,    ,   , , , , , ,A,J,S;
 APPCH:010,A,R09,MECAN,MECAN,K5,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , ,A,J,S;
-APPCH:020,A,R09,MECAN,NOGJO,K5,P,C,E  A, ,020,TF, , , , , ,      ,    ,    ,    ,    ,+,03000,     ,     , ,   ,    ,   , , , , , ,A,J,S;
+APPCH:020,A,R09,MECAN,NOGJO,K5,P,C,E  A, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,03000,     ,     , ,   ,    ,   , , , , , ,A,J,S;
 APPCH:030,A,R09,MECAN,FENLU,K5,P,C,EE B, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,03000,     ,     , ,   ,    ,   , , , , , ,A,J,S;
 APPCH:010,R,R09, ,FENLU,K5,P,C,E  I, ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,03000,     ,18000, ,   ,    ,   , , , , , ,A,J,S;
 APPCH:020,R,R09, ,SUREW,K5,P,C,E  F, ,010,TF, , , , , ,      ,    ,    ,0920,0062,+,02800,     ,     , ,   ,    ,   ,RW09,K5,P,G, ,A,J,S;

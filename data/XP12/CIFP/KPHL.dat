@@ -126,7 +126,7 @@ STAR:020,1,SLATT6,CFB,LECOR,K6,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    
 STAR:030,1,SLATT6,CFB,LVZ,K6,D, ,VE  , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:010,1,SLATT6,DNY,DNY,K6,D, ,V   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , , , , ;
 STAR:020,1,SLATT6,DNY,HARVA,K6,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
-STAR:030,1,SLATT6,DNY,CORLE,K6,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
+STAR:030,1,SLATT6,DNY,CORLE,K6,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:040,1,SLATT6,DNY,LVZ,K6,D, ,VE  , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:010,2,SLATT6,ALL,LVZ,K6,D, ,V   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , , , , ;
 STAR:020,2,SLATT6,ALL,SLATT,K6,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
@@ -138,7 +138,7 @@ STAR:020,4,SPUDS7,CFB,LECOR,K6,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    
 STAR:030,4,SPUDS7,CFB,LVZ,K6,D, ,VE  , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:010,4,SPUDS7,DNY,DNY,K6,D, ,V   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , , , , ;
 STAR:020,4,SPUDS7,DNY,HARVA,K6,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
-STAR:030,4,SPUDS7,DNY,CORLE,K6,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
+STAR:030,4,SPUDS7,DNY,CORLE,K6,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:040,4,SPUDS7,DNY,LVZ,K6,D, ,VE  , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:010,5,SPUDS7, ,LVZ,K6,D, ,V   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , , , , ;
 STAR:020,5,SPUDS7, ,SLATT,K6,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;

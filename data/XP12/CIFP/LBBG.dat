@@ -208,7 +208,7 @@ APPCH:010,A,I22,GIGPU,GIGPU,LB,P,C,E  A, ,   ,IF, , , , , ,      ,    ,    ,    
 APPCH:020,A,I22,GIGPU,IVKOR,LB,P,C,EE B, ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,03400,     ,     , ,   ,    ,   , , , , , ,0,D,S;
 APPCH:010,I,I22, ,IVKOR,LB,P,C,E  I, ,   ,IF, ,IBG,LB,P,I,      ,0384,0141,    ,    ,J,03400,02400,     , ,   ,    ,   , , , , , ,0,D,S;
 APPCH:020,I,I22, ,BG717,LB,P,C,E  F, ,   ,CF, ,IBG,LB,P,I,      ,0384,0090,2180,0051,H,02400,02400,     , ,   ,-300,   ,BGS,LB,D, , ,0,D,S;
-APPCH:030,I,I22, ,RW22,LB,P,G,G  M, ,   ,CF, ,IBG,LB,P,I,      ,0384,0019,2180,0070, ,00171,     ,     , ,   ,-300,   , , , , , ,0,D,S;
+APPCH:030,I,I22, ,RW22,LB,P,G,G  M, ,   ,CF, ,IBG,LB,P,I,      ,0384,0019,2180,0070, ,00175,     ,     , ,   ,-300,   , , , , , ,0,D,S;
 APPCH:040,I,I22, , , , , ,  M , ,   ,CA, , , , , ,      ,    ,    ,2180,    ,+,00540,     ,     , ,   ,    ,   , , , , , ,0,D,S;
 APPCH:050,I,I22, ,BGS,LB,D, ,V   , ,   ,FD, ,BGS,LB,D, ,      ,0000,0000,2260,0092, ,     ,     ,     , ,   ,    ,   , , , , , ,0,D,S;
 APPCH:060,I,I22, ,BGS,LB,D, ,V   ,L,   ,DF, , , , , ,      ,    ,    ,    ,    , ,04000,     ,     ,-,220,    ,   , , , , , ,0,D,S;
@@ -228,7 +228,7 @@ APPCH:050,R,R04, ,BGS,LB,D, ,VY  ,R,010,DF, , , , , ,      ,    ,    ,    ,    ,
 APPCH:060,R,R04, ,BGS,LB,D, ,VE H,L,010,HM, , , , , ,      ,    ,    ,2180,T010,+,04000,     ,     , ,   ,    ,   , , , , , ,A,J,S;
 APPCH:010,A,R22,BGS,BGS,LB,D, ,V  C, ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,04000,     ,     ,-,220,    ,   , , , , , ,A,J,S;
 APPCH:020,A,R22,BGS,BG390,LB,P,C,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , ,A,J,S;
-APPCH:030,A,R22,BGS,AMGUG,LB,P,C,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , ,A,J,S;
+APPCH:030,A,R22,BGS,AMGUG,LB,P,C,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     ,-,220,    ,   , , , , , ,A,J,S;
 APPCH:040,A,R22,BGS,IVKOR,LB,P,C,EE B, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,03400,     ,     ,-,190,    ,   , , , , , ,A,J,S;
 APPCH:010,A,R22,GIGPU,GIGPU,LB,P,C,E  A, ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,04000,     ,     ,-,220,    ,   , , , , , ,A,J,S;
 APPCH:020,A,R22,GIGPU,IVKOR,LB,P,C,EE B, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,03400,     ,     ,-,190,    ,   , , , , , ,A,J,S;

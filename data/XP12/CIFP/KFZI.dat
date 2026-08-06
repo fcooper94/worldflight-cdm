@@ -27,16 +27,5 @@ APPCH:040,R,R27, , , , , ,  M , ,   ,CA, , , , , ,      ,    ,    ,2750,    ,+,0
 APPCH:050,R,R27, ,DAVVS,K5,P,C,E   , ,010,DF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , ,A,J,S;
 APPCH:060,R,R27, ,FBC,K5,D, ,VY  , ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,02500,     ,     , ,   ,    ,   , , , , , ,A,J,S;
 APPCH:070,R,R27, ,FBC,K5,D, ,VE H,R,   ,HM, , , , , ,      ,    ,    ,2360,0040, ,     ,     ,     , ,   ,    ,   , , , , , ,A,J,S;
-APPCH:010,A,VORA,FBC,FBC,K5,D, ,V  A, ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , ,0, ,C;
-APPCH:020,A,VORA,FBC,CASTY,K5,P,C,EE B, ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,02500,     ,     , ,   ,    ,   , , , , , ,0, ,C;
-APPCH:010,A,VORA,OHZUF,OHZUF,K5,E,A,E  A, ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , ,0, ,C;
-APPCH:020,A,VORA,OHZUF,CASTY,K5,P,C,EE B,R,   ,AF, ,FBC,K5,D, ,      ,0510,0100,0120,    ,+,02500,     ,     , ,   ,    ,   , , , , , ,0, ,C;
-APPCH:010,A,VORA,OJACE,OJACE,K5,E,A,E  A, ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , ,0, ,C;
-APPCH:020,A,VORA,OJACE,CASTY,K5,P,C,EE B,L,   ,AF, ,FBC,K5,D, ,      ,0510,0100,1480,    ,+,02500,     ,     , ,   ,    ,   , , , , , ,0, ,C;
-APPCH:010,V,VORA, ,CASTY,K5,P,C,E  I, ,   ,IF, ,FBC,K5,D, ,      ,0510,0100,    ,    ,+,02500,     ,18000, ,   ,    ,   , , , , , ,0, ,C;
-APPCH:020,V,VORA, ,ARCAD,K5,P,C,E  F, ,   ,CF, ,FBC,K5,D, ,      ,0510,0170,0510,0070,+,02400,     ,     , ,   ,    ,   ,FBC,K5,D, , ,0, ,C;
-APPCH:030,V,VORA, ,MACCY,K5,P,C,E  M, ,   ,CF, ,FBC,K5,D, ,      ,0510,0214,0510,0044, ,01400,     ,     , ,   , 000,   , , , , , ,0, ,C;
-APPCH:040,V,VORA, ,ARCAD,K5,P,C,E M ,R,   ,CF,Y,FBC,K5,D, ,      ,0510,0170,2310,0044,+,02400,     ,     , ,   ,    ,   , , , , , ,0, ,C;
-APPCH:050,V,VORA, ,ARCAD,K5,P,C,EE H,R,   ,HM, , , , , ,      ,    ,    ,0510,T010, ,     ,     ,     , ,   ,    ,   , , , , , ,0, ,C;
 RWY:RW09 ,     ,      ,00751, ,    , ,   ;N41112695,W083240778,0000;
 RWY:RW27 ,     ,      ,00752, ,    , ,   ;N41112705,W083230231,0000;

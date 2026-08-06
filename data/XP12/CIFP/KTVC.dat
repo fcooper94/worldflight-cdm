@@ -25,12 +25,11 @@ APPCH:040,I,I28, , , , , ,  M , ,   ,CA, , , , , ,      ,    ,    ,2790,    ,+,0
 APPCH:050,I,I28, ,TVC,K5,D, ,V   ,L,   ,DF, , , , , ,      ,    ,    ,    ,    ,+,03000,     ,     , ,   ,    ,   , , , , , ,0,N,S;
 APPCH:060,I,I28, ,TVC,K5,D, ,VE H,R,   ,HM, , , , , ,      ,    ,    ,3400,T010,+,03000,     ,     , ,   ,    ,   , , , , , ,0,N,S;
 APPCH:010,A,R10,BABBE,BABBE,K5,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , ,A,J,S;
-APPCH:020,A,R10,BABBE,FEPEX,K5,E,A,E  A, ,020,TF, , , , , ,      ,    ,    ,    ,    ,+,03600,     ,     , ,   ,    ,   , , , , , ,A,J,S;
+APPCH:020,A,R10,BABBE,FEPEX,K5,E,A,E  A, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,03600,     ,     , ,   ,    ,   , , , , , ,A,J,S;
 APPCH:030,A,R10,BABBE,BEAAR,K5,P,C,EE B, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,03000,     ,     , ,   ,    ,   , , , , , ,A,J,S;
-APPCH:010,A,R10,BEAAR,BEAAR,K5,P,C,E  A, ,   ,IF, , , , , ,      ,    ,    ,    ,    ,-,06000,     ,18000, ,   ,    ,   , , , , , ,A,J,S;
-APPCH:020,A,R10,BEAAR,BEAAR,K5,P,C,EE H,R,   ,HF, , , , , ,      ,    ,    ,0990,0040,+,03000,     ,     , ,   ,    ,   , , , , , ,A,J,S;
+APPCH:010,A,R10,BEAAR,BEAAR,K5,P,C,EE C,R,   ,HF, , , , , ,      ,    ,    ,0990,0040,+,03000,     ,18000, ,   ,    ,   , , , , , ,A,J,S;
 APPCH:010,A,R10,IROTO,IROTO,K5,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , ,A,J,S;
-APPCH:020,A,R10,IROTO,CUBKO,K5,E,A,E  A, ,020,TF, , , , , ,      ,    ,    ,    ,    ,+,03000,     ,     , ,   ,    ,   , , , , , ,A,J,S;
+APPCH:020,A,R10,IROTO,CUBKO,K5,E,A,E  A, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,03000,     ,     , ,   ,    ,   , , , , , ,A,J,S;
 APPCH:030,A,R10,IROTO,BEAAR,K5,P,C,EE B, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,03000,     ,     , ,   ,    ,   , , , , , ,A,J,S;
 APPCH:010,R,R10, ,BEAAR,K5,P,C,E  I, ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,03000,     ,18000, ,   ,    ,   , , , , , ,A,J,S;
 APPCH:020,R,R10, ,PEETR,K5,P,C,E  F, ,010,TF, , , , , ,      ,    ,    ,0990,0061,+,02600,     ,     , ,   ,    ,   ,RW10,K5,P,G, ,A,J,S;

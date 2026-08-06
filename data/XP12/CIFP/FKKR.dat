@@ -54,7 +54,7 @@ STAR:010,2,BILE1V,ALL,BILEX,FK,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    
 STAR:015,2,BILE1V,ALL,D037M,FK,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,04300,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:020,2,BILE1V,ALL,TJR,FK,D, ,VE  , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:010,5,EBIM1A,RW09,EBIMU,DN,E,A,E   , ,010,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
-STAR:020,5,EBIM1A,RW09,KR401,DN,P,C,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,FL060,     ,     , ,   ,    ,   , , , , , , , , ;
+STAR:020,5,EBIM1A,RW09,KR401,FK,P,C,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,FL060,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:030,5,EBIM1A,RW09,APATA,FK,P,C,EE  , ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,03500,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:010,2,EBIM1D,RW27,EBIMU,DN,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   ,TJR,FK,D, , , , , ;
 STAR:015,2,EBIM1D,RW27,D354Y,FK,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,FL060,     ,     , ,   ,    ,   , , , , , , , , ;

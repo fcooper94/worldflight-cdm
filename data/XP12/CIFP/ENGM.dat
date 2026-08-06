@@ -324,7 +324,7 @@ APPCH:020,A,I01LY,INSUV,OGRAS,EN,P,C,EE B, ,   ,TF, ,OBW,EN,P,I,      ,    ,    
 APPCH:010,A,I01LY,VALPU,VALPU,EN,P,C,E  A, ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,05000,     ,     , ,220,    ,   , , , , , ,0,D,S;
 APPCH:020,A,I01LY,VALPU,OGRAS,EN,P,C,EE B, ,   ,TF, ,OBW,EN,P,I,      ,    ,    ,    ,    ,+,04000,     ,     ,-,200,    ,   , , , , , ,0,D,S;
 APPCH:010,I,I01LY, ,OGRAS,EN,P,C,E  I, ,   ,IF, ,OBW,EN,P,I,      ,1920,0142,    ,    ,J,04000,03500,     ,-,200,    ,   , , , , , ,0,D,S;
-APPCH:020,I,I01LY, ,XIKLA,EN,E,A,E  F, ,   ,CF, ,OBW,EN,P,I,      ,1920,0110,0120,0032,H,03500,03500,     , ,   ,-300,   ,GRM,EN,D, , ,0,D,S;
+APPCH:020,I,I01LY, ,XIKLA,EN,E,A,E  F, ,   ,CF, ,OBW,EN,P,I,      ,1920,0110,0120,0032,H,03500,03500,     , ,   ,-300,   ,ENGM,EN,P,A, ,0,D,S;
 APPCH:030,I,I01LY, ,RW01L,EN,P,G,G  M, ,   ,CF, ,OBW,EN,P,I,      ,1920,0022,0120,0088, ,00711,     ,     , ,   ,-300,   , , , , , ,0,D,S;
 APPCH:040,I,I01LY, ,RW01L,EN,P,G,G M , ,   ,FA, ,MES,EN,D, ,      ,1628,0565,0120,    ,+,05000,     ,     , ,   ,    ,   , , , , , ,0,D,S;
 APPCH:050,I,I01LY, , , , , ,    , ,   ,CD, ,OBW,EN,D, ,      ,    ,    ,0120,0200, ,     ,     ,     , ,   ,    ,   , , , , , ,0,D,S;
@@ -346,7 +346,7 @@ APPCH:020,A,I01RY,INSUV,NOSLA,EN,P,C,EE B, ,   ,TF, ,ONE,EN,P,I,      ,    ,    
 APPCH:010,A,I01RY,VALPU,VALPU,EN,P,C,E  A, ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,05000,     ,     , ,220,    ,   , , , , , ,0,D,S;
 APPCH:020,A,I01RY,VALPU,NOSLA,EN,P,C,EE B, ,   ,TF, ,ONE,EN,P,I,      ,    ,    ,    ,    ,+,04000,     ,     ,-,200,    ,   , , , , , ,0,D,S;
 APPCH:010,I,I01RY, ,NOSLA,EN,P,C,E  I, ,   ,IF, ,ONE,EN,P,I,      ,1921,0139,    ,    ,J,04000,03500,     ,-,200,    ,   , , , , , ,0,D,S;
-APPCH:020,I,I01RY, ,XEMEN,EN,P,C,E  F, ,   ,CF, ,ONE,EN,P,I,      ,1921,0106,0120,0033,H,03500,03500,     , ,   ,-300,   ,GRM,EN,D, , ,0,D,S;
+APPCH:020,I,I01RY, ,XEMEN,EN,P,C,E  F, ,   ,CF, ,ONE,EN,P,I,      ,1921,0106,0120,0033,H,03500,03500,     , ,   ,-300,   ,ENGM,EN,P,A, ,0,D,S;
 APPCH:030,I,I01RY, ,RW01R,EN,P,G,G  M, ,   ,CF, ,ONE,EN,P,I,      ,1921,0018,0120,0087, ,00721,     ,     , ,   ,-300,   , , , , , ,0,D,S;
 APPCH:040,I,I01RY, ,D012A,EN,P,C,EYM , ,   ,CF, ,MES,EN,D, ,      ,1605,0550,0120,0027, ,     ,     ,     , ,   ,    ,   , , , , , ,0,D,S;
 APPCH:050,I,I01RY, , , , , ,    , ,   ,CA, , , , , ,      ,    ,    ,0480,    ,+,04000,     ,     , ,   ,    ,   , , , , , ,0,D,S;
@@ -358,17 +358,16 @@ APPCH:030,A,I19LX,MES,OSPAD,EN,P,C,EE B, ,   ,CF, ,GME,EN,P,I,      ,0120,0143,1
 APPCH:010,I,I19LX, ,OSPAD,EN,P,C,E  I, ,   ,IF, ,GME,EN,P,I,      ,0120,0143,    ,    ,J,04000,03500,     ,-,200,    ,   , , , , , ,0,D,S;
 APPCH:020,I,I19LX, ,XIVTA,EN,P,C,E  F, ,   ,CF, ,GME,EN,P,I,      ,0120,0105,1920,0038,H,03500,03500,     , ,   ,-300,   ,ENGM,EN,P,A, ,0,D,S;
 APPCH:030,I,I19LX, ,RW19L,EN,P,G,G  M, ,   ,CF, ,GME,EN,P,I,      ,0120,0018,1920,0087, ,00732,     ,     , ,   ,-300,   , , , , , ,0,D,S;
-APPCH:040,I,I19LX, ,GME03,EN,P,C,EYM , ,   ,CF, ,MES,EN,D, ,      ,1627,0586,1920,0032, ,     ,     ,     , ,   ,    ,   , , , , , ,0,D,S;
-APPCH:045,I,I19LX, , , , , ,    , ,   ,CA, , , , , ,      ,    ,    ,1020,    ,+,03000,     ,     , ,   ,    ,   , , , , , ,0,D,S;
-APPCH:050,I,I19LX, , , , , ,    , ,   ,CD, ,GME,EN,D, ,      ,    ,    ,1020,0135, ,     ,     ,     , ,   ,    ,   , , , , , ,0,D,S;
-APPCH:070,I,I19LX, ,ZEGZU,EN,P,C,E   , ,   ,CF, ,SIG,EN,D, ,      ,0853,0622,0840,0070, ,06000,     ,     , ,   ,    ,   , , , , , ,0,D,S;
-APPCH:080,I,I19LX, ,ZEGZU,EN,P,C,EE H,L,   ,HM, , , , , ,      ,    ,    ,0840,0050,+,06000,     ,     , ,   ,    ,   , , , , , ,0,D,S;
+APPCH:040,I,I19LX, ,GME03,EN,P,C,EYM , ,   ,CF, ,MES,EN,D, ,      ,1627,0586,1920,0032, ,03000,     ,     , ,   ,    ,   , , , , , ,0,D,S;
+APPCH:050,I,I19LX, , , , , ,    , ,   ,CD, ,GME,EN,D, ,      ,    ,    ,1020,0135, ,05000,     ,     , ,   ,    ,   , , , , , ,0,D,S;
+APPCH:060,I,I19LX, ,ZEGZU,EN,P,C,E   , ,   ,CF, ,SIG,EN,D, ,      ,0853,0622,0840,0070, ,06000,     ,     , ,   ,    ,   , , , , , ,0,D,S;
+APPCH:070,I,I19LX, ,ZEGZU,EN,P,C,EE H,L,   ,HM, , , , , ,      ,    ,    ,0840,0050,+,06000,     ,     , ,   ,    ,   , , , , , ,0,D,S;
 APPCH:010,A,I19LY,BAVAD,BAVAD,EN,P,C,E  A, ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,05000,     ,     , ,220,    ,   , , , , , ,0,D,S;
 APPCH:020,A,I19LY,BAVAD,OSPAD,EN,P,C,EE B, ,   ,TF, ,GME,EN,P,I,      ,    ,    ,    ,    ,+,04000,     ,     ,-,200,    ,   , , , , , ,0,D,S;
 APPCH:010,A,I19LY,TITLA,TITLA,EN,P,C,E  A, ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,05000,     ,     , ,220,    ,   , , , , , ,0,D,S;
 APPCH:020,A,I19LY,TITLA,OSPAD,EN,P,C,EE B, ,   ,TF, ,GME,EN,P,I,      ,    ,    ,    ,    ,+,04000,     ,     ,-,200,    ,   , , , , , ,0,D,S;
 APPCH:010,I,I19LY, ,OSPAD,EN,P,C,E  I, ,   ,IF, ,GME,EN,P,I,      ,0120,0143,    ,    ,J,04000,03500,     ,-,200,    ,   , , , , , ,0,D,S;
-APPCH:020,I,I19LY, ,XIVTA,EN,P,C,E  F, ,   ,CF, ,GME,EN,P,I,      ,0120,0105,1920,0038,H,03500,03500,     , ,   ,-300,   ,GRM,EN,D, , ,0,D,S;
+APPCH:020,I,I19LY, ,XIVTA,EN,P,C,E  F, ,   ,CF, ,GME,EN,P,I,      ,0120,0105,1920,0038,H,03500,03500,     , ,   ,-300,   ,ENGM,EN,P,A, ,0,D,S;
 APPCH:030,I,I19LY, ,RW19L,EN,P,G,G  M, ,   ,CF, ,GME,EN,P,I,      ,0120,0018,1920,0087, ,00732,     ,     , ,   ,-300,   , , , , , ,0,D,S;
 APPCH:040,I,I19LY, ,GME03,EN,P,C,EYM , ,   ,CF, ,MES,EN,D, ,      ,1627,0586,1920,0032, ,03000,     ,     , ,   ,    ,   , , , , , ,0,D,S;
 APPCH:050,I,I19LY, , , , , ,    , ,   ,CD, ,GME,EN,D, ,      ,    ,    ,1020,0135, ,05000,     ,     , ,   ,    ,   , , , , , ,0,D,S;
@@ -382,7 +381,7 @@ APPCH:020,I,I19RX, ,XINLO,EN,P,C,E  F, ,   ,CF, ,GSW,EN,P,I,      ,0120,0108,192
 APPCH:030,I,I19RX, ,RW19R,EN,P,G,G  M, ,   ,CF, ,GSW,EN,P,I,      ,0120,0021,1920,0087, ,00726,     ,     , ,   ,-300,   , , , , , ,0,D,S;
 APPCH:040,I,I19RX, ,GSW03,EN,P,C,EYM , ,   ,CF, ,MES,EN,D, ,      ,1631,0571,1920,0027, ,     ,     ,     , ,   ,    ,   , , , , , ,0,D,S;
 APPCH:050,I,I19RX, , , , , ,    , ,   ,CD, ,GSW,EN,D, ,      ,    ,    ,2230,0200, ,     ,     ,     , ,   ,    ,   , , , , , ,0,D,S;
-APPCH:060,I,I19RX, , , , , ,    , ,   ,CI, , , , , ,      ,    ,    ,2360,    , ,     ,     ,     , ,   ,    ,   , , , , , ,0,D,S;
+APPCH:060,I,I19RX, , , , , ,    , ,   ,CI, , , , , ,      ,    ,    ,2360,    , ,05000,     ,     , ,   ,    ,   , , , , , ,0,D,S;
 APPCH:070,I,I19RX, ,GEZJU,EN,P,C,E   , ,   ,CF, ,SIG,EN,D, ,      ,1020,0220,2810,0040, ,06000,     ,     , ,   ,    ,   , , , , , ,0,D,S;
 APPCH:080,I,I19RX, ,GEZJU,EN,P,C,EE H,L,   ,HM, , , , , ,      ,    ,    ,2820,0050,+,06000,     ,     , ,   ,    ,   , , , , , ,0,D,S;
 APPCH:010,A,I19RY,BAVAD,BAVAD,EN,P,C,E  A, ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,05000,     ,     , ,220,    ,   , , , , , ,0,D,S;
@@ -390,7 +389,7 @@ APPCH:020,A,I19RY,BAVAD,ODUDI,EN,P,C,EE B, ,   ,TF, ,GSW,EN,P,I,      ,    ,    
 APPCH:010,A,I19RY,TITLA,TITLA,EN,P,C,E  A, ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,05000,     ,     , ,220,    ,   , , , , , ,0,D,S;
 APPCH:020,A,I19RY,TITLA,ODUDI,EN,P,C,EE B, ,   ,TF, ,GSW,EN,P,I,      ,    ,    ,    ,    ,+,04000,     ,     ,-,200,    ,   , , , , , ,0,D,S;
 APPCH:010,I,I19RY, ,ODUDI,EN,P,C,E  I, ,   ,IF, ,GSW,EN,P,I,      ,0120,0140,    ,    ,J,04000,03500,     ,-,200,    ,   , , , , , ,0,D,S;
-APPCH:020,I,I19RY, ,XINLO,EN,P,C,E  F, ,   ,CF, ,GSW,EN,P,I,      ,0120,0108,1920,0032,H,03500,03500,     , ,   ,-300,   ,GRM,EN,D, , ,0,D,S;
+APPCH:020,I,I19RY, ,XINLO,EN,P,C,E  F, ,   ,CF, ,GSW,EN,P,I,      ,0120,0108,1920,0032,H,03500,03500,     , ,   ,-300,   ,ENGM,EN,P,A, ,0,D,S;
 APPCH:030,I,I19RY, ,RW19R,EN,P,G,G  M, ,   ,CF, ,GSW,EN,P,I,      ,0120,0021,1920,0087, ,00726,     ,     , ,   ,-300,   , , , , , ,0,D,S;
 APPCH:040,I,I19RY, ,GSW03,EN,P,C,EYM , ,   ,CF, ,MES,EN,D, ,      ,1631,0571,1920,0027, ,     ,     ,     , ,   ,    ,   , , , , , ,0,D,S;
 APPCH:050,I,I19RY, , , , , ,    , ,   ,CD, ,GSW,EN,D, ,      ,    ,    ,2230,0200, ,     ,     ,     , ,   ,    ,   , , , , , ,0,D,S;
@@ -544,7 +543,7 @@ APPCH:020,R,R19LZ, ,XIVTA,EN,P,C,E  F, ,010,TF, , , , , ,      ,    ,    ,1920,0
 PRDAT:A,       LPV,A, LNAV/VNAV,A,      LNAV, ,   , ,   , ,   , ,   ,J,S;
 APPCH:030,R,R19LZ, ,RW19L,EN,P,G,GY M, ,302,TF, , , , , ,      ,    ,    ,1920,0087, ,00732,     ,     , ,   ,-300,   , , , , , ,A,J,S;
 APPCH:040,R,R19LZ, ,GM908,EN,P,C,EYM , ,010,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , ,A,J,S;
-APPCH:050,R,R19LZ, ,GM941,EN,P,C,E   , ,010,CF, ,TOR,EN,D, ,      ,0298,0660,1020,0125, ,03000,     ,     , ,   ,    ,   , , , , , ,A,J,S;
+APPCH:050,R,R19LZ, ,GM941,EN,P,C,E   , ,010,CF, ,MES,EN,D, ,      ,1537,0664,1020,0125, ,03000,     ,     , ,   ,    ,   , , , , , ,A,J,S;
 APPCH:060,R,R19LZ, ,GM942,EN,P,C,EY  , ,010,TF, , , , , ,      ,    ,    ,    ,    , ,05000,     ,     , ,   ,    ,   , , , , , ,A,J,S;
 APPCH:070,R,R19LZ, ,TITLA,EN,P,C,EE  ,L,010,DF, , , , , ,      ,    ,    ,    ,    ,+,05000,     ,     , ,   ,    ,   , , , , , ,A,J,S;
 APPCH:010,A,R19RE,ADGEL,ADGEL,EN,P,C,E  A, ,010,IF, , , , , ,      ,    ,    ,    ,    ,+,05000,     ,     ,-,220,    ,   , , , , , ,B,P,S;
@@ -554,7 +553,7 @@ APPCH:015,R,R19RE, ,GM634,EN,P,C,E   , ,010,TF, , , , , ,      ,    ,    ,2810,0
 APPCH:020,R,R19RE, ,GM562,EN,P,C,E  F,L,010,RF, , , , , ,003300,    ,    ,    ,0051,+,01800,     ,     , ,   ,    ,   ,GM020,EN,P,C, ,B,P,S;
 APPCH:030,R,R19RE, ,RW19R,EN,P,G,GY M, ,302,TF, , , , , ,      ,    ,    ,1920,0034, ,00726,     ,     , ,   ,-300,   , , , , , ,B,P,S;
 APPCH:040,R,R19RE, ,GM995,EN,P,C,EYM , ,010,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , ,B,P,S;
-APPCH:050,R,R19RE, ,GM996,EN,P,C,EY  , ,010,CF, ,TOR,EN,D, ,      ,0092,0496,2230,0179, ,     ,     ,     , ,   ,    ,   , , , , , ,B,P,S;
+APPCH:050,R,R19RE, ,GM996,EN,P,C,EY  , ,010,CF, ,MES,EN,D, ,      ,1762,0679,2230,0179, ,     ,     ,     , ,   ,    ,   , , , , , ,B,P,S;
 APPCH:060,R,R19RE, ,BAVAD,EN,P,C,EE  ,R,010,DF, , , , , ,      ,    ,    ,    ,    ,+,05000,     ,     , ,   ,    ,   , , , , , ,B,P,S;
 APPCH:010,A,R19RN,RIRUT,RIRUT,EN,P,C,E  A, ,010,IF, , , , , ,      ,    ,    ,    ,    ,+,05000,     ,     ,-,220,    ,   , , , , , ,B,P,S;
 APPCH:015,A,R19RN,RIRUT,GM601,EN,P,C,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,04500,     ,     , ,   ,    ,   , , , , , ,B,P,S;
@@ -564,7 +563,7 @@ APPCH:010,R,R19RN, ,GM563,EN,P,C,E  I, ,302,IF, , , , , ,      ,    ,    ,    , 
 APPCH:020,R,R19RN, ,GM562,EN,P,C,E  F,R,302,RF, , , , , ,005718,    ,    ,    ,0024,+,01800,     ,     , ,   ,    ,   ,GM004,EN,P,C, ,B,P,S;
 APPCH:030,R,R19RN, ,RW19R,EN,P,G,GY M, ,302,TF, , , , , ,      ,    ,    ,1920,0034, ,00726,     ,     , ,   ,-300,   , , , , , ,B,P,S;
 APPCH:040,R,R19RN, ,GM995,EN,P,C,EYM , ,010,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , ,B,P,S;
-APPCH:050,R,R19RN, ,GM996,EN,P,C,EY  , ,010,CF, ,TOR,EN,D, ,      ,0092,0496,2230,0179, ,     ,     ,     , ,   ,    ,   , , , , , ,B,P,S;
+APPCH:050,R,R19RN, ,GM996,EN,P,C,EY  , ,010,CF, ,MES,EN,D, ,      ,1762,0679,2230,0179, ,     ,     ,     , ,   ,    ,   , , , , , ,B,P,S;
 APPCH:060,R,R19RN, ,BAVAD,EN,P,C,EE  ,R,010,DF, , , , , ,      ,    ,    ,    ,    ,+,05000,     ,     , ,   ,    ,   , , , , , ,B,P,S;
 APPCH:010,A,R19RW,EXWOD,EXWOD,EN,P,C,E  A, ,802,IF, , , , , ,      ,    ,    ,    ,    ,+,05000,     ,     ,-,220,    ,   , , , , , ,B,P,S;
 APPCH:020,A,R19RW,EXWOD,GM638,EN,P,C,E   , ,802,TF, , , , , ,      ,    ,    ,    ,    ,+,04600,     ,     , ,   ,    ,   , , , , , ,B,P,S;
@@ -575,7 +574,7 @@ APPCH:015,R,R19RW, ,GM636,EN,P,C,E   , ,302,TF, , , , , ,      ,    ,    ,1360,0
 APPCH:020,R,R19RW, ,GM562,EN,P,C,E  F,R,302,RF, , , , , ,003050,    ,    ,    ,0030,+,01800,     ,     , ,   ,    ,   ,GM019,EN,P,C, ,B,P,S;
 APPCH:030,R,R19RW, ,RW19R,EN,P,G,GY M, ,302,TF, , , , , ,      ,    ,    ,1920,0034, ,00726,     ,     , ,   ,-300,   , , , , , ,B,P,S;
 APPCH:040,R,R19RW, ,GM995,EN,P,C,EYM , ,010,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , ,B,P,S;
-APPCH:050,R,R19RW, ,GM996,EN,P,C,EY  , ,010,CF, ,TOR,EN,D, ,      ,0092,0496,2230,0179, ,     ,     ,     , ,   ,    ,   , , , , , ,B,P,S;
+APPCH:050,R,R19RW, ,GM996,EN,P,C,EY  , ,010,CF, ,MES,EN,D, ,      ,1762,0679,2230,0179, ,     ,     ,     , ,   ,    ,   , , , , , ,B,P,S;
 APPCH:060,R,R19RW, ,BAVAD,EN,P,C,EE  ,R,010,DF, , , , , ,      ,    ,    ,    ,    , ,05000,     ,     , ,   ,    ,   , , , , , ,B,P,S;
 APPCH:010,A,R19RZ,BAVAD,BAVAD,EN,P,C,E  A, ,010,IF, , , , , ,      ,    ,    ,    ,    ,+,05000,     ,     , ,220,    ,   , , , , , ,A,J,S;
 APPCH:020,A,R19RZ,BAVAD,ODUDI,EN,P,C,EE B, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,04000,     ,     ,-,200,    ,   , , , , , ,A,J,S;
@@ -586,7 +585,7 @@ APPCH:020,R,R19RZ, ,XINLO,EN,P,C,E  F, ,010,TF, , , , , ,      ,    ,    ,1920,0
 PRDAT:A,       LPV,A, LNAV/VNAV,A,      LNAV, ,   , ,   , ,   , ,   ,J,S;
 APPCH:030,R,R19RZ, ,RW19R,EN,P,G,GY M, ,302,TF, , , , , ,      ,    ,    ,1920,0087, ,00726,     ,     , ,   ,-300,   , , , , , ,A,J,S;
 APPCH:040,R,R19RZ, ,GM995,EN,P,C,EYM , ,010,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , ,A,J,S;
-APPCH:050,R,R19RZ, ,GM996,EN,P,C,EY  , ,010,CF, ,TOR,EN,D, ,      ,0092,0496,2230,0179, ,05000,     ,     , ,   ,    ,   , , , , , ,A,J,S;
+APPCH:050,R,R19RZ, ,GM996,EN,P,C,EY  , ,010,CF, ,MES,EN,D, ,      ,1762,0679,2230,0179, ,05000,     ,     , ,   ,    ,   , , , , , ,A,J,S;
 APPCH:060,R,R19RZ, ,BAVAD,EN,P,C,EE  ,R,010,DF, , , , , ,      ,    ,    ,    ,    ,+,05000,     ,     , ,   ,    ,   , , , , , ,A,J,S;
 RWY:RW01L,     ,      ,00657, ,OBW ,3,   ;N60110600,E011042548,0000;
 RWY:RW01R,     ,      ,00671, ,ONE ,3,   ;N60103272,E011062802,0000;

@@ -1,12 +1,3 @@
-APPCH:010,A,NDBA,MMB,MMB,K4,D, ,V   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , ,0, ,C;
-APPCH:020,A,NDBA,MMB,PYX,K4,D,B,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,05000,     ,     , ,   ,    ,   , , , , , ,0, ,C;
-APPCH:030,A,NDBA,MMB,PYX,K4,D,B,E  A,L,   ,PI, ,ICT,K3,D, ,      ,2362,1716,1350,0100,+,04900,     ,     , ,   ,    ,   , , , , , ,0, ,C;
-APPCH:040,A,NDBA,MMB,FF270,K4,P,C,EE  , ,   ,CF, ,MMB,K4,D, ,      ,2656,0363,2700,0040,+,04900,     ,     , ,   ,    ,   , , , , , ,0, ,C;
-APPCH:020,N,NDBA, ,FF270,K4,P,C,E  F, ,   ,IF, ,PYX,K4,D,B,      ,    ,    ,    ,    ,+,04900,     ,18000, ,   ,    ,   ,PYX,K4,D,B, ,0, ,C;
-APPCH:030,N,NDBA, ,PYX,K4,D,B,E  M, ,   ,CF, ,PYX,K4,D,B,      ,    ,    ,2700,0060, ,03580,     ,     , ,   , 000,   , , , , , ,0, ,C;
-APPCH:040,N,NDBA, , , , , ,  M , ,   ,CA, , , , , ,      ,    ,    ,2700,    ,+,04000,     ,     , ,   ,    ,   , , , , , ,0, ,C;
-APPCH:050,N,NDBA, ,PYX,K4,D,B,E   ,R,   ,DF, , , , , ,      ,    ,    ,    ,    ,+,05000,     ,     , ,   ,    ,   , , , , , ,0, ,C;
-APPCH:060,N,NDBA, ,PYX,K4,D,B,EE H,L,   ,HM, , , , , ,      ,    ,    ,2700,T010, ,     ,     ,     , ,   ,    ,   , , , , , ,0, ,C;
 APPCH:010,A,R17,UHKET,UHKET,K4,P,C,E  A, ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , ,A,J,S;
 APPCH:020,A,R17,UHKET,EHKIF,K4,P,C,EE B, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,05000,     ,     , ,   ,    ,   , , , , , ,A,J,S;
 APPCH:010,A,R17,ZALIK,ZALIK,K4,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , ,A,J,S;

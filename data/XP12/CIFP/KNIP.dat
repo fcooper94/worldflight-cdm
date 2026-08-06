@@ -2,7 +2,7 @@ STAR:010,4,ALCRN1,ALLMA,ALLMA,K7,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,  
 STAR:020,4,ALCRN1,ALLMA,ALCRN,K7,E,A,EE  , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,B,14000,12000,     , ,   ,    ,   , , , , , , , , ;
 STAR:010,5,ALCRN1,ALL,ALCRN,K7,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    ,B,14000,12000,18000, ,   ,    ,   , , , , , , , , ;
 STAR:020,5,ALCRN1,ALL,AAMOS,K7,E,A,EY  , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,06000,     ,     , ,   ,    ,   , , , , , , , , ;
-STAR:030,5,ALCRN1,ALL,AAMOS,K7,E,A,EE  , ,   ,FM, ,SGJ,K7,D, ,      ,3211,0473,1600,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
+STAR:030,5,ALCRN1,ALL,AAMOS,K7,E,A,EE  , ,   ,FM, ,SAV,K7,D, ,      ,2084,1055,1600,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:010,4,HOTAR1,BASLE,BASLE,K7,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , , , , ;
 STAR:020,4,HOTAR1,BASLE,WYTOK,K7,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:030,4,HOTAR1,BASLE,JABOR,K7,E,A,EE  , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
@@ -27,7 +27,7 @@ STAR:015,4,QUBEN2,MEAAT,BASSS,K7,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,  
 STAR:020,4,QUBEN2,MEAAT,POGIE,K7,E,A,EE  , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,13000,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:010,5,QUBEN2,ALL,POGIE,K7,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,13000,     ,18000, ,   ,    ,   , , , , , , , , ;
 STAR:015,5,QUBEN2,ALL,QUBEN,K7,E,A,EY  , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
-STAR:020,5,QUBEN2,ALL,QUBEN,K7,E,A,EE  , ,   ,FM, ,SGJ,K7,D, ,      ,2721,0174,3600,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
+STAR:020,5,QUBEN2,ALL,QUBEN,K7,E,A,EE  , ,   ,FM, ,SAV,K7,D, ,      ,1964,1345,3600,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 APPCH:010,A,R10-Y,MADEN,MADEN,K7,P,C,E  C, ,   ,IF, , , , , ,      ,    ,    ,    ,    ,B,06000,01600,18000, ,   ,    ,   , , , , , ,A,P,S;
 APPCH:020,A,R10-Y,MADEN,ITEGE,K7,P,C,EE B, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,01600,     ,     , ,   ,    ,   , , , , , ,A,P,S;
 APPCH:010,R,R10-Y, ,ITEGE,K7,P,C,E  I, ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,01600,     ,18000, ,   ,    ,   ,RW10,K7,P,G, ,A,P,S;
@@ -39,10 +39,10 @@ APPCH:040,R,R10-Y, , , , , ,  M , ,   ,CA, , , , , ,      ,    ,    ,0960,    ,+
 APPCH:050,R,R10-Y, ,MADEN,K7,P,C,EY  ,R,010,DF, , , , , ,      ,    ,    ,    ,    ,+,02000,     ,     , ,   ,    ,   , , , , , ,A,P,S;
 APPCH:060,R,R10-Y, ,MADEN,K7,P,C,EE H,L,010,HM, , , , , ,      ,    ,    ,0110,0040,-,06000,     ,     ,-,230,    ,   , , , , , ,A,P,S;
 APPCH:010,A,R10-Z,FRESH,FRESH,K7,E,A,E  C, ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,03000,     ,18000, ,   ,    ,   , , , , , ,A,J,S;
-APPCH:020,A,R10-Z,FRESH,HOWLR,K7,E,A,EE B, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,03000,     ,     , ,   ,    ,   , , , , , ,A,J,S;
+APPCH:020,A,R10-Z,FRESH,HOWLR,K7,P,C,EE B, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,03000,     ,     , ,   ,    ,   , , , , , ,A,J,S;
 APPCH:010,A,R10-Z,REDIE,REDIE,K7,E,A,E  A, ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,03000,     ,18000, ,   ,    ,   , , , , , ,A,J,S;
-APPCH:020,A,R10-Z,REDIE,HOWLR,K7,E,A,EE B, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,03000,     ,     , ,   ,    ,   , , , , , ,A,J,S;
-APPCH:010,R,R10-Z, ,HOWLR,K7,E,A,E  I, ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,03000,     ,18000, ,   ,    ,   , , , , , ,A,J,S;
+APPCH:020,A,R10-Z,REDIE,HOWLR,K7,P,C,EE B, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,03000,     ,     , ,   ,    ,   , , , , , ,A,J,S;
+APPCH:010,R,R10-Z, ,HOWLR,K7,P,C,E  I, ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,03000,     ,18000, ,   ,    ,   , , , , , ,A,J,S;
 APPCH:015,R,R10-Z, ,HUTNO,K7,P,C,E S , ,010,TF, , , , , ,      ,    ,    ,0960,0047, ,03000,     ,     , ,   ,    ,   , , , , , ,A,J,S;
 APPCH:020,R,R10-Z, ,IVANZ,K7,E,A,E  F, ,010,TF, , , , , ,      ,    ,    ,0960,0053,+,01400,     ,     , ,   ,-300,   ,RW10,K7,P,G, ,A,J,S;
 PRDAT:A,       LPV,A, LNAV/VNAV,A,      LNAV, ,   , ,   , ,   , ,   ,J,S;
@@ -141,7 +141,7 @@ APPCH:030,T,T28-Z, ,GRUEN,K7,P,C,EY M, ,   ,CF, ,NIP,K7,D, ,      ,1060,0011,286
 APPCH:040,T,T28-Z, ,NIP,K7,D, ,V M , ,   ,DF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , ,0,D,S;
 APPCH:050,T,T28-Z, ,MADEN,K7,P,C,E   ,L,   ,CF, ,NIP,K7,D, ,      ,1910,0130,1910,0130,+,02000,     ,     , ,   ,    ,   , , , , , ,0,D,S;
 APPCH:060,T,T28-Z, ,MADEN,K7,P,C,EE H,L,   ,HM, , , , , ,      ,    ,    ,0110,0040,-,06000,     ,     ,-,230,    ,   , , , , , ,0,D,S;
-RWY:RW10 ,-0100,      ,00021, ,    , ,   ;N30135378,W081412321,0997;
+RWY:RW10 ,-0100,      ,00021, ,INTW,1,   ;N30135378,W081412321,0997;
 RWY:RW14 ,     ,      ,00010, ,    , ,   ;N30141421,W081402164,2734;
-RWY:RW28 ,+0100,      ,00008, ,    , ,   ;N30135424,W081395195,0000;
+RWY:RW28 ,+0100,      ,00008, ,INIP,1,   ;N30135424,W081395195,0000;
 RWY:RW32 ,     ,      ,00007, ,    , ,   ;N30135163,W081395534,0000;

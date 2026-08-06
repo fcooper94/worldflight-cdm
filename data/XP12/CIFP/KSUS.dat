@@ -56,7 +56,7 @@ STAR:020,5,BUUDD3, ,WEIZZ,K5,E,A,EE  , ,   ,TF, , , , , ,      ,    ,    ,    , 
 STAR:010,6,BUUDD3,RW08B,WEIZZ,K5,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , , , , ;
 STAR:020,6,BUUDD3,RW08B,STL,K3,D, ,V   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:030,6,BUUDD3,RW08B,FTZ,K3,D, ,VY  , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
-STAR:040,6,BUUDD3,RW08B,FTZ,K3,D, ,VE  ,L,   ,FM, ,SPI,K5,D, ,      ,2227,0914,1490,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
+STAR:040,6,BUUDD3,RW08B,FTZ,K3,D, ,VE  ,L,   ,FM, ,FTZ,K3,D, ,      ,0000,0000,1490,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:010,6,BUUDD3,RW26B,WEIZZ,K5,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , , , , ;
 STAR:020,6,BUUDD3,RW26B,EERRR,K5,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:030,6,BUUDD3,RW26B,DSETH,K3,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
@@ -75,7 +75,7 @@ STAR:020,5,DIRTT2, ,SEDDN,K3,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    , 
 STAR:030,5,DIRTT2, ,BERGY,K3,P,C,EE  , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:010,6,DIRTT2,RW08B,BERGY,K3,P,C,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , , , , ;
 STAR:020,6,DIRTT2,RW08B,FTZ,K3,D, ,VY  , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
-STAR:030,6,DIRTT2,RW08B,FTZ,K3,D, ,VE  , ,   ,FM, ,SPI,K5,D, ,      ,2227,0914,1490,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
+STAR:030,6,DIRTT2,RW08B,FTZ,K3,D, ,VE  , ,   ,FM, ,FTZ,K3,D, ,      ,0000,0000,1490,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:010,6,DIRTT2,RW26B,BERGY,K3,P,C,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , , , , ;
 STAR:020,6,DIRTT2,RW26B,DWEES,K3,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:030,6,DIRTT2,RW26B,EMKAA,K3,E,A,EY  , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
@@ -101,12 +101,12 @@ APPCH:010,A,I08R,FTZ,FTZ,K3,D, ,V  A, ,   ,IF, , , , , ,      ,    ,    ,    ,  
 APPCH:020,A,I08R,FTZ,JOBRK,K3,P,C,EE B, ,   ,CF, ,ISUS,K3,P,I,      ,2591,0134,1430,0055,+,02400,     ,     , ,   ,    ,   , , , , , ,0,N,S;
 APPCH:010,A,I08R,SADEN,SADEN,K3,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , ,0,N,S;
 APPCH:020,A,I08R,SADEN,SNOOP,K3,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,02400,     ,     , ,   ,    ,   , , , , , ,0,N,S;
-APPCH:030,A,I08R,SADEN,SNOOP,K3,P,C,EE A,R,   ,PI, ,FTZ,K3,D, ,      ,1038,0101,2140,0100,+,02400,     ,     , ,   ,    ,   , , , , , ,0,N,S;
+APPCH:030,A,I08R,SADEN,SNOOP,K3,P,C,EE A,R,   ,PI, ,SPI,K5,D, ,      ,2166,0881,2140,0100,+,02400,     ,     , ,   ,    ,   , , , , , ,0,N,S;
 APPCH:010,A,I08R,STL,STL,K3,D, ,V   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , ,0,N,S;
 APPCH:020,A,I08R,STL,SNOOP,K3,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,02400,     ,     , ,   ,    ,   , , , , , ,0,N,S;
-APPCH:030,A,I08R,STL,SNOOP,K3,P,C,EE A,R,   ,PI, ,STL,K3,D, ,      ,2244,0188,2140,0100,+,02400,     ,     , ,   ,    ,   , , , , , ,0,N,S;
-APPCH:010,I,I08R, ,JOBRK,K3,P,C,E  I, ,   ,IF, ,ISUS,K3,P,I,      ,2561,0134,    ,    ,J,02400,02400,18000, ,   ,    ,   , , , , , ,0,N,S;
-APPCH:020,I,I08R, ,SU,K3,P,N,E  F, ,   ,CF, ,ISUS,K3,P,I,      ,2591,0065,0790,0068,H,02400,02185,     , ,   ,-300,   ,SU,K3,P,N, ,0,N,S;
+APPCH:030,A,I08R,STL,SNOOP,K3,P,C,EE A,R,   ,PI, ,SPI,K5,D, ,      ,2166,0881,2140,0100,+,02400,     ,     , ,   ,    ,   , , , , , ,0,N,S;
+APPCH:010,I,I08R, ,JOBRK,K3,P,C,E  I, ,   ,IF, ,ISUS,K3,P,I,      ,2591,0134,    ,    ,J,02400,02400,18000, ,   ,    ,   , , , , , ,0,N,S;
+APPCH:020,I,I08R, ,SNOOP,K3,P,C,E  F, ,   ,CF, ,ISUS,K3,P,I,      ,2591,0065,0790,0068,H,02400,02160,     , ,   ,-300,   ,SU,K3,P,N, ,0,N,S;
 APPCH:030,I,I08R, ,RW08R,K3,P,G,G  M, ,   ,CF, ,ISUS,K3,P,I,      ,2591,0014,0790,0052, ,00516,     ,     , ,   ,-300,   , , , , , ,0,N,S;
 APPCH:040,I,I08R, , , , , ,  M , ,   ,CA, , , , , ,      ,    ,    ,0790,    ,+,01500,     ,     , ,   ,    ,   , , , , , ,0,N,S;
 APPCH:050,I,I08R, ,FTZ,K3,D, ,V   ,L,   ,DF, , , , , ,      ,    ,    ,    ,    ,+,02400,     ,     , ,   ,    ,   , , , , , ,0,N,S;

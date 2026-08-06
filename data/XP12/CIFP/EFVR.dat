@@ -1,6 +1,6 @@
 APPCH:010,A,R14,DIDUL,DIDUL,EF,P,C,E  A, ,010,IF, , , , , ,      ,    ,    ,    ,    ,+,02500,     ,     ,-,240,    ,   , , , , , ,A,J,S;
 APPCH:020,A,R14,DIDUL,SOVEL,EF,P,C,EE B, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,02500,     ,     , ,   ,    ,   , , , , , ,A,J,S;
-APPCH:010,A,R14,UPMIX,UPMIX,BI,P,C,E  A, ,010,IF, , , , , ,      ,    ,    ,    ,    ,+,02500,     ,     ,-,240,    ,   , , , , , ,A,J,S;
+APPCH:010,A,R14,UPMIX,UPMIX,EF,P,C,E  A, ,010,IF, , , , , ,      ,    ,    ,    ,    ,+,02500,     ,     ,-,240,    ,   , , , , , ,A,J,S;
 APPCH:020,A,R14,UPMIX,SOVEL,EF,P,C,EE B, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,02500,     ,     , ,   ,    ,   , , , , , ,A,J,S;
 APPCH:010,R,R14, ,SOVEL,EF,P,C,E  D, ,010,IF, , , , , ,      ,    ,    ,    ,    ,+,02500,     ,     , ,   ,    ,   , , , , , ,A,J,S;
 APPCH:020,R,R14, ,OKIRI,EF,P,C,E  F, ,010,TF, , , , , ,      ,    ,    ,1290,0050,+,02200,     ,     , ,   ,    ,   ,EFVR,EF,P,A, ,A,J,S;

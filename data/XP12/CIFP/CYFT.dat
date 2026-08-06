@@ -3,7 +3,7 @@ APPCH:020,A,R09,BOKPO,PILGA,CY,P,C,EE B, ,010,TF, , , , , ,      ,    ,    ,    
 APPCH:010,A,R09,TEXIK,TEXIK,CY,P,C,E  A, ,010,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000,-,210,    ,   , , , , , ,B,J,S;
 APPCH:020,A,R09,TEXIK,PILGA,CY,P,C,EE B, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,02000,     ,     , ,   ,    ,   , , , , , ,B,J,S;
 APPCH:010,R,R09, ,PILGA,CY,P,C,E  I, ,010,IF, , , , , ,      ,    ,    ,    ,    ,+,02000,     ,18000, ,   ,    ,   , , , , , ,B,J,S;
-APPCH:020,R,R09, ,MEVKA,CY,P,C,E  F, ,010,TF, , , , , ,      ,    ,    ,0810,0050,+,01900,     ,     , ,   ,    ,   ,RW09,CY,P,G, ,B,J,S;
+APPCH:020,R,R09, ,MEVKA,CY,P,C,E  F, ,010,TF, , , , , ,      ,    ,    ,0810,0050,+,01900,     ,     , ,   ,    ,   ,RW09,CY,P,G,A,B,J,S;
 PRDAT: ,          , ,          ,A,      LNAV, ,   , ,   , ,   , ,   ,J,S;
 APPCH:025,R,R09, ,KEGMA,CY,P,C,E S , ,302,TF, , , , , ,      ,    ,    ,0820,0024,+,01060,     ,     , ,   ,-301,   , , , , , ,B,J,S;
 APPCH:030,R,R09, ,RW09,CY,P,G,GY M, ,302,TF, , , , , ,      ,    ,    ,0820,0027, ,00278,     ,     , ,   ,-301,   , , , , , ,B,J,S;
@@ -14,7 +14,7 @@ APPCH:020,A,R27,RIDAN,OBSIP,CY,P,C,EE B, ,010,TF, , , , , ,      ,    ,    ,    
 APPCH:010,A,R27,TIGIS,TIGIS,CY,P,C,E  A, ,010,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000,-,210,    ,   , , , , , ,B,J,S;
 APPCH:020,A,R27,TIGIS,OBSIP,CY,P,C,EE B, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,02000,     ,     , ,   ,    ,   , , , , , ,B,J,S;
 APPCH:010,R,R27, ,OBSIP,CY,P,C,E  I, ,010,IF, , , , , ,      ,    ,    ,    ,    ,+,02000,     ,18000, ,   ,    ,   , , , , , ,B,J,S;
-APPCH:020,R,R27, ,LEPUV,CY,P,C,E  F, ,010,TF, , , , , ,      ,    ,    ,2670,0050,+,02000,     ,     , ,   ,    ,   ,RW27,CY,P,G, ,B,J,S;
+APPCH:020,R,R27, ,LEPUV,CY,P,C,E  F, ,010,TF, , , , , ,      ,    ,    ,2670,0050,+,02000,     ,     , ,   ,    ,   ,RW27,CY,P,G,A,B,J,S;
 PRDAT: ,          , ,          ,A,      LNAV, ,   , ,   , ,   , ,   ,J,S;
 APPCH:025,R,R27, ,XORAP,CY,P,C,E S , ,302,TF, , , , , ,      ,    ,    ,2670,0018,+,01420,     ,     , ,   ,-301,   , , , , , ,B,J,S;
 APPCH:030,R,R27, ,RW27,CY,P,G,GY M, ,302,TF, , , , , ,      ,    ,    ,2670,0037, ,00243,     ,     , ,   ,-301,   , , , , , ,B,J,S;

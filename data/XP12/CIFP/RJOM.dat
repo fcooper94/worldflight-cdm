@@ -27,10 +27,10 @@ SID:020,4,SAKAR2,RW32,OM400,RJ,P,C,E   ,L,010,DF, , , , , ,      ,    ,    ,    
 SID:030,4,SAKAR2,RW32,SAKAR,RJ,E,A,EE  , ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,05000,     ,     , ,   ,    ,   , , , , , , , , ;
 SID:010,6,SAKAR2,JINBE,SAKAR,RJ,E,A,E   , ,010,IF, , , , , ,      ,    ,    ,    ,    ,+,05000,     ,14000, ,   ,    ,   , , , , , , , , ;
 SID:020,6,SAKAR2,JINBE,JINBE,RJ,E,A,EE  , ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,13000,     ,     , ,   ,    ,   , , , , , , , , ;
-SID:010,6,SAKAR2,KRE,SAKAR,RJ,E,A,E   , ,010,IF, , , , , ,      ,    ,    ,    ,    ,+,05000,     ,14000, ,   ,    ,   , , , , , , , , ;
-SID:020,6,SAKAR2,KRE,NOUEH,RJ,P,C,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,13000,     ,     , ,   ,    ,   , , , , , , , , ;
-SID:030,6,SAKAR2,KRE,NOKMO,RJ,P,C,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,FL160,     ,     , ,   ,    ,   , , , , , , , , ;
-SID:040,6,SAKAR2,KRE,KRE,RJ,D, ,VE  , ,010,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
+SID:010,6,SAKAR2,NAE,SAKAR,RJ,E,A,E   , ,010,IF, , , , , ,      ,    ,    ,    ,    ,+,05000,     ,14000, ,   ,    ,   , , , , , , , , ;
+SID:020,6,SAKAR2,NAE,NOUEH,RJ,P,C,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,13000,     ,     , ,   ,    ,   , , , , , , , , ;
+SID:030,6,SAKAR2,NAE,NOKMO,RJ,P,C,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,FL160,     ,     , ,   ,    ,   , , , , , , , , ;
+SID:040,6,SAKAR2,NAE,NAE,RJ,D, ,VE  , ,010,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 SID:010,6,SAKAR2,ROSIE,SAKAR,RJ,E,A,E   , ,010,IF, , , , , ,      ,    ,    ,    ,    ,+,05000,     ,14000, ,   ,    ,   , , , , , , , , ;
 SID:020,6,SAKAR2,ROSIE,MOTOQ,RJ,P,C,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,13000,     ,     , ,   ,    ,   , , , , , , , , ;
 SID:030,6,SAKAR2,ROSIE,ROSIE,RJ,E,A,EE  , ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,FL160,     ,     , ,   ,    ,   , , , , , , , , ;

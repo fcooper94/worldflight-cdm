@@ -156,7 +156,7 @@ APPCH:020,A,R03,OSVAB,IDVIB,VD,P,C,EE H, ,010,TF, , , , , ,      ,    ,    ,    
 APPCH:010,A,R03,UXINI,UXINI,VD,P,C,E  A, ,010,IF, , , , , ,      ,    ,    ,    ,    ,+,03000,     ,13000, ,   ,    ,   , , , , , ,B,J,S;
 APPCH:020,A,R03,UXINI,IDVIB,VD,P,C,EE H, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,03000,     ,     , ,   ,    ,   , , , , , ,B,J,S;
 APPCH:010,R,R03, ,IDVIB,VD,P,C,E  I, ,010,IF, , , , , ,      ,    ,    ,    ,    ,+,03000,     ,13000, ,   ,    ,   , , , , , ,B,J,S;
-APPCH:020,R,R03, ,ENKES,VT,P,C,E  F, ,010,TF, , , , , ,      ,    ,    ,0280,0075,+,01540,     ,     , ,   ,    ,   ,VDDS,VD,P,A, ,B,J,S;
+APPCH:020,R,R03, ,ENKES,VD,P,C,E  F, ,010,TF, , , , , ,      ,    ,    ,0280,0075,+,01540,     ,     , ,   ,    ,   ,VDDS,VD,P,A, ,B,J,S;
 PRDAT: ,          ,A, LNAV/VNAV,A,      LNAV, ,   , ,   , ,   , ,   ,J,S;
 APPCH:030,R,R03, ,RW03,VD,P,G,GY M, ,302,TF, , , , , ,      ,    ,    ,0280,0045, ,00105,     ,     , ,   ,-300,   , , , , , ,B,J,S;
 APPCH:040,R,R03, ,DOSKO,VD,P,C,E M , ,010,DF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , ,B,J,S;

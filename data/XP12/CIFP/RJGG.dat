@@ -52,7 +52,7 @@ SID:010,2,FORES3, ,CBE,RJ,D, ,V   , ,   ,IF, , , , , ,      ,    ,    ,    ,    
 SID:020,2,FORES3, ,MORIZ,RJ,E,A,EE  , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 SID:010,3,FORES3,CHAUS,MORIZ,RJ,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,14000, ,   ,    ,   , , , , , , , , ;
 SID:030,3,FORES3,CHAUS,TSUGU,RJ,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
-SID:040,3,FORES3,CHAUS,CHAUS,RJ,E,A,EE  , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,FL150,     ,     , ,   ,    ,   , , , , , , , , ;
+SID:040,3,FORES3,CHAUS,CHAUS,RJ,E,A,EE  , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,FL190,     ,     , ,   ,    ,   , , , , , , , , ;
 SID:010,1,HIKNE3,RW18, , , , ,    , ,   ,CA, , , , , ,      ,    ,    ,1760,    ,+,00500,     ,14000, ,   ,    ,   , , , , , , , , ;
 SID:020,1,HIKNE3,RW18, , , , ,    ,R,   ,VI,Y, , , , ,      ,    ,    ,3590,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 SID:030,1,HIKNE3,RW18,D314T,RJ,P,C,E   , ,   ,CF, ,CBE,RJ,D, ,      ,3146,0200,3140,0150,+,06000,     ,     , ,   ,    ,   , , , , , , , , ;
@@ -155,7 +155,7 @@ SID:050,1,MORIZ2,RW36,ANJYO,RJ,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    
 SID:060,1,MORIZ2,RW36,MORIZ,RJ,E,A,EE  , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 SID:010,3,MORIZ2,CHAUS,MORIZ,RJ,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,14000, ,   ,    ,   , , , , , , , , ;
 SID:030,3,MORIZ2,CHAUS,TSUGU,RJ,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
-SID:040,3,MORIZ2,CHAUS,CHAUS,RJ,E,A,EE  , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,FL150,     ,     , ,   ,    ,   , , , , , , , , ;
+SID:040,3,MORIZ2,CHAUS,CHAUS,RJ,E,A,EE  , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,FL190,     ,     , ,   ,    ,   , , , , , , , , ;
 SID:010,4,OUMI2,RW18, , , , ,    , ,   ,VA, , , , , ,      ,    ,    ,1770,    ,+,00500,     ,14000, ,   ,    ,   , , , , , , , , ;
 SID:020,4,OUMI2,RW18,TITAN,RJ,P,C,E   ,R,   ,DF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 SID:030,4,OUMI2,RW18,HIKNE,RJ,E,A,EE  , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;

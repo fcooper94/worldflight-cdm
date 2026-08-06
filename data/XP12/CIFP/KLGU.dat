@@ -11,13 +11,13 @@ SID:050,1,ORNEY1,RW35,LHO,K2,D, ,VE H, ,   ,CF, ,LHO,K2,D, ,      ,0000,0000,192
 APPCH:010,A,I17,MLD,MLD,K1,D, ,V   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , ,0,D,S;
 APPCH:020,A,I17,MLD,HUSEM,K1,E,A,E  A, ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,10000,     ,     , ,   ,    ,   , , , , , ,0,D,S;
 APPCH:030,A,I17,MLD,JINUG,K2,P,C,E   ,R,   ,AF, ,LHO,K2,D, ,      ,3500,0189,3250,    ,+,10000,     ,     , ,   ,    ,   , , , , , ,0,D,S;
-APPCH:040,A,I17,MLD,D005R,K1,P,C,E   ,R,   ,AF, ,LHO,K2,D, ,      ,0050,0189,3500,    ,+,08900,     ,     , ,   ,    ,   , , , , , ,0,D,S;
+APPCH:040,A,I17,MLD,D005R,K2,P,C,E   ,R,   ,AF, ,LHO,K2,D, ,      ,0050,0189,3500,    ,+,08900,     ,     , ,   ,    ,   , , , , , ,0,D,S;
 APPCH:050,A,I17,MLD, , , , , E  , ,   ,VI, ,ILGU,K2,P,I,      ,    ,    ,1420,    , ,     ,     ,     , ,   ,    ,   , , , , , ,0,D,S;
 APPCH:010,A,I17,NIWTE,NIWTE,K2,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , ,0,D,S;
 APPCH:020,A,I17,NIWTE,LHO,K2,D, ,V   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,12000,     ,     , ,   ,    ,   , , , , , ,0,D,S;
 APPCH:030,A,I17,NIWTE,HUSEM,K1,E,A,E  A, ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,12000,     ,     , ,   ,    ,   , , , , , ,0,D,S;
 APPCH:040,A,I17,NIWTE,JINUG,K2,P,C,E   ,R,   ,AF, ,LHO,K2,D, ,      ,3500,0189,3250,    ,+,10000,     ,     , ,   ,    ,   , , , , , ,0,D,S;
-APPCH:050,A,I17,NIWTE,D005R,K1,P,C,E   ,R,   ,AF, ,LHO,K2,D, ,      ,0050,0189,3500,    ,+,08900,     ,     , ,   ,    ,   , , , , , ,0,D,S;
+APPCH:050,A,I17,NIWTE,D005R,K2,P,C,E   ,R,   ,AF, ,LHO,K2,D, ,      ,0050,0189,3500,    ,+,08900,     ,     , ,   ,    ,   , , , , , ,0,D,S;
 APPCH:060,A,I17,NIWTE, , , , , E  , ,   ,VI, ,ILGU,K2,P,I,      ,    ,    ,1420,    , ,     ,     ,     , ,   ,    ,   , , , , , ,0,D,S;
 APPCH:010,I,I17, ,KOKPE,K2,P,C,E  I, ,   ,IF, ,ILGU,K2,P,I,      ,3517,0180,    ,    ,J,08900,07600,18000, ,   ,    ,   , , , , , ,0,D,S;
 APPCH:020,I,I17, ,LOCIG,K2,P,C,E  F, ,   ,CF, ,ILGU,K2,P,I,      ,3517,0114,1720,0066,H,07600,07600,     , ,   ,-300,   ,LHO,K2,D, , ,0,D,S;

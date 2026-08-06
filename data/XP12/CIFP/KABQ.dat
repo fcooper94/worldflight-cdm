@@ -184,13 +184,13 @@ STAR:020,5,COLTR4, ,YYLEE,K2,P,C,EE  , ,   ,TF, , , , , ,      ,    ,    ,    , 
 STAR:010,6,COLTR4,RW03,YYLEE,K2,P,C,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,11000,     ,18000, ,250,    ,   , , , , , , , , ;
 STAR:020,6,COLTR4,RW03,CYOTE,K2,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:030,6,COLTR4,RW03,TNTOE,K2,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,10000,     ,     , ,210,    ,   , , , , , , , , ;
-STAR:040,6,COLTR4,RW03,SHYLE,K2,E,A,EY  , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
-STAR:050,6,COLTR4,RW03,SHYLE,K2,E,A,EE  , ,   ,FM, ,TXO,K4,D, ,      ,2675,1883,2130,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
+STAR:040,6,COLTR4,RW03,SHYLE,K2,P,C,EY  , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
+STAR:050,6,COLTR4,RW03,SHYLE,K2,P,C,EE  , ,   ,FM, ,TXO,K4,D, ,      ,2675,1883,2130,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:010,6,COLTR4,RW08,YYLEE,K2,P,C,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,11000,     ,18000, ,250,    ,   , , , , , , , , ;
 STAR:020,6,COLTR4,RW08,CYOTE,K2,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:030,6,COLTR4,RW08,TNTOE,K2,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,10000,     ,     , ,210,    ,   , , , , , , , , ;
-STAR:040,6,COLTR4,RW08,COLNN,K2,E,A,EY  , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
-STAR:050,6,COLTR4,RW08,COLNN,K2,E,A,EE  , ,   ,FM, ,TXO,K4,D, ,      ,2682,1926,2560,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
+STAR:040,6,COLTR4,RW08,COLNN,K2,P,C,EY  , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
+STAR:050,6,COLTR4,RW08,COLNN,K2,P,C,EE  , ,   ,FM, ,TXO,K4,D, ,      ,2682,1926,2560,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:010,6,COLTR4,RW21,YYLEE,K2,P,C,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,11000,     ,18000, ,250,    ,   , , , , , , , , ;
 STAR:020,6,COLTR4,RW21,TACOH,K2,E,A,EE  , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,10000,     ,     , ,210,    ,   , , , , , , , , ;
 STAR:010,6,COLTR4,RW26,YYLEE,K2,P,C,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,11000,     ,18000, ,250,    ,   , , , , , , , , ;

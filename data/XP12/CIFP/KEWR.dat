@@ -88,7 +88,7 @@ STAR:010,5,FLOSI4,ALL,FLOSI,K6,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    
 STAR:020,5,FLOSI4,ALL,CRANK,K6,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:030,5,FLOSI4,ALL,SHAFF,K6,E,A,E CH, ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:040,5,FLOSI4,ALL,SAX,K6,D, ,V   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
-STAR:050,5,FLOSI4,ALL,PHLBO,K6,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
+STAR:050,5,FLOSI4,ALL,PHLBO,K6,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:060,5,FLOSI4,ALL,HOKIR,K6,E,A,EY  , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:070,5,FLOSI4,ALL,KEWR,K6,P,A,AE  , ,   ,VM, , , , , ,      ,    ,    ,1800,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:010,1,FQM3,SLT,SLT,K6,D, ,V  H, ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , , , , ;
@@ -112,7 +112,7 @@ STAR:020,2,PENNS2,ALL,SWEET,K6,E,A,EE  , ,   ,TF, , , , , ,      ,    ,    ,    
 STAR:010,4,PHLBO4,GVE,GVE,K6,D, ,V  H, ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , , , , ;
 STAR:020,4,PHLBO4,GVE,BAILZ,K6,E,A,E  H, ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:030,4,PHLBO4,GVE,PALEO,K6,E,A,E  H, ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
-STAR:040,4,PHLBO4,GVE,FUBRR,K6,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,FL270,     ,     , ,   ,    ,   , , , , , , , , ;
+STAR:040,4,PHLBO4,GVE,FUBRR,K6,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,FL270,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:050,4,PHLBO4,GVE,DQO,K6,D, ,VE  , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,FL200,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:010,4,PHLBO4,HYTRA,HYTRA,K6,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , , , , ;
 STAR:020,4,PHLBO4,HYTRA,SWANN,K6,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
@@ -123,7 +123,7 @@ STAR:030,4,PHLBO4,QUART,LOOPR,K6,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,  
 STAR:040,4,PHLBO4,QUART,HVNNN,K6,E,A,E  H, ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:050,4,PHLBO4,QUART,BAILZ,K6,E,A,E  H, ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:060,4,PHLBO4,QUART,PALEO,K6,E,A,E  H, ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
-STAR:070,4,PHLBO4,QUART,FUBRR,K6,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,FL270,     ,     , ,   ,    ,   , , , , , , , , ;
+STAR:070,4,PHLBO4,QUART,FUBRR,K6,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,FL270,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:080,4,PHLBO4,QUART,DQO,K6,D, ,VE  , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,FL200,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:010,4,PHLBO4,SWANN,SWANN,K6,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , , , , ;
 STAR:020,4,PHLBO4,SWANN,DQO,K6,D, ,VE  , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,FL200,     ,     , ,   ,    ,   , , , , , , , , ;
@@ -134,9 +134,9 @@ STAR:040,5,PHLBO4,ALL,ARD,K6,D, ,V  H, ,   ,TF, , , , , ,      ,    ,    ,    , 
 STAR:050,5,PHLBO4,ALL,DYLIN,K6,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,08000,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:060,5,PHLBO4,ALL,MERSR,K6,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:070,5,PHLBO4,ALL,METRO,K6,E,A,E  H, ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
-STAR:080,5,PHLBO4,ALL,MARRT,K6,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
-STAR:090,5,PHLBO4,ALL,PHLBO,K6,E,A,EY  , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
-STAR:100,5,PHLBO4,ALL,PHLBO,K6,E,A,EE  , ,   ,FM, ,CCC,K6,D, ,      ,2793,0804,0250,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
+STAR:080,5,PHLBO4,ALL,MARRT,K6,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
+STAR:090,5,PHLBO4,ALL,PHLBO,K6,P,C,EY  , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
+STAR:100,5,PHLBO4,ALL,PHLBO,K6,P,C,EE  , ,   ,FM, ,CCC,K6,D, ,      ,2793,0804,0250,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:010,1,SHAFF7,ALB,ALB,K6,D, ,V   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , , , , ;
 STAR:020,1,SHAFF7,ALB,ACOVE,K6,E,A,E  H, ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:030,1,SHAFF7,ALB,TALCO,K6,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;

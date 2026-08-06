@@ -158,8 +158,7 @@ APPCH:030,D,D27, ,MD27,ZS,P,C,E  M, ,   ,CF, ,XUZ,ZS,D, ,      ,0930,0023,2730,0
 APPCH:040,D,D27, ,MD27,ZS,P,C,E M , ,   ,FA, ,XUZ,ZS,D, ,      ,0930,0023,2730,    ,+,01970,     ,     , ,   ,    ,   , , , , , ,0, ,S;
 APPCH:050,D,D27, ,XUZ,ZS,D, ,VE H,L,   ,DF, , , , , ,      ,    ,    ,    ,    , ,02960,     ,     ,-,205,    ,   , , , , , ,0, ,S;
 APPCH:010,A,I09-Y,ATVIM,ATVIM,ZS,E,A,E CA, ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,04930,     ,11800,-,205,    ,   , , , , , ,0,D,S;
-APPCH:020,A,I09-Y,ATVIM,ATVIM,ZS,E,A,E   , ,   ,FC, ,XUZ,ZS,D, ,      ,2536,0184,0600,0055, ,     ,     ,     , ,   ,    ,   , , , , , ,0,D,S;
-APPCH:030,A,I09-Y,ATVIM,CI09,ZS,P,C,EE B, ,   ,CF, ,ICK,ZS,P,I,      ,2705,0111,0600,0040,+,02300,     ,     , ,   ,    ,   , , , , , ,0,D,S;
+APPCH:020,A,I09-Y,ATVIM,CI09,ZS,P,C,EE B, ,   ,TF, ,ICK,ZS,P,I,      ,    ,    ,    ,    ,+,02300,     ,     , ,   ,    ,   , , , , , ,0,D,S;
 APPCH:010,A,I09-Y,XUZ1,XUZ,ZS,D, ,V  C, ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,02960,     ,11800,-,205,    ,   , , , , , ,0,D,S;
 APPCH:020,A,I09-Y,XUZ1,XUZ,ZS,D, ,V   , ,   ,FD, ,XUZ,ZS,D, ,      ,0000,0000,2520,0097,+,02300,     ,     , ,   ,    ,   , , , , , ,0,D,S;
 APPCH:040,A,I09-Y,XUZ1,CI09,ZS,P,C,EE B,R,   ,CF,Y,ICK,ZS,P,I,      ,2705,0111,0900,0010,+,02300,     ,     , ,   ,    ,   , , , , , ,0,D,S;

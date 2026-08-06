@@ -81,8 +81,8 @@ STAR:010,5,POVE4R,RW26,POVEL,ED,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,   
 STAR:020,5,POVE4R,RW26,BABKA,ED,P,C,EE H, ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,04000,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:010,5,SAS1A,RW08,SAS,ED,D, ,V   , ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,04000,     ,     , ,   ,    ,   ,EDVE,ED,P,A, , , , ;
 STAR:020,5,SAS1A,RW08,ELKER,ED,P,C,EE H, ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,04000,     ,     , ,   ,    ,   , , , , , , , , ;
-STAR:010,5,SAS1R,RW26,SAS,ED,D, ,V   , ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,04000,     ,     , ,   ,    ,   ,EDVE,ED,P,A, , , , ;
-STAR:020,5,SAS1R,RW26,BABKA,ED,P,C,EE H, ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,04000,     ,     , ,   ,    ,   , , , , , , , , ;
+STAR:010,5,SAS1X,RW26,SAS,ED,D, ,V   , ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,04000,     ,     , ,   ,    ,   ,EDVE,ED,P,A, , , , ;
+STAR:020,5,SAS1X,RW26,BABKA,ED,P,C,EE H, ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,04000,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:010,5,ULSE5A,RW26,ULSEN,ED,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,05000,     ,     , ,   ,    ,   ,EDVE,ED,P,A, , , , ;
 STAR:020,5,ULSE5A,RW26,ALESI,ED,P,C,EE H, ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,04000,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:010,5,ULSE5B,RW08,ULSEN,ED,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,04000,     ,     , ,   ,    ,   ,EDVE,ED,P,A, , , , ;

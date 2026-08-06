@@ -232,7 +232,7 @@ STAR:020,4,GIGGY2,PICUP,AXXIS,CY,E,A,EE  , ,   ,TF, , , , , ,      ,    ,    ,  
 STAR:010,5,GIGGY2,ALL,AXXIS,CY,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , , , , ;
 STAR:020,5,GIGGY2,ALL,AUTTO,CY,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:030,5,GIGGY2,ALL,GIGGY,CY,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,04000,     ,     , ,   ,    ,   , , , , , , , , ;
-STAR:040,5,GIGGY2,ALL,GIGGY,CY,E,A,EE  , ,   ,FM, ,MOP,K5,D, ,      ,1320,1202,2300,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
+STAR:040,5,GIGGY2,ALL,GIGGY,CY,E,A,EE  , ,   ,FM, ,DJB,K5,D, ,      ,3485,0650,2300,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:010,4,PETTE2,HOSSA,HOSSA,K5,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , , , , ;
 STAR:020,4,PETTE2,HOSSA,PETTE,K5,E,A,EE H, ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:010,4,PETTE2,QBURT,QBURT,K5,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , , , , ;

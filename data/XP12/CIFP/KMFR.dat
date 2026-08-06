@@ -129,7 +129,7 @@ APPCH:030,A,R32-Z,ACLOB,INITY,K1,P,C,E   ,R,502,RF, , , , , ,007000,    ,    ,  
 APPCH:040,A,R32-Z,ACLOB,HIDVO,K1,P,C,E   ,R,802,RF, , , , , ,007000,    ,    ,    ,0049,+,06100,     ,     , ,   ,    ,   ,CFFSQ,K1,P,C, ,A,P,S;
 APPCH:050,A,R32-Z,ACLOB,FILPU,K1,P,C,EE B, ,502,TF, , , , , ,      ,    ,    ,    ,    ,+,04600,     ,     ,-,210,    ,   , , , , , ,A,P,S;
 APPCH:010,A,R32-Z,BAYTS,BAYTS,K1,E,A,E  A, ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , ,A,P,S;
-APPCH:020,A,R32-Z,BAYTS,FIKEN,K2,P,C,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,09000,     ,     , ,   ,    ,   , , , , , ,A,P,S;
+APPCH:020,A,R32-Z,BAYTS,FIKEN,K1,P,C,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,09000,     ,     , ,   ,    ,   , , , , , ,A,P,S;
 APPCH:030,A,R32-Z,BAYTS,OMACO,K2,P,C,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,08800,     ,     ,-,210,    ,   , , , , , ,A,P,S;
 APPCH:040,A,R32-Z,BAYTS,NIGEE,K1,P,C,E   ,L,502,RF, , , , , ,006700,    ,    ,    ,0077,+,07400,     ,     ,-,210,    ,   ,CFFSR,K1,P,C, ,A,P,S;
 APPCH:050,A,R32-Z,BAYTS,IPAGY,K1,P,C,E   ,L,010,RF, , , , , ,006700,    ,    ,    ,0075,+,07400,     ,     , ,   ,    ,   ,CFFSR,K1,P,C, ,A,P,S;

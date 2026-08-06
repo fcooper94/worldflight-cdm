@@ -1,7 +1,7 @@
 APPCH:010,A,R05,BOSTR,BOSTR,K5,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , ,B,J,S;
 APPCH:020,A,R05,BOSTR,DOMBE,K5,P,C,E  A, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,03000,     ,     , ,   ,    ,   , , , , , ,B,J,S;
 APPCH:030,A,R05,BOSTR,EDINE,K5,P,C,EE B, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,02800,     ,     , ,   ,    ,   , , , , , ,B,J,S;
-APPCH:010,A,R05,ZOZBO,ZOZBO,K5,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , ,B,J,S;
+APPCH:010,A,R05,ZOZBO,ZOZBO,K5,P,C,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , ,B,J,S;
 APPCH:020,A,R05,ZOZBO,FERAD,K5,P,C,E  A, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,03000,     ,     , ,   ,    ,   , , , , , ,B,J,S;
 APPCH:030,A,R05,ZOZBO,EDINE,K5,P,C,EE B, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,02800,     ,     , ,   ,    ,   , , , , , ,B,J,S;
 APPCH:010,R,R05, ,EDINE,K5,P,C,E  I, ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,02800,     ,18000, ,   ,    ,   , , , , , ,B,J,S;

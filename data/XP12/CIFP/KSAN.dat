@@ -349,7 +349,7 @@ STAR:050,4,PLYYA2,FICKY,PITTD,K2,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,  
 STAR:060,4,PLYYA2,FICKY,OHBEA,K2,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,15000,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:070,4,PLYYA2,FICKY,PLYYA,K2,E,A,EE H, ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,11000,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:010,4,PLYYA2,LAX,LAX,K2,D, ,V   , ,   ,IF, , , , , ,      ,    ,    ,    ,    ,B,FL260,FL240,18000, ,280,    ,   , , , , , , , , ;
-STAR:020,4,PLYYA2,LAX,TASCO,K2,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,B,FL210,FL190,     , ,   ,    ,   , , , , , , , , ;
+STAR:020,4,PLYYA2,LAX,TASCO,K2,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,B,FL210,FL190,     , ,   ,    ,   , , , , , , , , ;
 STAR:030,4,PLYYA2,LAX,SWAMI,K2,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,-,16500,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:040,4,PLYYA2,LAX,OHBEA,K2,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,15000,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:050,4,PLYYA2,LAX,PLYYA,K2,E,A,EE H, ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,11000,     ,     , ,   ,    ,   , , , , , , , , ;

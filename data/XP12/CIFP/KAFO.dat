@@ -1,5 +1,5 @@
 SID:010,5,AFTON4,RW34,WOLEN,K1,E,A,E   , ,   ,DF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , , , , ;
-SID:020,5,AFTON4,RW34,FRIDM,K1,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
+SID:020,5,AFTON4,RW34,FRIDM,K1,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 SID:030,5,AFTON4,RW34,GIGSE,K1,E,A,EE  , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 SID:010,5,LUNDI2,RW16,HIPOX,K1,E,A,EY  , ,   ,DF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   ,ZASGO,K1,P,C, , , , ;
 SID:020,5,LUNDI2,RW16,LUNDI,K1,E,A,EE  ,R,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,15000,     ,     , ,   ,    ,   , , , , , , , , ;

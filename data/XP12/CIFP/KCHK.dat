@@ -7,8 +7,7 @@ STAR:010,1,GULLI3,TUL,TUL,K4,D, ,V   , ,   ,IF, , , , , ,      ,    ,    ,    , 
 STAR:020,1,GULLI3,TUL,GULLI,K4,E,A,EE H, ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,06000,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:010,2,GULLI3,ALL,GULLI,K4,E,A,E  H, ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , , , , ;
 STAR:020,2,GULLI3,ALL,KCHK,K4,P,A,AE  , ,   ,VM, , , , , ,      ,    ,    ,2300,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
-APPCH:010,A,R18,NEBEE,NEBEE,K4,P,C,E  A, ,   ,IF, , , , , ,      ,    ,    ,    ,    ,-,06000,     ,18000, ,   ,    ,   , , , , , ,A,J,S;
-APPCH:020,A,R18,NEBEE,NEBEE,K4,P,C,EE H,R,   ,HF, , , , , ,      ,    ,    ,1760,0040,+,03300,     ,     , ,   ,    ,   , , , , , ,A,J,S;
+APPCH:010,A,R18,NEBEE,NEBEE,K4,P,C,EE C,R,   ,HF, , , , , ,      ,    ,    ,1760,0040,+,03300,     ,18000, ,   ,    ,   , , , , , ,A,J,S;
 APPCH:010,R,R18, ,NEBEE,K4,P,C,E  I, ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,03300,     ,18000, ,   ,    ,   , , , , , ,A,J,S;
 APPCH:020,R,R18, ,BEKAW,K4,P,C,E  F, ,010,TF, , , , , ,      ,    ,    ,1760,0070,+,02900,     ,     , ,   ,    ,   , , , , , ,A,J,S;
 PRDAT:A,       LPV,A, LNAV/VNAV,A,      LNAV, ,   , ,   , ,   , ,   ,J,S;
@@ -17,8 +16,7 @@ APPCH:030,R,R18, ,RW18,K4,P,G,GY M, ,302,TF, , , , , ,      ,    ,    ,1760,0020
 APPCH:040,R,R18, , , , , ,  M , ,   ,CA, , , , , ,      ,    ,    ,1760,    ,+,01352,     ,     , ,   ,    ,   , , , , , ,A,J,S;
 APPCH:050,R,R18, ,DERFF,K4,P,C,EY  , ,010,DF, , , , , ,      ,    ,    ,    ,    ,+,03300,     ,     , ,   ,    ,   , , , , , ,A,J,S;
 APPCH:060,R,R18, ,DERFF,K4,P,C,EE H,R,   ,HM, , , , , ,      ,    ,    ,3560,0040, ,     ,     ,     , ,   ,    ,   , , , , , ,A,J,S;
-APPCH:010,A,R36,DERFF,DERFF,K4,P,C,E  A, ,   ,IF, , , , , ,      ,    ,    ,    ,    ,-,06000,     ,18000, ,   ,    ,   , , , , , ,A,J,S;
-APPCH:020,A,R36,DERFF,DERFF,K4,P,C,EE H,R,   ,HF, , , , , ,      ,    ,    ,3560,0040,+,03300,     ,     , ,   ,    ,   , , , , , ,A,J,S;
+APPCH:010,A,R36,DERFF,DERFF,K4,P,C,EE C,R,   ,HF, , , , , ,      ,    ,    ,3560,0040,+,03300,     ,18000, ,   ,    ,   , , , , , ,A,J,S;
 APPCH:010,R,R36, ,DERFF,K4,P,C,E  I, ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,03300,     ,18000, ,   ,    ,   , , , , , ,A,J,S;
 APPCH:020,R,R36, ,UHUZE,K4,P,C,E  F, ,010,TF, , , , , ,      ,    ,    ,3560,0070,+,02800,     ,     , ,   ,    ,   , , , , , ,A,J,S;
 PRDAT:A,       LPV,A, LNAV/VNAV,A,      LNAV, ,   , ,   , ,   , ,   ,J,S;

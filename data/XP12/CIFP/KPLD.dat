@@ -1,7 +1,7 @@
 APPCH:010,A,R09,AJAYS,AJAYS,K5,E,A,E  A, ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , ,A,J,S;
 APPCH:020,A,R09,AJAYS,DIYEC,K5,P,C,EE B, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,02500,     ,     , ,   ,    ,   , , , , , ,A,J,S;
 APPCH:010,A,R09,DIYEC,DIYEC,K5,P,C,EE C,R,   ,HF, , , , , ,      ,    ,    ,0910,0040,+,02500,     ,18000, ,   ,    ,   , , , , , ,A,J,S;
-APPCH:010,A,R09,FAXIG,FAXIG,K5,E,A,E  A, ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , ,A,J,S;
+APPCH:010,A,R09,FAXIG,FAXIG,K5,P,C,E  A, ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , ,A,J,S;
 APPCH:020,A,R09,FAXIG,DIYEC,K5,P,C,EE B, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,02500,     ,     , ,   ,    ,   , , , , , ,A,J,S;
 APPCH:010,R,R09, ,DIYEC,K5,P,C,E  I, ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,02500,     ,18000, ,   ,    ,   , , , , , ,A,J,S;
 APPCH:020,R,R09, ,CAXUV,K5,P,C,E  F, ,010,TF, , , , , ,      ,    ,    ,0910,0058,+,02000,     ,     , ,   ,    ,   ,RW09,K5,P,G, ,A,J,S;

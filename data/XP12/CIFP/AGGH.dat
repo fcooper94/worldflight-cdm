@@ -251,7 +251,7 @@ APPCH:020,A,R06,APEXI,GH401,AG,P,C,EE B, ,010,TF, , , , , ,      ,    ,    ,    
 APPCH:010,A,R06,KOPAU,KOPAU,AG,E,A,E  C, ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,12000, ,   ,    ,   , , , , , ,B,J,S;
 APPCH:020,A,R06,KOPAU,GH401,AG,P,C,EE B, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,05000,     ,     , ,   ,    ,   , , , , , ,B,J,S;
 APPCH:010,R,R06, ,GH401,AG,P,C,E  I, ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,05000,     ,12000, ,   ,    ,   , , , , , ,B,J,S;
-APPCH:020,R,R06, ,GH536,AG,P,C,E  F, ,010,TF, , , , , ,      ,    ,    ,0590,0070,+,02680,     ,     , ,   ,    ,   ,AGGH,AG,P,A, ,B,J,S;
+APPCH:020,R,R06, ,GH536,AG,P,C,E  F, ,010,TF, , , , , ,      ,    ,    ,0590,0070,+,02680,     ,     , ,   ,-350,   ,AGGH,AG,P,A, ,B,J,S;
 PRDAT: ,          , ,          ,A,      LNAV, ,   , ,   , ,   , ,   ,J,S;
 APPCH:030,R,R06, ,RW06,AG,P,G,GY M, ,302,TF, , , , , ,      ,    ,    ,0590,0070, ,00084,     ,     , ,   ,-350,   , , , , , ,B,J,S;
 APPCH:040,R,R06, ,GH582,AG,P,C,EYM , ,010,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , ,B,J,S;

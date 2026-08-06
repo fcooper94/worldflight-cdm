@@ -21,7 +21,7 @@ APPCH:010,A,D32-Z,MUDDA,MUDDA,K7,E,A,E  A, ,   ,IF, , , , , ,      ,    ,    ,  
 APPCH:020,A,D32-Z,MUDDA,COSNA,K7,P,C,E  B,L,   ,AF, ,GPT,K7,D, ,      ,1273,0120,2450,    ,+,01700,     ,     , ,   ,    ,   , , , , , ,0, ,S;
 APPCH:030,A,D32-Z,MUDDA,HOTIP,K7,P,C,EE  , ,   ,CF, ,GPT,K7,D, ,      ,1273,0060,3070,0060,+,01700,     ,     , ,   ,    ,   , , , , , ,0, ,S;
 APPCH:010,A,D32-Z,NESFE,NESFE,K7,E,A,E  A, ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,05000,     ,18000, ,   ,    ,   , , , , , ,0, ,S;
-APPCH:020,A,D32-Z,NESFE,THUGS,K4,P,C,E   ,R,   ,AF, ,GPT,K7,D, ,      ,0910,0120,0610,    ,+,05000,     ,     , ,   ,    ,   , , , , , ,0, ,S;
+APPCH:020,A,D32-Z,NESFE,THUGS,K7,P,C,E   ,R,   ,AF, ,GPT,K7,D, ,      ,0910,0120,0610,    ,+,05000,     ,     , ,   ,    ,   , , , , , ,0, ,S;
 APPCH:030,A,D32-Z,NESFE,COSNA,K7,P,C,E  B,R,   ,AF, ,GPT,K7,D, ,      ,1273,0120,0910,    ,+,01700,     ,     , ,   ,    ,   , , , , , ,0, ,S;
 APPCH:040,A,D32-Z,NESFE,HOTIP,K7,P,C,EE  , ,   ,CF, ,GPT,K7,D, ,      ,1273,0060,3070,0060,+,01700,     ,     , ,   ,    ,   , , , , , ,0, ,S;
 APPCH:020,D,D32-Z, ,HOTIP,K7,P,C,E  F, ,   ,IF, ,GPT,K7,D, ,      ,1273,0060,    ,    ,+,01700,     ,18000, ,   ,    ,   ,GPT,K7,D, ,A,0, ,S;

@@ -76,7 +76,7 @@ APPCH:020,D,D05-Z, ,FF05,UA,P,C,E  F, ,   ,IF, ,PSK,UA,D, ,      ,2336,0074,    
 APPCH:030,D,D05-Z, ,RW05,UA,P,G,G  M, ,   ,CF, ,PSK,UA,D, ,      ,2335,0020,0530,0054, ,00494,     ,     , ,   ,-300,   , , , , , ,0, ,S;
 APPCH:040,D,D05-Z, ,PSK,UA,D, ,VYM , ,   ,CF, ,PSK,UA,D, ,      ,0000,0000,0530,0020, ,     ,     ,     , ,   ,    ,   , , , , , ,0, ,S;
 APPCH:050,D,D05-Z, ,PSK,UA,D, ,V   , ,   ,FD, ,PSK,UA,D, ,      ,0000,0000,0530,0052,+,01500,     ,     , ,   ,    ,   , , , , , ,0, ,S;
-APPCH:060,D,D05-Z, ,PSK,UA,D, ,VE H,R,   ,DF, , , , , ,      ,    ,    ,    ,    , ,02200,     ,     ,-,240,    ,   , , , , , ,0, ,S;
+APPCH:060,D,D05-Z, ,PSK,UA,D, ,VE H,R,   ,DF, , , , , ,      ,    ,    ,    ,    , ,02200,     ,     , ,   ,    ,   , , , , , ,0, ,S;
 APPCH:010,A,D23-Y,DIDOB,DIDOB,UA,P,C,E  A, ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,02200,     ,     , ,   ,    ,   , , , , , ,0, ,S;
 APPCH:020,A,D23-Y,DIDOB,GOBDI,UA,P,C,EE B, ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,02200,     ,     , ,   ,    ,   , , , , , ,0, ,S;
 APPCH:010,A,D23-Y,LAVLO,LAVLO,UA,P,C,E  A, ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,02200,     ,     , ,   ,    ,   , , , , , ,0, ,S;
@@ -95,7 +95,7 @@ APPCH:030,A,D23-Z,PSK2,FD23,UA,P,C,EE  ,L,   ,CF,Y,PSK,UA,D, ,      ,0540,0049,2
 APPCH:020,D,D23-Z, ,FD23,UA,P,C,E  F, ,   ,IF, ,PSK,UA,D, ,      ,0540,0049,    ,    ,+,02200,     ,     , ,   ,    ,   ,PSK,UA,D, , ,0, ,S;
 APPCH:030,D,D23-Z, ,PSK,UA,D, ,V  M, ,   ,CF, ,PSK,UA,D, ,      ,0000,0000,2330,0049, ,00672,     ,     , ,   ,-300,   , , , , , ,0, ,S;
 APPCH:040,D,D23-Z, ,PSK,UA,D, ,V M , ,   ,FD, ,PSK,UA,D, ,      ,0000,0000,2330,0048,+,01400,     ,     , ,   ,    ,   , , , , , ,0, ,S;
-APPCH:050,D,D23-Z, ,PSK,UA,D, ,VE H,L,   ,DF, , , , , ,      ,    ,    ,    ,    , ,02200,     ,     ,-,240,    ,   , , , , , ,0, ,S;
+APPCH:050,D,D23-Z, ,PSK,UA,D, ,VE H,L,   ,DF, , , , , ,      ,    ,    ,    ,    , ,02200,     ,     , ,   ,    ,   , , , , , ,0, ,S;
 APPCH:010,A,I23-Y,DIDOB,DIDOB,UA,P,C,E  A, ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,02200,     ,     , ,   ,    ,   , , , , , ,0,D,S;
 APPCH:020,A,I23-Y,DIDOB, , , , ,    , ,   ,CR, ,PSK,UA,D, ,      ,0660,    ,3230,    , ,     ,     ,     , ,   ,    ,   , , , , , ,0,D,S;
 APPCH:030,A,I23-Y,DIDOB, , , , , E  , ,   ,CI, ,IPT,UA,P,I,      ,    ,    ,2630,    , ,     ,     ,     , ,   ,    ,   , , , , , ,0,D,S;

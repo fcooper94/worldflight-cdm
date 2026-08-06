@@ -31,12 +31,12 @@ APPCH:030,R,R12, ,RW12,K3,P,G,GY M, ,   ,TF, , , , , ,      ,    ,    ,1260,0023
 APPCH:040,R,R12, , , , , ,  M , ,   ,CA, , , , , ,      ,    ,    ,1260,    ,+,00947,     ,     , ,   ,    ,   , , , , , ,A,J,S;
 APPCH:050,R,R12, ,HOVRA,K5,P,C,EY  , ,   ,DF, , , , , ,      ,    ,    ,    ,    ,+,02700,     ,     , ,   ,    ,   , , , , , ,A,J,S;
 APPCH:060,R,R12, ,HOVRA,K5,P,C,EE H,R,   ,HM, , , , , ,      ,    ,    ,3060,0040, ,     ,     ,     , ,   ,    ,   , , , , , ,A,J,S;
-APPCH:010,A,R24,EDAGE,EDAGE,K3,P,C,EE C,R,   ,HF, , , , , ,      ,    ,    ,2400,0050,+,03000,     ,18000, ,   ,    ,   , , , , , ,A,J,S;
-APPCH:010,A,R24,WILTI,WILTI,K3,P,C,E  A, ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,03300,     ,18000, ,   ,    ,   , , , , , ,A,J,S;
-APPCH:020,A,R24,WILTI,EDAGE,K3,P,C,EE B, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,03000,     ,     , ,   ,    ,   , , , , , ,A,J,S;
-APPCH:010,A,R24,ZAGES,ZAGES,K3,P,C,E  A, ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,03000,     ,18000, ,   ,    ,   , , , , , ,A,J,S;
-APPCH:020,A,R24,ZAGES,EDAGE,K3,P,C,EE B, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,03000,     ,     , ,   ,    ,   , , , , , ,A,J,S;
-APPCH:010,R,R24, ,EDAGE,K3,P,C,E  I, ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,03000,     ,18000, ,   ,    ,   , , , , , ,A,J,S;
+APPCH:010,A,R24,EDAGE,EDAGE,K3,P,C,EE C,R,   ,HF, , , , , ,      ,    ,    ,2400,0050,+,03100,     ,18000, ,   ,    ,   , , , , , ,A,J,S;
+APPCH:010,A,R24,WILTI,WILTI,K3,P,C,E  A, ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , ,A,J,S;
+APPCH:020,A,R24,WILTI,EDAGE,K3,P,C,EE B, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,03100,     ,     , ,   ,    ,   , , , , , ,A,J,S;
+APPCH:010,A,R24,ZAGES,ZAGES,K3,P,C,E  A, ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , ,A,J,S;
+APPCH:020,A,R24,ZAGES,EDAGE,K3,P,C,EE B, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,03100,     ,     , ,   ,    ,   , , , , , ,A,J,S;
+APPCH:010,R,R24, ,EDAGE,K3,P,C,E  I, ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,03100,     ,18000, ,   ,    ,   , , , , , ,A,J,S;
 APPCH:020,R,R24, ,JOLIX,K3,P,C,E  F, ,010,TF, , , , , ,      ,    ,    ,2400,0060,+,02300,     ,     , ,   ,    ,   , , , , , ,A,J,S;
 PRDAT:A,       LPV,A, LNAV/VNAV,A,      LNAV, ,   , ,   , ,   , ,   ,J,S;
 APPCH:025,R,R24, ,YELDU,K3,P,C,E S , ,302,TF, , , , , ,      ,    ,    ,2400,0032,+,01260,     ,     , ,   ,-300,   , , , , , ,A,J,S;

@@ -216,11 +216,11 @@ APPCH:040,R,R17-Y, , , , , ,  M , ,010,VA, , , , , ,      ,    ,    ,1680,    ,+
 APPCH:050,R,R17-Y, ,KASPA,WB,P,C,E   ,L,010,DF, , , , , ,      ,    ,    ,    ,    ,+,05500,     ,     ,-,230,    ,   , , , , , ,B,J,S;
 APPCH:060,R,R17-Y, ,KASPA,WB,P,C,EE H,R,010,HM, , , , , ,      ,    ,    ,3180,T010,+,05500,     ,     ,-,230,    ,   , , , , , ,B,J,S;
 APPCH:010,A,R17-Z,ADGAB,ADGAB,WB,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,07000,     ,13000, ,   ,    ,   , , , , , ,B,P,S;
-APPCH:020,A,R17-Z,ADGAB,OBKEG,WB,P,C,E  C, ,020,TF, , , , , ,      ,    ,    ,    ,    ,+,02700,     ,     , ,   ,    ,   , , , , , ,B,P,S;
+APPCH:020,A,R17-Z,ADGAB,OBKEG,WB,P,C,E  C, ,020,TF, , , , , ,      ,    ,    ,    ,    ,+,02900,     ,     , ,   ,    ,   , , , , , ,B,P,S;
 APPCH:030,A,R17-Z,ADGAB,GB724,WB,P,C,E  B, ,302,TF, , , , , ,      ,    ,    ,    ,    ,+,02000,     ,     , ,   ,    ,   , , , , , ,B,P,S;
 APPCH:040,A,R17-Z,ADGAB,PUDIL,WB,P,C,EE  ,R,302,RF, , , , , ,002230,    ,    ,    ,0037, ,00900,     ,     , ,   ,    ,   ,RGB71,WB,P,C, ,B,P,S;
 APPCH:010,A,R17-Z,BASUV,BASUV,WB,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,07000,     ,13000, ,   ,    ,   , , , , , ,B,P,S;
-APPCH:020,A,R17-Z,BASUV,OBKEG,WB,P,C,E  C, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,02700,     ,     , ,   ,    ,   , , , , , ,B,P,S;
+APPCH:020,A,R17-Z,BASUV,OBKEG,WB,P,C,E  C, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,02900,     ,     , ,   ,    ,   , , , , , ,B,P,S;
 APPCH:030,A,R17-Z,BASUV,GB724,WB,P,C,E  B, ,302,TF, , , , , ,      ,    ,    ,    ,    ,+,02000,     ,     , ,   ,    ,   , , , , , ,B,P,S;
 APPCH:040,A,R17-Z,BASUV,PUDIL,WB,P,C,EE  ,R,302,RF, , , , , ,002230,    ,    ,    ,0037, ,00900,     ,     , ,   ,    ,   ,RGB71,WB,P,C, ,B,P,S;
 APPCH:010,A,R17-Z,DUNAS,DUNAS,WB,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,07000,     ,13000, ,   ,    ,   , , , , , ,B,P,S;
@@ -235,8 +235,8 @@ APPCH:020,R,R17-Z, ,PUDIL,WB,P,C,E  F, ,   ,IF, , , , , ,      ,    ,    ,    , 
 APPCH:030,R,R17-Z, ,RW17,WB,P,G,GY M, ,302,TF, , , , , ,      ,    ,    ,1680,0027, ,00084,     ,     , ,   ,-280,   , , , , , ,B,P,S;
 APPCH:040,R,R17-Z, ,GB792,WB,P,C,E M , ,010,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , ,B,P,S;
 APPCH:050,R,R17-Z, ,GB794,WB,P,C,E   ,R,010,RF, , , , , ,003100,    ,    ,    ,0100, ,     ,     ,     ,-,230,    ,   ,RGB91,WB,P,C, ,B,P,S;
-APPCH:060,R,R17-Z, ,OBKEG,WB,P,C,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,02700,     ,     , ,   ,    ,   , , , , , ,B,P,S;
-APPCH:070,R,R17-Z, ,OBKEG,WB,P,C,EE H,L,010,HM, , , , , ,      ,    ,    ,0730,T010,+,02700,     ,     ,-,230,    ,   , , , , , ,B,P,S;
+APPCH:060,R,R17-Z, ,OBKEG,WB,P,C,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,02900,     ,     , ,   ,    ,   , , , , , ,B,P,S;
+APPCH:070,R,R17-Z, ,OBKEG,WB,P,C,EE H,L,010,HM, , , , , ,      ,    ,    ,0730,T010,+,02900,     ,     ,-,230,    ,   , , , , , ,B,P,S;
 APPCH:010,A,R35-Y,AVLER,AVLER,WB,P,C,E  A, ,010,IF, , , , , ,      ,    ,    ,    ,    ,+,03200,     ,13000, ,   ,    ,   , , , , , ,B,J,S;
 APPCH:020,A,R35-Y,AVLER,IBEMA,WB,P,C,EE B, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,02400,     ,     , ,   ,    ,   , , , , , ,B,J,S;
 APPCH:010,A,R35-Y,BUDVA,BUDVA,WB,P,C,E  A, ,010,IF, , , , , ,      ,    ,    ,    ,    ,+,03200,     ,13000, ,   ,    ,   , , , , , ,B,J,S;

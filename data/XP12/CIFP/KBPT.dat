@@ -1,5 +1,5 @@
 APPCH:010,A,I12,HONEE,HONEE,K4,E,A,E  A, ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , ,0,N,S;
-APPCH:020,A,I12,HONEE,GIDDY,K4,P,C,EE B, ,   ,TF, ,IBPT,K4,P,I,      ,    ,    ,1480,0226,+,01800,     ,     , ,   ,    ,   , , , , , ,0,N,S;
+APPCH:020,A,I12,HONEE,GIDDY,K4,P,C,EE B, ,   ,TF, ,IBPT,K4,P,I,      ,    ,    ,    ,    ,+,01800,     ,     , ,   ,    ,   , , , , , ,0,N,S;
 APPCH:010,I,I12, ,GIDDY,K4,P,C,E  I, ,   ,IF, ,IBPT,K4,P,I,      ,3000,0139,    ,    ,J,01800,01700,18000, ,   ,    ,   , , , , , ,0,N,S;
 APPCH:020,I,I12, ,KAZOO,K4,P,C,E  F, ,   ,CF, ,IBPT,K4,P,I,      ,3000,0064,1200,0075,H,01700,01700,     , ,   ,-300,   ,SBI,K4,D, , ,0,N,S;
 APPCH:030,I,I12, ,RW12,K4,P,G,G  M, ,   ,CF, ,IBPT,K4,P,I,      ,3000,0013,1200,0052, ,00066,     ,     , ,   ,-300,   , , , , , ,0,N,S;

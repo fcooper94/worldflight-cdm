@@ -39,7 +39,7 @@ STAR:050,4,JAFAR3,MJKAL,JAFAR,K7,E,A,EE H, ,   ,TF, , , , , ,      ,    ,    ,  
 STAR:010,5,JAFAR3,ALL,JAFAR,K7,E,A,E  H, ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , , , , ;
 STAR:020,5,JAFAR3,ALL,RINGG,K7,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:030,5,JAFAR3,ALL,FLIPY,K7,E,A,EY  , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,11000,     ,     , ,250,    ,   , , , , , , , , ;
-STAR:040,5,JAFAR3,ALL,FLIPY,K7,E,A,EE  , ,   ,FM, ,SGJ,K7,D, ,      ,2075,0740,1440,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
+STAR:040,5,JAFAR3,ALL,FLIPY,K7,E,A,EE  , ,   ,FM, ,SAV,K7,D, ,      ,1957,2028,1440,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:010,4,JOKRS4,COREA,COREA,K7,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , , , , ;
 STAR:020,4,JOKRS4,COREA,SIMIE,K7,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:030,4,JOKRS4,COREA,FAZES,K7,E,A,E  H, ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
@@ -130,7 +130,7 @@ STAR:010,4,MUNGI1,WAPOM,WAPOM,K7,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,  
 STAR:020,4,MUNGI1,WAPOM,MUNGI,K7,E,A,EE H, ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:010,5,MUNGI1,ALL,MUNGI,K7,E,A,E  H, ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , , , , ;
 STAR:020,5,MUNGI1,ALL,BLOKD,K7,E,A,EY  , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,12000,     ,     , ,250,    ,   , , , , , , , , ;
-STAR:030,5,MUNGI1,ALL,BLOKD,K7,E,A,EE  , ,   ,FM, ,SGJ,K7,D, ,      ,1795,1151,3450,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
+STAR:030,5,MUNGI1,ALL,BLOKD,K7,E,A,EE  , ,   ,FM, ,SAV,K7,D, ,      ,1846,2455,3450,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:010,4,PRICY5,BAYNE,BAYNE,K7,E,A,E  H, ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , , , , ;
 STAR:020,4,PRICY5,BAYNE,BULKS,K7,E,A,E  H, ,   ,TF, , , , , ,      ,    ,    ,    ,    ,B,FL200,FL190,     , ,280,    ,   , , , , , , , , ;
 STAR:030,4,PRICY5,BAYNE,PRICY,K7,E,A,EE H, ,   ,TF, , , , , ,      ,    ,    ,    ,    ,B,16000,13000,     , ,250,    ,   , , , , , , , , ;
@@ -159,7 +159,7 @@ STAR:040,4,PRICY5,DOZES,PRICY,K7,E,A,EE H, ,   ,TF, , , , , ,      ,    ,    ,  
 STAR:010,5,PRICY5,ALL,PRICY,K7,E,A,E  H, ,   ,IF, , , , , ,      ,    ,    ,    ,    ,B,16000,13000,18000, ,250,    ,   , , , , , , , , ;
 STAR:020,5,PRICY5,ALL,BOCCE,K7,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:030,5,PRICY5,ALL,OTKEE,K7,E,A,EY  , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,11000,     ,     , ,   ,    ,   , , , , , , , , ;
-STAR:040,5,PRICY5,ALL,OTKEE,K7,E,A,EE  , ,   ,FM, ,SGJ,K7,D, ,      ,1990,1109,0560,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
+STAR:040,5,PRICY5,ALL,OTKEE,K7,E,A,EE  , ,   ,FM, ,SAV,K7,D, ,      ,1936,2412,0560,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:010,4,SHREK2,BIGDE,BIGDE,K7,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , , , , ;
 STAR:015,4,SHREK2,BIGDE,EATTR,K7,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:020,4,SHREK2,BIGDE,WANDD,K7,E,A,E  H, ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
@@ -183,7 +183,7 @@ STAR:010,4,SLOAO1,MATLK,MATLK,K7,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,  
 STAR:020,4,SLOAO1,MATLK,SLOAO,K7,E,A,EE  , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,06000,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:010,5,SLOAO1,ALL,SLOAO,K7,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,06000,     ,18000, ,   ,    ,   , , , , , , , , ;
 STAR:020,5,SLOAO1,ALL,DORMS,K7,E,A,EY  , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
-STAR:040,5,SLOAO1,ALL,DORMS,K7,E,A,EE  , ,   ,FM, ,SGJ,K7,D, ,      ,1794,1121,0150,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
+STAR:040,5,SLOAO1,ALL,DORMS,K7,E,A,EE  , ,   ,FM, ,SAV,K7,D, ,      ,1846,2425,0150,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:010,4,TTHOR3,KYLEG,KYLEG,K7,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , , , , ;
 STAR:020,4,TTHOR3,KYLEG,JAGGZ,K7,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,FL240,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:030,4,TTHOR3,KYLEG,WEEEK,K7,E,A,E  H, ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,16000,     ,     , ,   ,    ,   , , , , , , , , ;

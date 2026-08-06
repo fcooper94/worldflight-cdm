@@ -40,6 +40,7 @@ APPCH:020,A,R07,PIRAL,GUBIK,MD,P,C,E  C, ,   ,TF, , , , , ,      ,    ,    ,    
 APPCH:030,A,R07,PIRAL,PUSIM,MD,P,C,EE B, ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,03250,     ,     , ,   ,    ,   , , , , , ,B,J,S;
 APPCH:010,R,R07, ,PUSIM,MD,P,C,E  I, ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,03250,     ,18000,-,220,    ,   , , , , , ,B,J,S;
 APPCH:020,R,R07, ,CY366,MD,P,C,E  F, ,   ,TF, , , , , ,      ,    ,    ,0750,0050,+,01660,     ,     , ,   ,    ,   ,MDCY,MD,P,A, ,B,J,S;
+PRDAT: ,          , ,          ,A,      LNAV, ,   , ,   , ,   , ,   ,J,S;
 APPCH:030,R,R07, ,RW07,MD,P,G,GY M, ,   ,TF, , , , , ,      ,    ,    ,0750,0050, ,00062,     ,     , ,   ,-300,   , , , , , ,B,J,S;
 APPCH:040,R,R07, ,CY368,MD,P,C,E M , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , ,B,J,S;
 APPCH:050,R,R07, ,CY369,MD,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , ,B,J,S;
@@ -53,6 +54,7 @@ APPCH:020,A,R25,KOBET,IKDAT,MD,P,C,E  C, ,   ,TF, , , , , ,      ,    ,    ,    
 APPCH:030,A,R25,KOBET,CY250,MD,P,C,EE B, ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,03000,     ,     , ,   ,    ,   , , , , , ,B,J,S;
 APPCH:010,R,R25, ,CY250,MD,P,C,E  I, ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,03000,     ,18000, ,   ,    ,   , , , , , ,B,J,S;
 APPCH:020,R,R25, ,CY249,MD,P,C,E  F, ,   ,TF, , , , , ,      ,    ,    ,2550,0050,+,01700,     ,     , ,   ,    ,   ,MDCY,MD,P,A, ,B,J,S;
+PRDAT: ,          , ,          ,A,      LNAV, ,   , ,   , ,   , ,   ,J,S;
 APPCH:030,R,R25, ,RW25,MD,P,G,GY M, ,   ,TF, , , , , ,      ,    ,    ,2550,0050, ,00062,     ,     , ,   ,-300,   , , , , , ,B,J,S;
 APPCH:040,R,R25, ,CY248,MD,P,C,EYM , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , ,B,J,S;
 APPCH:050,R,R25, ,IKDAT,MD,P,C,E   ,R,   ,DF, , , , , ,      ,    ,    ,    ,    ,+,03000,     ,     , ,   ,    ,   , , , , , ,B,J,S;

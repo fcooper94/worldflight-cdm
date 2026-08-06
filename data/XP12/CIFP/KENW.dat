@@ -96,7 +96,7 @@ APPCH:020,A,R33,PAPPI,INSAW,K5,P,C,EE B, ,010,TF, , , , , ,      ,    ,    ,    
 APPCH:010,A,R33,TALOR,TALOR,K5,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , ,B,J,S;
 APPCH:020,A,R33,TALOR,KODOW,K5,P,C,E  A, ,020,TF, , , , , ,      ,    ,    ,    ,    ,+,03000,     ,     , ,   ,    ,   , , , , , ,B,J,S;
 APPCH:030,A,R33,TALOR,INSAW,K5,P,C,EE B, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,03000,     ,     , ,   ,    ,   , , , , , ,B,J,S;
-APPCH:010,A,R33,WARPI,WARPI,K5,E,A,E  A, ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , ,B,J,S;
+APPCH:010,A,R33,WARPI,WARPI,K5,P,C,E  A, ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , ,B,J,S;
 APPCH:020,A,R33,WARPI,INSAW,K5,P,C,EE B, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,03000,     ,     , ,   ,    ,   , , , , , ,B,J,S;
 APPCH:010,R,R33, ,INSAW,K5,P,C,E  I, ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,03000,     ,18000, ,   ,    ,   , , , , , ,B,J,S;
 APPCH:020,R,R33, ,KOKNE,K5,P,C,E  F, ,010,TF, , , , , ,      ,    ,    ,3260,0061,+,02400,     ,     , ,   ,    ,   ,RW33,K5,P,G, ,B,J,S;

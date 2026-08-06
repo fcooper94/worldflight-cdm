@@ -28,7 +28,7 @@ STAR:010,4,SLOAO1,MATLK,MATLK,K7,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,  
 STAR:020,4,SLOAO1,MATLK,SLOAO,K7,E,A,EE  , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,06000,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:010,5,SLOAO1,ALL,SLOAO,K7,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,06000,     ,18000, ,   ,    ,   , , , , , , , , ;
 STAR:020,5,SLOAO1,ALL,DORMS,K7,E,A,EY  , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
-STAR:040,5,SLOAO1,ALL,DORMS,K7,E,A,EE  , ,   ,FM, ,SGJ,K7,D, ,      ,1794,1121,0150,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
+STAR:040,5,SLOAO1,ALL,DORMS,K7,E,A,EE  , ,   ,FM, ,SAV,K7,D, ,      ,1846,2425,0150,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 APPCH:010,I,I36, ,AWINY,K7,E,A,E  D, ,   ,IF, ,ITIX,K7,P,I,      ,1841,0147,    ,    ,J,03000,02100,18000, ,   ,    ,   , , , , , ,0,N,S;
 APPCH:020,I,I36, ,JORUR,K7,P,C,E  F, ,   ,CF, ,ITIX,K7,P,I,      ,1841,0073,0040,0073,H,02100,02100,     , ,   ,-300,   ,MLB,K7,D, , ,0,N,S;
 APPCH:030,I,I36, ,RW36,K7,P,G,G  M, ,   ,CF, ,ITIX,K7,P,I,      ,1841,0014,0040,0060, ,00092,     ,     , ,   ,-300,   , , , , , ,0,N,S;

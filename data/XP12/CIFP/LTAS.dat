@@ -7,7 +7,7 @@ STAR:030,5,EVLA1A,RW36,UFKOZ,LT,P,C,EE  , ,010,TF, , , , , ,      ,    ,    ,   
 STAR:010,5,FACL1A,RW36,FACLI,LT,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   ,CAY,LT,D, , , , , ;
 STAR:020,5,FACL1A,RW36,AHJET,LT,P,C,E  H, ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,04800,     ,     ,-,220,    ,   , , , , , , , , ;
 STAR:030,5,FACL1A,RW36,UFKOZ,LT,P,C,EE  , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,03200,     ,     ,-,200,    ,   , , , , , , , , ;
-STAR:010,5,LETB1A,RW36,LETBU,LT,E,A,E   , ,010,IF, , , , , ,      ,    ,    ,    ,    , ,08000,     ,     , ,   ,    ,   ,CAY,LT,D, , , , , ;
+STAR:010,5,LETB1A,RW36,LETBU,LT,E,A,E   , ,010,IF, , , , , ,      ,    ,    ,    ,    ,+,10000,     ,     , ,   ,    ,   ,CAY,LT,D, , , , , ;
 STAR:020,5,LETB1A,RW36,ELFOM,LT,P,C,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,05800,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:030,5,LETB1A,RW36,AHJET,LT,P,C,E  H, ,010,TF, , , , , ,      ,    ,    ,    ,    , ,04800,     ,     ,-,220,    ,   , , , , , , , , ;
 STAR:040,5,LETB1A,RW36,UFKOZ,LT,P,C,EE  , ,010,TF, , , , , ,      ,    ,    ,    ,    , ,03200,     ,     ,-,200,    ,   , , , , , , , , ;

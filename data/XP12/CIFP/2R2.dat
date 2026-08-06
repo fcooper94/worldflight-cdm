@@ -14,7 +14,7 @@ APPCH:060,R,R18, ,GAKNE,K5,P,C,EE H,R,   ,HM, , , , , ,      ,    ,    ,1830,004
 APPCH:010,A,R36,KELLY,KELLY,K5,E,A,E  A, ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , ,A,J,S;
 APPCH:020,A,R36,KELLY,WOSOB,K5,P,C,EE B, ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,02700,     ,     , ,   ,    ,   , , , , , ,A,J,S;
 APPCH:010,R,R36, ,WOSOB,K5,P,C,E  I, ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,02700,     ,18000, ,   ,    ,   , , , , , ,A,J,S;
-APPCH:020,R,R36, ,OCOGU,K3,P,C,E  F, ,   ,TF, , , , , ,      ,    ,    ,0030,0070,+,02500,     ,     , ,   ,    ,   ,RW36,K5,P,G, ,A,J,S;
+APPCH:020,R,R36, ,OCOGU,K5,P,C,E  F, ,   ,TF, , , , , ,      ,    ,    ,0030,0070,+,02500,     ,     , ,   ,    ,   ,RW36,K5,P,G, ,A,J,S;
 PRDAT:A,       LPV,A, LNAV/VNAV,A,      LNAV, ,   , ,   , ,   , ,   ,J,S;
 APPCH:025,R,R36, ,CURGU,K5,P,C,E S , ,   ,TF, , , , , ,      ,    ,    ,0030,0034,+,01400,     ,     , ,   ,-300,   , , , , , ,A,J,S;
 APPCH:030,R,R36, ,RW36,K5,P,G,GY M, ,   ,TF, , , , , ,      ,    ,    ,0030,0016, ,00909,     ,     , ,   ,-300,   , , , , , ,A,J,S;

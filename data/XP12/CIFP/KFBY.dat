@@ -1,11 +1,3 @@
-APPCH:010,A,NDBA,BIE,BIE,K3,D, ,V   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , ,0, ,C;
-APPCH:020,A,NDBA,BIE,BLOON,K3,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,03600,     ,     , ,   ,    ,   , , , , , ,0, ,C;
-APPCH:030,A,NDBA,BIE,BLOON,K3,P,C,EE C,L,   ,HF, , , , , ,      ,    ,    ,1860,T010,+,03600,     ,     , ,   ,    ,   , , , , , ,0, ,C;
-APPCH:020,N,NDBA, ,BLOON,K3,P,C,E  F, ,   ,IF, ,FBY,K3,D,B,      ,    ,    ,    ,    ,+,03600,     ,18000, ,   ,    ,   ,FBY,K3,D,B, ,0, ,C;
-APPCH:030,N,NDBA, ,FBY,K3,D,B,E  M, ,   ,CF, ,FBY,K3,D,B,      ,    ,    ,1860,0050, ,02040,     ,     , ,   , 000,   , , , , , ,0, ,C;
-APPCH:040,N,NDBA, , , , , ,  M , ,   ,CA, , , , , ,      ,    ,    ,1860,    ,+,02040,     ,     , ,   ,    ,   , , , , , ,0, ,C;
-APPCH:050,N,NDBA, ,BLOON,K3,P,C,E   ,L,   ,CF,Y,SCB,K3,D, ,      ,1903,0840,0060,0040,+,03600,     ,     , ,   ,    ,   , , , , , ,0, ,C;
-APPCH:060,N,NDBA, ,BLOON,K3,P,C,EE H,L,   ,HM, , , , , ,      ,    ,    ,1860,T010, ,     ,     ,     , ,   ,    ,   , , , , , ,0, ,C;
 APPCH:010,A,R17,GADWY,GADWY,K3,E,A,EE C,R,   ,HF, , , , , ,      ,    ,    ,1740,0040,+,04000,     ,18000, ,   ,    ,   , , , , , ,A,J,S;
 APPCH:010,A,R17,KOPFY,KOPFY,K3,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , ,A,J,S;
 APPCH:020,A,R17,KOPFY,JULOM,K3,P,C,E  A, ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,04000,     ,     , ,   ,    ,   , , , , , ,A,J,S;

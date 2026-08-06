@@ -1,7 +1,7 @@
 APPCH:010,A,R09,AXODU,AXODU,HK,P,C,E  A, ,010,IF, , , , , ,      ,    ,    ,    ,    ,+,FL100,     ,05500, ,   ,    ,   , , , , , ,B,J,S;
 APPCH:020,A,R09,AXODU,TEXIN,HK,P,C,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,FL065,     ,     , ,   ,    ,   , , , , , ,B,J,S;
 APPCH:030,A,R09,AXODU,EGNUL,HK,P,C,EE B, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,04300,     ,     , ,   ,    ,   , , , , , ,B,J,S;
-APPCH:010,A,R09,USUKA,USUKA,HS,P,C,E  A, ,010,IF, , , , , ,      ,    ,    ,    ,    ,+,FL100,     ,05500, ,   ,    ,   , , , , , ,B,J,S;
+APPCH:010,A,R09,USUKA,USUKA,HK,P,C,E  A, ,010,IF, , , , , ,      ,    ,    ,    ,    ,+,FL100,     ,05500, ,   ,    ,   , , , , , ,B,J,S;
 APPCH:020,A,R09,USUKA,ESRAD,HK,P,C,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,FL065,     ,     , ,   ,    ,   , , , , , ,B,J,S;
 APPCH:030,A,R09,USUKA,EGNUL,HK,P,C,EE B, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,04300,     ,     , ,   ,    ,   , , , , , ,B,J,S;
 APPCH:010,R,R09, ,EGNUL,HK,P,C,E  I, ,010,IF, , , , , ,      ,    ,    ,    ,    ,+,04300,     ,05500, ,   ,    ,   , , , , , ,B,J,S;

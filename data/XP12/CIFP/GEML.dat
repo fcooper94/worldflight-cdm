@@ -5,10 +5,10 @@ APPCH:050,Q,NDMB, ,MIA,GE,D,B,E   , ,   ,FA, ,MEL,GE,D, ,      ,0035,0016,0810, 
 APPCH:060,Q,NDMB, ,MIA,GE,D,B,EE  ,L,   ,DF, , , , , ,      ,    ,    ,    ,    , ,03500,     ,     , ,   ,    ,   , , , , , ,0, ,C;
 APPCH:010,A,VORA,IXIRI,IXIRI,GM,E,A,E CC, ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,02500,     ,     , ,   ,    ,   , , , , , ,0, ,C;
 APPCH:020,A,VORA,IXIRI, , , , ,    , ,   ,CI, , , , , ,      ,    ,    ,2060,    , ,     ,     ,     , ,   ,    ,   , , , , , ,0, ,C;
-APPCH:030,A,VORA,IXIRI,CD261,GM,P,C,EE B,R,   ,AF, ,MEL,GE,D, ,      ,0810,0130,0260,    ,+,02000,     ,     , ,   ,    ,   , , , , , ,0, ,C;
-APPCH:010,V,VORA, ,CD261,GM,P,C,E  I, ,   ,IF, ,MEL,GE,D, ,      ,0810,0130,    ,    ,+,02000,     ,     , ,   ,    ,   , , , , , ,0, ,C;
-APPCH:020,V,VORA, ,FD261,GM,P,C,E  F, ,   ,CF, ,MEL,GE,D, ,      ,0810,0080,2610,0050,+,02000,     ,     , ,   ,    ,   ,MEL,GE,D, , ,0, ,C;
-APPCH:030,V,VORA, ,MD261,GM,P,C,E  M, ,   ,CF, ,MEL,GE,D, ,      ,0810,0040,2610,0040, ,01150,     ,     , ,   , 000,   , , , , , ,0, ,C;
+APPCH:030,A,VORA,IXIRI,CD261,GE,P,C,EE B,R,   ,AF, ,MEL,GE,D, ,      ,0810,0130,0260,    ,+,02000,     ,     , ,   ,    ,   , , , , , ,0, ,C;
+APPCH:010,V,VORA, ,CD261,GE,P,C,E  I, ,   ,IF, ,MEL,GE,D, ,      ,0810,0130,    ,    ,+,02000,     ,     , ,   ,    ,   , , , , , ,0, ,C;
+APPCH:020,V,VORA, ,FD261,GE,P,C,E  F, ,   ,CF, ,MEL,GE,D, ,      ,0810,0080,2610,0050,+,02000,     ,     , ,   ,    ,   ,MEL,GE,D, , ,0, ,C;
+APPCH:030,V,VORA, ,MD261,GE,P,C,E  M, ,   ,CF, ,MEL,GE,D, ,      ,0810,0040,2610,0040, ,01150,     ,     , ,   , 000,   , , , , , ,0, ,C;
 APPCH:040,V,VORA, , , , , ,  M ,R,   ,CI, , , , , ,      ,    ,    ,3580,    , ,     ,     ,     ,-,130,    ,   , , , , , ,0, ,C;
 APPCH:050,V,VORA, ,IXIRI,GM,E,A,E C , ,   ,CF, ,MEL,GE,D, ,      ,0259,0146,0260,0120, ,02500,     ,     , ,   ,    ,   , , , , , ,0, ,C;
 APPCH:060,V,VORA, ,IXIRI,GM,E,A,EE H,R,   ,HM, , , , , ,      ,    ,    ,2060,T010,+,02500,     ,     , ,   ,    ,   , , , , , ,0, ,C;

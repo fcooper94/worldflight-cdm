@@ -1,4 +1,4 @@
-SID:020,5,ASGU1A,RW23,ASGUB,SB,P,C,EB  , ,010,CF, ,TFE,SB,D, ,      ,3366,2350,2350,0050, ,     ,     ,04000, ,   ,    ,   ,SBUA,SB,P,A, , , , ;
+SID:020,5,ASGU1A,RW23,ASGUB,SB,P,C,EB  , ,010,CF, ,GBR,SB,D, ,      ,2339,0054,2350,0050, ,     ,     ,04000, ,   ,    ,   ,SBUA,SB,P,A, , , , ;
 SID:010,6,ASGU1A,ERVAM,ASGUB,SB,P,C,E   , ,010,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,04000, ,   ,    ,   ,SBUA,SB,P,A, , , , ;
 SID:020,6,ASGU1A,ERVAM,ERVAM,SB,E,A,EEC , ,010,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 SID:010,6,ASGU1A,ETEPU,ASGUB,SB,P,C,E   , ,010,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,04000, ,   ,    ,   ,SBUA,SB,P,A, , , , ;
@@ -9,7 +9,7 @@ SID:010,6,ASGU1A,GEVGO,ASGUB,SB,P,C,E   , ,010,IF, , , , , ,      ,    ,    ,   
 SID:020,6,ASGU1A,GEVGO,GEVGO,SB,E,A,EEC , ,010,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 SID:010,6,ASGU1A,ISAXA,ASGUB,SB,P,C,E   , ,010,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,04000, ,   ,    ,   ,SBUA,SB,P,A, , , , ;
 SID:020,6,ASGU1A,ISAXA,ISAXA,SB,E,A,EEC , ,010,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
-SID:010,5,DEXE1A,RW05,DEXEG,SB,P,C,EB  , ,010,CF, ,TFE,SB,D, ,      ,3393,2375,0550,0050, ,     ,     ,04000, ,   ,    ,   ,SBUA,SB,P,A, , , , ;
+SID:010,5,DEXE1A,RW05,DEXEG,SB,P,C,EB  , ,010,CF, ,GBR,SB,D, ,      ,0569,0060,0550,0050, ,     ,     ,04000, ,   ,    ,   ,SBUA,SB,P,A, , , , ;
 SID:010,6,DEXE1A,EPDOD,DEXEG,SB,P,C,E   , ,010,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,04000, ,   ,    ,   ,SBUA,SB,P,A, , , , ;
 SID:020,6,DEXE1A,EPDOD,XUXAK,SB,P,C,EY  ,R,010,DF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     ,-,250,    ,   , , , , , , , , ;
 SID:030,6,DEXE1A,EPDOD,EPDOD,SB,E,A,EEC , ,010,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
@@ -26,7 +26,7 @@ SID:030,6,DEXE1A,GEVGO,GEVGO,SB,E,A,EEC , ,010,TF, , , , , ,      ,    ,    ,   
 SID:010,6,DEXE1A,ISAXA,DEXEG,SB,P,C,E   , ,010,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,04000, ,   ,    ,   ,SBUA,SB,P,A, , , , ;
 SID:020,6,DEXE1A,ISAXA,XUXAK,SB,P,C,EY  ,R,010,DF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     ,-,250,    ,   , , , , , , , , ;
 SID:030,6,DEXE1A,ISAXA,ISAXA,SB,E,A,EEC , ,010,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
-SID:010,5,EPDO1A,RW23,ASGUB,SB,P,C,EY  , ,010,CF, ,TFE,SB,D, ,      ,3366,2350,2350,0050, ,     ,     ,04000, ,   ,    ,   ,SBUA,SB,P,A, , , , ;
+SID:010,5,EPDO1A,RW23,ASGUB,SB,P,C,EY  , ,010,CF, ,GBR,SB,D, ,      ,2339,0054,2350,0050, ,     ,     ,04000, ,   ,    ,   ,SBUA,SB,P,A, , , , ;
 SID:020,5,EPDO1A,RW23,UA014,SB,P,C,E   ,L,010,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     ,-,280,    ,   , , , , , , , , ;
 SID:030,5,EPDO1A,RW23,EPDOD,SB,E,A,EEC , ,010,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 SID:010,1,OMNI,RW05, , , , ,    , ,   ,CA, , , , , ,      ,    ,    ,0550,    ,+,01700,     ,04000, ,   ,    ,   ,SBUA,SB,P,A, , , , ;

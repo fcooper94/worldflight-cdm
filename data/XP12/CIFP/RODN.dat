@@ -7,7 +7,7 @@ SID:010,5,HIVAS4,RW05R,CAMDA,RO,P,C,E   , ,   ,DF, , , , , ,      ,    ,    ,   
 SID:020,5,HIVAS4,RW05R,HIVAS,RJ,E,A,EE  , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,B,10000,02800,     , ,   ,    ,   , , , , , , , , ;
 SID:010,2,JILEE4,RW05B, , , , ,    , ,   ,CD, ,KAD,RO,D, ,      ,    ,    ,0550,0050, ,     ,     ,14000, ,   ,    ,   ,KAD,RO,D, ,A, , , ;
 SID:020,2,JILEE4,RW05B,JILEE,RJ,E,A,EE  , ,   ,CF, ,KAD,RO,D, ,      ,0660,0144,0660,0090,-,10000,     ,     , ,   ,    ,   , , , , , , , , ;
-SID:010,2,TUCOF3,RW23B,SNUUP,RJ,P,C,E   , ,   ,CF, ,KAD,RO,D, ,      ,2348,0064,2350,0070,B,10000,02700,14000, ,   ,    ,   ,KAD,RO,D, ,A, , , ;
+SID:010,2,TUCOF3,RW23B,SNUUP,RO,P,C,E   , ,   ,CF, ,KAD,RO,D, ,      ,2348,0064,2350,0070,B,10000,02700,14000, ,   ,    ,   ,KAD,RO,D, ,A, , , ;
 SID:020,2,TUCOF3,RW23B,TUCOF,RJ,E,A,EE  , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,B,10000,02700,     , ,   ,    ,   , , , , , , , , ;
 APPCH:010,A,D05L,IDMEK,IDMEK,RO,P,C,E  C, ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,06000,     ,14000, ,   ,    ,   , , , , , ,0, ,S;
 APPCH:020,A,D05L,IDMEK, , , , ,    , ,   ,CI, , , , , ,      ,    ,    ,0370,    , ,     ,     ,     , ,   ,    ,   , , , , , ,0, ,S;

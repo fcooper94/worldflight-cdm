@@ -296,9 +296,6 @@ SID:030,1,TOMO2W,RW24R,TOMOH,RJ,E,A,EE  , ,   ,CF, ,KCE,RJ,D, ,      ,2158,0237,
 SID:010,3,TOMO2W,KEC,TOMOH,RJ,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,14000, ,   ,    ,   , , , , , , , , ;
 SID:020,3,TOMO2W,KEC,KCE41,RJ,P,C,E   , ,   ,CF, ,KEC,RJ,D, ,      ,3144,0582,2150,0170,+,10000,     ,     , ,   ,    ,   , , , , , , , , ;
 SID:030,3,TOMO2W,KEC,KEC,RJ,D, ,VE  , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
-SID:010,3,TOMO2W,KRE,TOMOH,RJ,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,14000, ,   ,    ,   , , , , , , , , ;
-SID:020,3,TOMO2W,KRE,DIODE,RJ,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,FL140,     ,     , ,   ,    ,   , , , , , , , , ;
-SID:030,3,TOMO2W,KRE,KRE,RJ,D, ,VE  , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 SID:010,1,TOMOH4,RW06L, , , , ,    , ,   ,CA, , , , , ,      ,    ,    ,0590,    ,+,00520,     ,14000, ,   ,    ,   , , , , , , , , ;
 SID:020,1,TOMOH4,RW06L, , , , ,    ,L,   ,VI,Y, , , , ,      ,    ,    ,2700,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 SID:030,1,TOMOH4,RW06L,TOMOH,RJ,E,A,EE  , ,   ,CF, ,KCE,RJ,D, ,      ,2158,0237,2150,0170,+,04000,     ,     , ,   ,    ,   , , , , , , , , ;
@@ -318,9 +315,6 @@ SID:030,1,TOMOH4,RW24R,TOMOH,RJ,E,A,EE  , ,   ,CF, ,KCE,RJ,D, ,      ,2158,0237,
 SID:010,3,TOMOH4,KEC,TOMOH,RJ,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,14000, ,   ,    ,   , , , , , , , , ;
 SID:020,3,TOMOH4,KEC,KCE41,RJ,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,10000,     ,     , ,   ,    ,   , , , , , , , , ;
 SID:030,3,TOMOH4,KEC,KEC,RJ,D, ,VE  , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
-SID:010,3,TOMOH4,KRE,TOMOH,RJ,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,14000, ,   ,    ,   , , , , , , , , ;
-SID:020,3,TOMOH4,KRE,DIODE,RJ,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,FL140,     ,     , ,   ,    ,   , , , , , , , , ;
-SID:030,3,TOMOH4,KRE,KRE,RJ,D, ,VE  , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 SID:010,4,UPMIN1,RW06L, , , , ,    , ,010,VA, , , , , ,      ,    ,    ,0590,    ,+,00500,     ,14000, ,   ,    ,   , , , , , , , , ;
 SID:020,4,UPMIN1,RW06L,LELUS,RJ,P,C,E   ,L,010,DF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 SID:030,4,UPMIN1,RW06L,VEKTA,RJ,P,C,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;

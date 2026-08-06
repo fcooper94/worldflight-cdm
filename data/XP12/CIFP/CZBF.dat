@@ -8,7 +8,7 @@ PRDAT:A,       LPV,A, LNAV/VNAV,A,      LNAV, ,   , ,   , ,   , ,   ,J,S;
 APPCH:025,R,R10, ,ESPUT,CY,P,C,E S , ,302,TF, , , , , ,      ,    ,    ,1000,0025,+,00910,     ,     , ,   ,-300,   , , , , , ,A,J,S;
 APPCH:030,R,R10, ,RW10,CY,P,G,GY M, ,302,TF, , , , , ,      ,    ,    ,1000,0021, ,00243,     ,     , ,   ,-300,   , , , , , ,A,J,S;
 APPCH:040,R,R10, ,OTETO,CY,P,C,EYM , ,010,TF, , , , , ,      ,    ,    ,    ,    , ,03300,     ,     , ,   ,    ,   , , , , , ,A,J,S;
-APPCH:050,R,R10, ,OTETO,CY,P,C,EE H,R,010,HM, , , , , ,      ,    ,    ,1000,T010, ,     ,     ,     , ,   ,    ,   , , , , , ,A,J,S;
+APPCH:050,R,R10, ,OTETO,CY,P,C,EE H,R,010,HM, , , , , ,      ,    ,    ,1000,T010, ,     ,     ,     ,-,230,    ,   , , , , , ,A,J,S;
 APPCH:010,A,R28,IKDEG,IKDEG,CY,P,C,E  A, ,010,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000,-,210,    ,   , , , , , ,A,J,S;
 APPCH:020,A,R28,IKDEG,EMIKA,CY,P,C,EE B, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,01600,     ,     , ,   ,    ,   , , , , , ,A,J,S;
 APPCH:010,A,R28,UDNUX,UDNUX,CY,P,C,E  A, ,010,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000,-,210,    ,   , , , , , ,A,J,S;
@@ -18,6 +18,6 @@ APPCH:020,R,R28, ,APLUP,CY,P,C,E  F, ,010,TF, , , , , ,      ,    ,    ,2800,006
 PRDAT:A,       LPV,A, LNAV/VNAV,A,      LNAV, ,   , ,   , ,   , ,   ,J,S;
 APPCH:030,R,R28, ,RW28,CY,P,G,GY M, ,302,TF, , , , , ,      ,    ,    ,2800,0043, ,00228,     ,     , ,   ,-300,   , , , , , ,A,J,S;
 APPCH:040,R,R28, ,AVEBA,CY,P,C,EYM , ,010,TF, , , , , ,      ,    ,    ,    ,    , ,03200,     ,     , ,   ,    ,   , , , , , ,A,J,S;
-APPCH:050,R,R28, ,AVEBA,CY,P,C,EE H,R,010,HM, , , , , ,      ,    ,    ,2800,T010, ,     ,     ,     , ,   ,    ,   , , , , , ,A,J,S;
+APPCH:050,R,R28, ,AVEBA,CY,P,C,EE H,R,010,HM, , , , , ,      ,    ,    ,2800,T010, ,     ,     ,     ,-,230,    ,   , , , , , ,A,J,S;
 RWY:RW10 ,-0410,      ,00193, ,    , ,   ;N47374294,W065445864,0462;
 RWY:RW28 ,     ,      ,00175, ,    , ,   ;N47375005,W065434418,0000;

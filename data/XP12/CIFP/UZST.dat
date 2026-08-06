@@ -29,13 +29,15 @@ STAR:020,2,AMDA2W,RW07,TRZ,UZ,D, ,VE H, ,   ,TF, , , , , ,      ,    ,    ,    ,
 STAR:010,2,AMDA2X,RW25,AMDAR,UZ,E,A,E C , ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,08000,     ,15000, ,   ,    ,   ,TRZ,UZ,D, , , , , ;
 STAR:020,2,AMDA2X,RW25,TRZ,UZ,D, ,VE H, ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,08000,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:010,2,AMDA2Z,ALL,AMDAR,UZ,E,A,E C , ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,08000,     ,15000, ,   ,    ,   ,TRZ,UZ,D, , , , , ;
-STAR:020,2,AMDA2Z,ALL,EREGA,UZ,P,C,EE  , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,03400,     ,     , ,   ,    ,   , , , , , , , , ;
+STAR:020,2,AMDA2Z,ALL,EREGA,UZ,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,03400,     ,     , ,   ,    ,   , , , , , , , , ;
+STAR:030,2,AMDA2Z,ALL,TUVUR,UZ,P,C,EE  , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,03400,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:010,2,FIZL2W,RW07,FIZLE,UZ,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,10000,     ,15000, ,   ,    ,   ,TRZ,UZ,D, , , , , ;
 STAR:020,2,FIZL2W,RW07,TRZ,UZ,D, ,VE H, ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,08000,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:010,2,FIZL2X,RW25,FIZLE,UZ,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,10000,     ,15000, ,   ,    ,   ,TRZ,UZ,D, , , , , ;
 STAR:020,2,FIZL2X,RW25,TRZ,UZ,D, ,VE H, ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,08000,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:010,2,FIZL2Y,ALL,FIZLE,UZ,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,10000,     ,15000, ,   ,    ,   ,TRZ,UZ,D, , , , , ;
-STAR:020,2,FIZL2Y,ALL,EREGA,UZ,P,C,EE  , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,03400,     ,     , ,   ,    ,   , , , , , , , , ;
+STAR:020,2,FIZL2Y,ALL,EREGA,UZ,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,03400,     ,     , ,   ,    ,   , , , , , , , , ;
+STAR:030,2,FIZL2Y,ALL,TUVUR,UZ,P,C,EE  , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,03400,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:010,2,FIZL2Z,ALL,FIZLE,UZ,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,10000,     ,15000, ,   ,    ,   ,TRZ,UZ,D, , , , , ;
 STAR:020,2,FIZL2Z,ALL,TUVUR,UZ,P,C,EE  , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,03400,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:005,2,KEKA2W,RW07,UMGAP,UZ,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,11000,     ,15000, ,   ,    ,   ,TRZ,UZ,D, , , , , ;
@@ -53,7 +55,8 @@ STAR:010,2,LAVM2X,RW25,LAVMI,UZ,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,   
 STAR:020,2,LAVM2X,RW25,TRZ,UZ,D, ,VE H, ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,08000,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:010,2,LAVM2Y,ALL,LAVMI,UZ,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,FL160,     ,15000, ,   ,    ,   ,TRZ,UZ,D, , , , , ;
 STAR:020,2,LAVM2Y,ALL,DUZFI,UZ,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,11000,     ,     , ,   ,    ,   , , , , , , , , ;
-STAR:030,2,LAVM2Y,ALL,EREGA,UZ,P,C,EE  , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,03400,     ,     , ,   ,    ,   , , , , , , , , ;
+STAR:030,2,LAVM2Y,ALL,EREGA,UZ,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,03400,     ,     , ,   ,    ,   , , , , , , , , ;
+STAR:040,2,LAVM2Y,ALL,TUVUR,UZ,P,C,EE  , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,03400,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:010,2,LAVM2Z,ALL,LAVMI,UZ,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,FL160,     ,15000, ,   ,    ,   ,TRZ,UZ,D, , , , , ;
 STAR:020,2,LAVM2Z,ALL,OPHUL,UZ,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,11000,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:030,2,LAVM2Z,ALL,TUVUR,UZ,P,C,EE  , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,03400,     ,     , ,   ,    ,   , , , , , , , , ;

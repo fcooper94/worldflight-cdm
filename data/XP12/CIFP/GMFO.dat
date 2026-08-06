@@ -116,7 +116,7 @@ STAR:020,2,ROMO7C,RW13,D253R,GM,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,   
 STAR:030,2,ROMO7C,RW13, , , , ,    , ,   ,CI, , , , , ,      ,    ,    ,0730,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:040,2,ROMO7C,RW13,ADRER,GM,P,C,EECH,R,   ,AF, ,VDO,GM,D, ,      ,2764,0161,2440,    ,+,07000,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:010,5,ROMO8A,RW31,ROMOR,GM,E,A,E C , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   ,OJD,GM,D, , , , , ;
-STAR:020,5,ROMO8A,RW31,FO161,DA,P,C,EE  , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,07000,     ,     , ,   ,    ,   , , , , , , , , ;
+STAR:020,5,ROMO8A,RW31,FO161,GM,P,C,EE  , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,07000,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:010,5,ROMO8R,RW31,ROMOR,GM,E,A,E C , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   ,OJD,GM,D, , , , , ;
 STAR:020,5,ROMO8R,RW31,ABKAN,GM,P,C,EECH, ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,07500,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:010,2,VABS5C,RW06,VABSI,GM,E,A,E C , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   ,OJD,GM,D, , , , , ;
@@ -188,7 +188,7 @@ APPCH:040,A,R31,ABKAN,D041C,GM,P,C,E   , ,010,TF, , , , , ,      ,    ,    ,    
 APPCH:050,A,R31,ABKAN,FO454,GM,P,C,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,03800,     ,     ,-,200,    ,   , , , , , ,B,J,S;
 APPCH:060,A,R31,ABKAN,FO456,GM,P,C,EE B, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,03300,     ,     ,-,185,    ,   , , , , , ,B,J,S;
 APPCH:010,A,R31,ADRER,ADRER,GM,P,C,E CC, ,010,IF, , , , , ,      ,    ,    ,    ,    ,+,07000,     ,     ,-,210,    ,   , , , , , ,B,J,S;
-APPCH:020,A,R31,ADRER,FO161,DA,P,C,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,07000,     ,     ,-,210,    ,   , , , , , ,B,J,S;
+APPCH:020,A,R31,ADRER,FO161,GM,P,C,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,07000,     ,     ,-,210,    ,   , , , , , ,B,J,S;
 APPCH:030,A,R31,ADRER,FO452,GM,P,C,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,05500,     ,     ,-,210,    ,   , , , , , ,B,J,S;
 APPCH:040,A,R31,ADRER,D041C,GM,P,C,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,05200,     ,     , ,   ,    ,   , , , , , ,B,J,S;
 APPCH:050,A,R31,ADRER,FO454,GM,P,C,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,03800,     ,     ,-,200,    ,   , , , , , ,B,J,S;
@@ -200,7 +200,7 @@ APPCH:040,A,R31,OJD,D041C,GM,P,C,E   , ,010,TF, , , , , ,      ,    ,    ,    , 
 APPCH:050,A,R31,OJD,FO454,GM,P,C,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,03800,     ,     ,-,200,    ,   , , , , , ,B,J,S;
 APPCH:060,A,R31,OJD,FO456,GM,P,C,EE B, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,03300,     ,     ,-,185,    ,   , , , , , ,B,J,S;
 APPCH:010,A,R31,ROMOR,ROMOR,GM,E,A,E CA, ,010,IF, , , , , ,      ,    ,    ,    ,    ,+,08500,     ,     ,-,220,    ,   , , , , , ,B,J,S;
-APPCH:020,A,R31,ROMOR,FO161,DA,P,C,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,07000,     ,     ,-,210,    ,   , , , , , ,B,J,S;
+APPCH:020,A,R31,ROMOR,FO161,GM,P,C,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,07000,     ,     ,-,210,    ,   , , , , , ,B,J,S;
 APPCH:030,A,R31,ROMOR,FO452,GM,P,C,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,05500,     ,     ,-,210,    ,   , , , , , ,B,J,S;
 APPCH:040,A,R31,ROMOR,D041C,GM,P,C,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,05200,     ,     , ,   ,    ,   , , , , , ,B,J,S;
 APPCH:050,A,R31,ROMOR,FO454,GM,P,C,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,03800,     ,     ,-,200,    ,   , , , , , ,B,J,S;

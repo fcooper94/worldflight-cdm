@@ -125,7 +125,7 @@ APPCH:020,D,D05-Z, ,FD05,UA,P,C,E  F, ,   ,IF, ,KRG,UA,D, ,      ,2304,0096,    
 APPCH:030,D,D05-Z, ,RW05,UA,P,G,G  M, ,   ,CF, ,KRG,UA,D, ,      ,2304,0027,0500,0069, ,01815,     ,     , ,   ,-300,   , , , , , ,0, ,S;
 APPCH:040,D,D05-Z, ,KRG,UA,D, ,V M , ,   ,CF, ,KRG,UA,D, ,      ,0000,0000,0500,0027, ,     ,     ,     , ,   ,    ,   , , , , , ,0, ,S;
 APPCH:050,D,D05-Z, ,KRG,UA,D, ,V   , ,   ,FD, ,KRG,UA,D, ,      ,0000,0000,0500,0065,+,03500,     ,     , ,   ,    ,   , , , , , ,0, ,S;
-APPCH:060,D,D05-Z, ,KRG,UA,D, ,VE H,R,   ,DF, , , , , ,      ,    ,    ,    ,    , ,04000,     ,     ,-,250,    ,   , , , , , ,0, ,S;
+APPCH:060,D,D05-Z, ,KRG,UA,D, ,VE H,R,   ,DF, , , , , ,      ,    ,    ,    ,    , ,04000,     ,     , ,   ,    ,   , , , , , ,0, ,S;
 APPCH:010,A,D23-Y,RONED,RONED,UA,P,C,E  A, ,   ,IF, ,KRG,UA,D, ,      ,0763,0124,    ,    ,+,04000,     ,     , ,   ,    ,   , , , , , ,0, ,S;
 APPCH:020,A,D23-Y,RONED,EKNOD,UA,P,C,EE B, ,   ,CF, ,KRG,UA,D, ,      ,0505,0112,3200,0054,+,04000,     ,     , ,   ,    ,   , , , , , ,0, ,S;
 APPCH:010,A,D23-Y,TENLU,TENLU,UA,P,C,E  A, ,   ,IF, ,KRG,UA,D, ,      ,0247,0124,    ,    ,+,04000,     ,     , ,   ,    ,   , , , , , ,0, ,S;
@@ -144,7 +144,7 @@ APPCH:030,A,D23-Z,KRG2,FD23,UA,P,C,EE  ,L,   ,CF,Y,KRG,UA,D, ,      ,0504,0062,2
 APPCH:020,D,D23-Z, ,FD23,UA,P,C,E  F, ,   ,IF, ,KRG,UA,D, ,      ,0504,0062,    ,    ,+,04000,     ,     , ,   ,    ,   ,KRG,UA,D, , ,0, ,S;
 APPCH:030,D,D23-Z, ,KRG,UA,D, ,V  M, ,   ,CF, ,KRG,UA,D, ,      ,0000,0000,2300,0062, ,02054,     ,     , ,   ,-300,   , , , , , ,0, ,S;
 APPCH:040,D,D23-Z, ,KRG,UA,D, ,V M , ,   ,FD, ,KRG,UA,D, ,      ,0000,0000,2300,0065,+,03000,     ,     , ,   ,    ,   , , , , , ,0, ,S;
-APPCH:050,D,D23-Z, ,KRG,UA,D, ,VE H,L,   ,DF, , , , , ,      ,    ,    ,    ,    , ,04000,     ,     ,-,250,    ,   , , , , , ,0, ,S;
+APPCH:050,D,D23-Z, ,KRG,UA,D, ,VE H,L,   ,DF, , , , , ,      ,    ,    ,    ,    , ,04000,     ,     , ,   ,    ,   , , , , , ,0, ,S;
 APPCH:010,A,I05,ARGER,ARGER,UA,P,C,E  A, ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,04000,     ,     , ,   ,    ,   , , , , , ,0,D,S;
 APPCH:020,A,I05,ARGER, , , , ,    , ,   ,CR, ,KRG,UA,D, ,      ,2380,    ,1400,    , ,     ,     ,     , ,   ,    ,   , , , , , ,0,D,S;
 APPCH:030,A,I05,ARGER, , , , , E  , ,   ,CI, ,IRG,UA,P,I,      ,    ,    ,0800,    , ,     ,     ,     , ,   ,    ,   , , , , , ,0,D,S;

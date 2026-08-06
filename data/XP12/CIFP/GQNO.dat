@@ -10,7 +10,7 @@ STAR:040,2,ARBE1L,RW06,D239T,GQ,P,C,E   ,R,   ,AF, ,OT,GQ,D, ,      ,2390,0200,1
 STAR:050,2,ARBE1L,RW06,LOSNA,GQ,P,C,EECH, ,   ,CF, ,OT,GQ,D, ,      ,2446,0140,0650,0060,+,02000,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:010,2,ARBE1T,RW16,ARBEN,GQ,E,A,E C , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   ,OT,GQ,D, , , , , ;
 STAR:020,2,ARBE1T,RW16,D198V,GQ,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
-STAR:030,2,ARBE1T,RW16,D208P,FT,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
+STAR:030,2,ARBE1T,RW16,D208P,GQ,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:040,2,ARBE1T,RW16, , , , ,    , ,   ,CI, , , , , ,      ,    ,    ,3550,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:050,2,ARBE1T,RW16,TANEB,GQ,P,C,EECH,R,   ,AF, ,OT,GQ,D, ,      ,3357,0140,2080,    ,+,02000,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:010,2,BIKI1G,RW34,BIKIS,GO,E,A,E C , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   ,OT,GQ,D, , , , , ;
@@ -19,11 +19,11 @@ STAR:030,2,BIKI1G,RW34, , , , ,    , ,   ,CI, , , , , ,      ,    ,    ,0280,   
 STAR:040,2,BIKI1G,RW34,D156T,GQ,P,C,E   ,L,   ,AF, ,OT,GQ,D, ,      ,1560,0200,2080,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:050,2,BIKI1G,RW34,GAMON,GQ,P,C,EECH, ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,02000,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:010,2,BIKI1L,RW06,BIKIS,GO,E,A,E C , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   ,OT,GQ,D, , , , , ;
-STAR:020,2,BIKI1L,RW06,D208P,FT,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
+STAR:020,2,BIKI1L,RW06,D208P,GQ,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:030,2,BIKI1L,RW06, , , , ,    , ,   ,CI, , , , , ,      ,    ,    ,0280,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:040,2,BIKI1L,RW06,LOSNA,GQ,P,C,EECH,R,   ,AF, ,OT,GQ,D, ,      ,2446,0140,2080,    ,+,02000,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:010,2,BIKI1T,RW16,BIKIS,GO,E,A,E C , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   ,OT,GQ,D, , , , , ;
-STAR:030,2,BIKI1T,RW16,D208P,FT,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
+STAR:030,2,BIKI1T,RW16,D208P,GQ,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:040,2,BIKI1T,RW16, , , , ,    , ,   ,CI, , , , , ,      ,    ,    ,0280,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:050,2,BIKI1T,RW16,TANEB,GQ,P,C,EECH,R,   ,AF, ,OT,GQ,D, ,      ,3357,0140,2080,    ,+,02000,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:010,2,BIKI1V, ,BIKIS,GO,E,A,EEC , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   ,OT,GQ,D, , , , , ;
@@ -155,7 +155,7 @@ STAR:010,2,ULNO2T,RW16,ULNOT,GQ,E,A,E C , ,   ,IF, , , , , ,      ,    ,    ,   
 STAR:030,2,ULNO2T,RW16,D173V,GQ,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:040,2,ULNO2T,RW16, , , , ,    , ,   ,CI, , , , , ,      ,    ,    ,3530,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:050,2,ULNO2T,RW16,D198T,GQ,P,C,E   ,R,   ,AF, ,OT,GQ,D, ,      ,1981,0200,1730,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
-STAR:060,2,ULNO2T,RW16,D208P,FT,P,C,EY  , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
+STAR:060,2,ULNO2T,RW16,D208P,GQ,P,C,EY  , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:070,2,ULNO2T,RW16, , , , ,    , ,   ,CI, , , , , ,      ,    ,    ,3550,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:080,2,ULNO2T,RW16,TANEB,GQ,P,C,EECH,R,   ,AF, ,OT,GQ,D, ,      ,3357,0140,2080,    ,+,02000,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:010,2,ZRT1G,RW34,ZRT,GQ,D, ,V C , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   ,OT,GQ,D, , , , , ;

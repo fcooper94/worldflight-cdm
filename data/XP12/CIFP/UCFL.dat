@@ -14,12 +14,12 @@ SID:020,2,BALV1F,RW25,BALVU,UC,E,A,EEC , ,   ,CF, ,ILK,UC,D, ,      ,2450,0256,2
 SID:010,2,IRKU1D,RW07, , , , ,    , ,   ,CA, , , , , ,      ,    ,    ,0690,    ,+,05830,     ,13000, ,   ,    ,   ,ILK,UC,D, , , , , ;
 SID:020,2,IRKU1D,RW07, , , , ,    , ,   ,CA, , , , , ,      ,    ,    ,0770,    ,+,06300,     ,     ,-,220,    ,   , , , , , , , , ;
 SID:030,2,IRKU1D,RW07, , , , ,    , ,   ,CI, , , , , ,      ,    ,    ,1210,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
-SID:040,2,IRKU1D,RW07,IRKUS,UC,P,C,EEC , ,   ,CF, ,ILK,UC,D, ,      ,0913,0452,0910,0410,+,10000,     ,     , ,   ,    ,   , , , , , , , , ;
+SID:040,2,IRKU1D,RW07,IRKUS,UC,E,A,EEC , ,   ,CF, ,ILK,UC,D, ,      ,0913,0452,0910,0410,+,10000,     ,     , ,   ,    ,   , , , , , , , , ;
 SID:010,2,IRKU1E,RW25, , , , ,    , ,   ,CA, , , , , ,      ,    ,    ,2490,    ,+,05830,     ,13000, ,   ,    ,   ,ILK,UC,D, , , , , ;
 SID:020,2,IRKU1E,RW25, , , , ,    , ,   ,CD, ,ILK,UC,D, ,      ,    ,    ,2340,0035, ,     ,     ,     ,-,220,    ,   , , , , , , , , ;
 SID:030,2,IRKU1E,RW25, , , , ,    ,L,   ,CI,Y, , , , ,      ,    ,    ,0460,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 SID:040,2,IRKU1E,RW25,D091I,UC,P,C,E   , ,   ,CF, ,ILK,UC,D, ,      ,0913,0086,0910,0050, ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
-SID:050,2,IRKU1E,RW25,IRKUS,UC,P,C,EEC , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,10000,     ,     , ,   ,    ,   , , , , , , , , ;
+SID:050,2,IRKU1E,RW25,IRKUS,UC,E,A,EEC , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,10000,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:010,2,BALV1A,RW07,BALVU,UC,E,A,E C , ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,FL160,     ,15000, ,   ,    ,   ,ILK,UC,D, , , , , ;
 STAR:020,2,BALV1A,RW07,VAROK,UC,P,C,EECH, ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:010,2,BALV1B,RW25,BALVU,UC,E,A,E C , ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,FL160,     ,15000, ,   ,    ,   ,ILK,UC,D, , , , , ;
@@ -28,11 +28,11 @@ STAR:010,5,BALV1L,RW25,BALVU,UC,E,A,E C , ,   ,IF, , , , , ,      ,    ,    ,   
 STAR:020,5,BALV1L,RW25,VAROK,UC,P,C,EECH, ,   ,TF, , , , , ,      ,    ,    ,    ,    ,B,13000,09600,     ,-,250,    ,   , , , , , , , , ;
 STAR:010,5,BALV1M,RW07,BALVU,UC,E,A,E C , ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,FL160,     ,15000, ,   ,    ,   ,UCFL,UC,P,A, , , , ;
 STAR:020,5,BALV1M,RW07,TUSKO,UC,P,C,EECH, ,   ,TF, , , , , ,      ,    ,    ,    ,    ,B,12000,08500,     ,-,230,    ,   , , , , , , , , ;
-STAR:020,2,IRKU1A,RW07,IRKUS,UC,P,C,E C , ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,10000,     ,15000, ,   ,    ,   ,ILK,UC,D, , , , , ;
+STAR:020,2,IRKU1A,RW07,IRKUS,UC,E,A,E C , ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,10000,     ,15000, ,   ,    ,   ,ILK,UC,D, , , , , ;
 STAR:030,2,IRKU1A,RW07,VAROK,UC,P,C,EECH, ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
-STAR:020,2,IRKU1B,RW25,IRKUS,UC,P,C,E C , ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,10000,     ,15000, ,   ,    ,   ,ILK,UC,D, , , , , ;
+STAR:020,2,IRKU1B,RW25,IRKUS,UC,E,A,E C , ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,10000,     ,15000, ,   ,    ,   ,ILK,UC,D, , , , , ;
 STAR:030,2,IRKU1B,RW25,VAROK,UC,P,C,EECH, ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
-STAR:020,5,IRKU1M,RW07,IRKUS,UC,P,C,E C , ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,10000,     ,15000, ,   ,    ,   ,UCFL,UC,P,A, , , , ;
+STAR:020,5,IRKU1M,RW07,IRKUS,UC,E,A,E C , ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,10000,     ,15000, ,   ,    ,   ,UCFL,UC,P,A, , , , ;
 STAR:030,5,IRKU1M,RW07,TUSKO,UC,P,C,EECH, ,   ,TF, , , , , ,      ,    ,    ,    ,    ,B,12000,08500,     ,-,230,    ,   , , , , , , , , ;
 APPCH:010,A,D07,VAROK,VAROK,UC,P,C,E  C, ,   ,IF, , , , , ,      ,    ,    ,    ,    ,B,13000,08100,15000,-,230,    ,   , , , , , ,0, ,S;
 APPCH:020,A,D07,VAROK,D096O,UC,P,C,E   , ,   ,CF, ,ILK,UC,D, ,      ,0961,0154,2760,0148,+,08100,     ,     , ,   ,    ,   , , , , , ,0, ,S;
@@ -82,7 +82,7 @@ APPCH:040,I,I25-Y, ,D249C,UC,P,C,EYM , ,   ,CF, ,ILK,UC,D, ,      ,2499,0028,249
 APPCH:050,I,I25-Y, , , , , ,    ,L,   ,CI,Y, , , , ,      ,    ,    ,0610,    , ,     ,     ,     , ,   ,    ,   , , , , , ,0,D,S;
 APPCH:060,I,I25-Y, ,VAROK,UC,P,C,E   , ,   ,CF, ,ILK,UC,D, ,      ,0961,0302,0960,0280,+,10800,     ,     ,-,230,    ,   , , , , , ,0,D,S;
 APPCH:070,I,I25-Y, ,VAROK,UC,P,C,EE H,L,   ,HM, , , , , ,      ,    ,    ,2760,0052, ,     ,     ,     ,-,230,    ,   , , , , , ,0,D,S;
-APPCH:010,A,I25-Z,IRKUS,IRKUS,UC,P,C,E  A, ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,10000,     ,15000, ,   ,    ,   , , , , , ,0,D,S;
+APPCH:010,A,I25-Z,IRKUS,IRKUS,UC,E,A,E  A, ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,10000,     ,15000, ,   ,    ,   , , , , , ,0,D,S;
 APPCH:020,A,I25-Z,IRKUS,FL251,UC,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,B,13000,09600,     ,-,230,    ,   , , , , , ,0,D,S;
 APPCH:030,A,I25-Z,IRKUS,FL252,UC,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,09600,     ,     ,-,230,    ,   , , , , , ,0,D,S;
 APPCH:040,A,I25-Z,IRKUS,FL253,UC,P,C,EE B, ,   ,TF, ,IKL,UC,P,I,      ,    ,    ,    ,    ,+,09600,     ,     , ,   ,    ,   , , , , , ,0,D,S;

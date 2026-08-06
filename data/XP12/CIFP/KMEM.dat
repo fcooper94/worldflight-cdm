@@ -883,15 +883,15 @@ STAR:080,6,BLUZZ5,RW36B,DINKE,K7,P,C,EY  , ,   ,TF, , , , , ,      ,    ,    ,  
 STAR:090,6,BLUZZ5,RW36B,DINKE,K7,P,C,EE  , ,   ,FM, ,SYI,K7,D, ,      ,2563,1749,1800,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:010,4,BRBBQ3,FSM,FSM,K4,D, ,V   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , , , , ;
 STAR:020,4,BRBBQ3,FSM,IGLOO,K4,E,A,E  H, ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
-STAR:030,4,BRBBQ3,FSM,SAUCC,K4,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,-,FL260,     ,     , ,290,    ,   , , , , , , , , ;
+STAR:030,4,BRBBQ3,FSM,SAUCC,K4,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,-,FL260,     ,     , ,290,    ,   , , , , , , , , ;
 STAR:040,4,BRBBQ3,FSM,BRBBQ,K4,P,C,EE H, ,   ,TF, , , , , ,      ,    ,    ,    ,    ,-,FL230,     ,     , ,280,    ,   , , , , , , , , ;
 STAR:010,4,BRBBQ3,IGLOO,IGLOO,K4,E,A,E  H, ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , , , , ;
-STAR:020,4,BRBBQ3,IGLOO,SAUCC,K4,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,-,FL260,     ,     , ,290,    ,   , , , , , , , , ;
+STAR:020,4,BRBBQ3,IGLOO,SAUCC,K4,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,-,FL260,     ,     , ,290,    ,   , , , , , , , , ;
 STAR:030,4,BRBBQ3,IGLOO,BRBBQ,K4,P,C,EE H, ,   ,TF, , , , , ,      ,    ,    ,    ,    ,-,FL230,     ,     , ,280,    ,   , , , , , , , , ;
 STAR:010,4,BRBBQ3,RZC,RZC,K4,D, ,V   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , , , , ;
 STAR:020,4,BRBBQ3,RZC,MARBI,K4,E,A,E  H, ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:030,4,BRBBQ3,RZC,IGLOO,K4,E,A,E  H, ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
-STAR:040,4,BRBBQ3,RZC,SAUCC,K4,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,-,FL260,     ,     , ,290,    ,   , , , , , , , , ;
+STAR:040,4,BRBBQ3,RZC,SAUCC,K4,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,-,FL260,     ,     , ,290,    ,   , , , , , , , , ;
 STAR:050,4,BRBBQ3,RZC,BRBBQ,K4,P,C,EE H, ,   ,TF, , , , , ,      ,    ,    ,    ,    ,-,FL230,     ,     , ,280,    ,   , , , , , , , , ;
 STAR:010,4,BRBBQ3,WHOLL,WHOLL,K4,E,A,E  H, ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , , , , ;
 STAR:020,4,BRBBQ3,WHOLL,HOOOG,K4,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,-,FL260,     ,     , ,290,    ,   , , , , , , , , ;
@@ -910,8 +910,8 @@ STAR:020,6,BRBBQ3,RW36B,FNCHR,K4,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,  
 STAR:030,6,BRBBQ3,RW36B,RDEEE,K4,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:040,6,BRBBQ3,RW36B,JESTI,K4,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:050,6,BRBBQ3,RW36B,BEERT,K4,E,A,E  H, ,   ,TF, , , , , ,      ,    ,    ,    ,    ,B,12000,10000,     , ,250,    ,   , , , , , , , , ;
-STAR:060,6,BRBBQ3,RW36B,LOONR,K4,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,B,11000,09000,     , ,   ,    ,   , , , , , , , , ;
-STAR:070,6,BRBBQ3,RW36B,BOWEN,K7,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,B,10000,08000,     , ,210,    ,   , , , , , , , , ;
+STAR:060,6,BRBBQ3,RW36B,LOONR,K4,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,B,11000,09000,     , ,   ,    ,   , , , , , , , , ;
+STAR:070,6,BRBBQ3,RW36B,BOWEN,K7,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,B,10000,08000,     , ,210,    ,   , , , , , , , , ;
 STAR:080,6,BRBBQ3,RW36B,JIMGA,K7,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,B,08000,06000,     , ,   ,    ,   , , , , , , , , ;
 STAR:090,6,BRBBQ3,RW36B,JAYWA,K7,P,C,EY  , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,04000,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:100,6,BRBBQ3,RW36B,JAYWA,K7,P,C,EE  , ,   ,FM, ,SYI,K7,D, ,      ,2578,1859,1790,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
@@ -945,8 +945,8 @@ STAR:020,3,DAWGG2,RW36B,FNCHR,K4,P,C,E  H, ,   ,TF, , , , , ,      ,    ,    ,  
 STAR:030,3,DAWGG2,RW36B,GQE,K4,D, ,V   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:040,3,DAWGG2,RW36B,JESTI,K4,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:050,3,DAWGG2,RW36B,BEERT,K4,E,A,E  H, ,   ,TF, , , , , ,      ,    ,    ,    ,    ,B,12000,10000,     , ,250,    ,   , , , , , , , , ;
-STAR:060,3,DAWGG2,RW36B,LOONR,K4,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,B,11000,09000,     , ,   ,    ,   , , , , , , , , ;
-STAR:070,3,DAWGG2,RW36B,BOWEN,K7,E,A,EY  , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,08000,     ,     , ,210,    ,   , , , , , , , , ;
+STAR:060,3,DAWGG2,RW36B,LOONR,K4,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,B,11000,09000,     , ,   ,    ,   , , , , , , , , ;
+STAR:070,3,DAWGG2,RW36B,BOWEN,K7,P,C,EY  , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,08000,     ,     , ,210,    ,   , , , , , , , , ;
 STAR:080,3,DAWGG2,RW36B,KMEM,K7,P,A,AE  , ,   ,VM, , , , , ,      ,    ,    ,1800,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:010,4,HOBRK4,ELD,ELD,K4,D, ,V   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , , , , ;
 STAR:020,4,HOBRK4,ELD,FAYEE,K4,E,A,E  H, ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
@@ -974,7 +974,7 @@ STAR:030,6,HOBRK4,RW18B,MADDN,K7,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,  
 STAR:040,6,HOBRK4,RW18B,JAMEA,K7,E,A,E  H, ,   ,TF, , , , , ,      ,    ,    ,    ,    ,B,12000,10000,     , ,250,    ,   , , , , , , , , ;
 STAR:050,6,HOBRK4,RW18B,TWIKL,K7,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,B,11000,09000,     , ,   ,    ,   , , , , , , , , ;
 STAR:060,6,HOBRK4,RW18B,SINBE,K7,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,B,10000,08000,     , ,210,    ,   , , , , , , , , ;
-STAR:070,6,HOBRK4,RW18B,BOWEN,K7,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,B,08000,06000,     , ,   ,    ,   , , , , , , , , ;
+STAR:070,6,HOBRK4,RW18B,BOWEN,K7,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,B,08000,06000,     , ,   ,    ,   , , , , , , , , ;
 STAR:080,6,HOBRK4,RW18B,SKEEZ,K4,P,C,EY  , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,04000,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:090,6,HOBRK4,RW18B,SKEEZ,K4,P,C,EE  , ,   ,FM, ,SYI,K7,D, ,      ,2673,1807,3600,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:010,6,HOBRK4,RW27,HOBRK,K4,P,C,E  H, ,   ,IF, , , , , ,      ,    ,    ,    ,    ,-,FL210,     ,18000, ,280,    ,   , , , , , , , , ;
@@ -1063,7 +1063,7 @@ STAR:030,6,VANZE3,RW09,CHLMR,K7,P,C,EE  , ,   ,FM, ,SYI,K7,D, ,      ,2521,1497,
 STAR:010,6,VANZE3,RW18B,VANZE,K7,P,C,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    ,-,FL230,     ,18000, ,280,    ,   , , , , , , , , ;
 STAR:020,6,VANZE3,RW18B,MASHH,K7,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,B,16000,14000,     , ,280,    ,   , , , , , , , , ;
 STAR:030,6,VANZE3,RW18B,HLI,K7,D, ,V   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
-STAR:040,6,VANZE3,RW18B,LARUE,K7,E,A,E  H, ,   ,TF, , , , , ,      ,    ,    ,    ,    ,B,12000,10000,     , ,250,    ,   , , , , , , , , ;
+STAR:040,6,VANZE3,RW18B,LARUE,K7,P,C,E  H, ,   ,TF, , , , , ,      ,    ,    ,    ,    ,B,12000,10000,     , ,250,    ,   , , , , , , , , ;
 STAR:050,6,VANZE3,RW18B,FLOND,K7,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,B,11000,09000,     , ,   ,    ,   , , , , , , , , ;
 STAR:060,6,VANZE3,RW18B,SUUZE,K7,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:070,6,VANZE3,RW18B,MEBEE,K7,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,B,10000,08000,     , ,210,    ,   , , , , , , , , ;
@@ -1182,7 +1182,7 @@ APPCH:060,R,R18CY, ,KEEZE,K7,P,C,EE H,R,   ,HM, , , , , ,      ,    ,    ,3330,0
 APPCH:010,A,R18CZ,LAURI,LAURI,K7,P,C,EE C,L,   ,HF, , , , , ,      ,    ,    ,1800,0040,+,03900,     ,18000, ,   ,    ,   , , , , , ,A,J,S;
 APPCH:010,A,R18CZ,TUNIE,TUNIE,K7,P,C,E  A, ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , ,A,J,S;
 APPCH:020,A,R18CZ,TUNIE,LAURI,K7,P,C,EE B, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,03900,     ,     , ,   ,    ,   , , , , , ,A,J,S;
-APPCH:010,A,R18CZ,ZOKOR,ZOKOR,K4,P,C,E  A, ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , ,A,J,S;
+APPCH:010,A,R18CZ,ZOKOR,ZOKOR,K7,P,C,E  A, ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , ,A,J,S;
 APPCH:020,A,R18CZ,ZOKOR,LAURI,K7,P,C,EE B, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,03900,     ,     , ,   ,    ,   , , , , , ,A,J,S;
 APPCH:010,R,R18CZ, ,LAURI,K7,P,C,E  I, ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,03900,     ,18000, ,   ,    ,   , , , , , ,A,J,S;
 APPCH:020,R,R18CZ, ,JALDO,K7,P,C,E  F, ,010,TF, , , , , ,      ,    ,    ,1800,0061,+,02000,     ,     , ,   ,    ,   ,RW18C,K7,P,G, ,A,J,S;
@@ -1208,7 +1208,7 @@ APPCH:060,R,R18LY, ,KEEZE,K7,P,C,EE H,R,   ,HM, , , , , ,      ,    ,    ,3330,0
 APPCH:010,A,R18LZ,REISE,REISE,K7,P,C,EE C,L,   ,HF, , , , , ,      ,    ,    ,1800,0050,+,04400,     ,18000, ,   ,    ,   , , , , , ,A,J,S;
 APPCH:010,A,R18LZ,TUNIE,TUNIE,K7,P,C,E  A, ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , ,A,J,S;
 APPCH:020,A,R18LZ,TUNIE,REISE,K7,P,C,EE B, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,04400,     ,     , ,   ,    ,   , , , , , ,A,J,S;
-APPCH:010,A,R18LZ,ZOKOR,ZOKOR,K4,P,C,E  A, ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , ,A,J,S;
+APPCH:010,A,R18LZ,ZOKOR,ZOKOR,K7,P,C,E  A, ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , ,A,J,S;
 APPCH:020,A,R18LZ,ZOKOR,REISE,K7,P,C,EE B, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,04400,     ,     , ,   ,    ,   , , , , , ,A,J,S;
 APPCH:010,R,R18LZ, ,REISE,K7,P,C,E  I, ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,04400,     ,18000, ,   ,    ,   , , , , , ,A,J,S;
 APPCH:020,R,R18LZ, ,RONEE,K7,P,C,E  F, ,010,TF, , , , , ,      ,    ,    ,1800,0077,+,02000,     ,     , ,   ,    ,   ,RW18L,K7,P,G, ,A,J,S;
@@ -1234,7 +1234,7 @@ APPCH:060,R,R18RY, ,JEPOB,K7,E,A,EE H,R,   ,HM, , , , , ,      ,    ,    ,2590,0
 APPCH:010,A,R18RZ,MCVEY,MCVEY,K7,P,C,EE C,R,010,HF, , , , , ,      ,    ,    ,1800,0050,+,04400,     ,18000, ,   ,    ,   , , , , , ,A,J,S;
 APPCH:010,A,R18RZ,TUNIE,TUNIE,K7,P,C,E  A, ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , ,A,J,S;
 APPCH:020,A,R18RZ,TUNIE,MCVEY,K7,P,C,EE B, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,04400,     ,     , ,   ,    ,   , , , , , ,A,J,S;
-APPCH:010,A,R18RZ,ZOKOR,ZOKOR,K4,P,C,E  A, ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , ,A,J,S;
+APPCH:010,A,R18RZ,ZOKOR,ZOKOR,K7,P,C,E  A, ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , ,A,J,S;
 APPCH:020,A,R18RZ,ZOKOR,MCVEY,K7,P,C,EE B, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,04400,     ,     , ,   ,    ,   , , , , , ,A,J,S;
 APPCH:010,R,R18RZ, ,MCVEY,K7,P,C,E  I, ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,04400,     ,18000, ,   ,    ,   , , , , , ,A,J,S;
 APPCH:020,R,R18RZ, ,ELVIS,K7,P,C,E  F, ,010,TF, , , , , ,      ,    ,    ,1800,0076,+,02000,     ,     , ,   ,    ,   ,RW18R,K7,P,G,B,A,J,S;

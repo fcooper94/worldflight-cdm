@@ -1,10 +1,10 @@
 SID:010,4,TUVVO1,RW02, , , , ,    , ,   ,CA, , , , , ,      ,    ,    ,0190,    ,+,02492,     ,18000, ,   ,    ,   , , , , , , , , ;
-SID:020,4,TUVVO1,RW02,NUDTI,PA,E,A,E   , ,   ,DF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
-SID:030,4,TUVVO1,RW02,HULIS,PA,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
+SID:020,4,TUVVO1,RW02,NUDTI,PA,P,C,E   , ,   ,DF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
+SID:030,4,TUVVO1,RW02,HULIS,PA,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 SID:040,4,TUVVO1,RW02,TUVVO,PA,E,A,EB H, ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 SID:010,4,TUVVO1,RW20, , , , ,    , ,   ,CA, , , , , ,      ,    ,    ,1990,    ,+,02492,     ,18000, ,   ,    ,   , , , , , , , , ;
-SID:020,4,TUVVO1,RW20,JOKTI,PA,E,A,E   , ,   ,DF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
-SID:030,4,TUVVO1,RW20,HILIM,PA,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
+SID:020,4,TUVVO1,RW20,JOKTI,PA,P,C,E   , ,   ,DF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
+SID:030,4,TUVVO1,RW20,HILIM,PA,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 SID:040,4,TUVVO1,RW20,TUVVO,PA,E,A,EB H, ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 APPCH:010,A,R02,TUVVO,TUVVO,PA,E,A,E  C, ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , ,B,J,S;
 APPCH:020,A,R02,TUVVO,DUCEK,PA,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,07000,     ,     , ,   ,    ,   , , , , , ,B,J,S;
@@ -16,7 +16,7 @@ APPCH:025,R,R02, ,CODIV,PA,P,C,E S , ,   ,TF, , , , , ,      ,    ,    ,0170,003
 APPCH:030,R,R02, ,DEGEC,PA,P,C,EY M, ,   ,TF, , , , , ,      ,    ,    ,0170,0035, ,02171,     ,     , ,   ,-306,   , , , , , ,B,J,S;
 APPCH:040,R,R02, , , , , ,  M , ,   ,CA, , , , , ,      ,    ,    ,0170,    ,+,02492,     ,     , ,   ,    ,   , , , , , ,B,J,S;
 APPCH:050,R,R02, ,FIPNU,PA,P,C,E   , ,   ,DF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , ,B,J,S;
-APPCH:060,R,R02, ,HULIS,PA,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , ,B,J,S;
+APPCH:060,R,R02, ,HULIS,PA,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , ,B,J,S;
 APPCH:070,R,R02, ,TUVVO,PA,E,A,EY  , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,10000,     ,     , ,   ,    ,   , , , , , ,B,J,S;
 APPCH:080,R,R02, ,TUVVO,PA,E,A,EE H,R,   ,HM, , , , , ,      ,    ,    ,3180,0080, ,     ,     ,     , ,   ,    ,   , , , , , ,B,J,S;
 APPCH:010,A,R20,JEKPU,JEKPU,PA,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , ,B,J,S;

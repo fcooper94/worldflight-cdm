@@ -28,7 +28,7 @@ PRDAT:A,       LPV,A, LNAV/VNAV,A,      LNAV, ,   , ,   , ,   , ,   ,J,S;
 APPCH:030,R,R13, ,RW13,K3,P,G,GY M, ,302,TF, , , , , ,      ,    ,    ,1320,0049, ,01126,     ,     , ,   ,-300,   , , , , , ,A,J,S;
 APPCH:040,R,R13, , , , , ,  M , ,   ,CA, , , , , ,      ,    ,    ,1320,    ,+,01477,     ,     , ,   ,    ,   , , , , , ,A,J,S;
 APPCH:050,R,R13, ,JIPDA,K3,P,C,EY  , ,010,DF, , , , , ,      ,    ,    ,    ,    ,+,03100,     ,     , ,   ,    ,   , , , , , ,A,J,S;
-APPCH:060,R,R13, ,JIPDA,K3,P,C,EE H,R,   ,HM, , , , , ,      ,    ,    ,3120,0050, ,     ,     ,     , ,   ,    ,   , , , , , ,A,J,S;
+APPCH:060,R,R13, ,JIPDA,K3,P,C,EE H,R,   ,HM, , , , , ,      ,    ,    ,3120,0040, ,     ,     ,     , ,   ,    ,   , , , , , ,A,J,S;
 APPCH:010,A,R18,BAULK,BAULK,K5,E,A,E  A, ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , ,A,J,S;
 APPCH:020,A,R18,BAULK,WITOK,K3,P,C,EE B, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,03000,     ,     , ,   ,    ,   , , , , , ,A,J,S;
 APPCH:010,A,R18,CASSY,CASSY,K5,E,A,E  A, ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , ,A,J,S;
@@ -46,8 +46,8 @@ APPCH:040,R,R18, , , , , ,  M , ,   ,CA, , , , , ,      ,    ,    ,1770,    ,+,0
 APPCH:050,R,R18, ,DIVGE,K3,P,C,EY  , ,010,DF, , , , , ,      ,    ,    ,    ,    ,+,02700,     ,     , ,   ,    ,   , , , , , ,A,J,S;
 APPCH:060,R,R18, ,DIVGE,K3,P,C,EE H,R,   ,HM, , , , , ,      ,    ,    ,3570,0040, ,     ,     ,     , ,   ,    ,   , , , , , ,A,J,S;
 APPCH:010,A,R31,DBQ,DBQ,K3,D, ,V   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , ,A,J,S;
-APPCH:020,A,R31,DBQ,JIPDA,K3,P,C,E   , ,020,TF, , , , , ,      ,    ,    ,    ,    ,+,03100,     ,     , ,   ,    ,   , , , , , ,A,J,S;
-APPCH:030,A,R31,DBQ,JIPDA,K3,P,C,EE C,R,   ,HF, , , , , ,      ,    ,    ,3120,0050,+,03100,     ,     , ,   ,    ,   , , , , , ,A,J,S;
+APPCH:020,A,R31,DBQ,JIPDA,K3,P,C,EY  , ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,03100,     ,     , ,   ,    ,   , , , , , ,A,J,S;
+APPCH:030,A,R31,DBQ,JIPDA,K3,P,C,EE C,R,   ,HF, , , , , ,      ,    ,    ,3120,0040,+,03100,     ,     , ,   ,    ,   , , , , , ,A,J,S;
 APPCH:010,A,R31,LOTTE,LOTTE,K3,E,A,E  A, ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , ,A,J,S;
 APPCH:020,A,R31,LOTTE,JIPDA,K3,P,C,EE B, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,03100,     ,     , ,   ,    ,   , , , , , ,A,J,S;
 APPCH:010,A,R31,WACKS,WACKS,K5,E,A,E  A, ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , ,A,J,S;
@@ -56,7 +56,7 @@ APPCH:010,R,R31, ,JIPDA,K3,P,C,E  I, ,   ,IF, , , , , ,      ,    ,    ,    ,   
 APPCH:020,R,R31, ,RIPOC,K3,P,C,E  F, ,010,TF, , , , , ,      ,    ,    ,3120,0061,+,02700,     ,     , ,   ,    ,   ,RW31,K3,P,G, ,A,J,S;
 PRDAT:A,       LPV,A, LNAV/VNAV,A,      LNAV, ,   , ,   , ,   , ,   ,J,S;
 APPCH:030,R,R31, ,RW31,K3,P,G,GY M, ,302,TF, , , , , ,      ,    ,    ,3120,0049, ,01112,     ,     , ,   ,-300,   , , , , , ,A,J,S;
-APPCH:040,R,R31, , , , , ,  M , ,   ,CA, , , , , ,      ,    ,    ,3120,    ,+,01477,     ,     , ,   ,    ,   , , , , , ,A,J,S;
+APPCH:040,R,R31, , , , , ,  M , ,   ,CA, , , , , ,      ,    ,    ,3120,    ,+,01476,     ,     , ,   ,    ,   , , , , , ,A,J,S;
 APPCH:050,R,R31, ,HULOT,K3,P,C,EY  , ,010,DF, , , , , ,      ,    ,    ,    ,    ,+,02800,     ,     , ,   ,    ,   , , , , , ,A,J,S;
 APPCH:060,R,R31, ,HULOT,K3,P,C,EE H,R,   ,HM, , , , , ,      ,    ,    ,1320,0050, ,     ,     ,     , ,   ,    ,   , , , , , ,A,J,S;
 APPCH:010,A,R36,ANOSA,ANOSA,K3,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , ,A,J,S;

@@ -9,13 +9,6 @@ APPCH:040,L,L31, , , , , ,  M , ,   ,CA, , , , , ,      ,    ,    ,3050,    ,+,0
 APPCH:050,L,L31, , , , , ,    , ,   ,VI, , , , , ,      ,    ,    ,2600,    , ,     ,     ,     , ,   ,    ,   , , , , , ,0,N,S;
 APPCH:060,L,L31, ,DARBY,K5,E,A,E   , ,   ,CF, ,IIU,K5,D, ,      ,1311,0400,3110,0070,+,03000,     ,     , ,   ,    ,   , , , , , ,0,N,S;
 APPCH:070,L,L31, ,DARBY,K5,E,A,EE H,R,   ,HM, , , , , ,      ,    ,    ,3110,T010, ,     ,     ,     , ,   ,    ,   , , , , , ,0,N,S;
-APPCH:010,A,NDBA,MAUDD,MAUDD,K5,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , ,0, ,C;
-APPCH:020,A,NDBA,MAUDD,DVK,K5,D,B,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,03100,     ,     , ,   ,    ,   , , , , , ,0, ,C;
-APPCH:030,A,NDBA,MAUDD,DVK,K5,D,B,E  A,R,   ,PI, ,HYK,K5,D, ,      ,2108,0272,3460,0100,+,03100,     ,     , ,   ,    ,   , , , , , ,0, ,C;
-APPCH:040,A,NDBA,MAUDD,FN211,K5,P,C,EE  , ,   ,CF, ,HYK,K5,D, ,      ,2116,0207,2110,0035,+,03100,     ,     , ,   ,    ,   , , , , , ,0, ,C;
-APPCH:020,N,NDBA, ,FN211,K5,P,C,E  F, ,   ,IF, ,DVK,K5,D,B,      ,    ,    ,    ,    ,+,03100,     ,18000, ,   ,    ,   ,DVK,K5,D,B, ,0, ,C;
-APPCH:030,N,NDBA, ,DVK,K5,D,B,E  M, ,   ,CF, ,DVK,K5,D,B,      ,    ,    ,2110,0065, ,01840,     ,     , ,   , 000,   , , , , , ,0, ,C;
-APPCH:040,N,NDBA, ,DVK,K5,D,B,EEMH,R,   ,HM, , , , , ,      ,    ,    ,2110,T010,+,03100,     ,     , ,   ,    ,   , , , , , ,0, ,C;
 APPCH:010,A,R13,MAUDD,MAUDD,K5,E,A,E  A, ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , ,A,J,S;
 APPCH:020,A,R13,MAUDD,ZUTOB,K5,P,C,EE B, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,02900,     ,     , ,   ,    ,   , , , , , ,A,J,S;
 APPCH:010,A,R13,MCFEE,MCFEE,K5,E,A,E  A, ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , ,A,J,S;

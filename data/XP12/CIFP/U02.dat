@@ -8,7 +8,7 @@ APPCH:010,R,RNVA, ,AMXOJ,K1,P,C,E  I, ,   ,IF, , , , , ,      ,    ,    ,    ,  
 APPCH:020,R,RNVA, ,YILKO,K1,P,C,E  F, ,010,TF, , , , , ,      ,    ,    ,1890,0062,+,06200,     ,     , ,   ,    ,   ,RW19,K1,P,G, ,A,J,C;
 APPCH:030,R,RNVA, ,RW19,K1,P,G,GY M, ,302,TF, , , , , ,      ,    ,    ,1890,0052, ,04532,     ,     , ,   ,-301,   , , , , , ,A,J,C;
 APPCH:040,R,RNVA, , , , , ,  M , ,   ,CA, , , , , ,      ,    ,    ,1890,    ,+,04888,     ,     , ,   ,    ,   , , , , , ,A,J,C;
-APPCH:050,R,RNVA, ,NARBE,K1,E,A,E   , ,020,DF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , ,A,J,C;
+APPCH:050,R,RNVA, ,NARBE,K1,P,C,E   , ,020,DF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , ,A,J,C;
 APPCH:060,R,RNVA, ,PIH,K1,D, ,VY  , ,020,TF, , , , , ,      ,    ,    ,    ,    ,+,08500,     ,     , ,   ,    ,   , , , , , ,A,J,C;
 APPCH:070,R,RNVA, ,PIH,K1,D, ,VE H,L,   ,HM, , , , , ,      ,    ,    ,0210,0070, ,     ,     ,     , ,   ,    ,   , , , , , ,A,J,C;
 APPCH:010,A,RNVB,PIH,PIH,K1,D, ,V  C, ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , ,A,J,C;
@@ -17,7 +17,7 @@ APPCH:010,R,RNVB, ,MILMK,K1,P,C,E  I, ,   ,IF, , , , , ,      ,    ,    ,    ,  
 APPCH:020,R,RNVB, ,OHJOJ,K1,P,C,E  F, ,010,TF, , , , , ,      ,    ,    ,0210,0069,+,06200,     ,     , ,   ,    ,   ,RW01,K1,P,G, ,A,J,C;
 APPCH:030,R,RNVB, ,RW01,K1,P,G,GY M, ,302,TF, , , , , ,      ,    ,    ,0090,0052, ,04521,     ,     , ,   ,-305,   , , , , , ,A,J,C;
 APPCH:040,R,RNVB, , , , , ,  M , ,   ,CA, , , , , ,      ,    ,    ,0090,    ,+,04888,     ,     , ,   ,    ,   , , , , , ,A,J,C;
-APPCH:050,R,RNVB, ,JASKI,K1,E,A,E   , ,020,DF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , ,A,J,C;
+APPCH:050,R,RNVB, ,JASKI,K1,P,C,E   , ,020,DF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , ,A,J,C;
 APPCH:060,R,RNVB, ,IDA,K1,D, ,VY  , ,020,TF, , , , , ,      ,    ,    ,    ,    ,+,07000,     ,     , ,   ,    ,   , , , , , ,A,J,C;
 APPCH:070,R,RNVB, ,IDA,K1,D, ,VE H,R,   ,HM, , , , , ,      ,    ,    ,1950,0070, ,     ,     ,     , ,   ,    ,   , , , , , ,A,J,C;
 APPCH:010,A,VDMC,PIH,PIH,K1,D, ,V  C, ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , ,0, ,C;

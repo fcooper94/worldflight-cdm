@@ -23,8 +23,7 @@ SID:040,6,MIGA1A,NESMI,FL916,SB,P,C,E   , ,010,TF, , , , , ,      ,    ,    ,   
 SID:050,6,MIGA1A,NESMI,NESMI,SB,E,A,EEC , ,010,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 SID:010,6,MIGA1A,UGREV,MIGAK,SB,P,C,E   , ,010,IF, , , , , ,      ,    ,    ,    ,    ,+,05700,     ,09000, ,   ,    ,   ,SBFL,SB,P,A, , , , ;
 SID:020,6,MIGA1A,UGREV,UGREV,SB,E,A,EEC , ,010,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
-SID:010,5,MUKA2B,RW32, , , , ,    , ,010,VA, , , , , ,      ,    ,    ,3210,    ,+,03400,     ,09000, ,   ,    ,   ,SBFL,SB,P,A, , , , ;
-SID:020,5,MUKA2B,RW32,MUKAL,SB,P,C,EE  , ,010,CF, ,FLN,SB,D, ,      ,3209,0166,3210,0160, ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
+SID:010,5,MUKA2B,RW32,MUKAL,SB,P,C,EE  , ,010,CF, ,FLN,SB,D, ,      ,3209,0166,3210,0160, ,     ,     ,09000, ,   ,    ,   ,SBFL,SB,P,A, , , , ;
 SID:010,6,MUKA2B,NESMI,MUKAL,SB,P,C,E   , ,010,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,09000, ,   ,    ,   ,SBFL,SB,P,A, , , , ;
 SID:020,6,MUKA2B,NESMI,UMKOT,SB,P,C,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 SID:030,6,MUKA2B,NESMI,FL921,SB,P,C,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;

@@ -1,5 +1,5 @@
 APPCH:010,A,R17,DUKRE,DUKRE,K3,P,C,EE C,R,   ,HF, , , , , ,      ,    ,    ,1700,0050,+,04600,     ,18000, ,   ,    ,   , , , , , ,A,J,S;
-APPCH:010,A,R17,EGANE,EGANE,K3,P,C,E  A, ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , ,A,J,S;
+APPCH:010,A,R17,EGANE,EGANE,K3,E,A,E  A, ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , ,A,J,S;
 APPCH:020,A,R17,EGANE,DUKRE,K3,P,C,EE B, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,04600,     ,     , ,   ,    ,   , , , , , ,A,J,S;
 APPCH:010,A,R17,FAXUL,FAXUL,K3,P,C,E  A, ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , ,A,J,S;
 APPCH:020,A,R17,FAXUL,DUKRE,K3,P,C,EE B, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,04600,     ,     , ,   ,    ,   , , , , , ,A,J,S;

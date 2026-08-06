@@ -6,6 +6,7 @@ APPCH:010,A,R12,ESROS,ESROS,MD,P,C,E  C, ,   ,IF, , , , , ,      ,    ,    ,    
 APPCH:020,A,R12,ESROS,BH200,MD,P,C,EE B, ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,03000,     ,     , ,   ,    ,   , , , , , ,B,J,S;
 APPCH:010,R,R12, ,BH200,MD,P,C,E  I, ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,03000,     ,18000, ,   ,    ,   , , , , , ,B,J,S;
 APPCH:020,R,R12, ,BH201,MD,P,C,E  F, ,   ,TF, , , , , ,      ,    ,    ,1280,0050,+,01700,     ,     , ,   ,    ,   ,MDBH,MD,P,A, ,B,J,S;
+PRDAT: ,          , ,          ,A,      LNAV, ,   , ,   , ,   , ,   ,J,S;
 APPCH:030,R,R12, ,RW12,MD,P,G,GY M, ,   ,TF, , , , , ,      ,    ,    ,1280,0050, ,00062,     ,     , ,   ,-300,   , , , , , ,B,J,S;
 APPCH:040,R,R12, ,BH202,MD,P,C,EYM , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,03000,     ,     , ,   ,    ,   , , , , , ,B,J,S;
 APPCH:050,R,R12, ,BH203,MD,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,04000,     ,     , ,   ,    ,   , , , , , ,B,J,S;
@@ -22,6 +23,7 @@ APPCH:010,A,R30,GLEMO,GLEMO,MD,P,C,E  A, ,   ,IF, , , , , ,      ,    ,    ,    
 APPCH:020,A,R30,GLEMO,BH300,MD,P,C,EE B, ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,03000,     ,     , ,   ,    ,   , , , , , ,B,J,S;
 APPCH:010,R,R30, ,BH300,MD,P,C,E  I, ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,03000,     ,18000, ,   ,    ,   , , , , , ,B,J,S;
 APPCH:020,R,R30, ,BH301,MD,P,C,E  F, ,   ,TF, , , , , ,      ,    ,    ,3080,0050,+,01700,     ,     , ,   ,    ,   ,MDBH,MD,P,A, ,B,J,S;
+PRDAT: ,          , ,          ,A,      LNAV, ,   , ,   , ,   , ,   ,J,S;
 APPCH:030,R,R30, ,RW30,MD,P,G,GY M, ,   ,TF, , , , , ,      ,    ,    ,3080,0050, ,00060,     ,     , ,   ,-300,   , , , , , ,B,J,S;
 APPCH:040,R,R30, ,BH302,MD,P,C,E M , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,03000,     ,     , ,   ,    ,   , , , , , ,B,J,S;
 APPCH:050,R,R30, ,BH303,MD,P,C,EY  ,R,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,04000,     ,     , ,   ,    ,   , , , , , ,B,J,S;

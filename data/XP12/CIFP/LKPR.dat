@@ -307,7 +307,7 @@ APPCH:030,A,I24,ERASU,PR532,LK,P,C,E  B, ,   ,TF, , , , , ,      ,    ,    ,    
 APPCH:040,A,I24,ERASU,CI24,LK,P,C,EE  , ,   ,CF, ,PR,LK,P,I,      ,0600,0130,2400,0030,+,04000,     ,     , ,   ,    ,   , , , , , ,0,D,S;
 APPCH:010,A,I24,OKL,OKL,LK,D, ,V CA, ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , ,0,D,S;
 APPCH:020,A,I24,OKL,FF24,LK,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,04000,     ,     , ,   ,    ,   , , , , , ,0,D,S;
-APPCH:030,A,I24,OKL,FF24,LK,P,C,EY  , ,   ,FC, ,OKL,LK,D, ,      ,0543,0096,0150,0043,+,04000,     ,     , ,   ,    ,   , , , , , ,0,D,S;
+APPCH:030,A,I24,OKL,FF24,LK,P,C,EY  , ,   ,FC, ,OKL,LK,D, ,      ,0542,0096,0150,0043,+,04000,     ,     , ,   ,    ,   , , , , , ,0,D,S;
 APPCH:040,A,I24,OKL,CI24,LK,P,C,EE  ,R,   ,CF,Y,PR,LK,P,I,      ,0600,0130,2400,0030,+,04000,     ,     , ,   ,    ,   , , , , , ,0,D,S;
 APPCH:010,A,I24,RATEV,RATEV,LK,P,C,E CA, ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , ,0,D,S;
 APPCH:020,A,I24,RATEV,PR530,LK,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,04000,     ,     , ,   ,    ,   , , , , , ,0,D,S;
@@ -315,7 +315,7 @@ APPCH:030,A,I24,RATEV,PR532,LK,P,C,E  B, ,   ,TF, , , , , ,      ,    ,    ,    
 APPCH:040,A,I24,RATEV,CI24,LK,P,C,EE  , ,   ,CF, ,PR,LK,P,I,      ,0600,0130,2400,0030,+,04000,     ,     , ,   ,    ,   , , , , , ,0,D,S;
 APPCH:010,I,I24, ,CI24,LK,P,C,E  I, ,   ,IF, ,PR,LK,P,I,      ,0600,0130,    ,    ,J,04000,04000,     , ,   ,    ,   , , , , , ,0,D,S;
 APPCH:020,I,I24, ,FF24,LK,P,C,E  F, ,   ,CF, ,PR,LK,P,I,      ,0600,0110,2400,0020,H,04000,04000,     , ,   ,-300,   ,OKL,LK,D, , ,0,D,S;
-APPCH:030,I,I24, ,RW24,LK,P,G,GYCM, ,   ,CF, ,PR,LK,P,I,      ,0600,0022,2400,0088, ,01214,     ,     , ,   ,-300,   , , , , , ,0,D,S;
+APPCH:030,I,I24, ,RW24,LK,P,G,GYCM, ,   ,CF, ,PR,LK,P,I,      ,0600,0022,2400,0087, ,01212,     ,     , ,   ,-300,   , , , , , ,0,D,S;
 APPCH:040,I,I24, ,RW24,LK,P,G,GEM , ,   ,FM, ,OKL,LK,D, ,      ,0089,0012,2400,    ,+,04000,     ,     , ,   ,    ,   , , , , , ,0,D,S;
 APPCH:010,A,I30,ARVEG,ARVEG,LK,P,C,E CA, ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , ,0,D,S;
 APPCH:020,A,I30,ARVEG,PR905,LK,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,05000,     ,     , ,   ,    ,   , , , , , ,0,D,S;

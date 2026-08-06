@@ -129,11 +129,11 @@ STAR:010,5,UDGA1B,RW28,UDGAS,FL,P,C,E   , ,   ,IF, , , , , ,      ,    ,    ,   
 STAR:020,5,UDGA1B,RW28,APKOX,FL,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:030,5,UDGA1B,RW28,UVUGO,FL,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,FL120,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:040,5,UDGA1B,RW28,APREG,FL,P,C,EE  , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,06500,     ,     , ,   ,    ,   , , , , , , , , ;
-STAR:010,5,UMVU1A,RW10,UMVUL,FV,P,C,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,FL240,     ,     , ,   ,    ,   ,FLKK,FL,P,A, , , , ;
+STAR:010,5,UMVU1A,RW10,UMVUL,FL,P,C,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,FL240,     ,     , ,   ,    ,   ,FLKK,FL,P,A, , , , ;
 STAR:020,5,UMVU1A,RW10,XADEP,FL,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:030,5,UMVU1A,RW10,DUNVU,FL,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,-,FL090,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:040,5,UMVU1A,RW10,APRAS,FL,P,C,EE  , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,06500,     ,     , ,   ,    ,   , , , , , , , , ;
-STAR:010,5,UMVU1B,RW28,UMVUL,FV,P,C,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,FL205,     ,     , ,   ,    ,   ,FLKK,FL,P,A, , , , ;
+STAR:010,5,UMVU1B,RW28,UMVUL,FL,P,C,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,FL205,     ,     , ,   ,    ,   ,FLKK,FL,P,A, , , , ;
 STAR:020,5,UMVU1B,RW28,AXOGA,FL,P,C,EE  , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,B,FL115,06500,     , ,   ,    ,   , , , , , , , , ;
 APPCH:010,A,D10,VLS,VLS,FL,D, ,V  C, ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,06100,     ,     , ,   ,    ,   , , , , , ,0, ,S;
 APPCH:020,A,D10,VLS,D280E,FL,P,C,E   , ,   ,CF, ,VLS,FL,D, ,      ,2800,0030,2800,0030, ,     ,     ,     , ,   ,    ,   , , , , , ,0, ,S;

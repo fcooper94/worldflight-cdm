@@ -447,7 +447,7 @@ APPCH:020,A,D34L,TYLER,GIINA,RJ,P,C,EE B, ,   ,TF, , , , , ,      ,    ,    ,   
 APPCH:010,D,D34L, ,GIINA,RJ,P,C,E  I, ,   ,IF, ,NRE,RJ,D, ,      ,1565,0181,    ,    , ,04000,     ,14000, ,   ,    ,   , , , , , ,0, ,S;
 APPCH:020,D,D34L, ,VIRGO,RJ,P,C,E  F, ,   ,CF, ,NRE,RJ,D, ,      ,1565,0123,3370,0058,+,03244,     ,     , ,   ,    ,   ,NRE,RJ,D, , ,0, ,S;
 APPCH:025,D,D34L, ,55VOR,RJ,P,C,E S , ,   ,CF, ,NRE,RJ,D, ,      ,1565,0055,3370,0068,+,01076,     ,     , ,   ,-300,   , , , , , ,0, ,S;
-APPCH:030,D,D34L, ,RW34L,RJ,P,G,G  M, ,   ,CF, ,NRE,RJ,D, ,      ,1565,0027,3370,0028, ,00197,     ,     , ,   ,-300,   , , , , , ,0, ,S;
+APPCH:030,D,D34L, ,RW34L,RJ,P,G,G  M, ,   ,CF, ,NRE,RJ,D, ,      ,1565,0027,3370,0028, ,00195,     ,     , ,   ,-300,   , , , , , ,0, ,S;
 APPCH:040,D,D34L, , , , , ,  M , ,   ,CA, , , , , ,      ,    ,    ,3370,    ,+,01000,     ,     , ,   ,    ,   , , , , , ,0, ,S;
 APPCH:050,D,D34L, , , , , ,    ,L,   ,VI,Y, , , , ,      ,    ,    ,1420,    , ,     ,     ,     , ,   ,    ,   , , , , , ,0, ,S;
 APPCH:060,D,D34L, ,GUMYO,RJ,P,C,E   , ,   ,CF, ,NRE,RJ,D, ,      ,1861,0141,1870,0080, ,     ,     ,     , ,   ,    ,   , , , , , ,0, ,S;
@@ -538,8 +538,8 @@ APPCH:030,A,I34L,ELGAR,GIINA,RJ,P,C,EE B, ,   ,TF, ,IYQ,RJ,P,I,      ,    ,    ,
 APPCH:010,A,I34L,TYLER,TYLER,RJ,P,C,E  A, ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,04000,     ,14000, ,   ,    ,   , , , , , ,0,D,S;
 APPCH:020,A,I34L,TYLER,GIINA,RJ,P,C,EE B, ,   ,TF, ,IYQ,RJ,P,I,      ,    ,    ,    ,    , ,04000,     ,     , ,   ,    ,   , , , , , ,0,D,S;
 APPCH:010,I,I34L, ,GIINA,RJ,P,C,E  I, ,   ,IF, ,IYQ,RJ,P,I,      ,1565,0178,    ,    ,I,04000,04000,14000, ,   ,    ,   , , , , , ,0,D,S;
-APPCH:020,I,I34L, ,COSMO,RJ,P,C,E  F, ,   ,CF, ,IYQ,RJ,P,I,      ,1565,0140,3370,0038,H,04000,04000,     , ,   ,-300,   ,NRE,RJ,D, , ,0,D,S;
-APPCH:030,I,I34L, ,RW34L,RJ,P,G,G  M, ,   ,CF, ,IYQ,RJ,P,I,      ,1565,0024,3370,0116, ,00197,     ,     , ,   ,-300,   , , , , , ,0,D,S;
+APPCH:020,I,I34L, ,UGVIN,RJ,P,C,E  F, ,   ,CF, ,IYQ,RJ,P,I,      ,1565,0140,3370,0038,H,04000,04000,     , ,   ,-300,   ,NRE,RJ,D, , ,0,D,S;
+APPCH:030,I,I34L, ,RW34L,RJ,P,G,G  M, ,   ,CF, ,IYQ,RJ,P,I,      ,1565,0025,3370,0116, ,00195,     ,     , ,   ,-300,   , , , , , ,0,D,S;
 APPCH:040,I,I34L, , , , , ,  M , ,   ,VA, , , , , ,      ,    ,    ,3370,    ,+,01000,     ,     , ,   ,    ,   , , , , , ,0,D,S;
 APPCH:050,I,I34L, , , , , ,    ,L,   ,VI,Y, , , , ,      ,    ,    ,1420,    , ,     ,     ,     , ,   ,    ,   , , , , , ,0,D,S;
 APPCH:060,I,I34L, ,GUMYO,RJ,P,C,E   , ,   ,CF, ,NRE,RJ,D, ,      ,1861,0141,1870,0080, ,     ,     ,     , ,   ,    ,   , , , , , ,0,D,S;
@@ -623,9 +623,9 @@ APPCH:030,A,L34L,ELGAR,GIINA,RJ,P,C,EE B, ,   ,TF, ,IYQ,RJ,P,I,      ,    ,    ,
 APPCH:010,A,L34L,TYLER,TYLER,RJ,P,C,E  A, ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,04000,     ,14000, ,   ,    ,   , , , , , ,0,D,S;
 APPCH:020,A,L34L,TYLER,GIINA,RJ,P,C,EE B, ,   ,TF, ,IYQ,RJ,P,I,      ,    ,    ,    ,    , ,04000,     ,     , ,   ,    ,   , , , , , ,0,D,S;
 APPCH:010,L,L34L, ,GIINA,RJ,P,C,E  I, ,   ,IF, ,IYQ,RJ,P,I,      ,1565,0178,    ,    , ,04000,     ,14000, ,   ,    ,   , , , , , ,0,D,S;
-APPCH:020,L,L34L, ,VIRGO,RJ,P,C,E  F, ,   ,CF, ,IYQ,RJ,P,I,      ,1565,0120,3370,0058,+,03244,     ,     , ,   ,    ,   ,NRE,RJ,D, , ,0,D,S;
-APPCH:025,L,L34L, ,30LOC,RJ,P,C,E S , ,   ,CF, ,IYQ,RJ,P,I,      ,1565,0052,3370,0068,+,01086,     ,     , ,   ,-300,   , , , , , ,0,D,S;
-APPCH:030,L,L34L, ,ML34L,RJ,P,C,E  M, ,   ,CF, ,IYQ,RJ,P,I,      ,1565,0028,3370,0024, ,00330,     ,     , ,   ,-300,   , , , , , ,0,D,S;
+APPCH:020,L,L34L, ,VIRGO,RJ,P,C,E  F, ,   ,CF, ,IYQ,RJ,P,I,      ,1565,0121,3370,0058,+,03244,     ,     , ,   ,    ,   ,NRE,RJ,D, , ,0,D,S;
+APPCH:025,L,L34L, ,30LOC,RJ,P,C,E S , ,   ,CF, ,IYQ,RJ,P,I,      ,1565,0053,3370,0068,+,01085,     ,     , ,   ,-300,   , , , , , ,0,D,S;
+APPCH:030,L,L34L, ,ML34L,RJ,P,C,E  M, ,   ,CF, ,IYQ,RJ,P,I,      ,1565,0029,3370,0024, ,00328,     ,     , ,   ,-300,   , , , , , ,0,D,S;
 APPCH:040,L,L34L, , , , , ,  M , ,   ,VA, , , , , ,      ,    ,    ,3370,    ,+,01000,     ,     , ,   ,    ,   , , , , , ,0,D,S;
 APPCH:050,L,L34L, , , , , ,    ,L,   ,VI,Y, , , , ,      ,    ,    ,1420,    , ,     ,     ,     , ,   ,    ,   , , , , , ,0,D,S;
 APPCH:060,L,L34L, ,GUMYO,RJ,P,C,E   , ,   ,CF, ,NRE,RJ,D, ,      ,1861,0141,1870,0080, ,     ,     ,     , ,   ,    ,   , , , , , ,0,D,S;

@@ -588,7 +588,7 @@ STAR:060,1,BUNTR3,INW,DBACK,K2,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    
 STAR:070,1,BUNTR3,INW,HOMRR,K2,E,A,E  H, ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,250,    ,   , , , , , , , , ;
 STAR:080,1,BUNTR3,INW,BUNTR,K2,E,A,EE  , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:010,1,BUNTR3,ZUN,ZUN,K2,D, ,V  H, ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   ,PXR,K2,D, , , , , ;
-STAR:020,1,BUNTR3,ZUN,DOJOE,K2,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
+STAR:020,1,BUNTR3,ZUN,DOJOE,K2,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:030,1,BUNTR3,ZUN,SLIDR,K2,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:040,1,BUNTR3,ZUN,PAYSO,K2,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:050,1,BUNTR3,ZUN,EAGUL,K2,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
@@ -603,12 +603,12 @@ STAR:020,1,COYOT5,BLD,PRFUM,K2,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    
 STAR:030,1,COYOT5,BLD,SINHO,K2,E,A,E  H, ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:035,1,COYOT5,BLD,WOTRO,K2,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:040,1,COYOT5,BLD,DRK,K2,D, ,V  H, ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
-STAR:050,1,COYOT5,BLD,HATRK,K2,E,A,E  H, ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
+STAR:050,1,COYOT5,BLD,HATRK,K2,P,C,E  H, ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:060,1,COYOT5,BLD,MAIER,K2,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:070,1,COYOT5,BLD,WEBAD,K2,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:080,1,COYOT5,BLD,COYOT,K2,E,A,EE  , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:010,1,COYOT5,DRK,DRK,K2,D, ,V  H, ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , , , , ;
-STAR:020,1,COYOT5,DRK,HATRK,K2,E,A,E  H, ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
+STAR:020,1,COYOT5,DRK,HATRK,K2,P,C,E  H, ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:030,1,COYOT5,DRK,MAIER,K2,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:040,1,COYOT5,DRK,WEBAD,K2,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:050,1,COYOT5,DRK,COYOT,K2,E,A,EE  , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
@@ -619,13 +619,13 @@ STAR:030,1,COYOT5,HEC,PRFUM,K2,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    
 STAR:040,1,COYOT5,HEC,SINHO,K2,E,A,E  H, ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:045,1,COYOT5,HEC,WOTRO,K2,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:050,1,COYOT5,HEC,DRK,K2,D, ,V  H, ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
-STAR:060,1,COYOT5,HEC,HATRK,K2,E,A,E  H, ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
+STAR:060,1,COYOT5,HEC,HATRK,K2,P,C,E  H, ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:070,1,COYOT5,HEC,MAIER,K2,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:080,1,COYOT5,HEC,WEBAD,K2,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:090,1,COYOT5,HEC,COYOT,K2,E,A,EE  , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:005,2,COYOT5,ALL,COYOT,K2,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , , , , ;
 STAR:010,2,COYOT5,ALL,BRUSR,K2,E,A,E  H, ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,250,    ,   , , , , , , , , ;
-STAR:020,2,COYOT5,ALL,MAHEM,K2,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
+STAR:020,2,COYOT5,ALL,MAHEM,K2,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:030,2,COYOT5,ALL,PXR,K2,D, ,VE  , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:010,4,DSERT2,FLG,FLG,K2,D, ,V   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , , , , ;
 STAR:020,4,DSERT2,FLG,DSERT,K2,E,A,EE H, ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
@@ -652,7 +652,7 @@ STAR:050,4,EAGUL6,GUP,EAGUL,K2,E,A,EE H, ,   ,TF, , , , , ,      ,    ,    ,    
 STAR:010,4,EAGUL6,INW,INW,K2,D, ,V   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , , , , ;
 STAR:020,4,EAGUL6,INW,EAGUL,K2,E,A,EE H, ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,FL180,     ,     , ,260,    ,   , , , , , , , , ;
 STAR:010,4,EAGUL6,ZUN,ZUN,K2,D, ,V  H, ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , , , , ;
-STAR:020,4,EAGUL6,ZUN,DOJOE,K2,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
+STAR:020,4,EAGUL6,ZUN,DOJOE,K2,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:030,4,EAGUL6,ZUN,SLIDR,K2,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:040,4,EAGUL6,ZUN,TINIZ,K2,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,-,FL330,     ,     , ,270,    ,   , , , , , , , , ;
 STAR:050,4,EAGUL6,ZUN,PAYSO,K2,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,B,FL300,FL240,     , ,270,    ,   , , , , , , , , ;

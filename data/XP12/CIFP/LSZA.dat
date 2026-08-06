@@ -6,7 +6,7 @@ SID:010,4,CANE1E,RW19, , , , ,    , ,   ,CA, , , , , ,      ,    ,    ,2010,    
 SID:020,4,CANE1E,RW19,PINIK,LI,E,A,EE  , ,   ,CF, ,SRN,LI,D, ,      ,3311,0155,1970,0020,+,06000,     ,     , ,   ,    ,   , , , , , , , , ;
 SID:010,5,CANE1E, ,PINIK,LI,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,06000,     ,06000, ,   ,    ,   ,LSZA,LS,P,A, , , , ;
 SID:020,5,CANE1E, ,ZA557,LS,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,FL100,     ,     , ,   ,    ,   , , , , , , , , ;
-SID:030,5,CANE1E, ,ZA559,LI,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,FL120,     ,     , ,   ,    ,   , , , , , , , , ;
+SID:030,5,CANE1E, ,ZA559,LS,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,FL120,     ,     , ,   ,    ,   , , , , , , , , ;
 SID:040,5,CANE1E, ,CANNE,LS,E,A,EE  ,R,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,FL150,     ,     , ,   ,    ,   , , , , , , , , ;
 SID:010,1,CANE1Z,RW01,D017B,LS,P,C,EY  , ,   ,CF, ,SRN,LI,D, ,      ,3498,0241,0170,0020, ,     ,     ,06000, ,   ,    ,   ,LSZA,LS,P,A, , , , ;
 SID:020,1,CANE1Z,RW01,LUGAN,LS,E,A,E C ,R,   ,DF, , , , , ,      ,    ,    ,    ,    ,+,05000,     ,     ,-,150,    ,   , , , , , , , , ;
@@ -15,7 +15,7 @@ SID:005,1,CANE1Z,RW19, , , , ,    , ,   ,CA, , , , , ,      ,    ,    ,1970,    
 SID:010,1,CANE1Z,RW19, , , , ,    , ,   ,CA, , , , , ,      ,    ,    ,2010,    ,+,04100,     ,     , ,   ,    ,   , , , , , , , , ;
 SID:020,1,CANE1Z,RW19,PINIK,LI,E,A,EBCH, ,   ,CF, ,SRN,LI,D, ,      ,3311,0155,1970,0020,+,06000,     ,     , ,   ,    ,   , , , , , , , , ;
 SID:010,2,CANE1Z, ,PINIK,LI,E,A,E CH, ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,06000,     ,06000, ,   ,    ,   ,LSZA,LS,P,A, , , , ;
-SID:020,2,CANE1Z, ,D009T,LI,P,C,E   ,R,   ,CF,Y,MMP,LI,D, ,      ,0099,0200,0090,0050,+,FL090,     ,     , ,   ,    ,   , , , , , , , , ;
+SID:020,2,CANE1Z, ,D009T,LS,P,C,E   ,R,   ,CF,Y,MMP,LI,D, ,      ,0099,0200,0090,0050,+,FL090,     ,     , ,   ,    ,   , , , , , , , , ;
 SID:030,2,CANE1Z, ,CANNE,LS,E,A,EEC , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,FL150,     ,     , ,   ,    ,   , , , , , , , , ;
 SID:010,1,CANE2U,RW01,D017B,LS,P,C,EY  , ,   ,CF, ,SRN,LI,D, ,      ,3498,0241,0170,0020, ,     ,     ,06000, ,   ,    ,   ,LSZA,LS,P,A, , , , ;
 SID:020,1,CANE2U,RW01,LUGAN,LS,E,A,EYC ,R,   ,DF, , , , , ,      ,    ,    ,    ,    ,+,05000,     ,     ,-,150,    ,   , , , , , , , , ;
@@ -55,7 +55,7 @@ SID:010,1,OMET1F,RW19, , , , ,    , ,   ,CA, , , , , ,      ,    ,    ,2010,    
 SID:020,1,OMET1F,RW19,PINIK,LI,E,A,EECH, ,   ,CF, ,SRN,LI,D, ,      ,3311,0155,1970,0020,+,06000,     ,     , ,   ,    ,   , , , , , , , , ;
 SID:010,2,OMET1F, ,PINIK,LI,E,A,E CH, ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,06000,     ,06000, ,   ,    ,   ,LSZA,LS,P,A, , , , ;
 SID:020,2,OMET1F, ,ZA552,LS,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,FL100,     ,     , ,   ,    ,   , , , , , , , , ;
-SID:025,2,OMET1F, ,D017D,LI,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,FL100,     ,     , ,   ,    ,   , , , , , , , , ;
+SID:025,2,OMET1F, ,D017D,LS,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,FL100,     ,     , ,   ,    ,   , , , , , , , , ;
 SID:030,2,OMET1F, ,ZA558,LS,P,C,EYC , ,   ,CF, ,MMP,LI,D, ,      ,2872,0106,2760,0100,+,FL130,     ,     , ,   ,    ,   , , , , , , , , ;
 SID:040,2,OMET1F, ,BAVMI,LI,E,A,E C , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,FL150,     ,     , ,   ,    ,   , , , , , , , , ;
 SID:050,2,OMET1F, ,OMETO,LI,E,A,EEC , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,FL190,     ,     , ,   ,    ,   , , , , , , , , ;
@@ -132,9 +132,9 @@ STAR:030,2,LUSI7P,ALL,ZA631,LS,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    
 STAR:040,2,LUSI7P,ALL,ZA632,LS,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,FL080,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:050,2,LUSI7P,ALL,PINIK,LI,E,A,EECH, ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,06000,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:010,2,ODIN8L,ALL,ODINA,LS,E,A,E C , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   ,LSZA,LS,P,A, , , , ;
-STAR:015,2,ODIN8L,ALL,BRL42,LI,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
+STAR:015,2,ODIN8L,ALL,BRL42,LS,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:020,2,ODIN8L,ALL,LUGAN,LS,E,A,E C , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
-STAR:025,2,ODIN8L,ALL,D017T,LI,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
+STAR:025,2,ODIN8L,ALL,D017T,LS,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:030,2,ODIN8L,ALL,CALDO,LS,P,C,EEC , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:010,2,ORI7L,ALL,ORI,LI,D,B,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   ,LSZA,LS,P,A, , , , ;
 STAR:020,2,ORI7L,ALL,BRL,LI,D, ,V   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,FL120,     ,     , ,   ,    ,   , , , , , , , , ;

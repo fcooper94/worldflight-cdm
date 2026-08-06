@@ -1,5 +1,5 @@
 SID:010,4,DUMZU1,RW20, , , , ,    , ,   ,VA, , , , , ,      ,    ,    ,2040,    ,+,00814,     ,18000, ,   ,    ,   ,PANO,PA,P,A, , , , ;
-SID:020,4,DUMZU1,RW20,GIDLE,PA,E,A,E   , ,   ,DF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
+SID:020,4,DUMZU1,RW20,GIDLE,PA,P,C,E   , ,   ,DF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 SID:030,4,DUMZU1,RW20,DUMZU,PA,E,A,EE  , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 APPCH:010,A,R02,FAGIN,FAGIN,PA,E,A,E  A, ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , ,B,J,S;
 APPCH:020,A,R02,FAGIN,ASVIW,PA,E,A,EE B, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,05000,     ,     , ,   ,    ,   , , , , , ,B,J,S;

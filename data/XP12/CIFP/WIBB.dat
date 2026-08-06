@@ -399,8 +399,8 @@ STAR:040,5,OSNI1L,RW18,SUDLO,WI,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,   
 STAR:050,5,OSNI1L,RW18,EMTOL,WI,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:060,5,OSNI1L,RW18,EPKEX,WI,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,FL170,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:070,5,OSNI1L,RW18,EPKIS,WI,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
-STAR:080,5,OSNI1L,RW18,JERVE,WI,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,09000,     ,     , ,   ,    ,   , , , , , , , , ;
-STAR:090,5,OSNI1L,RW18,TOCEF,WI,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
+STAR:080,5,OSNI1L,RW18,DONDI,WI,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,09000,     ,     , ,   ,    ,   , , , , , , , , ;
+STAR:090,5,OSNI1L,RW18,BIGNI,WI,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:100,5,OSNI1L,RW18,IGPUT,WI,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:110,5,OSNI1L,RW18,OTKEG,WI,P,C,EE H, ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,03000,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:010,5,OSNI1M,RW36,OSNIS,WI,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,13000, ,   ,    ,   ,WIBB,WI,P,A, , , , ;

@@ -47,7 +47,7 @@ SID:040,3,MORIZ5,ALPUS,MUGEN,RJ,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,   
 SID:050,3,MORIZ5,ALPUS,ALPUS,RJ,E,A,EE  , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 SID:010,3,MORIZ5,CHAUS,MORIZ,RJ,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,07000,     ,14000, ,   ,    ,   , , , , , , , , ;
 SID:030,3,MORIZ5,CHAUS,TSUGU,RJ,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
-SID:040,3,MORIZ5,CHAUS,CHAUS,RJ,E,A,EE  , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,FL150,     ,     , ,   ,    ,   , , , , , , , , ;
+SID:040,3,MORIZ5,CHAUS,CHAUS,RJ,E,A,EE  , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,FL190,     ,     , ,   ,    ,   , , , , , , , , ;
 SID:010,3,MORIZ5,LHT,MORIZ,RJ,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,07000,     ,14000, ,   ,    ,   , , , , , , , , ;
 SID:020,3,MORIZ5,LHT,LHT,RJ,D, ,VE  , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 SID:010,3,MORIZ5,SHIMA,MORIZ,RJ,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,07000,     ,14000, ,   ,    ,   , , , , , , , , ;

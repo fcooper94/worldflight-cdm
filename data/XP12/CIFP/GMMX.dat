@@ -115,7 +115,7 @@ STAR:020,5,MOKI3A,RW10,NAPOV,GM,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,   
 STAR:030,5,MOKI3A,RW10,SIVSO,GM,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:040,5,MOKI3A,RW10,ODALO,GM,P,C,EECH, ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:010,5,MOKI4A,RW28,MOKIR,GM,E,A,E C , ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,13000,     ,     , ,   ,    ,   ,MAK,GM,D, , , , , ;
-STAR:020,5,MOKI4A,RW28,MX291,DA,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
+STAR:020,5,MOKI4A,RW28,MX291,GM,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:030,5,MOKI4A,RW28,MX287,GM,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:040,5,MOKI4A,RW28,MX285,GM,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:050,5,MOKI4A,RW28,RAMIM,GM,P,C,EB H, ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;

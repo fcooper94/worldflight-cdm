@@ -1,16 +1,3 @@
-APPCH:010,A,NDBA,LDN,LDN,K6,D, ,V   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , ,0, ,C;
-APPCH:020,A,NDBA,LDN,LUA,K6,D,B,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,05700,     ,     , ,   ,    ,   , , , , , ,0, ,C;
-APPCH:030,A,NDBA,LDN,LUA,K6,D,B,E  A,R,   ,PI, ,DCA,K6,D, ,      ,2713,0681,3580,0100,+,05000,     ,     , ,   ,    ,   , , , , , ,0, ,C;
-APPCH:040,A,NDBA,LDN,LUA,K6,D,B,EE  , ,   ,CF, ,DCA,K6,D, ,      ,2713,0681,2230,0080,+,03200,     ,     , ,   ,    ,   , , , , , ,0, ,C;
-APPCH:010,A,NDBA,LURAY,LURAY,K6,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , ,0, ,C;
-APPCH:020,A,NDBA,LURAY,LUA,K6,D,B,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,05400,     ,     , ,   ,    ,   , , , , , ,0, ,C;
-APPCH:030,A,NDBA,LURAY,LUA,K6,D,B,E  A,R,   ,PI, ,DCA,K6,D, ,      ,2713,0681,3580,0100,+,05000,     ,     , ,   ,    ,   , , , , , ,0, ,C;
-APPCH:040,A,NDBA,LURAY,LUA,K6,D,B,EE  , ,   ,CF, ,DCA,K6,D, ,      ,2713,0681,2230,0080,+,03200,     ,     , ,   ,    ,   , , , , , ,0, ,C;
-APPCH:020,N,NDBA, ,LUA,K6,D,B,E  F, ,   ,IF, ,LUA,K6,D,B,      ,    ,    ,    ,    ,+,03200,     ,18000, ,   ,    ,   ,LUA,K6,D,B, ,0, ,C;
-APPCH:030,N,NDBA, ,MN224,K6,P,C,E  M, ,   ,CF, ,LUA,K6,D,B,      ,    ,    ,2230,0021, ,00942,     ,     , ,   ,-999,   , , , , , ,0, ,C;
-APPCH:040,N,NDBA, , , , , ,  M , ,   ,CA, , , , , ,      ,    ,    ,2230,    ,+,02900,     ,     , ,   ,    ,   , , , , , ,0, ,C;
-APPCH:050,N,NDBA, ,LUA,K6,D,B,E   ,L,   ,DF, , , , , ,      ,    ,    ,    ,    ,+,05000,     ,     , ,   ,    ,   , , , , , ,0, ,C;
-APPCH:060,N,NDBA, ,LUA,K6,D,B,EE H,R,   ,HM, , , , , ,      ,    ,    ,2230,T010,+,05000,     ,     , ,   ,    ,   , , , , , ,0, ,C;
 APPCH:010,A,R04,CEROL,CEROL,K6,E,A,E  A, ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , ,A,J,S;
 APPCH:020,A,R04,CEROL,IMIYU,K6,P,C,EE B, ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,05000,     ,     , ,   ,    ,   , , , , , ,A,J,S;
 APPCH:010,A,R04,ZEDPA,ZEDPA,K6,E,A,E  A, ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , ,A,J,S;

@@ -1,12 +1,2 @@
-APPCH:010,A,RNVA,DUXOK,DUXOK,CY,P,C,E  A, ,010,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000,-,140,    ,   , , , , , ,B,J,C;
-APPCH:020,A,RNVA,DUXOK,VEVDA,CY,P,C,EE B, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,06200,     ,     ,-,140,    ,   , , , , , ,B,J,C;
-APPCH:010,A,RNVA,KANEB,KANEB,CY,P,C,E  A, ,010,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000,-,140,    ,   , , , , , ,B,J,C;
-APPCH:020,A,RNVA,KANEB,VEVDA,CY,P,C,EE B, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,06300,     ,     ,-,140,    ,   , , , , , ,B,J,C;
-APPCH:010,R,RNVA, ,VEVDA,CY,P,C,E  I, ,010,IF, , , , , ,      ,    ,    ,    ,    ,+,06200,     ,18000,-,140,    ,   , , , , , ,B,J,C;
-APPCH:020,R,RNVA, ,ERBAG,CY,P,C,E  F, ,010,TF, , , , , ,      ,    ,    ,2350,0060,+,06000,     ,     , ,   ,    ,   ,CAD5,CY,P,A, ,B,J,C;
-APPCH:025,R,RNVA, ,AGNIV,CY,P,C,E S , ,302,TF, , , , , ,      ,    ,    ,2350,0028,+,05540,     ,     , ,   ,    ,   , , , , , ,B,J,C;
-APPCH:030,R,RNVA, ,KOBEG,CY,P,C,EY M, ,302,TF, , , , , ,      ,    ,    ,2350,0023, ,05300,     ,     , ,   , 000,   , , , , , ,B,J,C;
-APPCH:040,R,RNVA, ,MEBEV,CY,P,C,EYM , ,010,TF, , , , , ,      ,    ,    ,    ,    , ,07300,     ,     , ,   ,    ,   , , , , , ,B,J,C;
-APPCH:050,R,RNVA, ,MEBEV,CY,P,C,EE H,R,010,HM, , , , , ,      ,    ,    ,2350,T010, ,     ,     ,     ,-,265,    ,   , , , , , ,B,J,C;
 RWY:RW03 ,     ,      ,02040, ,    , ,   ;N50070943,W120450564,0000;
 RWY:RW21 ,-1120,      ,02085, ,    , ,   ;N50073513,W120441899,0000;

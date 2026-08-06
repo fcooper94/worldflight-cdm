@@ -28,7 +28,7 @@ STAR:010,4,SLOAO1,MATLK,MATLK,K7,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,  
 STAR:020,4,SLOAO1,MATLK,SLOAO,K7,E,A,EE  , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,06000,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:010,5,SLOAO1,ALL,SLOAO,K7,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,06000,     ,18000, ,   ,    ,   , , , , , , , , ;
 STAR:020,5,SLOAO1,ALL,DORMS,K7,E,A,EY  , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
-STAR:040,5,SLOAO1,ALL,DORMS,K7,E,A,EE  , ,   ,FM, ,SGJ,K7,D, ,      ,1794,1121,0150,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
+STAR:040,5,SLOAO1,ALL,DORMS,K7,E,A,EE  , ,   ,FM, ,SAV,K7,D, ,      ,1846,2425,0150,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 APPCH:010,A,R11,MALET,MALET,K7,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , ,A,J,S;
 APPCH:020,A,R11,MALET,PALCY,K7,P,C,E  A, ,020,TF, , , , , ,      ,    ,    ,    ,    ,+,02000,     ,     , ,   ,    ,   , , , , , ,A,J,S;
 APPCH:030,A,R11,MALET,LOUSA,K7,P,C,EE B, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,02000,     ,     , ,   ,    ,   , , , , , ,A,J,S;

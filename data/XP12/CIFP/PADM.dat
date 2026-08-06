@@ -1,7 +1,7 @@
-SID:010,4,BIBNE3,RW07,EPUTE,PA,E,A,EY  , ,   ,DF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , , , , ;
-SID:020,4,BIBNE3,RW07,CAGUL,PA,E,A,EY  , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
+SID:010,4,BIBNE3,RW07,EPUTE,PA,P,C,EY  , ,   ,DF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , , , , ;
+SID:020,4,BIBNE3,RW07,CAGUL,PA,P,C,EY  , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 SID:040,4,BIBNE3,RW07,BIBNE,PA,E,A,EE  ,R,   ,DF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
-SID:010,4,BIBNE3,RW25,CATLU,PA,E,A,EY  , ,   ,DF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , , , , ;
+SID:010,4,BIBNE3,RW25,CATLU,PA,P,C,EY  , ,   ,DF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , , , , ;
 SID:020,4,BIBNE3,RW25,BIBNE,PA,E,A,EE  , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 APPCH:010,A,R07,ANESE,ANESE,PA,E,A,E  A, ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , ,A,J,S;
 APPCH:020,A,R07,ANESE,CEGOT,PA,P,C,EE B, ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,02000,     ,     , ,   ,    ,   , , , , , ,A,J,S;

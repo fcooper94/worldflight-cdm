@@ -3,7 +3,7 @@ APPCH:020,A,R18,HASAM,UBVED,CY,P,C,EE B, ,010,TF, , , , , ,      ,    ,    ,    
 APPCH:010,A,R18,ILORU,ILORU,CY,P,C,E  A, ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000,-,210,    ,   , , , , , ,A,J,S;
 APPCH:020,A,R18,ILORU,UBVED,CY,P,C,EE B, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,02500,     ,     ,-,180,    ,   , , , , , ,A,J,S;
 APPCH:010,R,R18, ,UBVED,CY,P,C,E  D, ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,02500,     ,18000,-,180,    ,   , , , , , ,A,J,S;
-APPCH:020,R,R18, ,PUPUM,CY,P,C,E  F, ,010,TF, , , , , ,      ,    ,    ,1740,0060,+,02500,     ,     , ,   ,    ,   ,RW18,CY,P,G, ,A,J,S;
+APPCH:020,R,R18, ,PUPUM,CY,P,C,E  F, ,010,TF, , , , , ,      ,    ,    ,1740,0060,+,02500,     ,     , ,   ,    ,   , , , , , ,A,J,S;
 PRDAT:A,       LPV, ,          ,A,      LNAV, ,   , ,   , ,   , ,   ,J,S;
 APPCH:025,R,R18, ,XOVBI,CY,P,C,E S , ,302,TF, , , , , ,      ,    ,    ,1740,0030,+,01510,     ,     , ,   ,-300,   , , , , , ,A,J,S;
 APPCH:030,R,R18, ,RW18,CY,P,G,GY M, ,302,TF, , , , , ,      ,    ,    ,1740,0022, ,00810,     ,     , ,   ,-300,   , , , , , ,A,J,S;
@@ -14,7 +14,7 @@ APPCH:020,A,R36,MUTEK,OMLOX,CY,P,C,EE B, ,010,TF, , , , , ,      ,    ,    ,    
 APPCH:010,A,R36,SEVGI,SEVGI,CY,P,C,E  A, ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000,-,210,    ,   , , , , , ,A,J,S;
 APPCH:020,A,R36,SEVGI,OMLOX,CY,P,C,EE B, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,02500,     ,     ,-,180,    ,   , , , , , ,A,J,S;
 APPCH:010,R,R36, ,OMLOX,CY,P,C,E  D, ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,02500,     ,18000,-,180,    ,   , , , , , ,A,J,S;
-APPCH:020,R,R36, ,DUXAN,CY,P,C,E  F, ,010,TF, , , , , ,      ,    ,    ,3540,0060,+,02500,     ,     , ,   ,    ,   ,RW36,CY,P,G, ,A,J,S;
+APPCH:020,R,R36, ,DUXAN,CY,P,C,E  F, ,010,TF, , , , , ,      ,    ,    ,3540,0060,+,02500,     ,     , ,   ,    ,   , , , , , ,A,J,S;
 PRDAT:A,       LPV, ,          ,A,      LNAV, ,   , ,   , ,   , ,   ,J,S;
 APPCH:030,R,R36, ,RW36,CY,P,G,GY M, ,302,TF, , , , , ,      ,    ,    ,3540,0052, ,00823,     ,     , ,   ,-300,   , , , , , ,A,J,S;
 APPCH:040,R,R36, ,ETBUP,CY,P,C,EYM , ,010,TF, , , , , ,      ,    ,    ,    ,    , ,02600,     ,     , ,   ,    ,   , , , , , ,A,J,S;

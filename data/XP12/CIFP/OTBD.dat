@@ -2,7 +2,7 @@ SID:010,5,ALSE4N,RW33,SILSU,OT,P,C,EY  , ,010,CF, ,DIA,OT,D, ,      ,3352,0051,3
 SID:020,5,ALSE4N,RW33,ULDOR,OT,P,C,EY  , ,010,CF, ,DIA,OT,D, ,      ,3192,0103,3050,0056,+,02500,     ,     ,-,210,    ,   , , , , , , , , ;
 SID:030,5,ALSE4N,RW33,KIPIK,OT,E,A,E   ,L,010,DF, , , , , ,      ,    ,    ,    ,    , ,05000,     ,     ,-,230,    ,   , , , , , , , , ;
 SID:040,5,ALSE4N,RW33,EGMED,OT,E,A,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     ,-,250,    ,   , , , , , , , , ;
-SID:050,5,ALSE4N,RW33,SUVMA,OB,P,C,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
+SID:050,5,ALSE4N,RW33,SUVMA,OT,P,C,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 SID:060,5,ALSE4N,RW33,GOBLU,OB,E,A,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 SID:070,5,ALSE4N,RW33,ALSEM,OT,E,A,EE  , ,010,TF, , , , , ,      ,    ,    ,    ,    ,-,FL210,     ,     , ,   ,    ,   , , , , , , , , ;
 SID:010,5,ALSE4S,RW15,EMORA,OT,P,C,EY  , ,010,CF, ,DIA,OT,D, ,      ,1552,0016,1560,0020, ,     ,     ,13000, ,   ,    ,   ,OTBD,OT,P,A, , , , ;
@@ -76,7 +76,7 @@ SID:030,5,KUPR2S,RW15,PURIN,OT,E,A,E   , ,010,DF, , , , , ,      ,    ,    ,    
 SID:040,5,KUPR2S,RW15,KUTER,OT,E,A,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    , ,06000,     ,     ,-,230,    ,   , , , , , , , , ;
 SID:050,5,KUPR2S,RW15,GIRKA,OT,E,A,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,10000,     ,     , ,   ,    ,   , , , , , , , , ;
 SID:060,5,KUPR2S,RW15,KOBAT,OT,P,C,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,13000,     ,     , ,   ,    ,   , , , , , , , , ;
-SID:070,5,KUPR2S,RW15,ITIBA,OB,P,C,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
+SID:070,5,KUPR2S,RW15,ITIBA,OT,P,C,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 SID:080,5,KUPR2S,RW15,KASIS,OT,E,A,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 SID:090,5,KUPR2S,RW15,LOTUM,OB,E,A,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 SID:100,5,KUPR2S,RW15,KUPRO,OM,E,A,EE  , ,010,TF, , , , , ,      ,    ,    ,    ,    ,-,FL250,     ,     , ,   ,    ,   , , , , , , , , ;
@@ -156,7 +156,7 @@ SID:010,5,VAXI4N,RW33,SILSU,OT,P,C,EY  , ,010,CF, ,DIA,OT,D, ,      ,3352,0051,3
 SID:020,5,VAXI4N,RW33,ULDOR,OT,P,C,EY  , ,010,CF, ,DIA,OT,D, ,      ,3192,0103,3050,0056,+,02500,     ,     ,-,210,    ,   , , , , , , , , ;
 SID:030,5,VAXI4N,RW33,KIPIK,OT,E,A,E   ,L,010,DF, , , , , ,      ,    ,    ,    ,    , ,05000,     ,     ,-,230,    ,   , , , , , , , , ;
 SID:040,5,VAXI4N,RW33,EGMED,OT,E,A,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     ,-,250,    ,   , , , , , , , , ;
-SID:050,5,VAXI4N,RW33,SUVMA,OB,P,C,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
+SID:050,5,VAXI4N,RW33,SUVMA,OT,P,C,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 SID:060,5,VAXI4N,RW33,GOBLU,OB,E,A,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 SID:070,5,VAXI4N,RW33,VAXIN,OT,E,A,EE  , ,010,TF, , , , , ,      ,    ,    ,    ,    ,-,FL150,     ,     , ,   ,    ,   , , , , , , , , ;
 SID:010,5,VAXI4S,RW15,EMORA,OT,P,C,EY  , ,010,CF, ,DIA,OT,D, ,      ,1552,0016,1560,0020, ,     ,     ,13000, ,   ,    ,   ,OTBD,OT,P,A, , , , ;
@@ -523,7 +523,7 @@ STAR:130,5,TOSN2L,RW33,SOMAP,OT,E,A,E   , ,010,TF, , , , , ,      ,    ,    ,   
 STAR:140,5,TOSN2L,RW33,PURIN,OT,E,A,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:150,5,TOSN2L,RW33,DASIK,OT,E,A,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    ,B,04500,03500,     ,-,220,    ,   , , , , , , , , ;
 STAR:160,5,TOSN2L,RW33,DASIK,OT,E,A,EE  , ,010,FM, ,DIA,OT,D, ,      ,1747,0149,1560,    , ,     ,     ,     ,-,220,    ,   , , , , , , , , ;
-STAR:010,5,TOVO1P,RW15,TOVOX,OB,E,A,E   , ,010,IF, , , , , ,      ,    ,    ,    ,    , ,FL180,     ,15000, ,   ,    ,   ,OTBD,OT,P,A, , , , ;
+STAR:010,5,TOVO1P,RW15,TOVOX,OM,E,A,E   , ,010,IF, , , , , ,      ,    ,    ,    ,    , ,FL180,     ,15000, ,   ,    ,   ,OTBD,OT,P,A, , , , ;
 STAR:020,5,TOVO1P,RW15,DINEX,OB,E,A,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:030,5,TOVO1P,RW15,KIVAM,OB,E,A,E  H, ,010,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:040,5,TOVO1P,RW15,UKOBA,OB,E,A,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    , ,11000,     ,     , ,   ,    ,   , , , , , , , , ;
@@ -535,7 +535,7 @@ STAR:090,5,TOVO1P,RW15,PUTAN,OT,E,A,E   , ,010,TF, , , , , ,      ,    ,    ,   
 STAR:100,5,TOVO1P,RW15,IVANI,OT,E,A,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,04500,     ,     ,-,220,    ,   , , , , , , , , ;
 STAR:110,5,TOVO1P,RW15,IMGOG,OT,E,A,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:120,5,TOVO1P,RW15,IMGOG,OT,E,A,EE  , ,010,FM, ,DIA,OT,D, ,      ,3545,0242,3360,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
-STAR:010,5,TOVO1R,RW33,TOVOX,OB,E,A,E   , ,010,IF, , , , , ,      ,    ,    ,    ,    , ,FL180,     ,15000, ,   ,    ,   ,OTBD,OT,P,A, , , , ;
+STAR:010,5,TOVO1R,RW33,TOVOX,OM,E,A,E   , ,010,IF, , , , , ,      ,    ,    ,    ,    , ,FL180,     ,15000, ,   ,    ,   ,OTBD,OT,P,A, , , , ;
 STAR:020,5,TOVO1R,RW33,DINEX,OB,E,A,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:030,5,TOVO1R,RW33,KIVAM,OB,E,A,E  H, ,010,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     ,-,250,    ,   , , , , , , , , ;
 STAR:040,5,TOVO1R,RW33,AFNAN,OT,E,A,E  H, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,11000,     ,     , ,   ,    ,   , , , , , , , , ;
@@ -548,7 +548,7 @@ STAR:100,5,TOVO1R,RW33,SIDMU,OB,E,A,E   , ,010,TF, , , , , ,      ,    ,    ,   
 STAR:110,5,TOVO1R,RW33,LOVAN,OB,E,A,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:120,5,TOVO1R,RW33,MUXED,OT,E,A,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,04500,     ,     ,-,220,    ,   , , , , , , , , ;
 STAR:130,5,TOVO1R,RW33,MUXED,OT,E,A,EE  , ,010,FM, ,DOH,OT,D, ,      ,1324,0155,1560,    ,+,04500,     ,     ,-,220,    ,   , , , , , , , , ;
-STAR:010,5,TOVO2F,RW15,TOVOX,OB,E,A,E   , ,010,IF, , , , , ,      ,    ,    ,    ,    , ,FL180,     ,15000, ,   ,    ,   ,OTBD,OT,P,A, , , , ;
+STAR:010,5,TOVO2F,RW15,TOVOX,OM,E,A,E   , ,010,IF, , , , , ,      ,    ,    ,    ,    , ,FL180,     ,15000, ,   ,    ,   ,OTBD,OT,P,A, , , , ;
 STAR:020,5,TOVO2F,RW15,DINEX,OB,E,A,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:030,5,TOVO2F,RW15,KIVAM,OB,E,A,E  H, ,010,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:040,5,TOVO2F,RW15,IMTAL,OB,E,A,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
@@ -562,7 +562,7 @@ STAR:110,5,TOVO2F,RW15,NOKTO,OT,E,A,E   , ,010,TF, , , , , ,      ,    ,    ,   
 STAR:120,5,TOVO2F,RW15,LOSEN,OT,E,A,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:130,5,TOVO2F,RW15,KATED,OT,E,A,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    ,B,04500,03500,     ,-,220,    ,   , , , , , , , , ;
 STAR:140,5,TOVO2F,RW15,KATED,OT,E,A,EE  , ,010,FM, ,DIA,OT,D, ,      ,3189,0179,3350,    , ,     ,     ,     ,-,220,    ,   , , , , , , , , ;
-STAR:010,5,TOVO2L,RW33,TOVOX,OB,E,A,E   , ,010,IF, , , , , ,      ,    ,    ,    ,    , ,FL180,     ,15000, ,   ,    ,   ,OTBD,OT,P,A, , , , ;
+STAR:010,5,TOVO2L,RW33,TOVOX,OM,E,A,E   , ,010,IF, , , , , ,      ,    ,    ,    ,    , ,FL180,     ,15000, ,   ,    ,   ,OTBD,OT,P,A, , , , ;
 STAR:020,5,TOVO2L,RW33,DINEX,OB,E,A,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:030,5,TOVO2L,RW33,KIVAM,OB,E,A,E  H, ,010,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:040,5,TOVO2L,RW33,IMTAL,OB,E,A,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
@@ -684,13 +684,13 @@ APPCH:020,A,I15,MAXMO,SOBOM,OT,P,C,E   , ,   ,CF, ,DIA,OT,D, ,      ,3352,0144,1
 APPCH:030,A,I15,MAXMO,LUGAM,OT,P,C,EE  , ,   ,CF, ,AMD,OT,P,I,      ,3352,0114,1560,0027,+,03500,     ,     , ,   ,    ,   , , , , , ,0,D,S;
 APPCH:010,I,I15, ,LUGAM,OT,P,C,E  I, ,   ,IF, ,AMD,OT,P,I,      ,3352,0114,    ,    ,J,03500,02500,15000, ,   ,    ,   , , , , , ,0,D,S;
 APPCH:020,I,I15, ,BD411,OT,P,C,E  F, ,   ,CF, ,AMD,OT,P,I,      ,3352,0088,1560,0027,H,02500,02500,     , ,   ,-350,   ,DIA,OT,D, ,B,0,D,S;
-APPCH:030,I,I15, ,RW15,OT,P,G,G  M, ,   ,CF, ,AMD,OT,P,I,      ,3352,0023,1560,0065, ,00095,     ,     , ,   ,-350,   , , , , , ,0,D,S;
+APPCH:030,I,I15, ,RW15,OT,P,G,G  M, ,   ,CF, ,AMD,OT,P,I,      ,3351,0023,1560,0065, ,00095,     ,     , ,   ,-350,   , , , , , ,0,D,S;
 APPCH:040,I,I15, ,D155B,OT,P,C,EYM , ,   ,CF, ,DIA,OT,D, ,      ,1552,0015,1560,0041, ,     ,     ,     , ,   ,    ,   , , , , , ,0,D,S;
 APPCH:050,I,I15, , , , , ,    , ,   ,CI, , , , , ,      ,    ,    ,2440,    , ,     ,     ,     ,-,200,    ,   , , , , , ,0,D,S;
 APPCH:060,I,I15, ,BD412,OT,P,C,EE  , ,   ,CF, ,DIA,OT,D, ,      ,2034,0100,2040,0050, ,04000,     ,     , ,   ,    ,   , , , , , ,0,D,S;
 APPCH:010,A,I33,NAJMA,NAJMA,OT,P,C,E  B, ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,04500,     ,15000, ,   ,    ,   , , , , , ,0,D,S;
-APPCH:020,A,I33,NAJMA,RAMPO,OB,P,C,EE  , ,   ,CF, ,IBD,OT,P,I,      ,1552,0134,3360,0038,+,03500,     ,     , ,   ,    ,   , , , , , ,0,D,S;
-APPCH:010,I,I33, ,RAMPO,OB,P,C,E  I, ,   ,IF, ,IBD,OT,P,I,      ,1552,0134,    ,    ,J,03500,02500,15000, ,   ,    ,   , , , , , ,0,D,S;
+APPCH:020,A,I33,NAJMA,RAMPO,OT,P,C,EE  , ,   ,CF, ,IBD,OT,P,I,      ,1552,0134,3360,0038,+,03500,     ,     , ,   ,    ,   , , , , , ,0,D,S;
+APPCH:010,I,I33, ,RAMPO,OT,P,C,E  I, ,   ,IF, ,IBD,OT,P,I,      ,1552,0134,    ,    ,J,03500,02500,15000, ,   ,    ,   , , , , , ,0,D,S;
 APPCH:020,I,I33, ,BD711,OT,P,C,E  F, ,   ,CF, ,IBD,OT,P,I,      ,1552,0102,3360,0031,H,02500,02500,     , ,   ,-300,   ,DIA,OT,D, ,B,0,D,S;
 APPCH:030,I,I33, ,RW33,OT,P,G,G  M, ,   ,CF, ,IBD,OT,P,I,      ,1551,0026,3360,0076, ,00079,     ,     , ,   ,-300,   , , , , , ,0,D,S;
 APPCH:040,I,I33, ,D335F,OT,P,C,EYM , ,   ,CF, ,DIA,OT,D, ,      ,3352,0055,3360,0050,+,01500,     ,     , ,   ,    ,   , , , , , ,0,D,S;

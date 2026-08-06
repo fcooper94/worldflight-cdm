@@ -178,10 +178,10 @@ STAR:010,5,AKAM1G,RW29,AKAMO,NZ,P,C,E  H, ,   ,IF, , , , , ,      ,    ,    ,   
 STAR:020,5,AKAM1G,RW29,IDUBU,NZ,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,05000,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:030,5,AKAM1G,RW29,SUPSO,NZ,P,C,EE  , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,04000,     ,     ,-,210,    ,   , , , , , , , , ;
 STAR:010,4,AVNO1E,IGEGA,IGEGA,NZ,E,A,E  H, ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,11000,     ,15000, ,   ,    ,   ,NZCH,NZ,P,A, , , , ;
-STAR:020,4,AVNO1E,IGEGA,CH412,NZ,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,08000,     ,     , ,   ,    ,   , , , , , , , , ;
+STAR:020,4,AVNO1E,IGEGA,CH412,NZ,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:030,4,AVNO1E,IGEGA,AVNOP,NZ,P,C,EE H, ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,06000,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:010,4,AVNO1E,IPRAK,IPRAK,NZ,E,A,E  H, ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,11000,     ,15000, ,   ,    ,   ,NZCH,NZ,P,A, , , , ;
-STAR:020,4,AVNO1E,IPRAK,UPVES,NZ,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,08000,     ,     , ,   ,    ,   , , , , , , , , ;
+STAR:020,4,AVNO1E,IPRAK,UPVES,NZ,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:030,4,AVNO1E,IPRAK,AVNOP,NZ,P,C,EE H, ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,06000,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:010,4,AVNO1E,KIDAL,KIDAL,NZ,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,13000,     ,15000, ,   ,    ,   ,NZCH,NZ,P,A, , , , ;
 STAR:020,4,AVNO1E,KIDAL,CH413,NZ,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,10000,     ,     , ,   ,    ,   , , , , , , , , ;
@@ -189,10 +189,10 @@ STAR:030,4,AVNO1E,KIDAL,AVNOP,NZ,P,C,EE H, ,   ,TF, , , , , ,      ,    ,    ,  
 STAR:010,5,AVNO1E,RW02,AVNOP,NZ,P,C,E  H, ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,06000,     ,15000, ,   ,    ,   ,NZCH,NZ,P,A, , , , ;
 STAR:020,5,AVNO1E,RW02,ERVAX,NZ,E,A,EE  , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,04000,     ,     ,-,210,    ,   , , , , , , , , ;
 STAR:010,4,AVNO2A,IGEGA,IGEGA,NZ,E,A,E  H, ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,11000,     ,15000, ,   ,    ,   ,NZCH,NZ,P,A, , , , ;
-STAR:020,4,AVNO2A,IGEGA,CH412,NZ,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,08000,     ,     , ,   ,    ,   , , , , , , , , ;
+STAR:020,4,AVNO2A,IGEGA,CH412,NZ,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:030,4,AVNO2A,IGEGA,AVNOP,NZ,P,C,EE H, ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,06000,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:010,4,AVNO2A,IPRAK,IPRAK,NZ,E,A,E  H, ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,11000,     ,15000, ,   ,    ,   ,NZCH,NZ,P,A, , , , ;
-STAR:020,4,AVNO2A,IPRAK,UPVES,NZ,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,08000,     ,     , ,   ,    ,   , , , , , , , , ;
+STAR:020,4,AVNO2A,IPRAK,UPVES,NZ,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:030,4,AVNO2A,IPRAK,AVNOP,NZ,P,C,EE H, ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,06000,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:010,4,AVNO2A,KIDAL,KIDAL,NZ,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,13000,     ,15000, ,   ,    ,   ,NZCH,NZ,P,A, , , , ;
 STAR:020,4,AVNO2A,KIDAL,CH413,NZ,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,10000,     ,     , ,   ,    ,   , , , , , , , , ;

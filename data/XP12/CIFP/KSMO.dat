@@ -126,7 +126,7 @@ SID:060,6,CTRUS4,STOKD,SPLNT,K2,E,A,E  H, ,   ,TF, , , , , ,      ,    ,    ,   
 SID:070,6,CTRUS4,STOKD,STOKD,K2,E,A,EE  , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 SID:010,5,PEVEE6,RW21, , , , ,    , ,   ,VI, , , , , ,      ,    ,    ,2130,    , ,     ,     ,18000, ,   ,    ,   , , , , , , , , ;
 SID:020,5,PEVEE6,RW21,WRASH,K2,P,C,E   , ,   ,CF, ,TFD,K2,D, ,      ,2711,3418,2600,0057, ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
-SID:030,5,PEVEE6,RW21,PEEER,K2,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
+SID:030,5,PEVEE6,RW21,PEEER,K2,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 SID:040,5,PEVEE6,RW21,SPRRW,K2,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 SID:050,5,PEVEE6,RW21,PEVEE,K2,E,A,EE  , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 SID:010,6,PEVEE6,CLEEE,PEVEE,K2,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , , , , ;

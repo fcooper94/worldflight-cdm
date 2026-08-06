@@ -60,7 +60,7 @@ STAR:040,4,PRICY5,DOZES,PRICY,K7,E,A,EE H, ,   ,TF, , , , , ,      ,    ,    ,  
 STAR:010,5,PRICY5,ALL,PRICY,K7,E,A,E  H, ,   ,IF, , , , , ,      ,    ,    ,    ,    ,B,16000,13000,18000, ,250,    ,   , , , , , , , , ;
 STAR:020,5,PRICY5,ALL,BOCCE,K7,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:030,5,PRICY5,ALL,OTKEE,K7,E,A,EY  , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,11000,     ,     , ,   ,    ,   , , , , , , , , ;
-STAR:040,5,PRICY5,ALL,OTKEE,K7,E,A,EE  , ,   ,FM, ,SGJ,K7,D, ,      ,1990,1109,0560,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
+STAR:040,5,PRICY5,ALL,OTKEE,K7,E,A,EE  , ,   ,FM, ,SAV,K7,D, ,      ,1936,2412,0560,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 APPCH:010,A,B27L,MLB,MLB,K7,D, ,V   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , ,0,N,S;
 APPCH:020,A,B27L,MLB,CAPEN,K7,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,01700,     ,     , ,   ,    ,   , , , , , ,0,N,S;
 APPCH:030,A,B27L,MLB,CAPEN,K7,P,C,EE C,L,   ,HF, , , , , ,      ,    ,    ,2740,T010,+,01700,     ,     , ,   ,    ,   , , , , , ,0,N,S;

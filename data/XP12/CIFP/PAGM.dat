@@ -20,7 +20,7 @@ APPCH:020,R,R34, ,KALIX,PA,P,C,E  F, ,010,TF, , , , , ,      ,    ,    ,3300,006
 PRDAT:A,       LPV,A, LNAV/VNAV,A,      LNAV, ,   , ,   , ,   , ,   ,J,S;
 APPCH:030,R,R34, ,RW34,PA,P,G,GY M, ,302,TF, , , , , ,      ,    ,    ,3440,0045, ,00068,     ,     , ,   ,-300,   , , , , , ,A,J,S;
 APPCH:040,R,R34, , , , , ,  M , ,   ,CA, , , , , ,      ,    ,    ,3440,    ,+,00229,     ,     , ,   ,    ,   , , , , , ,A,J,S;
-APPCH:050,R,R34, ,VADUZ,PA,P,C,E   , ,010,DF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , ,A,J,S;
+APPCH:050,R,R34, ,VADUZ,PA,P,C,E   , ,010,DF, , , , , ,      ,    ,    ,    ,    ,+,02500,     ,     , ,   ,    ,   , , , , , ,A,J,S;
 APPCH:060,R,R34, ,ZADOK,PA,P,C,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , ,A,J,S;
 APPCH:070,R,R34, ,EEKAY,PA,E,A,EY  , ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,02500,     ,     , ,   ,    ,   , , , , , ,A,J,S;
 APPCH:080,R,R34, ,EEKAY,PA,E,A,EE H,R,   ,HM, , , , , ,      ,    ,    ,3030,0040, ,     ,     ,     , ,   ,    ,   , , , , , ,A,J,S;

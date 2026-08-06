@@ -12,9 +12,9 @@ APPCH:040,R,R14, ,YDUNH,AY,P,C,E M , ,010,DF, , , , , ,      ,    ,    ,    ,   
 APPCH:050,R,R14, , , , , , E  , ,   ,CA, , , , , ,      ,    ,    ,1300,    ,+,01700,     ,     , ,   ,    ,   , , , , , ,B,J,S;
 APPCH:010,A,R32,YDUSA,YDUSA,AY,P,C,E  A, ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,01700,     ,21000,-,210,    ,   , , , , , ,B,J,S;
 APPCH:020,A,R32,YDUSA,YDUSI,AY,P,C,EE B, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,01700,     ,     , ,   ,    ,   , , , , , ,B,J,S;
-APPCH:010,A,R32,YDUSB,YDUSB,YB,P,C,E  C, ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,01700,     ,21000,-,210,    ,   , , , , , ,B,J,S;
+APPCH:010,A,R32,YDUSB,YDUSB,AY,P,C,E  C, ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,01700,     ,21000,-,210,    ,   , , , , , ,B,J,S;
 APPCH:020,A,R32,YDUSB,YDUSI,AY,P,C,EE B, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,01700,     ,     , ,   ,    ,   , , , , , ,B,J,S;
-APPCH:010,A,R32,YDUSC,YDUSC,YB,P,C,E  A, ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,01700,     ,21000,-,210,    ,   , , , , , ,B,J,S;
+APPCH:010,A,R32,YDUSC,YDUSC,AY,P,C,E  A, ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,01700,     ,21000,-,210,    ,   , , , , , ,B,J,S;
 APPCH:020,A,R32,YDUSC,YDUSI,AY,P,C,EE B, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,01700,     ,     , ,   ,    ,   , , , , , ,B,J,S;
 APPCH:010,R,R32, ,YDUSI,AY,P,C,E  I, ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,01700,     ,21000, ,   ,    ,   , , , , , ,B,J,S;
 APPCH:020,R,R32, ,YDUSF,AY,P,C,E  F, ,010,TF, , , , , ,      ,    ,    ,3100,0050,+,01700,     ,     , ,   ,    ,   ,AYDU,AY,P,A, ,B,J,S;

@@ -22,6 +22,18 @@ APPCH:030,R,R11, ,RW11,PA,P,G,GY M, ,302,TF, , , , , ,      ,    ,    ,1110,0023
 APPCH:040,R,R11, , , , , ,  M , ,   ,CA, , , , , ,      ,    ,    ,1110,    ,+,00600,     ,     , ,   ,    ,   , , , , , ,A,J,S;
 APPCH:050,R,R11, ,OSUCA,PA,P,C,EY  ,R,010,DF, , , , , ,      ,    ,    ,    ,    ,+,03000,     ,     , ,   ,    ,   , , , , , ,A,J,S;
 APPCH:060,R,R11, ,OSUCA,PA,P,C,EE H,R,   ,HM, , , , , ,      ,    ,    ,0210,0040, ,     ,     ,     , ,   ,    ,   , , , , , ,A,J,S;
+APPCH:010,A,R29-M,DIBWO,DIBWO,PA,E,A,E  A, ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , ,A,J,S;
+APPCH:020,A,R29-M,DIBWO,ROAME,PA,P,C,EE B, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,02700,     ,     , ,   ,    ,   , , , , , ,A,J,S;
+APPCH:010,A,R29-M,RANND,RANND,PA,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , ,A,J,S;
+APPCH:020,A,R29-M,RANND,SLOKI,PA,P,C,E  A, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,04800,     ,     , ,   ,    ,   , , , , , ,A,J,S;
+APPCH:030,A,R29-M,RANND,ROAME,PA,P,C,EE B, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,02700,     ,     , ,   ,    ,   , , , , , ,A,J,S;
+APPCH:010,R,R29-M, ,ROAME,PA,P,C,E  I, ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,02700,     ,18000, ,   ,    ,   , , , , , ,A,J,S;
+APPCH:020,R,R29-M, ,VICUS,PA,P,C,E  F, ,010,TF, , , , , ,      ,    ,    ,3110,0050,+,01900,     ,     , ,   ,    ,   ,ZABIX,PA,P,C, ,A,J,S;
+PRDAT:A,        LP, ,          ,A,      LNAV, ,   , ,   , ,   , ,   ,J,S;
+APPCH:030,R,R29-M, ,ZABIX,PA,P,C,EY M, ,302,TF, , , , , ,      ,    ,    ,3110,0038, ,00363,     ,     , ,   ,-377,   , , , , , ,A,J,S;
+APPCH:040,R,R29-M, , , , , ,  M , ,   ,CA, , , , , ,      ,    ,    ,3110,    ,+,00940,     ,     , ,   ,    ,   , , , , , ,A,J,S;
+APPCH:050,R,R29-M, ,DIBWO,PA,E,A,EY  ,L,010,DF, , , , , ,      ,    ,    ,    ,    ,+,04800,     ,     , ,   ,    ,   , , , , , ,A,J,S;
+APPCH:060,R,R29-M, ,DIBWO,PA,E,A,EE H,R,   ,HM, , , , , ,      ,    ,    ,3080,0050,+,04800,     ,     , ,   ,    ,   , , , , , ,A,J,S;
 APPCH:010,A,RNVD,BILBE,BILBE,PA,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , ,B,J,C;
 APPCH:020,A,RNVD,BILBE,HEKEL,PA,P,C,EY  , ,020,TF, , , , , ,      ,    ,    ,    ,    ,+,02000,     ,     , ,   ,    ,   , , , , , ,B,J,C;
 APPCH:030,A,RNVD,BILBE,HEKEL,PA,P,C,EE C,R,   ,HF, , , , , ,      ,    ,    ,0690,0040,+,02000,     ,     , ,   ,    ,   , , , , , ,B,J,C;

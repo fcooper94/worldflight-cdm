@@ -599,7 +599,7 @@ STAR:030,5,ABLI4L,RW28B,LIPGO,EG,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,  
 STAR:040,5,ABLI4L,RW28B,PEKOK,EI,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,FL070,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:050,5,ABLI4L,RW28B,SIVNA,EI,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,FL070,     ,     ,-,220,    ,   , , , , , , , , ;
 STAR:060,5,ABLI4L,RW28B,SUGAD,EI,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,FL070,     ,     ,-,220,    ,   , , , , , , , , ;
-STAR:070,5,ABLI4L,RW28B,DW704,EG,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,FL070,     ,     ,-,220,    ,   , , , , , , , , ;
+STAR:070,5,ABLI4L,RW28B,DW704,EI,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,FL070,     ,     ,-,220,    ,   , , , , , , , , ;
 STAR:080,5,ABLI4L,RW28B,DW705,EI,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,FL070,     ,     ,-,220,    ,   , , , , , , , , ;
 STAR:090,5,ABLI4L,RW28B,DW706,EI,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,FL070,     ,     ,-,220,    ,   , , , , , , , , ;
 STAR:110,5,ABLI4L,RW28B,PIZSA,EI,P,C,EE  ,L,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,03000,     ,     ,-,220,    ,   , , , , , , , , ;
@@ -698,7 +698,7 @@ STAR:040,5,BUNE4L,RW28B,ARVOK,EI,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,  
 STAR:050,5,BUNE4L,RW28B,SORIN,EI,E,A,E  H, ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,FL070,     ,     ,-,220,    ,   , , , , , , , , ;
 STAR:060,5,BUNE4L,RW28B,SIVNA,EI,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,FL070,     ,     ,-,220,    ,   , , , , , , , , ;
 STAR:070,5,BUNE4L,RW28B,SUGAD,EI,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,FL070,     ,     ,-,220,    ,   , , , , , , , , ;
-STAR:080,5,BUNE4L,RW28B,DW704,EG,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,FL070,     ,     ,-,220,    ,   , , , , , , , , ;
+STAR:080,5,BUNE4L,RW28B,DW704,EI,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,FL070,     ,     ,-,220,    ,   , , , , , , , , ;
 STAR:090,5,BUNE4L,RW28B,DW705,EI,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,FL070,     ,     ,-,220,    ,   , , , , , , , , ;
 STAR:100,5,BUNE4L,RW28B,DW706,EI,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,FL070,     ,     ,-,220,    ,   , , , , , , , , ;
 STAR:120,5,BUNE4L,RW28B,PIZSA,EI,P,C,EE  ,L,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,03000,     ,     ,-,220,    ,   , , , , , , , , ;
@@ -752,7 +752,7 @@ STAR:015,5,NIRI1L,RW28B,DW100,EI,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,  
 STAR:020,5,NIRI1L,RW28B,SORIN,EI,E,A,E  H, ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,FL070,     ,     ,-,220,    ,   , , , , , , , , ;
 STAR:030,5,NIRI1L,RW28B,SIVNA,EI,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,FL070,     ,     ,-,220,    ,   , , , , , , , , ;
 STAR:040,5,NIRI1L,RW28B,SUGAD,EI,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,FL070,     ,     ,-,220,    ,   , , , , , , , , ;
-STAR:050,5,NIRI1L,RW28B,DW704,EG,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,FL070,     ,     ,-,220,    ,   , , , , , , , , ;
+STAR:050,5,NIRI1L,RW28B,DW704,EI,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,FL070,     ,     ,-,220,    ,   , , , , , , , , ;
 STAR:060,5,NIRI1L,RW28B,DW705,EI,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,FL070,     ,     ,-,220,    ,   , , , , , , , , ;
 STAR:070,5,NIRI1L,RW28B,DW706,EI,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,FL070,     ,     ,-,220,    ,   , , , , , , , , ;
 STAR:090,5,NIRI1L,RW28B,PIZSA,EI,P,C,EE  ,L,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,03000,     ,     ,-,220,    ,   , , , , , , , , ;
@@ -820,7 +820,7 @@ STAR:040,5,OSGA4L,RW28B,ARVOK,EI,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,  
 STAR:050,5,OSGA4L,RW28B,SORIN,EI,E,A,E  H, ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,FL070,     ,     ,-,220,    ,   , , , , , , , , ;
 STAR:060,5,OSGA4L,RW28B,SIVNA,EI,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,FL070,     ,     ,-,220,    ,   , , , , , , , , ;
 STAR:070,5,OSGA4L,RW28B,SUGAD,EI,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,FL070,     ,     ,-,220,    ,   , , , , , , , , ;
-STAR:080,5,OSGA4L,RW28B,DW704,EG,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,FL070,     ,     ,-,220,    ,   , , , , , , , , ;
+STAR:080,5,OSGA4L,RW28B,DW704,EI,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,FL070,     ,     ,-,220,    ,   , , , , , , , , ;
 STAR:090,5,OSGA4L,RW28B,DW705,EI,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,FL070,     ,     ,-,220,    ,   , , , , , , , , ;
 STAR:100,5,OSGA4L,RW28B,DW706,EI,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,FL070,     ,     ,-,220,    ,   , , , , , , , , ;
 STAR:120,5,OSGA4L,RW28B,PIZSA,EI,P,C,EE  ,L,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,03000,     ,     ,-,220,    ,   , , , , , , , , ;
@@ -850,7 +850,7 @@ STAR:040,5,SUTE4L,RW28B,ARVOK,EI,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,  
 STAR:050,5,SUTE4L,RW28B,SORIN,EI,E,A,E  H, ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,FL070,     ,     ,-,220,    ,   , , , , , , , , ;
 STAR:060,5,SUTE4L,RW28B,SIVNA,EI,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,FL070,     ,     ,-,220,    ,   , , , , , , , , ;
 STAR:070,5,SUTE4L,RW28B,SUGAD,EI,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,FL070,     ,     ,-,220,    ,   , , , , , , , , ;
-STAR:080,5,SUTE4L,RW28B,DW704,EG,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,FL070,     ,     ,-,220,    ,   , , , , , , , , ;
+STAR:080,5,SUTE4L,RW28B,DW704,EI,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,FL070,     ,     ,-,220,    ,   , , , , , , , , ;
 STAR:090,5,SUTE4L,RW28B,DW705,EI,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,FL070,     ,     ,-,220,    ,   , , , , , , , , ;
 STAR:100,5,SUTE4L,RW28B,DW706,EI,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,FL070,     ,     ,-,220,    ,   , , , , , , , , ;
 STAR:120,5,SUTE4L,RW28B,PIZSA,EI,P,C,EE  ,L,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,03000,     ,     ,-,220,    ,   , , , , , , , , ;
@@ -884,7 +884,7 @@ STAR:015,5,VATR4L,RW28B,DW100,EI,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,  
 STAR:020,5,VATR4L,RW28B,SORIN,EI,E,A,E  H, ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,FL070,     ,     ,-,220,    ,   , , , , , , , , ;
 STAR:030,5,VATR4L,RW28B,SIVNA,EI,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,FL070,     ,     ,-,220,    ,   , , , , , , , , ;
 STAR:040,5,VATR4L,RW28B,SUGAD,EI,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,FL070,     ,     ,-,220,    ,   , , , , , , , , ;
-STAR:050,5,VATR4L,RW28B,DW704,EG,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,FL070,     ,     ,-,220,    ,   , , , , , , , , ;
+STAR:050,5,VATR4L,RW28B,DW704,EI,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,FL070,     ,     ,-,220,    ,   , , , , , , , , ;
 STAR:060,5,VATR4L,RW28B,DW705,EI,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,FL070,     ,     ,-,220,    ,   , , , , , , , , ;
 STAR:070,5,VATR4L,RW28B,DW706,EI,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,FL070,     ,     ,-,220,    ,   , , , , , , , , ;
 STAR:090,5,VATR4L,RW28B,PIZSA,EI,P,C,EE  ,L,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,03000,     ,     ,-,220,    ,   , , , , , , , , ;

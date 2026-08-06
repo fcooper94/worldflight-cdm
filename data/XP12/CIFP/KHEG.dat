@@ -8,7 +8,7 @@ STAR:015,4,QUBEN2,MEAAT,BASSS,K7,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,  
 STAR:020,4,QUBEN2,MEAAT,POGIE,K7,E,A,EE  , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,13000,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:010,5,QUBEN2,ALL,POGIE,K7,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,13000,     ,18000, ,   ,    ,   , , , , , , , , ;
 STAR:015,5,QUBEN2,ALL,QUBEN,K7,E,A,EY  , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
-STAR:020,5,QUBEN2,ALL,QUBEN,K7,E,A,EE  , ,   ,FM, ,SGJ,K7,D, ,      ,2721,0174,3600,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
+STAR:020,5,QUBEN2,ALL,QUBEN,K7,E,A,EE  , ,   ,FM, ,SAV,K7,D, ,      ,1964,1345,3600,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 APPCH:010,A,R25,BUNDE,BUNDE,K7,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , ,A,J,S;
 APPCH:020,A,R25,BUNDE,WHYDE,K7,P,C,E  A, ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,04000,     ,     , ,   ,    ,   , , , , , ,A,J,S;
 APPCH:030,A,R25,BUNDE,PAWPA,K7,P,C,EE B, ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,03000,     ,     , ,   ,    ,   , , , , , ,A,J,S;

@@ -1,8 +1,8 @@
 APPCH:010,A,R17,DOPOK,DOPOK,BG,P,C,E  C, ,010,IF, , , , , ,      ,    ,    ,    ,    ,+,03500,     ,     , ,   ,    ,   , , , , , ,B,J,S;
-APPCH:020,A,R17,DOPOK,KUVIG,BG,P,C,EE B, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,03500,     ,     , ,   ,    ,   , , , , , ,B,J,S;
+APPCH:020,A,R17,DOPOK,KUVIG,BG,E,A,EE B, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,03500,     ,     , ,   ,    ,   , , , , , ,B,J,S;
 APPCH:010,A,R17,LOBKA,LOBKA,BG,P,C,E  A, ,010,IF, , , , , ,      ,    ,    ,    ,    ,+,04400,     ,     , ,   ,    ,   , , , , , ,B,J,S;
-APPCH:020,A,R17,LOBKA,KUVIG,BG,P,C,EE B, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,03500,     ,     , ,   ,    ,   , , , , , ,B,J,S;
-APPCH:010,R,R17, ,KUVIG,BG,P,C,E  D, ,010,IF, , , , , ,      ,    ,    ,    ,    ,+,03500,     ,     , ,   ,    ,   , , , , , ,B,J,S;
+APPCH:020,A,R17,LOBKA,KUVIG,BG,E,A,EE B, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,03500,     ,     , ,   ,    ,   , , , , , ,B,J,S;
+APPCH:010,R,R17, ,KUVIG,BG,E,A,E  D, ,010,IF, , , , , ,      ,    ,    ,    ,    ,+,03500,     ,     , ,   ,    ,   , , , , , ,B,J,S;
 APPCH:020,R,R17, ,NOVGO,BG,P,C,E  F, ,010,TF, , , , , ,      ,    ,    ,1650,0050,+,02700,     ,     , ,   ,    ,   , , , , , ,B,J,S;
 PRDAT: ,          , ,          ,A,      LNAV, ,   , ,   , ,   , ,   ,J,S;
 APPCH:030,R,R17, ,ROPKI,BG,P,C,EY M, ,302,TF, , , , , ,      ,    ,    ,1650,0060, ,00167,     ,     , ,   ,-400,   , , , , , ,B,J,S;
@@ -11,7 +11,7 @@ APPCH:050,R,R17, ,DOPOK,BG,P,C,E   ,R,010,DF, , , , , ,      ,    ,    ,    ,   
 APPCH:060,R,R17, ,DOPOK,BG,P,C,EE H,L,010,HM, , , , , ,      ,    ,    ,0750,T010, ,03500,     ,     , ,   ,    ,   , , , , , ,B,J,S;
 APPCH:010,A,RNVA,BAMUG,BAMUG,BG,P,C,E  A, ,010,IF, , , , , ,      ,    ,    ,    ,    ,+,03800,     ,     , ,   ,    ,   , , , , , ,B,J,C;
 APPCH:020,A,RNVA,BAMUG,PT351,BG,P,C,EE B, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,03200,     ,     , ,   ,    ,   , , , , , ,B,J,C;
-APPCH:010,A,RNVA,GENSA,GENSA,BG,P,C,E  A, ,010,IF, , , , , ,      ,    ,    ,    ,    ,+,05100,     ,     , ,   ,    ,   , , , , , ,B,J,C;
+APPCH:010,A,RNVA,GENSA,GENSA,BG,E,A,E  A, ,010,IF, , , , , ,      ,    ,    ,    ,    ,+,05100,     ,     , ,   ,    ,   , , , , , ,B,J,C;
 APPCH:020,A,RNVA,GENSA,PT351,BG,P,C,EE B, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,03200,     ,     , ,   ,    ,   , , , , , ,B,J,C;
 APPCH:010,A,RNVA,NANOK,NANOK,BG,P,C,E  A, ,010,IF, , , , , ,      ,    ,    ,    ,    ,+,05300,     ,     , ,   ,    ,   , , , , , ,B,J,C;
 APPCH:015,A,RNVA,NANOK,2NM,BG,P,C,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,04000,     ,     , ,   ,    ,   , , , , , ,B,J,C;

@@ -48,7 +48,7 @@ APPCH:010,R,R18, ,AKVUP,SA,P,C,E  I, ,010,IF, , , , , ,      ,    ,    ,    ,   
 APPCH:020,R,R18, ,NEBEL,SA,P,C,E  F, ,010,TF, , , , , ,      ,    ,    ,1820,0050,+,03600,     ,     , ,   ,    ,   ,SANU,SA,P,A,B,B,J,S;
 PRDAT: ,          ,A, LNAV/VNAV,A,      LNAV, ,   , ,   , ,   , ,   ,J,S;
 APPCH:030,R,R18, ,RW18,SA,P,G,GY M, ,302,TF, , , , , ,      ,    ,    ,1820,0050, ,01998,     ,     , ,   ,-300,   , , , , , ,B,J,S;
-APPCH:040,R,R18, ,DILIX,SA,P,C,E M , ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,04500,     ,     ,-,220,    ,   , , , , , ,B,J,S;
+APPCH:040,R,R18, ,DILIX,SA,P,C,E M , ,010,CF, ,UIS,SA,D, ,      ,3119,1352,1820,0164,+,04500,     ,     ,-,220,    ,   , , , , , ,B,J,S;
 APPCH:050,R,R18, ,DILIX,SA,P,C,EE H,R,010,HM, , , , , ,      ,    ,    ,0020,0040,+,05000,     ,     ,-,210,    ,   , , , , , ,B,J,S;
 APPCH:010,A,R36,DILIX,DILIX,SA,P,C,E CA, ,010,IF, , , , , ,      ,    ,    ,    ,    ,+,05000,     ,     ,-,220,    ,   , , , , , ,B,J,S;
 APPCH:020,A,R36,DILIX,GEDOL,SA,P,C,EE B, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,04000,     ,     ,-,180,    ,   , , , , , ,B,J,S;
@@ -58,7 +58,7 @@ APPCH:010,R,R36, ,GEDOL,SA,P,C,E  I, ,010,IF, , , , , ,      ,    ,    ,    ,   
 APPCH:020,R,R36, ,SEMLI,SA,P,C,E  F, ,010,TF, , , , , ,      ,    ,    ,0020,0050,+,03600,     ,     , ,   ,    ,   ,SANU,SA,P,A,B,B,J,S;
 PRDAT: ,          ,A, LNAV/VNAV,A,      LNAV, ,   , ,   , ,   , ,   ,J,S;
 APPCH:030,R,R36, ,RW36,SA,P,G,GY M, ,302,TF, , , , , ,      ,    ,    ,0020,0051, ,01991,     ,     , ,   ,-300,   , , , , , ,B,J,S;
-APPCH:040,R,R36, ,NIPTO,SA,P,C,E M , ,010,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , ,B,J,S;
+APPCH:040,R,R36, ,NIPTO,SA,P,C,E M , ,010,CF, ,UIS,SA,D, ,      ,3181,1500,0020,0064, ,     ,     ,     , ,   ,    ,   , , , , , ,B,J,S;
 APPCH:050,R,R36, ,DODBO,SA,P,C,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,FL070,     ,     , ,   ,    ,   , , , , , ,B,J,S;
 APPCH:060,R,R36, ,DODBO,SA,P,C,EE H,R,010,HM, , , , , ,      ,    ,    ,2020,0040,+,FL070,     ,     ,-,210,    ,   , , , , , ,B,J,S;
 RWY:RW18 ,-0080,      ,01948, ,SJ  ,1,   ;S31333733,W068250626,0000;

@@ -507,10 +507,10 @@ APPCH:030,D,D28-Z, ,RW28,UA,P,G,G  M, ,   ,CF, ,SMK,UA,D, ,      ,1002,0024,2810
 APPCH:040,D,D28-Z, ,RW28,UA,P,G,G M , ,   ,FD, ,SMK,UA,D, ,      ,1002,0024,2810,0052,+,03300,     ,     , ,   ,    ,   , , , , , ,0, ,S;
 APPCH:050,D,D28-Z, ,SMK,UA,D, ,VE  ,R,   ,DF, , , , , ,      ,    ,    ,    ,    , ,04000,     ,     ,-,250,    ,   , , , , , ,0, ,S;
 APPCH:010,A,I10,REZEK,REZEK,UA,P,C,E  A, ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,06000,     ,     , ,   ,    ,   , , , , , ,0,D,S;
-APPCH:020,A,I10,REZEK, , , , ,    , ,   ,CR, ,SMK,UA,D, ,      ,2690,    ,0100,    , ,     ,     ,     , ,   ,    ,   , , , , , ,0,D,S;
+APPCH:020,A,I10,REZEK,D269K,UA,P,C,EY  , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , ,0,D,S;
 APPCH:030,A,I10,REZEK, , , , , E  , ,   ,VI, ,IEN,UA,P,I,      ,    ,    ,0710,    , ,     ,     ,     , ,   ,    ,   , , , , , ,0,D,S;
 APPCH:010,A,I10,ROTEP,ROTEP,UA,P,C,E  A, ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,06000,     ,     , ,   ,    ,   , , , , , ,0,D,S;
-APPCH:020,A,I10,ROTEP, , , , ,    , ,   ,CR, ,SMK,UA,D, ,      ,2920,    ,1910,    , ,     ,     ,     , ,   ,    ,   , , , , , ,0,D,S;
+APPCH:020,A,I10,ROTEP,D292K,UA,P,C,EY  , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , ,0,D,S;
 APPCH:030,A,I10,ROTEP, , , , , E  , ,   ,VI, ,IEN,UA,P,I,      ,    ,    ,1310,    , ,     ,     ,     , ,   ,    ,   , , , , , ,0,D,S;
 APPCH:010,I,I10, ,APTOG,UA,P,C,E  I, ,   ,IF, ,IEN,UA,P,I,      ,2802,0135,    ,    ,J,04500,03000,     , ,   ,    ,   , , , , , ,0,D,S;
 APPCH:020,I,I10, ,FF10,UA,P,C,E  F, ,   ,CF, ,IEN,UA,P,I,      ,2802,0073,1010,0062,H,03000,03000,     , ,   ,-300,   ,SMK,UA,D, , ,0,D,S;

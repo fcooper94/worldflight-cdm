@@ -94,7 +94,8 @@ APPCH:020,A,VORA,TOE,TOE,RJ,D, ,V   , ,   ,FD, ,TOE,RJ,D, ,      ,0000,0000,0190
 APPCH:030,A,VORA,TOE,CF215,RJ,P,C,E   ,R,   ,CF,Y,TOE,RJ,D, ,      ,0350,0110,2150,0010,+,01700,     ,     , ,   ,    ,   , , , , , ,0, ,C;
 APPCH:040,A,VORA,TOE,GANDO,RJ,P,C,EE  , ,   ,CF, ,TOE,RJ,D, ,      ,0354,0050,2150,0060,+,01200,     ,     , ,   ,    ,   , , , , , ,0, ,C;
 APPCH:020,V,VORA, ,GANDO,RJ,P,C,E  F, ,   ,IF, ,TOE,RJ,D, ,      ,0354,0050,    ,    ,+,01200,     ,14000, ,   ,    ,   ,TOE,RJ,D, , ,0, ,C;
-APPCH:025,V,VORA, ,20VOR,RJ,P,C,E S , ,   ,CF, ,TOE,RJ,D, ,      ,0354,0020,2150,0030,+,00800,     ,     , ,   ,    ,   , , , , , ,0, ,C;
+APPCH:023,V,VORA, ,35VOR,RJ,P,C,E S , ,   ,CF, ,TOE,RJ,D, ,      ,0354,0035,2150,0015,+,01000,     ,     , ,   ,    ,   , , , , , ,0, ,C;
+APPCH:025,V,VORA, ,20VOR,RJ,P,C,E S , ,   ,CF, ,TOE,RJ,D, ,      ,0354,0020,2150,0015,+,00800,     ,     , ,   ,    ,   , , , , , ,0, ,C;
 APPCH:030,V,VORA, ,TOE,RJ,D, ,V  M, ,   ,CF, ,TOE,RJ,D, ,      ,0000,0000,2150,0020, ,00800,     ,     , ,   , 000,   , , , , , ,0, ,C;
 APPCH:040,V,VORA, , , , , ,  M ,L,   ,VI,Y, , , , ,      ,    ,    ,3550,    , ,     ,     ,     , ,   ,    ,   , , , , , ,0, ,C;
 APPCH:050,V,VORA, ,TOE,RJ,D, ,V   , ,   ,FA, ,TOE,RJ,D, ,      ,0000,0000,0400,    ,+,03000,     ,     , ,   ,    ,   , , , , , ,0, ,C;

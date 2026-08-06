@@ -33,10 +33,10 @@ APPCH:040,R,R01-Z, ,PAXAE,PA,E,A,E M , ,   ,DF, , , , , ,      ,    ,    ,    , 
 APPCH:050,R,R01-Z, ,FODOS,PA,P,C,EY  , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,05000,     ,     , ,   ,    ,   , , , , , ,A,W,S;
 APPCH:060,R,R01-Z, ,FODOS,PA,P,C,EE H,R,   ,HM, , , , , ,      ,    ,    ,0640,0050, ,     ,     ,     , ,   ,    ,   , , , , , ,A,W,S;
 APPCH:010,A,R19,BTT,BTT,PA,D, ,V   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , ,A,J,S;
-APPCH:020,A,R19,BTT,UGAKY,PA,P,C,E  A, ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,05000,     ,     , ,   ,    ,   , , , , , ,A,J,S;
+APPCH:020,A,R19,BTT,UGAKY,PA,E,A,E  A, ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,05000,     ,     , ,   ,    ,   , , , , , ,A,J,S;
 APPCH:030,A,R19,BTT,ZIDOV,PA,P,C,EE B, ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,04600,     ,     , ,   ,    ,   , , , , , ,A,J,S;
 APPCH:010,A,R19,CITMI,CITMI,PA,P,C,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , ,A,J,S;
-APPCH:020,A,R19,CITMI,UGAKY,PA,P,C,E  A, ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,05000,     ,     , ,   ,    ,   , , , , , ,A,J,S;
+APPCH:020,A,R19,CITMI,UGAKY,PA,E,A,E  A, ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,05000,     ,     , ,   ,    ,   , , , , , ,A,J,S;
 APPCH:030,A,R19,CITMI,ZIDOV,PA,P,C,EE B, ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,04600,     ,     , ,   ,    ,   , , , , , ,A,J,S;
 APPCH:010,R,R19, ,ZIDOV,PA,P,C,E  I, ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,04600,     ,18000, ,   ,    ,   , , , , , ,A,J,S;
 APPCH:020,R,R19, ,WOLPI,PA,P,C,E  F, ,   ,TF, , , , , ,      ,    ,    ,1620,0068,+,04100,     ,     , ,   ,    ,   ,YURUG,PA,P,C, ,A,J,S;
@@ -45,7 +45,7 @@ APPCH:023,R,R19, ,VUWCU,PA,P,C,E S , ,   ,TF, , , , , ,      ,    ,    ,1910,001
 APPCH:027,R,R19, ,ZANEB,PA,P,C,E S , ,   ,TF, , , , , ,      ,    ,    ,1910,0030,+,02340,     ,     , ,   ,-360,   , , , , , ,A,J,S;
 APPCH:030,R,R19, ,YURUG,PA,P,C,EY M, ,   ,TF, , , , , ,      ,    ,    ,1910,0022, ,01503,     ,     , ,   ,-360,   , , , , , ,A,J,S;
 APPCH:040,R,R19, , , , , ,  M , ,   ,CA, , , , , ,      ,    ,    ,1910,    ,+,01700,     ,     , ,   ,    ,   , , , , , ,A,J,S;
-APPCH:050,R,R19, ,UGAKY,PA,P,C,EY  ,R,   ,DF, , , , , ,      ,    ,    ,    ,    ,+,05000,     ,     , ,   ,    ,   , , , , , ,A,J,S;
-APPCH:060,R,R19, ,UGAKY,PA,P,C,EE H,R,   ,HM, , , , , ,      ,    ,    ,0720,0050,+,05000,     ,     , ,   ,    ,   , , , , , ,A,J,S;
+APPCH:050,R,R19, ,UGAKY,PA,E,A,EY  ,R,   ,DF, , , , , ,      ,    ,    ,    ,    ,+,05000,     ,     , ,   ,    ,   , , , , , ,A,J,S;
+APPCH:060,R,R19, ,UGAKY,PA,E,A,EE H,R,   ,HM, , , , , ,      ,    ,    ,0720,0050,+,05000,     ,     , ,   ,    ,   , , , , , ,A,J,S;
 RWY:RW01 ,     ,      ,01091, ,    , ,   ;N66482989,W150391014,0000;
 RWY:RW19 ,     ,      ,01088, ,    , ,   ;N66491120,W150380384,0000;

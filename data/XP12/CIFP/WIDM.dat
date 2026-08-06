@@ -9,9 +9,9 @@ STAR:030,5,KIKO1A,RW18,TAXOM,WI,P,C,E   , ,010,TF, , , , , ,      ,    ,    ,   
 STAR:040,5,KIKO1A,RW18,SEKDU,WI,P,C,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:050,5,KIKO1A,RW18,UBMAR,WI,P,C,EE H, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,03000,     ,     , ,   ,    ,   , , , , , , , , ;
 APPCH:010,A,R18-Z,UBMAR,UBMAR,WI,P,C,E  C, ,010,IF, , , , , ,      ,    ,    ,    ,    ,+,03000,     ,13000, ,   ,    ,   , , , , , ,B,J,S;
-APPCH:020,A,R18-Z,UBMAR,DM502,WS,P,C,EE B, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,02200,     ,     , ,   ,    ,   , , , , , ,B,J,S;
-APPCH:010,R,R18-Z, ,DM502,WS,P,C,E  I, ,010,IF, , , , , ,      ,    ,    ,    ,    ,+,02200,     ,13000, ,   ,    ,   , , , , , ,B,J,S;
-APPCH:020,R,R18-Z, ,DM501,WS,P,C,E  F, ,010,TF, , , , , ,      ,    ,    ,1810,0030,+,01700,     ,     , ,   ,    ,   ,WIDM,WI,P,A, ,B,J,S;
+APPCH:020,A,R18-Z,UBMAR,DM502,WI,P,C,EE B, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,02200,     ,     , ,   ,    ,   , , , , , ,B,J,S;
+APPCH:010,R,R18-Z, ,DM502,WI,P,C,E  I, ,010,IF, , , , , ,      ,    ,    ,    ,    ,+,02200,     ,13000, ,   ,    ,   , , , , , ,B,J,S;
+APPCH:020,R,R18-Z, ,DM501,WI,P,C,E  F, ,010,TF, , , , , ,      ,    ,    ,1810,0030,+,01700,     ,     , ,   ,    ,   ,WIDM,WI,P,A, ,B,J,S;
 PRDAT: ,          ,A, LNAV/VNAV,A,      LNAV, ,   , ,   , ,   , ,   ,J,S;
 APPCH:030,R,R18-Z, ,RW18,WI,P,G,GY M, ,302,TF, , , , , ,      ,    ,    ,1810,0053, ,00060,     ,     , ,   ,-290,   , , , , , ,B,J,S;
 APPCH:040,R,R18-Z, , , , , ,  M , ,010,CA, , , , , ,      ,    ,    ,1810,    ,+,02000,     ,     , ,   ,    ,   , , , , , ,B,J,S;

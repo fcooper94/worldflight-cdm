@@ -94,12 +94,12 @@ APPCH:010,A,R10,MORON,MORON,K2,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    
 APPCH:020,A,R10,MORON,FETAR,K2,P,C,E   , ,020,TF, , , , , ,      ,    ,    ,    ,    ,+,12200,     ,     , ,   ,    ,   , , , , , ,B,J,S;
 APPCH:030,A,R10,MORON,ELECO,K2,P,C,E   , ,020,TF, , , , , ,      ,    ,    ,    ,    ,+,10000,     ,     , ,   ,    ,   , , , , , ,B,J,S;
 APPCH:040,A,R10,MORON,CIKUS,K2,P,C,E  A, ,020,TF, , , , , ,      ,    ,    ,    ,    ,+,07700,     ,     , ,   ,    ,   , , , , , ,B,J,S;
-APPCH:050,A,R10,MORON,FEMAK,K2,E,A,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,04500,     ,     , ,   ,    ,   , , , , , ,B,J,S;
+APPCH:050,A,R10,MORON,FEMAK,K2,P,C,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,04500,     ,     , ,   ,    ,   , , , , , ,B,J,S;
 APPCH:060,A,R10,MORON,HASOR,K2,P,C,EE  , ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,03100,     ,     , ,   ,    ,   , , , , , ,B,J,S;
 APPCH:010,A,R10,YUCCA,YUCCA,K2,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , ,B,J,S;
 APPCH:020,A,R10,YUCCA,FOLDI,K2,P,C,E   , ,020,TF, , , , , ,      ,    ,    ,    ,    ,+,09300,     ,     , ,   ,    ,   , , , , , ,B,J,S;
 APPCH:030,A,R10,YUCCA,CIKUS,K2,P,C,E  A, ,020,TF, , , , , ,      ,    ,    ,    ,    ,+,07700,     ,     , ,   ,    ,   , , , , , ,B,J,S;
-APPCH:040,A,R10,YUCCA,FEMAK,K2,E,A,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,04500,     ,     , ,   ,    ,   , , , , , ,B,J,S;
+APPCH:040,A,R10,YUCCA,FEMAK,K2,P,C,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,04500,     ,     , ,   ,    ,   , , , , , ,B,J,S;
 APPCH:050,A,R10,YUCCA,HASOR,K2,P,C,EE  , ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,03100,     ,     , ,   ,    ,   , , , , , ,B,J,S;
 APPCH:010,R,R10, ,HASOR,K2,P,C,E  I, ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,03100,     ,18000, ,   ,    ,   , , , , , ,B,J,S;
 APPCH:020,R,R10, ,JANEN,K2,P,C,E  F, ,010,TF, , , , , ,      ,    ,    ,1080,0025,+,02400,     ,     , ,   ,    ,   ,RW10,K2,P,G, ,B,J,S;

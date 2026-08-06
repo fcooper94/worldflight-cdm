@@ -27,7 +27,7 @@ APPCH:010,A,RNVA,DUXAR,DUXAR,CY,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,   
 APPCH:020,A,RNVA,DUXAR,TATLU,CY,P,C,E  A, ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,08400,     ,     ,-,200,    ,   , , , , , ,B,J,C;
 APPCH:030,A,RNVA,DUXAR,SEPKO,CY,P,C,E  B, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,07800,     ,     , ,   ,    ,   , , , , , ,B,J,C;
 APPCH:040,A,RNVA,DUXAR,XOXEV,CY,P,C,EE  , ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,07300,     ,     , ,   ,    ,   , , , , , ,B,J,C;
-APPCH:010,A,RNVA,RIBIT,RIBIT,CY,P,C,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , ,B,J,C;
+APPCH:010,A,RNVA,RIBIT,RIBIT,CY,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , ,B,J,C;
 APPCH:020,A,RNVA,RIBIT,ONGOP,CY,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,10600,     ,     , ,   ,    ,   , , , , , ,B,J,C;
 APPCH:030,A,RNVA,RIBIT,TATLU,CY,P,C,E  A, ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,08800,     ,     ,-,200,    ,   , , , , , ,B,J,C;
 APPCH:040,A,RNVA,RIBIT,SEPKO,CY,P,C,E  B, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,07800,     ,     , ,   ,    ,   , , , , , ,B,J,C;
@@ -42,7 +42,7 @@ APPCH:010,A,RNVB,DUXAR,DUXAR,CY,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,   
 APPCH:020,A,RNVB,DUXAR,TATLU,CY,P,C,E  A, ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,08400,     ,     ,-,200,    ,   , , , , , ,B,J,C;
 APPCH:030,A,RNVB,DUXAR,SEPKO,CY,P,C,E  B, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,07800,     ,     , ,   ,    ,   , , , , , ,B,J,C;
 APPCH:040,A,RNVB,DUXAR,XOXEV,CY,P,C,EE  , ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,07300,     ,     , ,   ,    ,   , , , , , ,B,J,C;
-APPCH:010,A,RNVB,RIBIT,RIBIT,CY,P,C,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , ,B,J,C;
+APPCH:010,A,RNVB,RIBIT,RIBIT,CY,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , ,B,J,C;
 APPCH:020,A,RNVB,RIBIT,ONGOP,CY,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,10600,     ,     , ,   ,    ,   , , , , , ,B,J,C;
 APPCH:030,A,RNVB,RIBIT,TATLU,CY,P,C,E  A, ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,08800,     ,     ,-,200,    ,   , , , , , ,B,J,C;
 APPCH:040,A,RNVB,RIBIT,SEPKO,CY,P,C,E  B, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,07800,     ,     , ,   ,    ,   , , , , , ,B,J,C;

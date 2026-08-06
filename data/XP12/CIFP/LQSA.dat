@@ -160,15 +160,15 @@ APPCH:010,A,I11-X,KEB,KEB,LQ,D, ,V   , ,   ,IF, , , , , ,      ,    ,    ,    , 
 APPCH:020,A,I11-X,KEB,TIMID,LQ,E,A,E CC, ,   ,CF, ,KEB,LQ,D, ,      ,3066,0120,3070,0120,B,FL110,06000,     , ,   ,    ,   , , , , , ,0,D,S;
 APPCH:030,A,I11-X,KEB,D307P,LQ,P,C,E   , ,   ,CF, ,KEB,LQ,D, ,      ,3070,0160,3070,0040, ,     ,     ,     , ,   ,    ,   , , , , , ,0,D,S;
 APPCH:035,A,I11-X,KEB,D307R,LQ,P,C,E   , ,   ,CF, ,KEB,LQ,D, ,      ,3070,0180,3070,0020, ,     ,     ,     , ,   ,    ,   , , , , , ,0,D,S;
-APPCH:040,A,I11-X,KEB,D301R,LQ,P,C,E   ,L,   ,AF, ,KEB,LQ,D, ,      ,3010,0180,3070,    ,B,08600,06000,     , ,   ,    ,   , , , , , ,0,D,S;
-APPCH:050,A,I11-X,KEB,D283R,LQ,P,C,E   ,L,   ,AF, ,KEB,LQ,D, ,      ,2830,0180,3010,    ,B,07000,05400,     , ,   ,    ,   , , , , , ,0,D,S;
+APPCH:040,A,I11-X,KEB,D300R,LQ,P,C,E   ,L,   ,AF, ,KEB,LQ,D, ,      ,3000,0180,3070,    ,B,08600,06000,     , ,   ,    ,   , , , , , ,0,D,S;
+APPCH:050,A,I11-X,KEB,D283R,LQ,P,C,E   ,L,   ,AF, ,KEB,LQ,D, ,      ,2830,0180,3000,    ,B,07000,05400,     , ,   ,    ,   , , , , , ,0,D,S;
 APPCH:055,A,I11-X,KEB,D113R,LQ,P,C,E   ,L,   ,AF, ,KEB,LQ,D, ,      ,2661,0180,2830,    , ,     ,     ,     , ,   ,    ,   , , , , , ,0,D,S;
 APPCH:060,A,I11-X,KEB,RIVUS,LQ,P,C,EE  , ,   ,CF, ,BHS,LQ,P,I,      ,2924,0143,1120,0011,+,05400,     ,     , ,   ,    ,   , , , , , ,0,D,S;
 APPCH:010,A,I11-X,NORPI,NORPI,LQ,E,A,E CA, ,   ,IF, , , , , ,      ,    ,    ,    ,    ,B,FL110,09000,     , ,   ,    ,   , , , , , ,0,D,S;
 APPCH:020,A,I11-X,NORPI,D307U,LQ,P,C,E   , ,   ,CF, ,KEB,LQ,D, ,      ,3070,0210,1270,0040, ,     ,     ,     , ,   ,    ,   , , , , , ,0,D,S;
 APPCH:030,A,I11-X,NORPI,D307T,LQ,P,C,EY  , ,   ,CF, ,KEB,LQ,D, ,      ,3070,0200,1270,0010, ,     ,     ,     , ,   ,    ,   , , , , , ,0,D,S;
-APPCH:040,A,I11-X,NORPI,D301R,LQ,P,C,E   , ,   ,DF, , , , , ,      ,    ,    ,    ,    ,B,08600,06000,     , ,   ,    ,   , , , , , ,0,D,S;
-APPCH:050,A,I11-X,NORPI,D283R,LQ,P,C,E   ,L,   ,AF, ,KEB,LQ,D, ,      ,2830,0180,3010,    ,B,07000,05400,     , ,   ,    ,   , , , , , ,0,D,S;
+APPCH:040,A,I11-X,NORPI,D300R,LQ,P,C,E   , ,   ,DF, , , , , ,      ,    ,    ,    ,    ,B,08600,06000,     , ,   ,    ,   , , , , , ,0,D,S;
+APPCH:050,A,I11-X,NORPI,D283R,LQ,P,C,E   ,L,   ,AF, ,KEB,LQ,D, ,      ,2830,0180,3000,    ,B,07000,05400,     , ,   ,    ,   , , , , , ,0,D,S;
 APPCH:060,A,I11-X,NORPI,D113R,LQ,P,C,E   ,L,   ,AF, ,KEB,LQ,D, ,      ,2661,0180,2830,    , ,     ,     ,     , ,   ,    ,   , , , , , ,0,D,S;
 APPCH:070,A,I11-X,NORPI,RIVUS,LQ,P,C,EE  , ,   ,CF, ,BHS,LQ,P,I,      ,2924,0143,1120,0011,+,05400,     ,     , ,   ,    ,   , , , , , ,0,D,S;
 APPCH:010,I,I11-X, ,RIVUS,LQ,P,C,E  I, ,   ,IF, ,BHS,LQ,P,I,      ,2924,0143,    ,    ,J,05400,04200,     , ,   ,    ,   , , , , , ,0,D,S;
@@ -177,7 +177,7 @@ APPCH:030,I,I11-X, ,RW11,LQ,P,G,G  M, ,   ,CF, ,BHS,LQ,P,I,      ,2924,0015,1120
 APPCH:040,I,I11-X, , , , , ,  M , ,   ,CA, , , , , ,      ,    ,    ,1120,    ,+,02250,     ,     , ,   ,    ,   , , , , , ,0,D,S;
 APPCH:050,I,I11-X, ,D123H,LQ,P,C,EY  ,L,   ,CF,Y,KEB,LQ,D, ,      ,2674,0109,3030,0090, ,     ,     ,     ,-,160,    ,   , , , , , ,0,D,S;
 APPCH:060,I,I11-X, ,D123L,LQ,P,C,E   , ,   ,CF, ,KEB,LQ,D, ,      ,2712,0120,3030,0014, ,     ,     ,     , ,   ,    ,   , , , , , ,0,D,S;
-APPCH:065,I,I11-X, ,D110L,LQ,P,C,E   ,R,   ,AF, ,KEB,LQ,D, ,      ,2781,0120,2710,    ,+,05500,     ,     , ,   ,    ,   , , , , , ,0,D,S;
+APPCH:065,I,I11-X, ,D109L,LQ,P,C,E   ,R,   ,AF, ,KEB,LQ,D, ,      ,2786,0120,2710,    ,+,05500,     ,     , ,   ,    ,   , , , , , ,0,D,S;
 APPCH:070,I,I11-X, ,TIMID,LQ,E,A,E C ,R,   ,AF, ,KEB,LQ,D, ,      ,3066,0120,2780,    , ,06500,     ,     , ,   ,    ,   , , , , , ,0,D,S;
 APPCH:080,I,I11-X, ,TIMID,LQ,E,A,EECH,R,   ,HM, , , , , ,      ,    ,    ,3070,T010,+,06500,     ,     ,-,220,    ,   , , , , , ,0,D,S;
 APPCH:010,A,L11,NORPI,NORPI,LQ,E,A,E  C, ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,07100,     ,     ,-,230,    ,   , , , , , ,0,D,S;

@@ -23,8 +23,8 @@ APPCH:010,A,R27,TEPDU,TEPDU,ED,E,A,E  C, ,010,IF, , , , , ,      ,    ,    ,    
 APPCH:030,A,R27,TEPDU,BH439,ED,P,C,EE B, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,02300,     ,     , ,   ,    ,   , , , , , ,A,J,S;
 APPCH:010,R,R27, ,BH439,ED,P,C,E  I, ,010,IF, , , , , ,      ,    ,    ,    ,    ,+,02300,     ,     , ,   ,    ,   , , , , , ,A,J,S;
 APPCH:020,R,R27, ,BASUG,ED,P,C,E  F, ,010,TF, , , , , ,      ,    ,    ,2670,0040,+,01700,     ,     , ,   ,    ,   ,EDBH,ED,P,A, ,A,J,S;
-PRDAT:A,       LPV, ,          ,A,      LNAV, ,   , ,   , ,   , ,   ,J,S;
-APPCH:030,R,R27, ,RW27,ED,P,G,GY M, ,302,TF, , , , , ,      ,    ,    ,2670,0051, ,00072,     ,     , ,   ,-300,   , , , , , ,A,J,S;
+PRDAT:A,       LPV,A, LNAV/VNAV,A,      LNAV, ,   , ,   , ,   , ,   ,J,S;
+APPCH:030,R,R27, ,RW27,ED,P,G,GY M, ,302,TF, , , , , ,      ,    ,    ,2670,0051, ,00073,     ,     , ,   ,-300,   , , , , , ,A,J,S;
 APPCH:040,R,R27, ,BH440,ED,P,C,EYM , ,010,CF, ,FLD,ED,D, ,      ,3119,0494,2670,0054, ,     ,     ,     , ,   ,    ,   , , , , , ,A,J,S;
 APPCH:050,R,R27, , , , , ,    , ,010,CA, , , , , ,      ,    ,    ,2670,    ,+,02000,     ,     , ,   ,    ,   , , , , , ,A,J,S;
 APPCH:060,R,R27, ,BH450,ED,P,C,E   ,L,010,DF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , ,A,J,S;

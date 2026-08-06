@@ -35,10 +35,13 @@ SID:020,6,SCTWN4,SHUFL,DOSCO,K2,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,   
 SID:030,6,SCTWN4,SHUFL,DUNGN,K2,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 SID:040,6,SCTWN4,SHUFL,DRAGN,K2,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 SID:050,6,SCTWN4,SHUFL,SHUFL,K2,E,A,EE  , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
-STAR:010,2,CCR2,ALL,CCR,K2,D, ,V   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , , , , ;
-STAR:020,2,CCR2,ALL,ISYOH,K2,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
-STAR:040,2,CCR2,ALL,ELKOE,K2,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
-STAR:050,2,CCR2,ALL,KSMF,K2,P,A,AE  , ,   ,VM, , , , , ,      ,    ,    ,3400,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
+STAR:010,5,FEVTA1, ,FEVTA,K2,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , , , , ;
+STAR:020,5,FEVTA1, ,ISYOH,K2,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
+STAR:030,5,FEVTA1, ,ELKOE,K2,P,C,EB  , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,04000,     ,     , ,   ,    ,   , , , , , , , , ;
+STAR:010,6,FEVTA1,RW17B,ELKOE,K2,P,C,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,04000,     ,18000, ,   ,    ,   , , , , , , , , ;
+STAR:020,6,FEVTA1,RW17B,ELKOE,K2,P,C,EE  , ,   ,FM, ,BAM,K2,D, ,      ,2306,2499,3400,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
+STAR:010,6,FEVTA1,RW35B,ELKOE,K2,P,C,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,04000,     ,18000, ,   ,    ,   , , , , , , , , ;
+STAR:020,6,FEVTA1,RW35B,ELKOE,K2,P,C,EE  , ,   ,FM, ,BAM,K2,D, ,      ,2306,2499,3400,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:010,4,SLMMR5,ANAHO,ANAHO,K2,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , , , , ;
 STAR:020,4,SLMMR5,ANAHO,WEBGO,K2,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,B,FL220,FL200,     , ,   ,    ,   , , , , , , , , ;
 STAR:030,4,SLMMR5,ANAHO,SLMMR,K2,E,A,EE  , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,B,17000,13000,     , ,280,    ,   , , , , , , , , ;

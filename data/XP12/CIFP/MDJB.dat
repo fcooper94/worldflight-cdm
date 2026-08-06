@@ -41,7 +41,8 @@ APPCH:020,A,R01,TUMEL,AIDAS,MD,P,C,E  C, ,   ,TF, , , , , ,      ,    ,    ,    
 APPCH:030,A,R01,TUMEL,JB122,MD,P,C,EE B, ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,02500,     ,     , ,   ,    ,   , , , , , ,B,J,S;
 APPCH:010,R,R01, ,JB122,MD,P,C,E  I, ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,02500,     ,18000, ,   ,    ,   , , , , , ,B,J,S;
 APPCH:020,R,R01, ,SOTOS,MD,P,C,E  F, ,   ,TF, , , , , ,      ,    ,    ,0080,0050,+,01700,     ,     , ,   ,    ,   ,MDJB,MD,P,A, ,B,J,S;
-APPCH:030,R,R01, ,RW01,MD,P,G,GY M, ,   ,TF, , , , , ,      ,    ,    ,0180,0050, ,00090,     ,     , ,   ,-311,   , , , , , ,B,J,S;
+PRDAT: ,          , ,          ,A,      LNAV, ,   , ,   , ,   , ,   ,J,S;
+APPCH:030,R,R01, ,RW01,MD,P,G,GY M, ,   ,TF, , , , , ,      ,    ,    ,0180,0050, ,00090,     ,     , ,   ,-300,   , , , , , ,B,J,S;
 APPCH:040,R,R01, ,JB124,MD,P,C,EYM , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , ,B,J,S;
 APPCH:050,R,R01, ,JB125,MD,P,C,E   ,R,   ,DF, , , , , ,      ,    ,    ,    ,    ,+,03000,     ,     , ,   ,    ,   , , , , , ,B,J,S;
 APPCH:060,R,R01, ,JB126,MD,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,03000,     ,     , ,   ,    ,   , , , , , ,B,J,S;
@@ -59,6 +60,7 @@ APPCH:030,A,R19,KODIX,LOTFI,MD,P,C,E  C, ,   ,TF, , , , , ,      ,    ,    ,    
 APPCH:040,A,R19,KODIX,JB112,MD,P,C,EE B, ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,02500,     ,     , ,   ,    ,   , , , , , ,B,J,S;
 APPCH:010,R,R19, ,JB112,MD,P,C,E  I, ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,02500,     ,18000, ,   ,    ,   , , , , , ,B,J,S;
 APPCH:020,R,R19, ,MAYTE,MD,P,C,E  F, ,   ,TF, , , , , ,      ,    ,    ,1980,0050,+,01700,     ,     , ,   ,    ,   ,MDJB,MD,P,A, ,B,J,S;
+PRDAT: ,          , ,          ,A,      LNAV, ,   , ,   , ,   , ,   ,J,S;
 APPCH:030,R,R19, ,RW19,MD,P,G,GY M, ,   ,TF, , , , , ,      ,    ,    ,1980,0050, ,00131,     ,     , ,   ,-300,   , , , , , ,B,J,S;
 APPCH:040,R,R19, ,JB114,MD,P,C,EYM , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , ,B,J,S;
 APPCH:050,R,R19, ,EUDIS,MD,P,C,E   ,L,   ,DF, , , , , ,      ,    ,    ,    ,    ,+,03000,     ,     , ,   ,    ,   , , , , , ,B,J,S;

@@ -30,7 +30,7 @@ SID:040,5,ERIG4N,RW03,KEMUR,LF,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    
 SID:050,5,ERIG4N,RW03,ERIGA,LF,E,A,EE  , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 SID:010,5,ERIG4S,RW21,LULID,LF,E,A,EYC , ,   ,CF, ,NTS,LF,D, ,      ,2001,0023,2080,0010, ,     ,     ,05000, ,   ,    ,   ,LFRS,LF,P,A, , , , ;
 SID:020,5,ERIG4S,RW21, , , , ,    , ,   ,CA, , , , , ,      ,    ,    ,2080,    ,+,00800,     ,     , ,   ,    ,   , , , , , , , , ;
-SID:030,5,ERIG4S,RW21,NAZIR,LF,E,A,E   ,R,   ,DF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
+SID:030,5,ERIG4S,RW21,NAZIR,LF,E,A,E   ,R,   ,DF, , , , , ,      ,    ,    ,    ,    ,+,05000,     ,     , ,   ,    ,   , , , , , , , , ;
 SID:040,5,ERIG4S,RW21,KEMUR,LF,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 SID:050,5,ERIG4S,RW21,ERIGA,LF,E,A,EE  , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 SID:010,5,LUGE4N,RW03, , , , ,    , ,   ,CA, , , , , ,      ,    ,    ,0280,    ,+,00540,     ,05000, ,   ,    ,   ,LFRS,LF,P,A, , , , ;

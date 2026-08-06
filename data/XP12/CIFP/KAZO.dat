@@ -24,8 +24,6 @@ APPCH:060,R,R05, ,AMPEY,K5,P,C,EE H,R,   ,HM, , , , , ,      ,    ,    ,2280,004
 APPCH:010,A,R17,BOHRR,BOHRR,K5,E,A,E  A, ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , ,A,J,S;
 APPCH:020,A,R17,BOHRR,OSEGO,K5,E,A,EE B, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,03000,     ,     , ,   ,    ,   , , , , , ,A,J,S;
 APPCH:010,A,R17,OSEGO,OSEGO,K5,E,A,EE C,R,   ,HF, , , , , ,      ,    ,    ,1740,0040,+,03000,     ,18000, ,   ,    ,   , , , , , ,A,J,S;
-APPCH:010,A,R17,PMM,PMM,K5,D, ,V  A, ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , ,A,J,S;
-APPCH:020,A,R17,PMM,OSEGO,K5,E,A,EE B, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,03000,     ,     , ,   ,    ,   , , , , , ,A,J,S;
 APPCH:010,R,R17, ,OSEGO,K5,E,A,E  I, ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,03000,     ,18000, ,   ,    ,   , , , , , ,A,J,S;
 APPCH:020,R,R17, ,SUYOD,K5,P,C,E  F, ,010,TF, , , , , ,      ,    ,    ,1740,0072,+,02800,     ,     , ,   ,    ,   ,RW17,K5,P,G, ,A,J,S;
 PRDAT:A,       LPV,A, LNAV/VNAV,A,      LNAV, ,   , ,   , ,   , ,   ,J,S;

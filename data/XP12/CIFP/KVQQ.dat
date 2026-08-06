@@ -2,7 +2,7 @@ STAR:010,4,ALCRN1,ALLMA,ALLMA,K7,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,  
 STAR:020,4,ALCRN1,ALLMA,ALCRN,K7,E,A,EE  , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,B,14000,12000,     , ,   ,    ,   , , , , , , , , ;
 STAR:010,5,ALCRN1,ALL,ALCRN,K7,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    ,B,14000,12000,18000, ,   ,    ,   , , , , , , , , ;
 STAR:020,5,ALCRN1,ALL,AAMOS,K7,E,A,EY  , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,06000,     ,     , ,   ,    ,   , , , , , , , , ;
-STAR:030,5,ALCRN1,ALL,AAMOS,K7,E,A,EE  , ,   ,FM, ,SGJ,K7,D, ,      ,3211,0473,1600,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
+STAR:030,5,ALCRN1,ALL,AAMOS,K7,E,A,EE  , ,   ,FM, ,SAV,K7,D, ,      ,2084,1055,1600,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:010,4,HOTAR1,BASLE,BASLE,K7,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , , , , ;
 STAR:020,4,HOTAR1,BASLE,WYTOK,K7,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:030,4,HOTAR1,BASLE,JABOR,K7,E,A,EE  , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
@@ -27,7 +27,7 @@ STAR:015,4,QUBEN2,MEAAT,BASSS,K7,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,  
 STAR:020,4,QUBEN2,MEAAT,POGIE,K7,E,A,EE  , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,13000,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:010,5,QUBEN2,ALL,POGIE,K7,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,13000,     ,18000, ,   ,    ,   , , , , , , , , ;
 STAR:015,5,QUBEN2,ALL,QUBEN,K7,E,A,EY  , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
-STAR:020,5,QUBEN2,ALL,QUBEN,K7,E,A,EE  , ,   ,FM, ,SGJ,K7,D, ,      ,2721,0174,3600,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
+STAR:020,5,QUBEN2,ALL,QUBEN,K7,E,A,EE  , ,   ,FM, ,SAV,K7,D, ,      ,1964,1345,3600,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 APPCH:010,A,D27L,CRG,CRG,K7,D, ,V  A, ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,03000,     ,18000, ,   ,    ,   , , , , , ,0, ,S;
 APPCH:020,A,D27L,CRG,ZEMID,K7,P,C,EE B, ,   ,CF, ,CRG,K7,D, ,      ,2514,0090,2510,0090,+,03000,     ,     , ,   ,    ,   , , , , , ,0, ,S;
 APPCH:010,D,D27L, ,ZEMID,K7,P,C,E  I, ,   ,IF, ,CRG,K7,D, ,      ,2514,0090,    ,    ,+,03000,     ,18000, ,   ,    ,   , , , , , ,0, ,S;

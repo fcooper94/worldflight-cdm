@@ -10,8 +10,8 @@ SID:045,5,EKPE1B,RW22,AC226,ED,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    
 SID:050,5,EKPE1B,RW22,EKPEK,ED,E,A,EE  , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 SID:010,2,EKPE8H,RW22, , , , ,    , ,   ,CD, ,AGD,ED,D, ,      ,    ,    ,2160,0063, ,     ,     ,05000, ,   ,    ,   ,EDAC,ED,P,A, , , , ;
 SID:020,2,EKPE8H,RW22,ABU,ED,D,B,E   ,R,   ,CF,Y,DRN,ED,D, ,      ,2656,0409,0730,0070, ,     ,     ,     ,-,220,    ,   , , , , , , , , ;
-SID:025,2,EKPE8H,RW22,D258P,ED,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
-SID:030,2,EKPE8H,RW22,EKPEK,ED,E,A,EE  , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
+SID:030,2,EKPE8H,RW22,D258P,ED,P,C,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
+SID:040,2,EKPE8H,RW22,EKPEK,ED,E,A,EE  , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 SID:010,5,GOLA1A,RW04, , , , ,    , ,   ,VA, , , , , ,      ,    ,    ,0360,    ,+,01100,     ,05000, ,   ,    ,   ,EDAC,ED,P,A, , , , ;
 SID:020,5,GOLA1A,RW04,AC041,ED,E,A,EY  , ,   ,CF, ,GOT,ED,D, ,      ,1094,0423,0360,0074, ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 SID:030,5,GOLA1A,RW04,AC045,ED,E,A,E   ,L,   ,DF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
@@ -24,8 +24,6 @@ SID:005,2,GOLA1G,RW04, , , , ,    , ,   ,CA, , , , , ,      ,    ,    ,0360,    
 SID:010,2,GOLA1G,RW04, , , , ,    , ,   ,CD, ,AGD,ED,D, ,      ,    ,    ,0370,0076, ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 SID:020,2,GOLA1G,RW04,ABU,ED,D,B,E   ,L,   ,CF,Y,GOT,ED,D, ,      ,1187,0407,1760,0070, ,     ,     ,     ,-,220,    ,   , , , , , , , , ;
 SID:030,2,GOLA1G,RW04,GOLAT,ED,E,A,EE  , ,   ,CF, ,GOT,ED,D, ,      ,1514,0289,2540,0230, ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
-SID:010,2,GOLA7H,RW22, , , , ,    , ,   ,CD, ,AGD,ED,D, ,      ,    ,    ,2160,0063, ,     ,     ,05000, ,   ,    ,   ,EDAC,ED,P,A, , , , ;
-SID:030,2,GOLA7H,RW22,GOLAT,ED,E,A,EE  , ,   ,CF, ,DRN,ED,D, ,      ,2620,0633,2720,0180, ,     ,     ,     ,-,220,    ,   , , , , , , , , ;
 SID:010,5,OSKA1A,RW04, , , , ,    , ,   ,VA, , , , , ,      ,    ,    ,0360,    ,+,01100,     ,05000, ,   ,    ,   ,EDAC,ED,P,A, , , , ;
 SID:020,5,OSKA1A,RW04,AC041,ED,E,A,EY  , ,   ,CF, ,GOT,ED,D, ,      ,1094,0423,0360,0074, ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 SID:030,5,OSKA1A,RW04,AC042,ED,E,A,E   ,L,   ,DF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     ,-,220,    ,   , , , , , , , , ;
@@ -42,14 +40,10 @@ SID:010,2,OSKA1G,RW04, , , , ,    , ,   ,CD, ,AGD,ED,D, ,      ,    ,    ,0370,0
 SID:020,2,OSKA1G,RW04, , , , ,    , ,   ,VI, , , , , ,      ,    ,    ,3140,    , ,     ,     ,     ,-,220,    ,   , , , , , , , , ;
 SID:030,2,OSKA1G,RW04,D104R,ED,P,C,EY  , ,   ,CF, ,GOT,ED,D, ,      ,1040,0182,2840,0220, ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 SID:040,2,OSKA1G,RW04,OSKAT,ED,E,A,EE  , ,   ,CF, ,GOT,ED,D, ,      ,0708,0146,3460,0100, ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
-SID:010,2,OSKA3H,RW22, , , , ,    , ,   ,CD, ,AGD,ED,D, ,      ,    ,    ,2160,0063, ,     ,     ,05000, ,   ,    ,   ,EDAC,ED,P,A, , , , ;
-SID:020,2,OSKA3H,RW22,GOT27,ED,P,C,EY  ,R,   ,CF, ,GOT,ED,D, ,      ,1310,0267,3110,0110, ,     ,     ,     ,-,220,    ,   , , , , , , , , ;
-SID:025,2,OSKA3H,RW22,MAG45,ED,P,C,E   , ,   ,CF, ,GOT,ED,D, ,      ,1051,0164,3460,0130, ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
-SID:030,2,OSKA3H,RW22,OSKAT,ED,E,A,EE  , ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:020,5,BEBE1V,ALL,BEBEX,ED,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,05000,     ,     , ,   ,    ,   ,EDAC,ED,P,A, , , , ;
 STAR:040,5,BEBE1V,ALL,ABU,ED,D,B,EE H, ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,05000,     ,     , ,   ,    ,   , , , , , , , , ;
-STAR:020,2,BEBE2T,ALL,BEBEX,ED,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   ,EDAC,ED,P,A, , , , ;
-STAR:040,2,BEBE2T,ALL,ABU,ED,D,B,EE H, ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
+STAR:010,2,BEBE2T,ALL,BEBEX,ED,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   ,EDAC,ED,P,A, , , , ;
+STAR:020,2,BEBE2T,ALL,ABU,ED,D,B,EE H, ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:010,5,GOLA1V,ALL,GOLAT,ED,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,05000,     ,     , ,   ,    ,   ,EDAC,ED,P,A, , , , ;
 STAR:020,5,GOLA1V,ALL,ABU,ED,D,B,EE H, ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,05000,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:010,2,GOLA6T,ALL,GOLAT,ED,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   ,EDAC,ED,P,A, , , , ;
@@ -63,7 +57,7 @@ APPCH:020,A,I22,ABU,D018K,ED,P,C,EY  , ,   ,CF, ,LEG,ED,D, ,      ,1596,0180,018
 APPCH:030,A,I22,ABU,CI22,ED,P,C,EE  ,R,   ,CF,Y,IALW,ED,P,I,      ,0365,0117,2160,0010,+,04000,     ,     ,-,210,    ,   , , , , , ,0,D,S;
 APPCH:010,I,I22, ,CI22,ED,P,C,E  I, ,   ,IF, ,IALW,ED,P,I,      ,0365,0117,    ,    ,J,04000,04000,     ,-,210,    ,   , , , , , ,0,D,S;
 APPCH:020,I,I22, ,LASID,ED,P,C,E  F, ,   ,CF, ,IALW,ED,P,I,      ,0365,0107,2160,0010,H,04000,04000,     , ,   ,-330,   ,EDAC,ED,P,A, ,0,D,S;
-APPCH:030,I,I22, ,RW22,ED,P,G,G  M, ,   ,CF, ,IALW,ED,P,I,      ,0365,0011,2160,0096, ,00657,     ,     , ,   ,-330,   , , , , , ,0,D,S;
+APPCH:030,I,I22, ,RW22,ED,P,G,G  M, ,   ,CF, ,IALW,ED,P,I,      ,0365,0011,2160,0095, ,00657,     ,     , ,   ,-330,   , , , , , ,0,D,S;
 APPCH:040,I,I22, , , , , ,  M , ,   ,CD, ,AGD,ED,D, ,      ,    ,    ,2160,0050, ,     ,     ,     , ,   ,    ,   , , , , , ,0,D,S;
 APPCH:050,I,I22, ,ABU,ED,D,B,E   ,R,   ,DF, , , , , ,      ,    ,    ,    ,    , ,05000,     ,     ,-,210,    ,   , , , , , ,0,D,S;
 APPCH:060,I,I22, ,ABU,ED,D,B,EE H,R,   ,HM, , , , , ,      ,    ,    ,3060,T010,+,05000,     ,     , ,   ,    ,   , , , , , ,0,D,S;

@@ -1,6 +1,6 @@
-STAR:010,5,GALI1A,ALL,MERVA,LL,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,05000,     ,20000, ,   ,    ,   ,LLHA,LL,P,A, , , , ;
-STAR:020,5,GALI1A,ALL,ZAHAV,LL,E,A,EB H, ,   ,TF, , , , , ,      ,    ,    ,    ,    ,B,05000,03000,     , ,   ,    ,   , , , , , , , , ;
-STAR:010,5,GALI1B,ALL,MERVA,LL,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,05000,     ,20000, ,   ,    ,   ,LLHA,LL,P,A, , , , ;
-STAR:020,5,GALI1B,ALL,ZAHAV,LL,E,A,EB H, ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,05000,     ,     , ,   ,    ,   , , , , , , , , ;
+STAR:010,5,GALI1A,ALL,MERVA,LL,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    ,B,06000,05000,20000, ,   ,    ,   ,LLHA,LL,P,A, , , , ;
+STAR:020,5,GALI1A,ALL,ZAHAV,LL,E,A,EE H, ,   ,TF, , , , , ,      ,    ,    ,    ,    ,B,06000,03000,     , ,   ,    ,   , , , , , , , , ;
+STAR:010,5,GALI1B,ALL,MERVA,LL,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    ,B,06000,05000,20000, ,   ,    ,   ,LLHA,LL,P,A, , , , ;
+STAR:020,5,GALI1B,ALL,ZAHAV,LL,E,A,EE H, ,   ,TF, , , , , ,      ,    ,    ,    ,    , ,05000,     ,     , ,   ,    ,   , , , , , , , , ;
 RWY:RW15 ,     ,      ,00026, ,    , ,   ;N32485555,E035022926,0161;
 RWY:RW33 ,     ,      ,00016, ,    , ,   ;N32482141,E035024414,0377;

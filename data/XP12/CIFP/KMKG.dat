@@ -13,7 +13,7 @@ APPCH:040,I,I32, , , , , ,  M , ,   ,CA, , , , , ,      ,    ,    ,3210,    ,+,0
 APPCH:050,I,I32, ,SINNI,K5,E,A,E   ,R,   ,DF, , , , , ,      ,    ,    ,    ,    ,+,03000,     ,     , ,   ,    ,   , , , , , ,0,N,S;
 APPCH:060,I,I32, ,SINNI,K5,E,A,EE H,R,   ,HM, , , , , ,      ,    ,    ,3210,T010, ,     ,     ,     , ,   ,    ,   , , , , , ,0,N,S;
 APPCH:010,A,R06,HITPO,HITPO,K5,P,C,EE C,R,   ,HF, , , , , ,      ,    ,    ,0600,0040,+,03000,     ,18000, ,   ,    ,   , , , , , ,A,J,S;
-APPCH:010,A,R06,SALES,SALES,K5,E,A,E  A, ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , ,A,J,S;
+APPCH:010,A,R06,SALES,SALES,K5,P,C,E  A, ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , ,A,J,S;
 APPCH:020,A,R06,SALES,HITPO,K5,P,C,EE B, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,03000,     ,     , ,   ,    ,   , , , , , ,A,J,S;
 APPCH:010,A,R06,WASOG,WASOG,K5,E,A,E  A, ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,18000, ,   ,    ,   , , , , , ,A,J,S;
 APPCH:020,A,R06,WASOG,HITPO,K5,P,C,EE B, ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,03000,     ,     , ,   ,    ,   , , , , , ,A,J,S;

@@ -9,7 +9,7 @@ SID:010,5,TIBL3S,RW21,YE440,UD,P,C,EY  , ,   ,CF, ,ZVR,UD,D, ,      ,1135,0057,2
 SID:020,5,TIBL3S,RW21,TIBLO,UD,E,A,EE  ,R,   ,DF, , , , , ,      ,    ,    ,    ,    ,+,FL140,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:010,5,GOSI4A,RW03,GOSIS,UD,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,FL130,     ,     ,-,250,    ,   ,ZVR,UD,D, , , , , ;
 STAR:020,5,GOSI4A,RW03,BANAG,UD,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,10000,     ,     ,-,250,    ,   , , , , , , , , ;
-STAR:030,5,GOSI4A,RW03,ZVR,UD,D, ,VE H, ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,07000,     ,     ,-,220,    ,   , , , , , , , , ;
+STAR:030,5,GOSI4A,RW03,ZVR,UD,D, ,VE  , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,07000,     ,     ,-,220,    ,   , , , , , , , , ;
 STAR:010,5,INDU4A,RW03,INDUR,LT,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,FL140,     ,     ,-,250,    ,   ,ZVR,UD,D, , , , , ;
 STAR:015,5,INDU4A,RW03,ISNUC,UD,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,11800,     ,     ,-,230,    ,   , , , , , , , , ;
 STAR:020,5,INDU4A,RW03,OKUDA,UD,E,A,EE H, ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,07000,     ,     ,-,220,    ,   , , , , , , , , ;
@@ -18,6 +18,6 @@ STAR:020,5,LODA1A,RW03,ISNUC,UD,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,   
 STAR:030,5,LODA1A,RW03,OKUDA,UD,E,A,EE H, ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,07000,     ,     ,-,220,    ,   , , , , , , , , ;
 STAR:010,5,SEVA4A,RW03,SEVAN,UD,E,A,E   , ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,FL130,     ,     ,-,250,    ,   ,ZVR,UD,D, , , , , ;
 STAR:020,5,SEVA4A,RW03,MAXAK,UD,E,A,E   , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,FL130,     ,     ,-,250,    ,   , , , , , , , , ;
-STAR:030,5,SEVA4A,RW03,ZVR,UD,D, ,VE H, ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,07000,     ,     ,-,220,    ,   , , , , , , , , ;
+STAR:030,5,SEVA4A,RW03,ZVR,UD,D, ,VE  , ,   ,TF, , , , , ,      ,    ,    ,    ,    ,+,07000,     ,     ,-,220,    ,   , , , , , , , , ;
 RWY:RW03 ,+0640,      ,02898, ,    , ,   ;N40064253,E044272386,0000;
 RWY:RW21 ,-0640,      ,02957, ,    , ,   ;N40074646,E044281703,1555;

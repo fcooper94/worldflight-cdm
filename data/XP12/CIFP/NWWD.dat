@@ -1,7 +1,7 @@
 APPCH:010,A,NDBA,KQ,KQ,NW,D,B,E  C, ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,04800,     ,     , ,   ,    ,   , , , , , ,0, ,C;
 APPCH:020,A,NDBA,KQ,KQ,NW,D,B,EY  , ,   ,FC, ,KQ,NW,D,B,      ,0000,0000,1690,0090, ,     ,     ,     , ,   ,    ,   , , , , , ,0, ,C;
-APPCH:030,A,NDBA,KQ,FF335,NF,P,C,EE  ,L,   ,CF,Y,KQ,NW,D,B,      ,1550,0077,3350,0012,+,03600,     ,     , ,   ,    ,   , , , , , ,0, ,C;
-APPCH:020,N,NDBA, ,FF335,NF,P,C,E  F, ,   ,IF, ,KQ,NW,D,B,      ,    ,    ,    ,    ,+,03600,     ,     , ,   ,    ,   ,KQ,NW,D,B, ,0, ,C;
+APPCH:030,A,NDBA,KQ,FF335,NW,P,C,EE  ,L,   ,CF,Y,KQ,NW,D,B,      ,1550,0077,3350,0012,+,03600,     ,     , ,   ,    ,   , , , , , ,0, ,C;
+APPCH:020,N,NDBA, ,FF335,NW,P,C,E  F, ,   ,IF, ,KQ,NW,D,B,      ,    ,    ,    ,    ,+,03600,     ,     , ,   ,    ,   ,KQ,NW,D,B, ,0, ,C;
 APPCH:030,N,NDBA, ,KQ,NW,D,B,E  M, ,   ,CF, ,KQ,NW,D,B,      ,    ,    ,3350,0077, ,01920,     ,     , ,   , 000,   , , , , , ,0, ,C;
 APPCH:040,N,NDBA, , , , , ,  M ,L,   ,CA,Y, , , , ,      ,    ,    ,1930,    ,+,03400,     ,     , ,   ,    ,   , , , , , ,0, ,C;
 APPCH:050,N,NDBA, ,KQ,NW,D,B,EE H,L,   ,DF, , , , , ,      ,    ,    ,    ,    ,+,04800,     ,     , ,   ,    ,   , , , , , ,0, ,C;

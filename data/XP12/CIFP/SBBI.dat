@@ -72,7 +72,7 @@ STAR:010,5,EKAP1B,RW36,RAXIT,SB,E,A,E C , ,010,IF, , , , , ,      ,    ,    ,   
 STAR:020,5,EKAP1B,RW36,EKAPU,SB,E,A,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:030,5,EKAP1B,RW36,LIVEG,SB,E,A,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    ,-,FL180,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:040,5,EKAP1B,RW36,LOKEP,SB,E,A,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    ,-,FL150,     ,     , ,   ,    ,   , , , , , , , , ;
-STAR:050,5,EKAP1B,RW36,MAVSA,SB,E,A,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,09000,     ,     , ,   ,    ,   , , , , , , , , ;
+STAR:050,5,EKAP1B,RW36,VUKUN,SB,E,A,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,09000,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:060,5,EKAP1B,RW36,GATUV,SB,E,A,E   , ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,08000,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:070,5,EKAP1B,RW36,BI101,SB,P,C,EE  , ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,06500,     ,     , ,   ,    ,   , , , , , , , , ;
 APPCH:010,A,D18-Y,DABOB,DABOB,SB,P,C,E  A, ,   ,IF, , , , , ,      ,    ,    ,    ,    ,+,07500,     ,     , ,   ,    ,   , , , , , ,0, ,S;

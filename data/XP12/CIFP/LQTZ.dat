@@ -133,7 +133,7 @@ STAR:020,5,VIBO1P,RW09,TZ414,LQ,P,C,E   , ,010,TF, , , , , ,      ,    ,    ,   
 STAR:030,5,VIBO1P,RW09,BIBWA,LQ,P,C,EE  , ,010,TF, , , , , ,      ,    ,    ,    ,    ,+,04700,     ,     ,-,230,    ,   , , , , , , , , ;
 STAR:010,2,VIBO1R,RW09,VIBOP,LQ,E,A,E C , ,   ,IF, , , , , ,      ,    ,    ,    ,    , ,     ,     ,     , ,   ,    ,   ,TZU,LQ,D, , , , , ;
 STAR:020,2,VIBO1R,RW09,VIBOP,LQ,E,A,E C , ,   ,FD, ,TZU,LQ,D, ,      ,3544,0326,1740,0306, ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
-STAR:030,2,VIBO1R,RW09,D354Y,LQ,P,C,E   , ,   ,CF, ,TZU,LQ,D, ,      ,3544,0250,1740,0056,+,10000,     ,     , ,   ,    ,   , , , , , , , , ;
+STAR:030,2,VIBO1R,RW09,D354Y,LQ,P,C,E   , ,   ,CF, ,TZU,LQ,D, ,      ,3544,0250,1740,0056,+,FL110,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:040,2,VIBO1R,RW09,D305Y,LQ,P,C,E   ,L,   ,AF, ,TZU,LQ,D, ,      ,3050,0250,3540,    ,+,08000,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:050,2,VIBO1R,RW09,D278Y,LQ,P,C,E   ,L,   ,AF, ,TZU,LQ,D, ,      ,2780,0250,3050,    , ,     ,     ,     , ,   ,    ,   , , , , , , , , ;
 STAR:060,2,VIBO1R,RW09,ILKUF,LQ,P,C,E   ,L,   ,AF, ,TZU,LQ,D, ,      ,2715,0250,2780,    , ,     ,     ,     ,-,250,    ,   , , , , , , , , ;
