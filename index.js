@@ -12660,11 +12660,21 @@ document.addEventListener('DOMContentLoaded', function () {
 
   scopeEl.addEventListener('change', refreshDatalist);
 
-  function renderGrants(grants) {
-    if (!grants.length) {
+  function renderGrants(grants, autoFirs) {
+    autoFirs = autoFirs || [];
+    if (!grants.length && !autoFirs.length) {
       grantsEl.innerHTML = '<span style="font-size:12px;color:var(--muted);">No FIR or division grants yet.</span>';
       return;
     }
+    var autoHtml = autoFirs.map(function(f) {
+      return '<span title="Auto-granted via the WF FIR Management spreadsheet (VATSIM). Manage on the sheet — resynced hourly." style="display:inline-flex;align-items:center;gap:6px;padding:4px 10px;background:rgba(20,184,166,0.10);color:#14b8a6;border:1px dashed #14b8a6;border-radius:6px;font-size:12px;font-weight:600;">'
+        + '<span style="font-size:10px;font-weight:700;opacity:0.7;text-transform:uppercase;letter-spacing:0.05em;">Auto</span>'
+        + f
+        + '</span>';
+    }).join('');
+    var autoNote = autoFirs.length
+      ? '<div style="flex-basis:100%;font-size:11px;color:var(--muted);margin-top:4px;">Auto grants come from the WF FIR Management spreadsheet and can only be removed there (resynced hourly).</div>'
+      : '';
     grantsEl.innerHTML = grants.map(function(g) {
       var color = g.scope === 'DIVISION' ? '#a78bfa' : '#60a5fa';
       var bg = g.scope === 'DIVISION' ? 'rgba(139,92,246,0.12)' : 'rgba(96,165,250,0.12)';
@@ -12673,7 +12683,7 @@ document.addEventListener('DOMContentLoaded', function () {
         + g.value
         + '<button data-grant-id="' + g.id + '" class="fir-events-revoke-btn" title="Revoke" style="background:none;border:none;color:inherit;cursor:pointer;font-size:14px;line-height:1;padding:0 0 0 2px;opacity:0.7;">&times;</button>'
         + '</span>';
-    }).join('');
+    }).join('') + autoHtml + autoNote;
 
     grantsEl.querySelectorAll('.fir-events-revoke-btn').forEach(function(btn) {
       btn.addEventListener('click', function() {
@@ -12691,8 +12701,8 @@ document.addEventListener('DOMContentLoaded', function () {
     loadOptions();
     fetch('/admin/api/fir-events-access/' + cid, { credentials: 'same-origin' })
       .then(function(r) { return r.json(); })
-      .then(function(data) { renderGrants(data.grants || []); })
-      .catch(function() { renderGrants([]); });
+      .then(function(data) { renderGrants(data.grants || [], data.autoFirs || []); })
+      .catch(function() { renderGrants([], []); });
   };
 
   addBtn.addEventListener('click', async function() {
@@ -13100,7 +13110,11 @@ app.get('/admin/api/fir-events-access/:cid', requireAdmin, async (req, res) => {
       where: { cid },
       orderBy: [{ scope: 'asc' }, { value: 'asc' }]
     });
-    res.json({ cid, grants: rows });
+    // FIRs auto-granted via the WF FIR Management spreadsheet (not revocable
+    // here — managed on the sheet itself, resynced hourly).
+    const csv = firManagementState.data?.cidToFirs;
+    const autoFirs = (csv && (csv[cid] || csv[String(cid)])) || [];
+    res.json({ cid, grants: rows, autoFirs: [...autoFirs] });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
