@@ -269,6 +269,15 @@ export default function renderLayout({
 
 </header>
 
+  ${user && user._impersonation ? `
+  <div class="impersonation-banner">
+    <span class="impersonation-banner-text">Viewing site as <strong>${user.personal?.name_full || 'User'} (${user.cid})</strong> — your admin session is paused</span>
+    <form method="POST" action="/impersonate/stop" class="impersonation-return-form">
+      <button type="submit" class="impersonation-return-btn">Return to normal view</button>
+    </form>
+  </div>
+  ` : ''}
+
   ${siteBanner.enabled && siteBanner.text ? `
   <div class="site-banner">
     <span class="site-banner-text">${siteBanner.text}</span>

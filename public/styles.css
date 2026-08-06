@@ -426,6 +426,38 @@ a:hover{ text-decoration:none; }
 .site-banner-text {
   display: inline;
 }
+.impersonation-banner {
+  position: sticky;
+  top: 0;
+  z-index: 1101;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  background: linear-gradient(135deg, rgba(245,158,11,0.22), rgba(217,119,6,0.22));
+  border-bottom: 1px solid rgba(245,158,11,0.5);
+  padding: 8px 20px;
+  font-size: 13px;
+  color: var(--text, #e2e8f0);
+}
+.impersonation-return-form { margin: 0; }
+.impersonation-return-btn {
+  padding: 4px 12px;
+  background: #f59e0b;
+  color: #1a1a1a;
+  border: none;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.impersonation-return-btn:hover { background: #fbbf24; }
+[data-theme="light"] .impersonation-banner {
+  background: linear-gradient(135deg, #fef3c7, #fde68a);
+  border-bottom-color: rgba(217,119,6,0.4);
+}
+
 .admin-alert-banner {
   position: relative;
   z-index: 1;

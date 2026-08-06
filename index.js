@@ -11221,7 +11221,10 @@ app.get('/admin/access-management', requireAdmin, (req, res) => {
     </div>
 
     <div id="permResults" style="display:none;">
-      <div id="permResultsHeader" style="font-size:13px;color:var(--muted);margin-bottom:8px;"></div>
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:8px;">
+        <div id="permResultsHeader" style="font-size:13px;color:var(--muted);"></div>
+        <button id="viewAsUserBtn" class="action-btn" style="display:none;font-size:11px;padding:3px 12px;">View site as this user</button>
+      </div>
       <div style="overflow-x:auto;">
         <table class="admin-table">
           <thead id="permResultsHead"><tr><th>CID</th><th>Pattern</th><th>Actions</th></tr></thead>
@@ -12046,6 +12049,25 @@ document.addEventListener('DOMContentLoaded', function () {
   var resultsHeader = document.getElementById('permResultsHeader');
   var resultsBody = document.getElementById('permResultsBody');
   var addSection = document.getElementById('permAddSection');
+  var viewAsBtn = document.getElementById('viewAsUserBtn');
+
+  viewAsBtn.addEventListener('click', async function() {
+    var cid = Number(viewAsBtn.dataset.cid);
+    if (!cid) return;
+    var label = viewAsBtn.dataset.name ? viewAsBtn.dataset.name + ' (' + cid + ')' : String(cid);
+    if (!confirm('View the site as ' + label + '? Your admin session is paused until you click "Return to normal view".')) return;
+    try {
+      var r = await fetch('/admin/api/impersonate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ cid: cid })
+      });
+      var d = await r.json();
+      if (r.ok) { window.location.href = '/'; return; }
+      alert(d.error || 'Failed to switch user');
+    } catch (e) { alert('Failed to switch user'); }
+  });
   var addMsg = document.getElementById('permAddMsg');
   var patternInput = document.getElementById('permAddPattern');
   var helpIcon = document.getElementById('permAddHelp');
@@ -12124,6 +12146,7 @@ document.addEventListener('DOMContentLoaded', function () {
         addSection.style.display = '';
 
         var thead = document.getElementById('permResultsHead');
+        viewAsBtn.style.display = 'none';
 
         // CID search returns grouped object
         if (data._searchType === 'cid') {
@@ -12137,6 +12160,9 @@ document.addEventListener('DOMContentLoaded', function () {
           if (data.name) headerParts.push(data.name);
           if (data.role) headerParts.push(data.role.charAt(0).toUpperCase() + data.role.slice(1));
           resultsHeader.textContent = headerParts.join(' \u2014 ');
+          viewAsBtn.style.display = '';
+          viewAsBtn.dataset.cid = data.cid;
+          viewAsBtn.dataset.name = data.name || '';
 
           var html = '';
 
@@ -13148,6 +13174,52 @@ app.delete('/admin/api/fir-events-access/:id', requireAdmin, async (req, res) =>
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
+});
+
+// ── Admin impersonation: browse the site as another user ──
+// The real admin session is parked in req.session.impersonatorUser and a
+// minimal session user is built for the target CID (same shape as the
+// dev-login custom-CID path). The layout shows a banner whenever
+// user._impersonation is set; POST /impersonate/stop restores the admin.
+app.post('/admin/api/impersonate', requireAdmin, async (req, res) => {
+  const targetCid = Number(req.body?.cid);
+  if (!targetCid || targetCid <= 0) return res.status(400).json({ error: 'cid required' });
+  if (req.session.impersonatorUser) return res.status(400).json({ error: 'Already viewing as another user — return to normal view first' });
+  const selfCid = Number(req.session.user?.data?.cid);
+  if (targetCid === selfCid) return res.status(400).json({ error: 'That is already you' });
+
+  let displayName = `User ${targetCid}`;
+  try {
+    const u = await prisma.user.findUnique({ where: { cid: targetCid }, select: { name: true } });
+    if (u?.name) displayName = u.name;
+  } catch {}
+  const parts = displayName.trim().split(/\s+/);
+
+  req.session.impersonatorUser = req.session.user;
+  req.session.user = { data: {
+    cid: targetCid,
+    personal: {
+      name_first: parts[0] || displayName,
+      name_last: parts.slice(1).join(' '),
+      name_full: displayName
+    },
+    vatsim: {
+      rating: { id: 1, short: 'OBS', long: 'Observer' },
+      pilotrating: { id: 0, short: 'NEW', long: 'Basic Member' },
+      division: { id: '', name: '' },
+      region: { id: '', name: '' }
+    },
+    oauth: { token_valid: true },
+    _impersonation: { byCid: selfCid }
+  } };
+  req.session.save(() => res.json({ success: true, cid: targetCid, name: displayName }));
+});
+
+app.post('/impersonate/stop', (req, res) => {
+  if (!req.session.impersonatorUser) return res.redirect('/');
+  req.session.user = req.session.impersonatorUser;
+  delete req.session.impersonatorUser;
+  req.session.save(() => res.redirect('/admin/access-management'));
 });
 
 // Autocomplete data: all FIRs known to the active event + the standard
