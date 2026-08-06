@@ -116,6 +116,60 @@ function getFirsForPoint(lat, lon) {
   return results;
 }
 
+/* ===== NAVDATA: DB-BACKED PERSISTENCE =====
+   Railway's container filesystem is ephemeral — files uploaded via /admin/airac
+   are lost on every deploy. Uploads are therefore also stored in the NavdataFile
+   table; on boot, the DB copy is written back to disk when it's newer than the
+   file that shipped with the deploy. */
+const NAVDATA_DB_PATHS = {
+  'earth_fix.dat': ['data', 'navdata', 'earth_fix.dat'],
+  'earth_awy.dat': ['data', 'navdata', 'earth_awy.dat'],
+  'earth_nav.dat': ['data', 'navdata', 'earth_nav.dat'],
+  'earth_msa.dat': ['data', 'navdata', 'earth_msa.dat'],
+  'fir-boundaries.geojson': ['public', 'fir-boundaries.geojson'],
+};
+
+async function saveNavdataToDb(targetName, filePath) {
+  const content = fs.readFileSync(filePath);
+  const cycle = targetName.endsWith('.dat') ? (parseAiracHeader(filePath)?.cycle || null) : null;
+  await prisma.navdataFile.upsert({
+    where: { name: targetName },
+    update: { content, cycle, uploadedAt: new Date() },
+    create: { name: targetName, content, cycle },
+  });
+  console.log('[AIRAC] Persisted ' + targetName + ' to DB' + (cycle ? ' (cycle ' + cycle + ')' : ''));
+}
+
+async function restoreNavdataFromDb() {
+  let rows;
+  try {
+    rows = await prisma.navdataFile.findMany();
+  } catch (err) {
+    console.warn('[AIRAC] Navdata restore skipped -', err.message);
+    return;
+  }
+  for (const row of rows) {
+    const rel = NAVDATA_DB_PATHS[row.name];
+    if (!rel) continue;
+    const target = path.join(__dirname, ...rel);
+    try {
+      if (row.name.endsWith('.dat')) {
+        // Only overwrite when the DB copy's AIRAC cycle beats the disk file's —
+        // committing a newer cycle to the repo must not be shadowed by an old upload.
+        const diskCycle = parseInt(parseAiracHeader(target)?.cycle, 10);
+        const dbCycle = parseInt(row.cycle, 10);
+        if (!isNaN(diskCycle) && (isNaN(dbCycle) || dbCycle <= diskCycle)) continue;
+      } else if (fs.existsSync(target) && Buffer.from(row.content).equals(fs.readFileSync(target))) {
+        continue;
+      }
+      fs.writeFileSync(target, Buffer.from(row.content));
+      console.log('[AIRAC] Restored ' + row.name + ' from DB' + (row.cycle ? ' (cycle ' + row.cycle + ')' : ''));
+    } catch (err) {
+      console.warn('[AIRAC] Failed restoring ' + row.name + ':', err.message);
+    }
+  }
+}
+
 function loadNavFixes() {
   const fixFile = path.join(path.dirname(fileURLToPath(import.meta.url)), 'data', 'navdata', 'earth_fix.dat');
   if (!fs.existsSync(fixFile)) { console.log('[NAV] earth_fix.dat not found'); return; }
@@ -2720,6 +2774,7 @@ async function prefetchGroundForActiveSchedule() {
 
 async function bootstrap() {
   setBootstrapStatus(1, 'Loading navigation data');
+  await restoreNavdataFromDb();
   loadNavFixes();
 
   setBootstrapStatus(2, 'Loading FIR boundaries');
@@ -25880,6 +25935,14 @@ app.post('/admin/api/airac/upload', requireAdmin, multer({
     // Replace the file
     fs.copyFileSync(req.file.path, targetPath);
     fs.unlinkSync(req.file.path);
+
+    // Persist to DB — the container filesystem is wiped on every deploy
+    try {
+      await saveNavdataToDb(targetName, targetPath);
+    } catch (dbErr) {
+      console.warn('[AIRAC] DB persist failed for ' + targetName + ':', dbErr.message);
+      return res.status(500).send('File updated on the server, but saving to the database failed — this upload will NOT survive the next deploy. Error: ' + dbErr.message);
+    }
 
     // Reload data
     if (fileType === 'earth_fix' || fileType === 'earth_nav') {

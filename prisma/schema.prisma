@@ -428,3 +428,10 @@ model AdminPermission {
   @@unique([cid, page])
   @@index([cid])
 }
+
+model NavdataFile {
+  name       String   @id
+  cycle      String?
+  content    Bytes
+  uploadedAt DateTime @default(now())
+}
