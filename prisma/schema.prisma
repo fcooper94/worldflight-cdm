@@ -435,3 +435,23 @@ model NavdataFile {
   content    Bytes
   uploadedAt DateTime @default(now())
 }
+
+model AffiliateApplication {
+  id          Int       @id @default(autoincrement())
+  callsign    String
+  simType     String
+  cid         Int
+  sinceYear   Int?
+  hasMembers  Boolean   @default(false)
+  contact     String?
+  notes       String?
+  source      String    @default("admin")
+  status      String    @default("pending")
+  decidedBy   Int?
+  decidedAt   DateTime?
+  affiliateId Int?
+  createdAt   DateTime  @default(now())
+
+  @@index([status])
+  @@index([cid])
+}

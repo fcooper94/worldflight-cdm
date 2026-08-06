@@ -8986,6 +8986,7 @@ app.get('/auth/login', requireSiteGate, (req, res, next) => {
 
   next();
 }, vatsimLogin);
+
 // Note: /auth/callback is deliberately NOT gated. It's only reached via a
 // VATSIM redirect that follows /auth/login (which IS gated), so the visitor
 // has already satisfied the gate to start the flow. Re-gating here causes a
@@ -21040,10 +21041,14 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
     return res.status(403).send('You do not have Admin access');
   }
 
-  const [teams, affiliates] = await Promise.all([
+  const [teams, affiliates, applications] = await Promise.all([
     prisma.officialTeam.findMany({ orderBy: { createdAt: 'desc' } }),
-    prisma.affiliate.findMany({ orderBy: { createdAt: 'desc' } })
+    prisma.affiliate.findMany({ orderBy: { createdAt: 'desc' } }),
+    prisma.affiliateApplication.findMany({ orderBy: { createdAt: 'desc' } }).catch(() => [])
   ]);
+  // Pending first, then decided ones (newest first within each group)
+  applications.sort((a, b) => (a.status === 'pending' ? 0 : 1) - (b.status === 'pending' ? 0 : 1));
+  const pendingApps = applications.filter(a => a.status === 'pending');
 
   const teamRecord = (t) => JSON.stringify({ teamName: t.teamName, callsign: t.callsign, mainCid: t.mainCid, aircraftType: t.aircraftType, country: t.country, participatingWf26: t.participatingWf26 }).replace(/'/g, '&#39;');
   const affRecord = (a) => JSON.stringify({ callsign: a.callsign, simType: a.simType, cid: a.cid, sinceYear: a.sinceYear, hasMembers: a.hasMembers, participatingWf26: a.participatingWf26 }).replace(/'/g, '&#39;');
@@ -21056,6 +21061,7 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
         <div class="ot-add-actions">
           <button class="action-btn primary ot-add-btn" id="addTeamBtn" data-add-for="teams">+ Add Official Team</button>
           <button class="action-btn primary ot-add-btn" id="addAffiliateBtn" data-add-for="affiliates" hidden>+ Add WF Affiliate</button>
+          <button class="action-btn primary ot-add-btn" id="addApplicationBtn" data-add-for="applications" hidden>+ Add Application</button>
         </div>
       </div>
 
@@ -21069,6 +21075,11 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
           <svg class="ot-tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
           <span>WF Affiliates</span>
           <span class="ot-tab-count">${affiliates.length}</span>
+        </button>
+        <button class="ot-tab" data-tab="applications" role="tab" type="button">
+          <svg class="ot-tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="15" x2="15" y2="15"/><line x1="9" y1="11" x2="12" y2="11"/></svg>
+          <span>Applications</span>
+          <span class="ot-tab-count${pendingApps.length ? ' ot-tab-count-alert' : ''}">${pendingApps.length}</span>
         </button>
       </div>
     </header>
@@ -21175,6 +21186,57 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
         </div>
       `}
     </div>
+
+    <div class="ot-panel" data-panel="applications">
+      ${applications.length === 0 ? `
+        <div class="ot-empty">
+          <div class="ot-empty-title">No applications yet</div>
+          <div class="ot-empty-sub">Public applications from /affiliate-apply land here — or click "+ Add Application" for people who reached out directly.</div>
+        </div>
+      ` : `
+        <div class="ot-table-wrap">
+          <table class="ot-table">
+            <thead>
+              <tr>
+                <th>Name / Callsign</th>
+                <th>Sim Type</th>
+                <th>CID</th>
+                <th>Since</th>
+                <th>Contact</th>
+                <th>Notes</th>
+                <th>Source</th>
+                <th>Applied</th>
+                <th>Status</th>
+                <th class="ot-th-actions"></th>
+              </tr>
+            </thead>
+            <tbody>
+              ${applications.map(a => `
+                <tr data-application-id="${a.id}">
+                  <td class="ot-cell-name"><span class="ot-cell-callsign">${escapeHtml(a.callsign)}</span></td>
+                  <td><span class="ot-simtype" data-sim="${escapeHtml((a.simType || '').toUpperCase())}">${escapeHtml(a.simType || '—')}</span></td>
+                  <td class="ot-cell-cid">${a.cid}</td>
+                  <td>${a.sinceYear ? `<span class="ot-since">${a.sinceYear}</span>` : '<span class="ot-muted">—</span>'}</td>
+                  <td class="ot-app-contact">${a.contact ? escapeHtml(a.contact) : '<span class="ot-muted">—</span>'}</td>
+                  <td class="ot-app-notes" title="${a.notes ? escapeHtml(a.notes) : ''}">${a.notes ? escapeHtml(a.notes.length > 60 ? a.notes.slice(0, 60) + '…' : a.notes) : '<span class="ot-muted">—</span>'}</td>
+                  <td><span class="ot-app-source ot-app-source-${a.source}">${a.source === 'public' ? 'Applied online' : 'Added by admin'}</span></td>
+                  <td class="ot-muted">${new Date(a.createdAt).toISOString().slice(0, 10)}</td>
+                  <td><span class="ot-app-status ot-app-status-${a.status}">${a.status.charAt(0).toUpperCase() + a.status.slice(1)}</span></td>
+                  <td class="ot-cell-actions">
+                    ${a.status === 'pending' ? `
+                      <button class="ot-btn ot-btn-approve" data-action="approve-application" data-id="${a.id}" data-callsign="${escapeHtml(a.callsign)}">Approve</button>
+                      <button class="ot-btn ot-btn-danger" data-action="decline-application" data-id="${a.id}" data-callsign="${escapeHtml(a.callsign)}">Decline</button>
+                    ` : `
+                      <button class="ot-btn ot-btn-danger" data-action="delete-application" data-id="${a.id}">Delete</button>
+                    `}
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      `}
+    </div>
   </section>
 
   <style>
@@ -21238,6 +21300,20 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
     .ot-panel { display: none; }
     .ot-panel.active { display: block; }
 
+    /* Applications tab */
+    .ot-tab-count-alert { background: rgba(239,68,68,0.18); color: #f87171; }
+    .ot-btn-approve {
+      background: rgba(34,197,94,0.15);
+      color: #4ade80;
+      border-color: #4ade80;
+    }
+    .ot-app-status { font-size: 11px; font-weight: 700; padding: 2px 10px; border-radius: 999px; }
+    .ot-app-status-pending { background: rgba(245,158,11,0.15); color: #fbbf24; }
+    .ot-app-status-approved { background: rgba(34,197,94,0.15); color: #4ade80; }
+    .ot-app-status-declined { background: rgba(239,68,68,0.15); color: #f87171; }
+    .ot-app-source { font-size: 11px; color: var(--muted); }
+    .ot-app-contact, .ot-app-notes { font-size: 12px; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
     @media (max-width: 720px) {
       .ot-card { padding: 16px; }
       .ot-table thead th, .ot-table tbody td { padding: 10px 10px; }
@@ -21250,11 +21326,13 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
       const panels = document.querySelectorAll('.ot-panel');
       const addTeam = document.getElementById('addTeamBtn');
       const addAff = document.getElementById('addAffiliateBtn');
+      const addApp = document.getElementById('addApplicationBtn');
       function activate(name) {
         tabs.forEach(function(t) { t.classList.toggle('active', t.dataset.tab === name); });
         panels.forEach(function(p) { p.classList.toggle('active', p.dataset.panel === name); });
         if (addTeam) addTeam.hidden = name !== 'teams';
         if (addAff)  addAff.hidden  = name !== 'affiliates';
+        if (addApp)  addApp.hidden  = name !== 'applications';
         try { localStorage.setItem('ot-active-tab', name); } catch (e) {}
       }
       tabs.forEach(function(t) {
@@ -21262,7 +21340,7 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
       });
       var saved = 'teams';
       try { saved = localStorage.getItem('ot-active-tab') || 'teams'; } catch (e) {}
-      if (saved === 'affiliates') activate('affiliates');
+      if (saved === 'affiliates' || saved === 'applications') activate(saved);
     })();
   </script>
 
@@ -21345,10 +21423,17 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
 
 </div>
 
+  <!-- ================= APPLICATION EXTRA FIELDS ================= -->
+  <div id="applicationExtraFields" class="hidden">
+    <label style="display:block; margin:10px 0 6px;">Contact (Discord / email)</label>
+    <input name="appContact" type="text" placeholder="e.g. NATOPOWER / someone@mail.com" maxlength="120" />
 
+    <label style="display:block; margin:10px 0 6px;">Notes</label>
+    <textarea name="appNotes" rows="3" maxlength="1000" placeholder="Anything from the conversation worth keeping" style="width:100%;resize:vertical;"></textarea>
+  </div>
 
   <!-- ================= WF26 ================= -->
-  <label style="display:flex; align-items:center; gap:10px; margin:14px 0 0; user-select:none;">
+  <label id="participatingWf26Row" style="display:flex; align-items:center; gap:10px; margin:14px 0 0; user-select:none;">
     <input type="checkbox" name="participatingWf26" />
     Participating in Active Event
   </label>
@@ -21370,11 +21455,14 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
 
     const teamFields = document.getElementById('teamFields');
     const affiliateFields = document.getElementById('affiliateFields');
+    const applicationExtraFields = document.getElementById('applicationExtraFields');
+    const participatingRow = document.getElementById('participatingWf26Row');
 
     const titleEl = document.getElementById('adminEntryModalTitle');
     const cancelBtn = document.getElementById('adminEntryCancel');
     const addTeamBtn = document.getElementById('addTeamBtn');
     const addAffiliateBtn = document.getElementById('addAffiliateBtn');
+    const addApplicationBtn = document.getElementById('addApplicationBtn');
 
     if (!modal || !form || !typeInput || !teamFields || !affiliateFields || !titleEl || !cancelBtn || !addTeamBtn || !addAffiliateBtn) {
       console.error('[Admin modal] Missing required DOM elements:', {
@@ -21396,6 +21484,12 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
       typeInput.value = type;
       editingId = record?.id ?? null;
       form.reset();
+
+      if (applicationExtraFields) {
+        applicationExtraFields.classList.toggle('hidden', type !== 'application');
+        setSectionEnabled(applicationExtraFields, type === 'application');
+      }
+      if (participatingRow) participatingRow.style.display = type === 'application' ? 'none' : '';
 
       if (type === 'team') {
         titleEl.textContent = editingId ? 'Edit Official Team' : 'Add Official Team';
@@ -21425,7 +21519,9 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
         if (sinceYear) sinceYear.required = false;
 
       } else {
-        titleEl.textContent = editingId ? 'Edit WF Affiliate' : 'Add WF Affiliate';
+        titleEl.textContent = type === 'application'
+          ? 'Add Affiliate Application'
+          : (editingId ? 'Edit WF Affiliate' : 'Add WF Affiliate');
 
         teamFields.classList.add('hidden');
         affiliateFields.classList.remove('hidden');
@@ -21494,6 +21590,11 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
       openEntryModal('affiliate');
     });
 
+    if (addApplicationBtn) addApplicationBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      openEntryModal('application');
+    });
+
     // Edit buttons (event delegation so newly injected rows also work)
     document.addEventListener('click', (e) => {
       var teamEdit = e.target.closest('.edit-team-btn');
@@ -21540,9 +21641,16 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
         const yr = (fd.get('sinceYear') || '').toString().trim();
         payload.sinceYear = yr ? Number(yr) : null;
         payload.hasMembers = String(fd.get('hasMembers') || '').toLowerCase() === 'true';
+        if (type === 'application') {
+          delete payload.participatingWf26;
+          payload.contact = (fd.get('appContact') || '').toString().trim();
+          payload.notes = (fd.get('appNotes') || '').toString().trim();
+        }
       }
 
-      const baseUrl = type === 'team' ? '/api/admin/official-teams' : '/api/admin/affiliates';
+      const baseUrl = type === 'team' ? '/api/admin/official-teams'
+        : type === 'application' ? '/admin/api/affiliate-applications'
+        : '/api/admin/affiliates';
       const isEdit = editingId != null;
       const url = isEdit ? baseUrl + '/' + editingId : baseUrl;
 
@@ -21600,6 +21708,47 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
           credentials: 'same-origin'
         });
 
+        if (!res.ok) alert('Failed to delete');
+        else location.reload();
+      }
+
+      if (action === 'approve-application') {
+        const ok = await openConfirmModal({
+          title: 'Approve Application',
+          message: 'Approve ' + (btn.dataset.callsign || 'this application') + '? They will be added to WF Affiliates and made active for the event.'
+        });
+        if (!ok) return;
+        const res = await fetch('/admin/api/affiliate-applications/' + id + '/approve', {
+          method: 'POST', credentials: 'same-origin'
+        });
+        if (!res.ok) {
+          const d = await res.json().catch(() => ({}));
+          alert(d.error || 'Failed to approve');
+        } else location.reload();
+      }
+
+      if (action === 'decline-application') {
+        const ok = await openConfirmModal({
+          title: 'Decline Application',
+          message: 'Decline ' + (btn.dataset.callsign || 'this application') + '? The row is kept for reference.'
+        });
+        if (!ok) return;
+        const res = await fetch('/admin/api/affiliate-applications/' + id + '/decline', {
+          method: 'POST', credentials: 'same-origin'
+        });
+        if (!res.ok) alert('Failed to decline');
+        else location.reload();
+      }
+
+      if (action === 'delete-application') {
+        const ok = await openConfirmModal({
+          title: 'Delete Application',
+          message: 'Permanently remove this application record?'
+        });
+        if (!ok) return;
+        const res = await fetch('/admin/api/affiliate-applications/' + id, {
+          method: 'DELETE', credentials: 'same-origin'
+        });
         if (!res.ok) alert('Failed to delete');
         else location.reload();
       }
@@ -21816,6 +21965,267 @@ app.delete('/api/admin/official-teams/:id', requireAdmin, async (req, res) => {
   }
 
   return res.json({ success: true });
+});
+
+/* ===== AFFILIATE APPLICATIONS =====
+   People who want to join as a WF Affiliate. Applications arrive either from
+   the public /affiliate-apply form (source 'public') or are entered by an
+   admin for people who reached out elsewhere (source 'admin'). Approving one
+   creates the Affiliate (participating/active) exactly like the manual
+   affiliate-create endpoint; the application row is kept as history. */
+
+// Public application form. Logged-in users apply; the CID is taken from the
+// session. Not linked from the nav — share the URL directly.
+app.get('/affiliate-apply', async (req, res) => {
+  const user = req.session?.user?.data || null;
+  const isAdmin = user ? isAdminUser(user.cid) : false;
+  const cid = Number(user?.cid) || null;
+
+  let existingState = null; // 'pending' | 'affiliate' | null
+  if (cid) {
+    try {
+      const [pending, aff] = await Promise.all([
+        prisma.affiliateApplication.findFirst({ where: { cid, status: 'pending' } }),
+        prisma.affiliate.findFirst({ where: { cid } })
+      ]);
+      if (aff) existingState = 'affiliate';
+      else if (pending) existingState = 'pending';
+    } catch {}
+  }
+
+  const yearOpts = (() => {
+    const now = new Date().getUTCFullYear();
+    const opts = [];
+    for (let y = now + 1; y >= 2002; y--) opts.push(`<option value="${y}">${y}</option>`);
+    return opts.join('');
+  })();
+
+  const inner = !user ? `
+      <p style="color:var(--muted);margin:0 0 16px;">You need to be logged in with your VATSIM account to apply.</p>
+      <a href="/auth/login" class="action-btn primary" style="align-self:flex-start;">Login to apply</a>
+  ` : existingState === 'affiliate' ? `
+      <p style="color:#4ade80;font-weight:600;margin:0;">Your CID (${cid}) is already registered as a WF Affiliate — nothing to do here!</p>
+  ` : existingState === 'pending' ? `
+      <p style="color:#fbbf24;font-weight:600;margin:0;">You already have a pending application. We'll be in touch once it's been reviewed.</p>
+  ` : `
+      <p style="color:var(--muted);margin:0 0 16px;">Applying as <strong>${escapeHtml(user.personal?.name_full || '')} (${cid})</strong></p>
+      <form id="affApplyForm" style="display:flex;flex-direction:column;gap:4px;max-width:480px;">
+        <label style="margin:6px 0 4px;">Name / Callsign *</label>
+        <input name="callsign" type="text" maxlength="40" required placeholder="e.g. FRENCH BAGUETTE" style="text-transform:uppercase;" />
+
+        <label style="margin:10px 0 4px;">Sim Type *</label>
+        <select name="simType" required>
+          <option value="" disabled selected>Select sim type</option>
+          <option value="FULL SIM">FULL SIM</option>
+          <option value="HOME COCKPIT">HOME COCKPIT</option>
+          <option value="COMMUNITY">COMMUNITY</option>
+          <option value="OTHER">OTHER</option>
+        </select>
+
+        <label style="margin:10px 0 4px;">Active since (year)</label>
+        <select name="sinceYear"><option value="">Not sure</option>${yearOpts}</select>
+
+        <label style="margin:10px 0 4px;">Multiple pilots / users?</label>
+        <select name="hasMembers"><option value="false" selected>No</option><option value="true">Yes</option></select>
+
+        <label style="margin:10px 0 4px;">Contact (Discord / email)</label>
+        <input name="contact" type="text" maxlength="120" placeholder="So we can reach you outside VATSIM" />
+
+        <label style="margin:10px 0 4px;">Tell us about your setup</label>
+        <textarea name="notes" rows="4" maxlength="1000" placeholder="Your sim, your group, anything else worth knowing" style="resize:vertical;"></textarea>
+
+        <div style="margin-top:16px;display:flex;align-items:center;gap:12px;">
+          <button type="submit" class="action-btn primary">Submit application</button>
+          <span id="affApplyMsg" style="font-size:13px;display:none;"></span>
+        </div>
+      </form>
+      <script>
+        (function() {
+          var form = document.getElementById('affApplyForm');
+          var msg = document.getElementById('affApplyMsg');
+          form.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            var fd = new FormData(form);
+            var payload = {
+              callsign: (fd.get('callsign') || '').toString().trim().toUpperCase(),
+              simType: (fd.get('simType') || '').toString(),
+              sinceYear: (fd.get('sinceYear') || '').toString() || null,
+              hasMembers: (fd.get('hasMembers') || '') === 'true',
+              contact: (fd.get('contact') || '').toString().trim(),
+              notes: (fd.get('notes') || '').toString().trim()
+            };
+            try {
+              var r = await fetch('/api/affiliate-applications', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'same-origin',
+                body: JSON.stringify(payload)
+              });
+              var d = await r.json();
+              if (r.ok) {
+                form.outerHTML = '<p style="color:#4ade80;font-weight:600;">Application submitted — thanks! We\\'ll review it and you\\'ll see your name under WF Affiliates once approved.</p>';
+              } else {
+                msg.textContent = d.error || 'Failed to submit';
+                msg.style.color = '#f87171';
+                msg.style.display = '';
+              }
+            } catch (err) {
+              msg.textContent = 'Failed to submit';
+              msg.style.color = '#f87171';
+              msg.style.display = '';
+            }
+          });
+        })();
+      </script>
+  `;
+
+  const content = `
+  <section class="card" style="max-width:680px;margin:0 auto;padding:28px;">
+    <h2 style="margin:0 0 6px;">Apply as a WF Affiliate</h2>
+    <p style="color:var(--muted);font-size:13px;margin:0 0 20px;">WF Affiliates are established sim setups and communities that fly the WorldFlight route alongside the official teams.</p>
+    <div style="display:flex;flex-direction:column;">${inner}</div>
+  </section>`;
+
+  res.send(renderLayout({ title: 'Apply as a WF Affiliate', user, isAdmin, content, layoutClass: 'dashboard-full' }));
+});
+
+// Public submission — logged-in users only; CID comes from the session.
+app.post('/api/affiliate-applications', async (req, res) => {
+  const sessUser = req.session?.user?.data;
+  const cid = Number(sessUser?.cid);
+  if (!cid) return res.status(401).json({ error: 'You must be logged in to apply' });
+
+  const { callsign, simType, sinceYear, hasMembers, contact, notes } = req.body || {};
+  if (!callsign || !simType) return res.status(400).json({ error: 'Name/callsign and sim type are required' });
+
+  const yr = sinceYear == null || sinceYear === '' ? null : Number(sinceYear);
+  if (yr != null && (!Number.isFinite(yr) || yr < 1990 || yr > 2100)) {
+    return res.status(400).json({ error: 'Invalid year' });
+  }
+
+  try {
+    const [pending, existingAff] = await Promise.all([
+      prisma.affiliateApplication.findFirst({ where: { cid, status: 'pending' } }),
+      prisma.affiliate.findFirst({ where: { cid } })
+    ]);
+    if (pending) return res.status(400).json({ error: 'You already have a pending application' });
+    if (existingAff) return res.status(400).json({ error: 'This CID is already registered as a WF Affiliate' });
+
+    const created = await prisma.affiliateApplication.create({
+      data: {
+        callsign: String(callsign).trim().toUpperCase().slice(0, 40),
+        simType: String(simType).trim().toUpperCase().slice(0, 30),
+        cid,
+        sinceYear: yr,
+        hasMembers: Boolean(hasMembers),
+        contact: contact ? String(contact).trim().slice(0, 120) : null,
+        notes: notes ? String(notes).trim().slice(0, 1000) : null,
+        source: 'public'
+      }
+    });
+    console.log(`[AFF-APP] New public application #${created.id} from CID ${cid} (${created.callsign})`);
+    res.json({ success: true, id: created.id });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Admin manual add (people who reached out via Discord/email etc.)
+app.post('/admin/api/affiliate-applications', requireAdmin, async (req, res) => {
+  const { callsign, simType, cid, sinceYear, hasMembers, contact, notes } = req.body || {};
+  if (!callsign || !simType || !cid) return res.status(400).json({ error: 'Missing required fields' });
+  const yr = sinceYear == null || sinceYear === '' ? null : Number(sinceYear);
+  if (yr != null && (!Number.isFinite(yr) || yr < 1990 || yr > 2100)) {
+    return res.status(400).json({ error: 'Invalid sinceYear' });
+  }
+  try {
+    const created = await prisma.affiliateApplication.create({
+      data: {
+        callsign: String(callsign).trim().toUpperCase().slice(0, 40),
+        simType: String(simType).trim().toUpperCase().slice(0, 30),
+        cid: Number(cid),
+        sinceYear: yr,
+        hasMembers: Boolean(hasMembers),
+        contact: contact ? String(contact).trim().slice(0, 120) : null,
+        notes: notes ? String(notes).trim().slice(0, 1000) : null,
+        source: 'admin'
+      }
+    });
+    res.json({ success: true, id: created.id });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Approve — creates the Affiliate as participating/active (mirrors the
+// manual affiliate-create endpoint: role grant + owner reload + auto-assign).
+app.post('/admin/api/affiliate-applications/:id/approve', requireAdmin, async (req, res) => {
+  const id = Number(req.params.id);
+  const adminCid = Number(req.session?.user?.data?.cid) || null;
+  try {
+    const appRow = await prisma.affiliateApplication.findUnique({ where: { id } });
+    if (!appRow) return res.status(404).json({ error: 'Application not found' });
+    if (appRow.status !== 'pending') return res.status(400).json({ error: 'Application already ' + appRow.status });
+
+    const created = await prisma.affiliate.create({
+      data: {
+        callsign: appRow.callsign,
+        simType: appRow.simType,
+        cid: appRow.cid,
+        sinceYear: appRow.sinceYear,
+        hasMembers: appRow.hasMembers,
+        participatingWf26: true
+      }
+    });
+
+    if (!isAdminUser(appRow.cid)) {
+      await prisma.userAdditionalRole.upsert({
+        where: { cid_role: { cid: appRow.cid, role: 'WF_AFFILIATE' } },
+        update: {},
+        create: { cid: appRow.cid, role: 'WF_AFFILIATE' }
+      });
+      affiliateCids.add(appRow.cid);
+    }
+    await loadAffiliateOwners();
+    await loadAffiliates();
+
+    await prisma.affiliateApplication.update({
+      where: { id },
+      data: { status: 'approved', decidedBy: adminCid, decidedAt: new Date(), affiliateId: created.id }
+    });
+
+    autoAssignTeamThenAffiliate({ reason: `affiliate application ${id} approved` }).catch(() => {});
+    console.log(`[AFF-APP] Application #${id} (${appRow.callsign}) approved by ${adminCid} — affiliate ${created.id} created`);
+    res.json({ success: true, affiliateId: created.id });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/admin/api/affiliate-applications/:id/decline', requireAdmin, async (req, res) => {
+  const id = Number(req.params.id);
+  const adminCid = Number(req.session?.user?.data?.cid) || null;
+  try {
+    const appRow = await prisma.affiliateApplication.findUnique({ where: { id } });
+    if (!appRow) return res.status(404).json({ error: 'Application not found' });
+    if (appRow.status !== 'pending') return res.status(400).json({ error: 'Application already ' + appRow.status });
+    await prisma.affiliateApplication.update({
+      where: { id },
+      data: { status: 'declined', decidedBy: adminCid, decidedAt: new Date() }
+    });
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.delete('/admin/api/affiliate-applications/:id', requireAdmin, async (req, res) => {
+  try {
+    await prisma.affiliateApplication.delete({ where: { id: Number(req.params.id) } });
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // Delete Affiliate

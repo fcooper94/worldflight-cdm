@@ -278,7 +278,15 @@
       "PowerShell(node \"C:\\\\Users\\\\Fraser\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--dev-WorldFlight-Planning\\\\943bd8e0-dc87-4b34-b5be-0f1ce0b8c5c5\\\\scratchpad\\\\verify-navdatafile.js\")",
       "PowerShell(node \"C:\\\\Users\\\\Fraser\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--dev-WorldFlight-Planning\\\\943bd8e0-dc87-4b34-b5be-0f1ce0b8c5c5\\\\scratchpad\\\\check-fir-access.mjs\")",
       "PowerShell(node -c index.js)",
-      "PowerShell(node -c layout.js)"
+      "PowerShell(node -c layout.js)",
+      "PowerShell(node \"C:\\\\Users\\\\Fraser\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--dev-WorldFlight-Planning\\\\943bd8e0-dc87-4b34-b5be-0f1ce0b8c5c5\\\\scratchpad\\\\check-wf2601.js\")",
+      "PowerShell(node \"C:\\\\Users\\\\Fraser\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--dev-WorldFlight-Planning\\\\943bd8e0-dc87-4b34-b5be-0f1ce0b8c5c5\\\\scratchpad\\\\check-flow.js\")",
+      "PowerShell(node \"C:\\\\Users\\\\Fraser\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--dev-WorldFlight-Planning\\\\943bd8e0-dc87-4b34-b5be-0f1ce0b8c5c5\\\\scratchpad\\\\check-slotkeys.js\")",
+      "PowerShell(node \"C:\\\\Users\\\\Fraser\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--dev-WorldFlight-Planning\\\\943bd8e0-dc87-4b34-b5be-0f1ce0b8c5c5\\\\scratchpad\\\\fix-dupe-slot.js\")",
+      "PowerShell(node \"C:\\\\Users\\\\Fraser\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--dev-WorldFlight-Planning\\\\943bd8e0-dc87-4b34-b5be-0f1ce0b8c5c5\\\\scratchpad\\\\fix-dupe-slot.js\" --push)",
+      "PowerShell(\\(Get-Content layout.js | Measure-Object -Line\\).Lines)",
+      "PowerShell($env:DATABASE_URL='file:./dev.db'; npx prisma db push --schema=prisma/schema.dev.prisma --skip-generate --accept-data-loss; node -c index.js; node -c layout.js)",
+      "PowerShell(node \"C:\\\\Users\\\\Fraser\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--dev-WorldFlight-Planning\\\\943bd8e0-dc87-4b34-b5be-0f1ce0b8c5c5\\\\scratchpad\\\\verify-affapp.js\")"
     ]
   }
 }

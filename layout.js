@@ -260,10 +260,10 @@ export default function renderLayout({
       </div>
     </div>
   ` : `
-    <a href="/auth/login" class="login-btn">
-      <span class="login-full">${process.env.DEV_MODE === 'true' ? 'Login Offline' : 'Login with VATSIM'}</span>
+    <button type="button" class="login-btn" id="loginModalOpenBtn">
+      <span class="login-full">Login</span>
       <span class="login-short">Login</span>
-    </a>
+    </button>
   `}
 </div>
 
@@ -1320,6 +1320,80 @@ ${isAdmin ? `
   });
 })();
 </script>
+
+${user ? '' : `
+<!-- ===== LOGIN CHOICE MODAL ===== -->
+<div id="loginChoiceModal" class="modal hidden">
+  <div class="modal-backdrop"></div>
+  <div class="modal-card card login-modal-card">
+    <button type="button" class="login-modal-close" id="loginModalClose" aria-label="Close">&times;</button>
+
+    <div id="loginViewChoice">
+      <h3>Login</h3>
+      <p class="modal-help">Sign in to book slots and access pilot resources.</p>
+      <a href="/auth/login" class="login-modal-vatsim">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/></svg>
+        ${process.env.DEV_MODE === 'true' ? 'Login Offline (dev)' : 'Login with VATSIM'}
+      </a>
+      <div class="login-modal-divider"><span>or</span></div>
+      <button type="button" class="login-modal-alt" id="loginNotVatsimBtn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
+        I'm not a VATSIM member
+      </button>
+    </div>
+
+    <div id="loginViewLocal" class="hidden">
+      <button type="button" class="login-modal-back" id="loginBackBtn">&larr; Back</button>
+      <div class="login-modal-info">
+        <div class="login-modal-info-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        </div>
+        <h3>VATSIM account required</h3>
+        <p>The WorldFlight Planning Portal runs on the VATSIM network — slot bookings, briefings and controller coordination are all tied to your VATSIM ID, so an account is required to log in.</p>
+        <p>Joining VATSIM is free and only takes a few minutes. Once you're registered, come back here and log in.</p>
+        <a href="https://my.vatsim.net/register" target="_blank" rel="noopener" class="login-modal-vatsim">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
+          Join VATSIM
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+  var modal = document.getElementById('loginChoiceModal');
+  var openBtn = document.getElementById('loginModalOpenBtn');
+  if (!modal || !openBtn) return;
+
+  var viewChoice = document.getElementById('loginViewChoice');
+  var viewLocal = document.getElementById('loginViewLocal');
+
+  function showChoice() {
+    viewChoice.classList.remove('hidden');
+    viewLocal.classList.add('hidden');
+  }
+  function open() {
+    showChoice();
+    modal.classList.remove('hidden');
+  }
+  function close() { modal.classList.add('hidden'); }
+
+  openBtn.addEventListener('click', open);
+  document.getElementById('loginModalClose').addEventListener('click', close);
+  modal.querySelector('.modal-backdrop').addEventListener('click', close);
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && !modal.classList.contains('hidden')) close();
+  });
+
+  document.getElementById('loginNotVatsimBtn').addEventListener('click', function() {
+    viewChoice.classList.add('hidden');
+    viewLocal.classList.remove('hidden');
+  });
+  document.getElementById('loginBackBtn').addEventListener('click', showChoice);
+})();
+</script>
+`}
 
 </body>
 </html>`;
