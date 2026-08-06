@@ -264,7 +264,12 @@
       "Bash(node -e \"const s = require\\('fs'\\).readFileSync\\('index.js','utf8'\\); console.log\\('Smart quotes:', \\(s.match\\(/\\\\u2019/g\\)||[]\\).length\\)\")",
       "Bash(DATABASE_URL=\"postgresql://postgres:eqlaWvnIHoAflvdngKPhZtHNWwojqXnv@mainline.proxy.rlwy.net:28655/railway\" npx prisma db push --schema=prisma/schema.prisma --skip-generate --accept-data-loss)",
       "Bash(DATABASE_URL=\"postgresql://postgres:eqlaWvnIHoAflvdngKPhZtHNWwojqXnv@mainline.proxy.rlwy.net:28655/railway\" npx prisma db push --schema=prisma/schema.prisma --skip-generate)",
-      "Bash(node -c c:/dev/WorldFlight-Planning/index.js)"
+      "Bash(node -c c:/dev/WorldFlight-Planning/index.js)",
+      "PowerShell(git stash pop)",
+      "PowerShell(git pull origin main)",
+      "PowerShell(git stash drop)",
+      "PowerShell(git status --short | Where-Object { $_ -notmatch 'data/XP12/CIFP/' })",
+      "PowerShell(git add data/XP12/CIFP)"
     ]
   }
 }
