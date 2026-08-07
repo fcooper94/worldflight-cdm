@@ -17805,6 +17805,15 @@ app.get('/affiliates/hq', requireLogin, async (req, res) => {
 
   const sinceYear = affiliate?.sinceYear || null;
   const isSolo = !!(affiliate && !affiliate.hasMembers);
+  // Main CID holders manage members on /affiliates/my-members, so their HQ
+  // shows the public-profile editor instead of the Our Members table.
+  const isMainHolder = !!(affiliate && !readOnly && Number(affiliate.cid) === cid);
+  const profilePhotoRow = affiliate
+    ? await prisma.profilePhoto.findUnique({
+        where: { entityType_entityId: { entityType: 'affiliate', entityId: affiliate.id } },
+        select: { updatedAt: true }
+      }).catch(() => null)
+    : null;
   const soloPilot = isSolo ? memberOptions.find(m => m.isMain) || null : null;
 
   // Live VATSIM presence — pilot or controller, otherwise offline
@@ -17858,7 +17867,7 @@ app.get('/affiliates/hq', requireLogin, async (req, res) => {
       ${readOnly ? `
       <section class="card aff-readonly-banner">
         <span class="aff-readonly-badge">Admin · Read-only view</span>
-        <span class="aff-readonly-text">Viewing <strong>${escapeHtml(affiliate.callsign || '')}</strong> as administrator. No actions are available.</span>
+        <span class="aff-readonly-text">Viewing <strong>${escapeHtml(affiliate.name || affiliate.callsign || '')}</strong> as administrator. No actions are available.</span>
         <a href="/official-teams" class="ot-btn">← Back to Affiliates</a>
       </section>
       ` : ''}
@@ -17868,7 +17877,7 @@ app.get('/affiliates/hq', requireLogin, async (req, res) => {
         <div class="card-side-body aff-identity-body">
           <div class="aff-identity-main">
             <div class="aff-identity-eyebrow">Official WorldFlight Affiliate</div>
-            <div class="aff-identity-name">${escapeHtml(affiliate.callsign || '')}</div>
+            <div class="aff-identity-name">${escapeHtml(affiliate.name || affiliate.callsign || '')}</div>
             <div class="aff-identity-meta">
               <span class="ot-simtype" data-sim="${escapeHtml((affiliate.simType || '').toUpperCase())}">${escapeHtml(affiliate.simType || '—')}</span>
               ${sinceYear ? `<span class="ot-since">Affiliate since ${sinceYear}</span>` : ''}
@@ -17990,6 +17999,67 @@ app.get('/affiliates/hq', requireLogin, async (req, res) => {
               <div class="aff-stat-value mono">${escapeHtml(livePresence.detail || '—')}</div>
             </div>
           </div>
+        </section>
+        ` : isMainHolder ? `
+        <section class="card aff-profile-card">
+          <header class="aff-members-header">
+            <h3 class="section-title" style="margin:0;">Public Profile</h3>
+            <span style="font-size:11px;color:var(--muted);">Shown on the Teams &amp; Affiliates page</span>
+          </header>
+          <form id="affProfileForm" style="display:flex;flex-direction:column;gap:4px;margin-top:12px;">
+            <label style="font-size:13px;margin:0 0 4px;">Website Link</label>
+            <input name="website" type="text" maxlength="200" placeholder="https://..." value="${escapeHtml(affiliate.website || '')}" style="text-transform:none;text-align:left;" />
+
+            <label style="font-size:13px;margin:12px 0 4px;">Aircraft Type</label>
+            <input name="aircraftType" type="text" maxlength="10" placeholder="e.g. B744" value="${escapeHtml(affiliate.aircraftType || '')}" style="text-transform:none;text-align:left;" />
+
+            <label style="font-size:13px;margin:12px 0 4px;">Bio</label>
+            <textarea name="description" rows="4" maxlength="1000" placeholder="Who you are, what you fly, where you're based…" style="width:100%;box-sizing:border-box;resize:vertical;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-family:inherit;font-size:14px;">${escapeHtml(affiliate.description || '')}</textarea>
+
+            <label style="font-size:13px;margin:12px 0 4px;">Profile Picture</label>
+            <div style="display:flex;gap:14px;align-items:center;">
+              ${profilePhotoRow
+                ? `<img src="/api/profile-photo/affiliate/${affiliate.id}?v=${new Date(profilePhotoRow.updatedAt).getTime()}" alt="Profile photo" style="width:72px;height:72px;object-fit:cover;border-radius:10px;border:1px solid var(--border);flex-shrink:0;" />`
+                : `<div style="width:72px;height:72px;border-radius:10px;border:2px dashed var(--border);display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:11px;flex-shrink:0;">None</div>`}
+              <input name="photo" type="file" accept="image/*" style="font-size:13px;" />
+            </div>
+
+            <div style="display:flex;align-items:center;gap:12px;margin-top:16px;">
+              <button type="submit" class="action-btn primary">Save profile</button>
+              <span id="affProfileMsg" style="display:none;font-size:13px;"></span>
+            </div>
+          </form>
+          <script>
+            (function() {
+              var form = document.getElementById('affProfileForm');
+              var msg = document.getElementById('affProfileMsg');
+              form.addEventListener('submit', async function(e) {
+                e.preventDefault();
+                var photoInput = form.querySelector('input[name="photo"]');
+                if (photoInput.files[0] && photoInput.files[0].size > 5 * 1024 * 1024) {
+                  msg.textContent = 'Photo must be under 5 MB';
+                  msg.style.color = '#f87171'; msg.style.display = '';
+                  return;
+                }
+                var fd = new FormData(form);
+                try {
+                  var r = await fetch('/api/affiliates/hq/profile', { method: 'POST', credentials: 'same-origin', body: fd });
+                  var d = await r.json().catch(function() { return {}; });
+                  if (r.ok) {
+                    msg.textContent = 'Saved!';
+                    msg.style.color = '#4ade80'; msg.style.display = '';
+                    if (photoInput.files[0]) setTimeout(function() { location.reload(); }, 600);
+                  } else {
+                    msg.textContent = d.error || 'Failed to save';
+                    msg.style.color = '#f87171'; msg.style.display = '';
+                  }
+                } catch (err) {
+                  msg.textContent = 'Failed to save';
+                  msg.style.color = '#f87171'; msg.style.display = '';
+                }
+              });
+            })();
+          </script>
         </section>
         ` : `
         <section class="card aff-members-card">
@@ -19098,6 +19168,35 @@ app.get('/affiliates/hq', requireLogin, async (req, res) => {
 });
 
 // Solo affiliate: release this sector (delete booking, mark released) or restore (recreate booking).
+// Main CID edits the affiliate's public profile (website, bio, photo) —
+// surfaced on the public Teams & Affiliates page.
+app.post('/api/affiliates/hq/profile', requireLogin, requireAffiliate, (req, res, next) => {
+  profilePhotoUpload.single('photo')(req, res, (err) => {
+    if (err) return res.status(400).json({ error: err.code === 'LIMIT_FILE_SIZE' ? 'Photo must be under 5 MB' : 'Upload failed: ' + err.message });
+    next();
+  });
+}, async (req, res) => {
+  const cid = Number(req.session.user.data.cid);
+  try {
+    const affiliate = await resolveUserAffiliate(cid);
+    if (!affiliate || Number(affiliate.cid) !== cid) {
+      return res.status(403).json({ error: 'Only the affiliate Main CID can edit the public profile' });
+    }
+    await prisma.affiliate.update({
+      where: { id: affiliate.id },
+      data: {
+        website: cleanWebsite(req.body?.website),
+        aircraftType: req.body?.aircraftType ? String(req.body.aircraftType).trim().toUpperCase().slice(0, 10) : null,
+        description: req.body?.description ? String(req.body.description).trim().slice(0, 1000) : null
+      }
+    });
+    await saveProfilePhoto('affiliate', affiliate.id, req.file);
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.post('/api/affiliates/hq/solo-toggle', requireLogin, requireAffiliate, async (req, res) => {
   const cid = Number(req.session?.user?.data?.cid);
   const sectorNumber = String(req.body?.sectorNumber || '').trim();
@@ -19281,7 +19380,7 @@ app.get('/affiliates/my-members', requireLogin, requireAffiliateOwner, async (re
         <section class="card mm-card" data-aff-id="${a.id}">
           <div class="mm-card-header">
             <div class="mm-card-title">
-              <span class="ot-cell-callsign mm-callsign">${escapeHtml(a.callsign)}</span>
+              <span class="ot-cell-callsign mm-callsign">${escapeHtml(a.name || a.callsign)}</span>
               <span class="ot-simtype" data-sim="${escapeHtml((a.simType || '').toUpperCase())}">${escapeHtml(a.simType || '—')}</span>
               <span class="mm-count">${list.length} member${list.length === 1 ? '' : 's'}</span>
             </div>
@@ -21042,16 +21141,30 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
   }
 
   const [teams, affiliates, applications] = await Promise.all([
-    prisma.officialTeam.findMany({ orderBy: { createdAt: 'desc' } }),
-    prisma.affiliate.findMany({ orderBy: { createdAt: 'desc' } }),
+    prisma.officialTeam.findMany({ orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }] }),
+    prisma.affiliate.findMany({ orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }] }),
     prisma.affiliateApplication.findMany({ orderBy: { createdAt: 'desc' } }).catch(() => [])
   ]);
+  const appPhotoMeta = applications.length
+    ? await prisma.affiliateApplicationPhoto.findMany({
+        where: { applicationId: { in: applications.map(a => a.id) } },
+        select: { id: true, applicationId: true }
+      }).catch(() => [])
+    : [];
+  const photosByApp = {};
+  for (const p of appPhotoMeta) (photosByApp[p.applicationId] = photosByApp[p.applicationId] || []).push(p.id);
   // Pending first, then decided ones (newest first within each group)
   applications.sort((a, b) => (a.status === 'pending' ? 0 : 1) - (b.status === 'pending' ? 0 : 1));
   const pendingApps = applications.filter(a => a.status === 'pending');
 
-  const teamRecord = (t) => JSON.stringify({ teamName: t.teamName, callsign: t.callsign, mainCid: t.mainCid, aircraftType: t.aircraftType, country: t.country, participatingWf26: t.participatingWf26 }).replace(/'/g, '&#39;');
-  const affRecord = (a) => JSON.stringify({ callsign: a.callsign, simType: a.simType, cid: a.cid, sinceYear: a.sinceYear, hasMembers: a.hasMembers, participatingWf26: a.participatingWf26 }).replace(/'/g, '&#39;');
+  const teamRecord = (t) => JSON.stringify({ teamName: t.teamName, callsign: t.callsign, mainCid: t.mainCid, aircraftType: t.aircraftType, country: t.country, sinceYear: t.sinceYear, description: t.description, website: t.website, sortOrder: t.sortOrder, participatingWf26: t.participatingWf26 }).replace(/'/g, '&#39;');
+  const affRecord = (a) => JSON.stringify({ name: a.name, callsign: a.callsign, simType: a.simType, cid: a.cid, sinceYear: a.sinceYear, hasMembers: a.hasMembers, aircraftType: a.aircraftType, description: a.description, website: a.website, sortOrder: a.sortOrder, participatingWf26: a.participatingWf26 }).replace(/'/g, '&#39;');
+  const appRecord = (a) => JSON.stringify({
+    id: a.id, callsign: a.callsign, simType: a.simType, cid: a.cid, hasMembers: a.hasMembers,
+    contact: a.contact, heardAbout: a.heardAbout, website: a.website, notes: a.notes,
+    source: a.source, status: a.status, createdAt: a.createdAt,
+    photoIds: (photosByApp[a.id] || [])
+  }).replace(/'/g, '&#39;');
 
   const content = `
   <section class="card card-full ot-card">
@@ -21107,7 +21220,7 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
             <tbody>
               ${teams.map(t => `
                 <tr data-team-id="${t.id}">
-                  <td class="ot-cell-name ot-uppercase">${escapeHtml(t.teamName)}</td>
+                  <td class="ot-cell-name">${escapeHtml(t.teamName)}</td>
                   <td><span class="ot-cell-callsign">${escapeHtml(t.callsign)}</span></td>
                   <td class="ot-cell-cid">${t.mainCid}</td>
                   <td><span class="ot-cell-actype">${escapeHtml(t.aircraftType)}</span></td>
@@ -21156,7 +21269,8 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
               ${affiliates.map(a => `
                 <tr data-affiliate-id="${a.id}">
                   <td class="ot-cell-name">
-                    <span class="ot-cell-callsign">${escapeHtml(a.callsign)}</span>
+                    <span class="ot-cell-callsign">${escapeHtml(a.name || a.callsign)}</span>
+                    ${a.name && a.name !== a.callsign ? `<span style="font-size:11px;color:var(--muted);font-family:monospace;margin-left:6px;">${escapeHtml(a.callsign)}</span>` : ''}
                     <a class="ot-open-link" href="/affiliates/hq?id=${a.id}" target="_blank" rel="noopener" title="Open Affiliate HQ (read-only)" aria-label="Open Affiliate HQ">
                       <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
                     </a>
@@ -21201,9 +21315,10 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
                 <th>Name / Callsign</th>
                 <th>Sim Type</th>
                 <th>CID</th>
-                <th>Since</th>
                 <th>Contact</th>
+                <th>Heard via</th>
                 <th>Notes</th>
+                <th>Photos</th>
                 <th>Source</th>
                 <th>Applied</th>
                 <th>Status</th>
@@ -21212,13 +21327,22 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
             </thead>
             <tbody>
               ${applications.map(a => `
-                <tr data-application-id="${a.id}">
-                  <td class="ot-cell-name"><span class="ot-cell-callsign">${escapeHtml(a.callsign)}</span></td>
+                <tr data-application-id="${a.id}" data-record='${appRecord(a)}' class="ot-app-row">
+                  <td class="ot-cell-name">
+                    <span class="ot-cell-callsign">${escapeHtml(a.callsign)}</span>
+                    ${a.website ? `<a class="ot-open-link" href="${escapeHtml(a.website)}" target="_blank" rel="noopener" title="${escapeHtml(a.website)}" aria-label="Open website">
+                      <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                    </a>` : ''}
+                  </td>
                   <td><span class="ot-simtype" data-sim="${escapeHtml((a.simType || '').toUpperCase())}">${escapeHtml(a.simType || '—')}</span></td>
                   <td class="ot-cell-cid">${a.cid}</td>
-                  <td>${a.sinceYear ? `<span class="ot-since">${a.sinceYear}</span>` : '<span class="ot-muted">—</span>'}</td>
                   <td class="ot-app-contact">${a.contact ? escapeHtml(a.contact) : '<span class="ot-muted">—</span>'}</td>
+                  <td class="ot-app-heard">${a.heardAbout ? escapeHtml(a.heardAbout) : '<span class="ot-muted">—</span>'}</td>
                   <td class="ot-app-notes" title="${a.notes ? escapeHtml(a.notes) : ''}">${a.notes ? escapeHtml(a.notes.length > 60 ? a.notes.slice(0, 60) + '…' : a.notes) : '<span class="ot-muted">—</span>'}</td>
+                  <td class="ot-app-photos">${(photosByApp[a.id] || []).map(pid => `
+                    <a href="/admin/api/affiliate-applications/${a.id}/photos/${pid}" target="_blank" rel="noopener" title="Open photo">
+                      <img src="/admin/api/affiliate-applications/${a.id}/photos/${pid}" alt="Setup photo" loading="lazy" />
+                    </a>`).join('') || '<span class="ot-muted">—</span>'}</td>
                   <td><span class="ot-app-source ot-app-source-${a.source}">${a.source === 'public' ? 'Applied online' : 'Added by admin'}</span></td>
                   <td class="ot-muted">${new Date(a.createdAt).toISOString().slice(0, 10)}</td>
                   <td><span class="ot-app-status ot-app-status-${a.status}">${a.status.charAt(0).toUpperCase() + a.status.slice(1)}</span></td>
@@ -21313,6 +21437,21 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
     .ot-app-status-declined { background: rgba(239,68,68,0.15); color: #f87171; }
     .ot-app-source { font-size: 11px; color: var(--muted); }
     .ot-app-contact, .ot-app-notes { font-size: 12px; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .ot-app-heard { font-size: 12px; white-space: nowrap; }
+    .ot-app-row { cursor: pointer; }
+    .ot-app-row:hover td { background: rgba(255,255,255,0.03); }
+    .ot-app-photos { white-space: nowrap; }
+    .ot-app-photos a { display: inline-block; margin-right: 4px; }
+    .ot-app-photos img {
+      height: 34px;
+      width: 34px;
+      object-fit: cover;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      vertical-align: middle;
+      transition: transform .15s ease;
+    }
+    .ot-app-photos img:hover { transform: scale(1.15); }
 
     @media (max-width: 720px) {
       .ot-card { padding: 16px; }
@@ -21371,6 +21510,17 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
 
     <label style="display:block; margin:10px 0 6px;">Country</label>
     <input name="country" type="text" placeholder="e.g. UK" required />
+
+    <label style="display:block; margin:10px 0 6px;">Member Since <span style="color:var(--muted);font-weight:400;">(shown on the public page)</span></label>
+    <select name="teamSinceYear">
+      <option value="" selected>Not set</option>
+      ${(() => {
+        const now = new Date().getUTCFullYear();
+        const opts = [];
+        for (let y = now + 1; y >= 1990; y--) opts.push(`<option value="${y}">${y}</option>`);
+        return opts.join('');
+      })()}
+    </select>
   </div>
 
   <!-- ================= AFFILIATE FIELDS ================= -->
@@ -21378,11 +21528,20 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
   <!-- ================= AFFILIATE FIELDS ================= -->
 <div id="affiliateFields" class="hidden">
 
-  <label style="display:block; margin:10px 0 6px;">Name / Callsign</label>
+  <label style="display:block; margin:10px 0 6px;">Team / Display Name <span style="color:var(--muted);font-weight:400;">(optional — defaults to callsign)</span></label>
+  <input
+    name="affiliateName"
+    type="text"
+    placeholder="e.g. French Baguette"
+    maxlength="60"
+    style="text-transform:none;text-align:left;"
+  />
+
+  <label style="display:block; margin:10px 0 6px;">Callsign</label>
   <input
     name="affiliateCallsign"
     type="text"
-    placeholder="e.g. TOM1VB"
+    placeholder="e.g. FBT26WF or TOM1VB"
     maxlength="40"
     style="text-transform:uppercase;"
   />
@@ -21396,6 +21555,9 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
     <option value="OTHER">OTHER</option>
   </select>
 
+  <label style="display:block; margin:10px 0 6px;">A/C Type <span style="color:var(--muted);font-weight:400;">(optional)</span></label>
+  <input name="affAircraftType" type="text" maxlength="10" placeholder="e.g. B744" />
+
   <label style="display:block; margin:10px 0 6px;">Main CID</label>
   <input
     name="cid"
@@ -21404,9 +21566,9 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
     placeholder="E.G. 1303570"
   />
 
-  <label style="display:block; margin:10px 0 6px;">Active Since</label>
+  <label style="display:block; margin:10px 0 6px;">Active Since <span style="color:var(--muted);font-weight:400;">(optional)</span></label>
   <select name="sinceYear">
-    <option value="" disabled selected>SELECT YEAR</option>
+    <option value="" selected>Not set</option>
     ${(() => {
       const now = new Date().getUTCFullYear();
       const opts = [];
@@ -21422,6 +21584,21 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
   </select>
 
 </div>
+
+  <!-- ================= PUBLIC PROFILE FIELDS (team + affiliate) ================= -->
+  <div id="profileFields">
+    <label style="display:block; margin:10px 0 6px;">Website <span style="color:var(--muted);font-weight:400;">(optional)</span></label>
+    <input name="profileWebsite" type="text" maxlength="200" placeholder="https://..." style="text-transform:none;text-align:left;" />
+
+    <label style="display:block; margin:10px 0 6px;">Short description <span style="color:var(--muted);font-weight:400;">(shown on the public Teams &amp; Affiliates page)</span></label>
+    <textarea name="profileDescription" rows="3" maxlength="1000" placeholder="Who they are, what they fly, where they're based…" style="width:100%;resize:vertical;"></textarea>
+
+    <label style="display:block; margin:10px 0 6px;">Profile photo <span style="color:var(--muted);font-weight:400;">(replaces existing)</span></label>
+    <input name="photo" type="file" accept="image/*" style="font-size:13px;" />
+
+    <label style="display:block; margin:10px 0 6px;">Display Order <span style="color:var(--muted);font-weight:400;">(lower shows first; blank = add to end)</span></label>
+    <input name="sortOrder" type="number" inputmode="numeric" min="0" placeholder="Auto" />
+  </div>
 
   <!-- ================= APPLICATION EXTRA FIELDS ================= -->
   <div id="applicationExtraFields" class="hidden">
@@ -21444,6 +21621,25 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
   </div>
 </form>
 
+    </div>
+  </div>
+
+  <!-- ===== Application Detail Modal ===== -->
+  <div id="appDetailModal" class="modal hidden">
+    <div class="modal-backdrop"></div>
+    <div class="modal-card card" style="max-width:560px;text-align:left;">
+      <h3 style="display:flex;align-items:center;gap:10px;justify-content:flex-start;margin-bottom:4px;">
+        <span id="appDetailCallsign"></span>
+        <span id="appDetailStatus" class="ot-app-status"></span>
+      </h3>
+      <div id="appDetailMeta" style="font-size:12px;color:var(--muted);margin-bottom:16px;"></div>
+      <div id="appDetailGrid" style="display:grid;grid-template-columns:130px 1fr;gap:8px 14px;font-size:13px;align-items:baseline;"></div>
+      <div id="appDetailNotesWrap" style="margin-top:14px;">
+        <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px;">Notes</div>
+        <div id="appDetailNotes" style="font-size:13px;line-height:1.6;white-space:pre-wrap;background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;"></div>
+      </div>
+      <div id="appDetailPhotos" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;"></div>
+      <div class="modal-actions" id="appDetailActions" style="margin-top:18px;"></div>
     </div>
   </div>
 
@@ -21488,6 +21684,11 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
       if (applicationExtraFields) {
         applicationExtraFields.classList.toggle('hidden', type !== 'application');
         setSectionEnabled(applicationExtraFields, type === 'application');
+      }
+      var profileFields = document.getElementById('profileFields');
+      if (profileFields) {
+        profileFields.classList.toggle('hidden', type === 'application');
+        setSectionEnabled(profileFields, type !== 'application');
       }
       if (participatingRow) participatingRow.style.display = type === 'application' ? 'none' : '';
 
@@ -21538,7 +21739,7 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
         if (affiliateCallsign) affiliateCallsign.required = true;
         if (simType) simType.required = true;
         if (cid) cid.required = true;
-        if (sinceYear) sinceYear.required = true;
+        if (sinceYear) sinceYear.required = false;
 
         // Not required for AFFILIATE
         form.querySelector('input[name="teamName"]').required = false;
@@ -21556,8 +21757,12 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
           form.querySelector('input[name="mainCid"]').value = record.mainCid || '';
           form.querySelector('input[name="aircraftType"]').value = record.aircraftType || '';
           form.querySelector('input[name="country"]').value = record.country || '';
+          var teamYearSel = form.querySelector('select[name="teamSinceYear"]');
+          if (teamYearSel) teamYearSel.value = record.sinceYear ? String(record.sinceYear) : '';
         } else {
           form.querySelector('input[name="affiliateCallsign"]').value = record.callsign || '';
+          var affNameIn = form.querySelector('input[name="affiliateName"]');
+          if (affNameIn) affNameIn.value = record.name || '';
           var simSel = form.querySelector('select[name="simType"]');
           if (simSel) simSel.value = record.simType || '';
           form.querySelector('input[name="cid"]').value = record.cid || '';
@@ -21565,7 +21770,15 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
           if (yearSel) yearSel.value = record.sinceYear ? String(record.sinceYear) : '';
           var hasMembersSel = form.querySelector('select[name="hasMembers"]');
           if (hasMembersSel) hasMembersSel.value = record.hasMembers ? 'true' : 'false';
+          var affAcIn = form.querySelector('input[name="affAircraftType"]');
+          if (affAcIn) affAcIn.value = record.aircraftType || '';
         }
+        var wsIn = form.querySelector('input[name="profileWebsite"]');
+        if (wsIn) wsIn.value = record.website || '';
+        var descIn = form.querySelector('textarea[name="profileDescription"]');
+        if (descIn) descIn.value = record.description || '';
+        var sortIn = form.querySelector('input[name="sortOrder"]');
+        if (sortIn) sortIn.value = record.sortOrder != null ? String(record.sortOrder) : '';
         form.querySelector('input[name="participatingWf26"]').checked = !!record.participatingWf26;
       }
 
@@ -21607,6 +21820,85 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
       openEntryModal(teamEdit ? 'team' : 'affiliate', record);
     });
 
+    // ===== Application detail modal =====
+    const appModal = document.getElementById('appDetailModal');
+
+    function esc(s) {
+      var d = document.createElement('div');
+      d.textContent = s == null ? '' : String(s);
+      return d.innerHTML;
+    }
+
+    function openAppDetailModal(a) {
+      document.getElementById('appDetailCallsign').textContent = a.callsign || '';
+      var statusEl = document.getElementById('appDetailStatus');
+      statusEl.textContent = (a.status || '').charAt(0).toUpperCase() + (a.status || '').slice(1);
+      statusEl.className = 'ot-app-status ot-app-status-' + a.status;
+      document.getElementById('appDetailMeta').textContent =
+        (a.source === 'public' ? 'Applied online' : 'Added by admin') +
+        ' · ' + (a.createdAt ? new Date(a.createdAt).toISOString().slice(0, 10) : '');
+
+      var rows = [
+        ['Sim Type', esc(a.simType || '—')],
+        ['CID', esc(a.cid)],
+        ['Multiple users', a.hasMembers ? 'Yes' : 'No'],
+        ['Contact', esc(a.contact || '—')],
+        ['Heard via', esc(a.heardAbout || '—')],
+        ['Website', a.website
+          ? '<a href="' + esc(a.website) + '" target="_blank" rel="noopener" style="color:var(--accent);">' + esc(a.website) + '</a>'
+          : '—']
+      ];
+      document.getElementById('appDetailGrid').innerHTML = rows.map(function(r) {
+        return '<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;">' + r[0] + '</div><div>' + r[1] + '</div>';
+      }).join('');
+
+      var notesWrap = document.getElementById('appDetailNotesWrap');
+      if (a.notes) {
+        notesWrap.style.display = '';
+        document.getElementById('appDetailNotes').textContent = a.notes;
+      } else {
+        notesWrap.style.display = 'none';
+      }
+
+      var photosEl = document.getElementById('appDetailPhotos');
+      photosEl.innerHTML = (a.photoIds || []).map(function(pid) {
+        var url = '/admin/api/affiliate-applications/' + a.id + '/photos/' + pid;
+        return '<a href="' + url + '" target="_blank" rel="noopener" title="Open full size">' +
+          '<img src="' + url + '" alt="Setup photo" loading="lazy" style="width:96px;height:96px;object-fit:cover;border-radius:8px;border:1px solid var(--border);" /></a>';
+      }).join('');
+
+      var actionsEl = document.getElementById('appDetailActions');
+      var actions = '<button type="button" class="action-btn" id="appDetailClose">Close</button>';
+      if (a.status === 'pending') {
+        actions += '<button type="button" class="action-btn" style="background:rgba(239,68,68,0.15);color:#f87171;border-color:#f87171;" data-action="decline-application" data-id="' + a.id + '" data-callsign="' + esc(a.callsign) + '">Decline</button>';
+        actions += '<button type="button" class="action-btn primary" style="background:rgba(34,197,94,0.15);color:#4ade80;border-color:#4ade80;" data-action="approve-application" data-id="' + a.id + '" data-callsign="' + esc(a.callsign) + '">Approve</button>';
+      } else {
+        actions += '<button type="button" class="action-btn" style="background:rgba(239,68,68,0.15);color:#f87171;border-color:#f87171;" data-action="delete-application" data-id="' + a.id + '">Delete</button>';
+      }
+      actionsEl.innerHTML = actions;
+
+      appModal.classList.remove('hidden');
+    }
+
+    function closeAppDetailModal() { appModal.classList.add('hidden'); }
+
+    // Row click opens the modal (ignore clicks on buttons/links inside the row)
+    document.addEventListener('click', (e) => {
+      var row = e.target.closest('tr.ot-app-row');
+      if (!row || e.target.closest('button, a')) return;
+      var record = {};
+      try { record = JSON.parse(row.dataset.record || '{}'); } catch (err) { return; }
+      openAppDetailModal(record);
+    });
+
+    document.addEventListener('click', (e) => {
+      if (e.target.closest('#appDetailClose')) closeAppDetailModal();
+    });
+    appModal.querySelector('.modal-backdrop').addEventListener('click', closeAppDetailModal);
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && !appModal.classList.contains('hidden')) closeAppDetailModal();
+    });
+
     cancelBtn.addEventListener('click', (e) => {
       e.preventDefault();
       closeEntryModal();
@@ -21634,6 +21926,7 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
         payload.mainCid = Number(fd.get('mainCid'));
         payload.aircraftType = (fd.get('aircraftType') || '').toString().trim().toUpperCase();
         payload.country = (fd.get('country') || '').toString().trim();
+        payload.sinceYear = (fd.get('teamSinceYear') || '').toString() || null;
       } else {
         payload.callsign = (fd.get('affiliateCallsign') || '').toString().trim().toUpperCase();
         payload.simType = (fd.get('simType') || '').toString().trim().toUpperCase();
@@ -21641,11 +21934,20 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
         const yr = (fd.get('sinceYear') || '').toString().trim();
         payload.sinceYear = yr ? Number(yr) : null;
         payload.hasMembers = String(fd.get('hasMembers') || '').toLowerCase() === 'true';
+        if (type === 'affiliate') {
+          payload.name = (fd.get('affiliateName') || '').toString().trim();
+          payload.aircraftType = (fd.get('affAircraftType') || '').toString().trim().toUpperCase();
+        }
         if (type === 'application') {
           delete payload.participatingWf26;
           payload.contact = (fd.get('appContact') || '').toString().trim();
           payload.notes = (fd.get('appNotes') || '').toString().trim();
         }
+      }
+      if (type !== 'application') {
+        payload.website = (fd.get('profileWebsite') || '').toString().trim();
+        payload.description = (fd.get('profileDescription') || '').toString().trim();
+        payload.sortOrder = (fd.get('sortOrder') || '').toString().trim();
       }
 
       const baseUrl = type === 'team' ? '/api/admin/official-teams'
@@ -21654,12 +21956,26 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
       const isEdit = editingId != null;
       const url = isEdit ? baseUrl + '/' + editingId : baseUrl;
 
-      const res = await fetch(url, {
-        method: isEdit ? 'PATCH' : 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'same-origin',
-        body: JSON.stringify(payload)
-      });
+      let res;
+      if (type === 'application') {
+        res = await fetch(url, {
+          method: isEdit ? 'PATCH' : 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify(payload)
+        });
+      } else {
+        // Teams/affiliates go multipart so the profile photo can ride along
+        const sendFd = new FormData();
+        Object.keys(payload).forEach(k => sendFd.append(k, payload[k] == null ? '' : String(payload[k])));
+        const photoInput = form.querySelector('input[name="photo"]');
+        if (photoInput && photoInput.files && photoInput.files[0]) sendFd.append('photo', photoInput.files[0]);
+        res = await fetch(url, {
+          method: isEdit ? 'PATCH' : 'POST',
+          credentials: 'same-origin',
+          body: sendFd
+        });
+      }
 
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -21808,11 +22124,48 @@ app.get('/api/admin/scenery/pending-count', requireAdmin, async (req, res) => {
 
 
 // Create Official Team
-app.post('/api/admin/official-teams', requireAdmin, async (req, res) => {
-  const { teamName, callsign, mainCid, aircraftType, country, participatingWf26 } = req.body || {};
+// Shared helpers for team/affiliate create+edit. The admin modal submits
+// multipart (fields + optional profile photo); the WF26 toggle still sends
+// plain JSON — multer passes non-multipart requests through untouched.
+const profilePhotoUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024, files: 1 }
+});
+// Multipart booleans arrive as 'true'/'false' strings; JSON as real booleans.
+const asBool = (v) => v === true || String(v) === 'true';
+const cleanWebsite = (v) => {
+  const s = String(v || '').trim();
+  if (!s) return null;
+  return (/^https?:\/\//i.test(s) ? s : 'https://' + s).slice(0, 200);
+};
+// Blank/absent display order on create appends to the end of the list.
+async function resolveSortOrder(raw, model) {
+  if (raw !== undefined && raw !== null && String(raw).trim() !== '') {
+    return Math.max(0, Number(raw) || 0);
+  }
+  const agg = await model.aggregate({ _max: { sortOrder: true } }).catch(() => null);
+  return (agg?._max?.sortOrder ?? 0) + 1;
+}
+
+async function saveProfilePhoto(entityType, entityId, file) {
+  if (!file || !/^image\//.test(file.mimetype)) return;
+  await prisma.profilePhoto.upsert({
+    where: { entityType_entityId: { entityType, entityId } },
+    update: { mime: file.mimetype, data: file.buffer, updatedAt: new Date() },
+    create: { entityType, entityId, mime: file.mimetype, data: file.buffer }
+  });
+}
+
+app.post('/api/admin/official-teams', requireAdmin, profilePhotoUpload.single('photo'), async (req, res) => {
+  const { teamName, callsign, mainCid, aircraftType, country, sinceYear, participatingWf26, description, website } = req.body || {};
 
   if (!teamName || !callsign || !mainCid || !aircraftType || !country) {
     return res.status(400).json({ error: 'Missing required fields' });
+  }
+
+  const yr = sinceYear == null || sinceYear === '' ? null : Number(sinceYear);
+  if (yr != null && (!Number.isFinite(yr) || yr < 1990 || yr > 2100)) {
+    return res.status(400).json({ error: 'Invalid sinceYear' });
   }
 
   const created = await prisma.officialTeam.create({
@@ -21822,9 +22175,14 @@ app.post('/api/admin/official-teams', requireAdmin, async (req, res) => {
       mainCid: Number(mainCid),
       aircraftType: String(aircraftType).trim().toUpperCase(),
       country: String(country).trim(),
-      participatingWf26: Boolean(participatingWf26)
+      sinceYear: yr,
+      description: description ? String(description).trim().slice(0, 1000) : null,
+      website: cleanWebsite(website),
+      sortOrder: await resolveSortOrder(req.body?.sortOrder, prisma.officialTeam),
+      participatingWf26: asBool(participatingWf26)
     }
   });
+  await saveProfilePhoto('team', created.id, req.file);
 
   if (created.participatingWf26) {
     autoAssignTeamThenAffiliate({ reason: `team ${created.id} created` }).catch(() => {});
@@ -21833,8 +22191,8 @@ app.post('/api/admin/official-teams', requireAdmin, async (req, res) => {
 });
 
 // Create Affiliate
-app.post('/api/admin/affiliates', requireAdmin, async (req, res) => {
-  const { callsign, simType, cid, sinceYear, hasMembers, participatingWf26 } = req.body || {};
+app.post('/api/admin/affiliates', requireAdmin, profilePhotoUpload.single('photo'), async (req, res) => {
+  const { callsign, simType, cid, sinceYear, hasMembers, participatingWf26, description, website } = req.body || {};
 
   if (!callsign || !simType || !cid) {
     return res.status(400).json({ error: 'Missing required fields' });
@@ -21847,14 +22205,20 @@ app.post('/api/admin/affiliates', requireAdmin, async (req, res) => {
 
   const created = await prisma.affiliate.create({
     data: {
+      name: req.body?.name ? String(req.body.name).trim().slice(0, 60) : null,
       callsign: String(callsign).trim().toUpperCase(),
       simType: String(simType).trim(),
       cid: Number(cid),
       sinceYear: yr,
-      hasMembers: Boolean(hasMembers),
-      participatingWf26: Boolean(participatingWf26)
+      hasMembers: asBool(hasMembers),
+      aircraftType: req.body?.aircraftType ? String(req.body.aircraftType).trim().toUpperCase().slice(0, 10) : null,
+      description: description ? String(description).trim().slice(0, 1000) : null,
+      website: cleanWebsite(website),
+      sortOrder: await resolveSortOrder(req.body?.sortOrder, prisma.affiliate),
+      participatingWf26: asBool(participatingWf26)
     }
   });
+  await saveProfilePhoto('affiliate', created.id, req.file);
 
   // Auto-grant WF_AFFILIATE role to the linked CID — but skip admins so
   // creating an affiliate on behalf of someone doesn't put an "Affiliate HQ"
@@ -21993,13 +22357,6 @@ app.get('/affiliate-apply', async (req, res) => {
     } catch {}
   }
 
-  const yearOpts = (() => {
-    const now = new Date().getUTCFullYear();
-    const opts = [];
-    for (let y = now + 1; y >= 2002; y--) opts.push(`<option value="${y}">${y}</option>`);
-    return opts.join('');
-  })();
-
   const inner = !user ? `
       <p style="color:var(--muted);margin:0 0 16px;">You need to be logged in with your VATSIM account to apply.</p>
       <a href="/auth/login" class="action-btn primary" style="align-self:flex-start;">Login to apply</a>
@@ -22022,17 +22379,79 @@ app.get('/affiliate-apply', async (req, res) => {
           <option value="OTHER">OTHER</option>
         </select>
 
-        <label style="margin:10px 0 4px;">Active since (year)</label>
-        <select name="sinceYear"><option value="">Not sure</option>${yearOpts}</select>
-
         <label style="margin:10px 0 4px;">Multiple pilots / users?</label>
         <select name="hasMembers"><option value="false" selected>No</option><option value="true">Yes</option></select>
+
+        <label style="margin:10px 0 4px;">How did you hear about WorldFlight?</label>
+        <select name="heardAbout">
+          <option value="" disabled selected>Select an option</option>
+          <option value="Watched on a stream">Watched on a stream</option>
+          <option value="Via VATSIM events">Via VATSIM events</option>
+          <option value="Flown along before">Flown along before</option>
+          <option value="Online search">Online search</option>
+          <option value="Referred by a friend">Referred by a friend</option>
+        </select>
 
         <label style="margin:10px 0 4px;">Contact (Discord / email)</label>
         <input name="contact" type="text" maxlength="120" placeholder="So we can reach you outside VATSIM" />
 
+        <label style="margin:10px 0 4px;">Website</label>
+        <input name="website" type="url" maxlength="200" placeholder="If you have a website, link it here" />
+
         <label style="margin:10px 0 4px;">Tell us about your setup</label>
-        <textarea name="notes" rows="4" maxlength="1000" placeholder="Your sim, your group, anything else worth knowing" style="resize:vertical;"></textarea>
+        <textarea name="notes" rows="4" maxlength="1000" placeholder="Your sim, your group, anything else worth knowing" style="resize:vertical;width:100%;box-sizing:border-box;background:var(--panel2,#0d1526);color:var(--text,#e2e8f0);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-family:inherit;font-size:14px;"></textarea>
+
+        <label style="margin:10px 0 4px;">Photos of your setup</label>
+        <div id="affPhotoTiles" style="display:flex;gap:10px;flex-wrap:wrap;">
+          ${[0, 1, 2, 3, 4].map(() => `
+          <div class="aff-photo-tile">
+            <input type="file" accept="image/*" hidden />
+            <svg class="aff-photo-tile-add" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            <img class="aff-photo-tile-img hidden" alt="" />
+            <button type="button" class="aff-photo-tile-remove hidden" aria-label="Remove photo">&times;</button>
+          </div>`).join('')}
+        </div>
+        <span style="font-size:12px;color:var(--muted);margin-top:6px;">If you have any photos of your setup, upload them too — up to 5 images, max 5&nbsp;MB each.</span>
+        <style>
+          .aff-photo-tile {
+            position: relative;
+            width: 84px;
+            height: 84px;
+            border: 2px dashed var(--border);
+            border-radius: 10px;
+            background: var(--panel2, rgba(255,255,255,0.03));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            overflow: hidden;
+            transition: border-color .15s ease;
+          }
+          .aff-photo-tile:hover { border-color: var(--accent); }
+          .aff-photo-tile.has-photo { border-style: solid; cursor: default; }
+          .aff-photo-tile-add { width: 24px; height: 24px; color: var(--muted); transition: color .15s ease; }
+          .aff-photo-tile:hover .aff-photo-tile-add { color: var(--accent); }
+          .aff-photo-tile-img { width: 100%; height: 100%; object-fit: cover; }
+          .aff-photo-tile-remove {
+            position: absolute;
+            top: 4px;
+            right: 4px;
+            width: 20px;
+            height: 20px;
+            border: none;
+            border-radius: 50%;
+            background: rgba(0,0,0,0.65);
+            color: #fff;
+            font-size: 13px;
+            line-height: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+          }
+          .aff-photo-tile-remove:hover { background: rgba(239,68,68,0.9); }
+          .aff-photo-tile-remove.hidden, .aff-photo-tile-img.hidden, .aff-photo-tile-add.hidden { display: none; }
+        </style>
 
         <div style="margin-top:16px;display:flex;align-items:center;gap:12px;">
           <button type="submit" class="action-btn primary">Submit application</button>
@@ -22043,23 +22462,71 @@ app.get('/affiliate-apply', async (req, res) => {
         (function() {
           var form = document.getElementById('affApplyForm');
           var msg = document.getElementById('affApplyMsg');
+
+          function showMsg(text) {
+            msg.textContent = text;
+            msg.style.color = '#f87171';
+            msg.style.display = '';
+          }
+
+          var tiles = Array.prototype.slice.call(document.querySelectorAll('.aff-photo-tile'));
+          tiles.forEach(function(tile) {
+            var input = tile.querySelector('input[type=file]');
+            var img = tile.querySelector('.aff-photo-tile-img');
+            var addIcon = tile.querySelector('.aff-photo-tile-add');
+            var removeBtn = tile.querySelector('.aff-photo-tile-remove');
+
+            tile.addEventListener('click', function(e) {
+              if (e.target.closest('.aff-photo-tile-remove')) return;
+              if (!tile.classList.contains('has-photo')) input.click();
+            });
+
+            input.addEventListener('change', function() {
+              var f = input.files && input.files[0];
+              if (!f) return;
+              if (f.type.indexOf('image/') !== 0) {
+                showMsg('Only image files can be attached');
+                input.value = '';
+                return;
+              }
+              if (f.size > 5 * 1024 * 1024) {
+                showMsg('Each photo must be under 5 MB (' + f.name + ' is too big)');
+                input.value = '';
+                return;
+              }
+              msg.style.display = 'none';
+              img.src = URL.createObjectURL(f);
+              img.classList.remove('hidden');
+              addIcon.classList.add('hidden');
+              removeBtn.classList.remove('hidden');
+              tile.classList.add('has-photo');
+            });
+
+            removeBtn.addEventListener('click', function(e) {
+              e.stopPropagation();
+              input.value = '';
+              if (img.src) { URL.revokeObjectURL(img.src); }
+              img.removeAttribute('src');
+              img.classList.add('hidden');
+              addIcon.classList.remove('hidden');
+              removeBtn.classList.add('hidden');
+              tile.classList.remove('has-photo');
+            });
+          });
+
           form.addEventListener('submit', async function(e) {
             e.preventDefault();
             var fd = new FormData(form);
-            var payload = {
-              callsign: (fd.get('callsign') || '').toString().trim().toUpperCase(),
-              simType: (fd.get('simType') || '').toString(),
-              sinceYear: (fd.get('sinceYear') || '').toString() || null,
-              hasMembers: (fd.get('hasMembers') || '') === 'true',
-              contact: (fd.get('contact') || '').toString().trim(),
-              notes: (fd.get('notes') || '').toString().trim()
-            };
+            fd.set('callsign', (fd.get('callsign') || '').toString().trim().toUpperCase());
+            tiles.forEach(function(tile) {
+              var f = tile.querySelector('input[type=file]').files[0];
+              if (f) fd.append('photos', f);
+            });
             try {
               var r = await fetch('/api/affiliate-applications', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
                 credentials: 'same-origin',
-                body: JSON.stringify(payload)
+                body: fd
               });
               var d = await r.json();
               if (r.ok) {
@@ -22089,18 +22556,234 @@ app.get('/affiliate-apply', async (req, res) => {
   res.send(renderLayout({ title: 'Apply as a WF Affiliate', user, isAdmin, content, layoutClass: 'dashboard-full' }));
 });
 
+/* ===== WHO ARE WE: PUBLIC TEAMS & AFFILIATES PAGE ===== */
+
+// Serve a team/affiliate profile photo (public — the page itself is public)
+app.get('/api/profile-photo/:type/:id', async (req, res) => {
+  const type = req.params.type === 'team' ? 'team' : req.params.type === 'affiliate' ? 'affiliate' : null;
+  const id = Number(req.params.id);
+  if (!type || !id) return res.status(400).send('Bad request');
+  try {
+    const p = await prisma.profilePhoto.findUnique({
+      where: { entityType_entityId: { entityType: type, entityId: id } }
+    });
+    if (!p) return res.status(404).send('Not found');
+    res.set('Content-Type', p.mime);
+    res.set('Cache-Control', 'public, max-age=300');
+    res.send(Buffer.from(p.data));
+  } catch (e) {
+    res.status(500).send(e.message);
+  }
+});
+
+app.get('/teams', requirePageEnabled('who-we-are'), async (req, res) => {
+  const user = req.session?.user?.data || null;
+  const isAdmin = user ? isAdminUser(user.cid) : false;
+
+  const [teams, affiliates, photoMeta] = await Promise.all([
+    prisma.officialTeam.findMany({ orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }] }),
+    prisma.affiliate.findMany({ orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }] }),
+    prisma.profilePhoto.findMany({ select: { entityType: true, entityId: true } }).catch(() => [])
+  ]);
+  const hasPhoto = new Set(photoMeta.map(p => `${p.entityType}:${p.entityId}`));
+
+  const initials = (name) => escapeHtml(String(name || '?').trim().split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase());
+
+  // Badge shows the joining year — no year set means no badge at all.
+  const badgeFor = (sinceYear) => sinceYear ? `Member Since ${sinceYear}` : null;
+
+  const card = (type, id, name, facts, description, website, badge) => `
+    <div class="wwa-card">
+      <div class="wwa-photo">
+        ${hasPhoto.has(`${type}:${id}`)
+          ? `<img src="/api/profile-photo/${type}/${id}" alt="${escapeHtml(name)}" loading="lazy" />`
+          : `<div class="wwa-photo-placeholder">${initials(name)}</div>`}
+        ${badge ? `<span class="wwa-active-badge">${badge}</span>` : ''}
+      </div>
+      <div class="wwa-body">
+        <div class="wwa-name">${escapeHtml(name)}</div>
+        <div class="wwa-facts">
+          ${facts.filter(f => f[1] != null && f[1] !== '').map(f => `
+          <div class="wwa-fact">
+            <span class="wwa-fact-label">${escapeHtml(f[0])}</span>
+            <span class="wwa-fact-value">${escapeHtml(String(f[1]))}</span>
+          </div>`).join('')}
+        </div>
+        ${description ? `<p class="wwa-desc">${escapeHtml(description)}</p>` : ''}
+        ${website ? `<a class="wwa-site" href="${escapeHtml(website)}" target="_blank" rel="noopener">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10Z"/></svg>
+          Visit website</a>` : ''}
+      </div>
+    </div>`;
+
+  const content = `
+  <section class="card card-full" style="padding:28px;">
+    <h2 style="margin:0 0 26px;">Official Teams &amp; WF Affiliates</h2>
+
+    <h3 class="wwa-section-title">Official Teams</h3>
+    <p class="wwa-section-intro">These are the Official Teams participating in WorldFlight. All the below simulators are full-size flight simulators.</p>
+    ${teams.length ? `<div class="wwa-grid">
+      ${teams.map(t => card('team', t.id, t.teamName, [
+        ['Callsign', t.callsign],
+        ['Aircraft', t.aircraftType],
+        ['Country', t.country],
+        ['Main CID', t.mainCid]
+      ], t.description, t.website, badgeFor(t.sinceYear))).join('')}
+    </div>` : '<p style="color:var(--muted);font-size:13px;">No official teams registered yet.</p>'}
+
+    <h3 class="wwa-section-title" style="margin-top:34px;">WF Affiliates</h3>
+    <p class="wwa-section-intro">The below teams and individuals are recognized as WorldFlight Affiliates thanks to their contribution over the years. The majority of these teams are made up of multiple members, all flying from their own home cockpit setup in a relay through the week.</p>
+    <p class="wwa-section-intro">Our friends operating as WorldFlight Affiliates are part of our community and lift the official teams' spirits by flying along. It's great to hear so many familiar callsigns every year.</p>
+    <div style="margin:4px 0 18px;">
+      <a href="/affiliate-apply" class="action-btn primary" style="display:inline-flex;align-items:center;gap:8px;">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
+        Apply to become a WF Affiliate
+      </a>
+    </div>
+    ${affiliates.length ? `<div class="wwa-grid">
+      ${affiliates.map(a => card('affiliate', a.id, a.name || a.callsign, [
+        ['Callsign', a.callsign],
+        ['Aircraft', a.aircraftType],
+        ['Sim Type', a.simType],
+        ['Main CID', a.cid]
+      ], a.description, a.website, badgeFor(a.sinceYear))).join('')}
+    </div>` : '<p style="color:var(--muted);font-size:13px;">No WF affiliates registered yet.</p>'}
+  </section>
+
+  <style>
+    .wwa-section-title {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--text);
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 8px;
+      margin: 0 0 12px;
+    }
+    .wwa-section-intro {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.65;
+      margin: 0 0 12px;
+    }
+    .wwa-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+      gap: 18px;
+    }
+    .wwa-card {
+      background: var(--panel2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      transition: border-color .15s ease;
+    }
+    .wwa-card:hover { border-color: var(--accent); }
+    .wwa-photo { position: relative; height: 150px; background: #10192e; }
+    .wwa-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .wwa-photo-placeholder {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 40px;
+      font-weight: 800;
+      color: rgba(255,255,255,0.18);
+      background: linear-gradient(135deg, #1a2744, #1f1a3a);
+      letter-spacing: 0.05em;
+    }
+    .wwa-active-badge {
+      position: absolute;
+      bottom: 8px;
+      left: 8px;
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 3px 8px;
+      border-radius: 999px;
+      background: rgba(34,197,94,0.85);
+      color: #fff;
+    }
+    .wwa-body { padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 8px; flex: 1; }
+    .wwa-name {
+      font-size: 18px;
+      font-weight: 800;
+      color: var(--text);
+      letter-spacing: 0.01em;
+      line-height: 1.25;
+    }
+    .wwa-facts {
+      display: flex;
+      flex-direction: column;
+      border-top: 1px solid var(--border);
+      margin-top: 2px;
+    }
+    .wwa-fact {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 12px;
+      padding: 5px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .wwa-fact-label {
+      font-size: 10.5px;
+      font-weight: 700;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      white-space: nowrap;
+    }
+    .wwa-fact-value {
+      font-size: 12.5px;
+      font-weight: 600;
+      color: var(--text);
+      font-family: 'SF Mono', 'Cascadia Code', Consolas, monospace;
+      text-align: right;
+    }
+    .wwa-desc { font-size: 12.5px; color: var(--muted); line-height: 1.55; margin: 0; }
+    .wwa-site {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--accent);
+      text-decoration: none;
+      margin-top: auto;
+    }
+    .wwa-site:hover { text-decoration: underline; }
+  </style>`;
+
+  res.send(renderLayout({ title: 'Official Teams / WF Affiliates', user, isAdmin, content, layoutClass: 'dashboard-full' }));
+});
+
 // Public submission — logged-in users only; CID comes from the session.
-app.post('/api/affiliate-applications', async (req, res) => {
+// Multipart: text fields + up to 5 setup photos (stored in the DB so they
+// survive redeploys on Railway's ephemeral filesystem).
+const affApplyUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024, files: 5 }
+});
+app.post('/api/affiliate-applications', (req, res, next) => {
+  affApplyUpload.array('photos', 5)(req, res, (err) => {
+    if (err) return res.status(400).json({ error: err.code === 'LIMIT_FILE_SIZE' ? 'Each photo must be under 5 MB' : 'Photo upload failed: ' + err.message });
+    next();
+  });
+}, async (req, res) => {
   const sessUser = req.session?.user?.data;
   const cid = Number(sessUser?.cid);
   if (!cid) return res.status(401).json({ error: 'You must be logged in to apply' });
 
-  const { callsign, simType, sinceYear, hasMembers, contact, notes } = req.body || {};
+  const { callsign, simType, hasMembers, heardAbout, contact, website, notes } = req.body || {};
   if (!callsign || !simType) return res.status(400).json({ error: 'Name/callsign and sim type are required' });
 
-  const yr = sinceYear == null || sinceYear === '' ? null : Number(sinceYear);
-  if (yr != null && (!Number.isFinite(yr) || yr < 1990 || yr > 2100)) {
-    return res.status(400).json({ error: 'Invalid year' });
+  const photos = (req.files || []).filter(f => /^image\//.test(f.mimetype));
+  if ((req.files || []).length > photos.length) {
+    return res.status(400).json({ error: 'Only image files can be attached' });
   }
 
   try {
@@ -22116,17 +22799,46 @@ app.post('/api/affiliate-applications', async (req, res) => {
         callsign: String(callsign).trim().toUpperCase().slice(0, 40),
         simType: String(simType).trim().toUpperCase().slice(0, 30),
         cid,
-        sinceYear: yr,
-        hasMembers: Boolean(hasMembers),
+        hasMembers: String(hasMembers) === 'true',
+        heardAbout: heardAbout ? String(heardAbout).trim().slice(0, 60) : null,
         contact: contact ? String(contact).trim().slice(0, 120) : null,
+        // Force an http(s) scheme so the admin-side link can never be javascript: etc.
+        website: website && String(website).trim()
+          ? (/^https?:\/\//i.test(String(website).trim()) ? String(website).trim() : 'https://' + String(website).trim()).slice(0, 200)
+          : null,
         notes: notes ? String(notes).trim().slice(0, 1000) : null,
         source: 'public'
       }
     });
-    console.log(`[AFF-APP] New public application #${created.id} from CID ${cid} (${created.callsign})`);
+
+    for (const f of photos) {
+      await prisma.affiliateApplicationPhoto.create({
+        data: {
+          applicationId: created.id,
+          filename: String(f.originalname || 'photo').slice(0, 120),
+          mime: f.mimetype,
+          data: f.buffer
+        }
+      });
+    }
+
+    console.log(`[AFF-APP] New public application #${created.id} from CID ${cid} (${created.callsign}, ${photos.length} photos)`);
     res.json({ success: true, id: created.id });
   } catch (e) {
     res.status(500).json({ error: e.message });
+  }
+});
+
+// Serve an application photo (admin only)
+app.get('/admin/api/affiliate-applications/:id/photos/:photoId', requireAdmin, async (req, res) => {
+  try {
+    const photo = await prisma.affiliateApplicationPhoto.findUnique({ where: { id: Number(req.params.photoId) } });
+    if (!photo || photo.applicationId !== Number(req.params.id)) return res.status(404).send('Not found');
+    res.set('Content-Type', photo.mime);
+    res.set('Cache-Control', 'private, max-age=3600');
+    res.send(Buffer.from(photo.data));
+  } catch (e) {
+    res.status(500).send(e.message);
   }
 });
 
@@ -22172,11 +22884,27 @@ app.post('/admin/api/affiliate-applications/:id/approve', requireAdmin, async (r
         callsign: appRow.callsign,
         simType: appRow.simType,
         cid: appRow.cid,
-        sinceYear: appRow.sinceYear,
+        // Public applicants don't pick a year — active since the year we approve
+        sinceYear: appRow.sinceYear || new Date().getUTCFullYear(),
         hasMembers: appRow.hasMembers,
+        description: appRow.notes || null,
+        website: appRow.website || null,
         participatingWf26: true
       }
     });
+
+    // First application photo becomes the affiliate's public profile photo
+    const firstPhoto = await prisma.affiliateApplicationPhoto.findFirst({
+      where: { applicationId: id },
+      orderBy: { id: 'asc' }
+    }).catch(() => null);
+    if (firstPhoto) {
+      await prisma.profilePhoto.upsert({
+        where: { entityType_entityId: { entityType: 'affiliate', entityId: created.id } },
+        update: { mime: firstPhoto.mime, data: firstPhoto.data, updatedAt: new Date() },
+        create: { entityType: 'affiliate', entityId: created.id, mime: firstPhoto.mime, data: firstPhoto.data }
+      }).catch(() => {});
+    }
 
     if (!isAdminUser(appRow.cid)) {
       await prisma.userAdditionalRole.upsert({
@@ -22221,7 +22949,9 @@ app.post('/admin/api/affiliate-applications/:id/decline', requireAdmin, async (r
 
 app.delete('/admin/api/affiliate-applications/:id', requireAdmin, async (req, res) => {
   try {
-    await prisma.affiliateApplication.delete({ where: { id: Number(req.params.id) } });
+    const id = Number(req.params.id);
+    await prisma.affiliateApplicationPhoto.deleteMany({ where: { applicationId: id } });
+    await prisma.affiliateApplication.delete({ where: { id } });
     res.json({ success: true });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -22240,7 +22970,7 @@ app.delete('/api/admin/affiliates/:id', requireAdmin, async (req, res) => {
 });
 
 // Patch Official Team (WF26 toggle or full edit)
-app.patch('/api/admin/official-teams/:id', requireAdmin, async (req, res) => {
+app.patch('/api/admin/official-teams/:id', requireAdmin, profilePhotoUpload.single('photo'), async (req, res) => {
   const id = Number(req.params.id);
   if (!id) return res.status(400).json({ error: 'Invalid id' });
   const body = req.body || {};
@@ -22250,16 +22980,27 @@ app.patch('/api/admin/official-teams/:id', requireAdmin, async (req, res) => {
   if (body.mainCid !== undefined) data.mainCid = Number(body.mainCid);
   if (body.aircraftType !== undefined) data.aircraftType = String(body.aircraftType).trim().toUpperCase();
   if (body.country !== undefined) data.country = String(body.country).trim();
-  if (body.participatingWf26 !== undefined) data.participatingWf26 = Boolean(body.participatingWf26);
-  if (!Object.keys(data).length) return res.status(400).json({ error: 'No fields to update' });
+  if (body.sinceYear !== undefined) {
+    const yr = body.sinceYear == null || body.sinceYear === '' ? null : Number(body.sinceYear);
+    if (yr != null && (!Number.isFinite(yr) || yr < 1990 || yr > 2100)) {
+      return res.status(400).json({ error: 'Invalid sinceYear' });
+    }
+    data.sinceYear = yr;
+  }
+  if (body.description !== undefined) data.description = String(body.description).trim().slice(0, 1000) || null;
+  if (body.website !== undefined) data.website = cleanWebsite(body.website);
+  if (body.sortOrder !== undefined && String(body.sortOrder).trim() !== '') data.sortOrder = Math.max(0, Number(body.sortOrder) || 0);
+  if (body.participatingWf26 !== undefined) data.participatingWf26 = asBool(body.participatingWf26);
+  if (!Object.keys(data).length && !req.file) return res.status(400).json({ error: 'No fields to update' });
 
-  await prisma.officialTeam.update({ where: { id }, data });
+  if (Object.keys(data).length) await prisma.officialTeam.update({ where: { id }, data });
+  await saveProfilePhoto('team', id, req.file);
   autoAssignTeamThenAffiliate({ reason: `team ${id} patched` }).catch(() => {});
   return res.json({ success: true });
 });
 
 // Patch Affiliate (WF26 toggle or full edit)
-app.patch('/api/admin/affiliates/:id', requireAdmin, async (req, res) => {
+app.patch('/api/admin/affiliates/:id', requireAdmin, profilePhotoUpload.single('photo'), async (req, res) => {
   const id = Number(req.params.id);
   if (!id) return res.status(400).json({ error: 'Invalid id' });
   const body = req.body || {};
@@ -22274,11 +23015,17 @@ app.patch('/api/admin/affiliates/:id', requireAdmin, async (req, res) => {
     }
     data.sinceYear = yr;
   }
-  if (body.hasMembers !== undefined) data.hasMembers = Boolean(body.hasMembers);
-  if (body.participatingWf26 !== undefined) data.participatingWf26 = Boolean(body.participatingWf26);
-  if (!Object.keys(data).length) return res.status(400).json({ error: 'No fields to update' });
+  if (body.hasMembers !== undefined) data.hasMembers = asBool(body.hasMembers);
+  if (body.name !== undefined) data.name = String(body.name).trim().slice(0, 60) || null;
+  if (body.aircraftType !== undefined) data.aircraftType = String(body.aircraftType).trim().toUpperCase().slice(0, 10) || null;
+  if (body.description !== undefined) data.description = String(body.description).trim().slice(0, 1000) || null;
+  if (body.website !== undefined) data.website = cleanWebsite(body.website);
+  if (body.sortOrder !== undefined && String(body.sortOrder).trim() !== '') data.sortOrder = Math.max(0, Number(body.sortOrder) || 0);
+  if (body.participatingWf26 !== undefined) data.participatingWf26 = asBool(body.participatingWf26);
+  if (!Object.keys(data).length && !req.file) return res.status(400).json({ error: 'No fields to update' });
 
-  await prisma.affiliate.update({ where: { id }, data });
+  if (Object.keys(data).length) await prisma.affiliate.update({ where: { id }, data });
+  await saveProfilePhoto('affiliate', id, req.file);
 
   // If the main CID changed, grant WF_AFFILIATE to the new owner so they
   // get the Affiliate HQ sidebar entry. Skip admins (they shouldn't pick up
@@ -26472,6 +27219,7 @@ app.get('/admin/settings', requireAdmin, async (req, res) => {
         { key: 'my-slots',        label: 'My Slots / Bookings', icon: '✈️', desc: 'Personal slot and booking overview' },
         { key: 'atc',             label: 'WF Flow Control',     icon: '🎧', desc: 'Controller departure management view' },
         { key: 'suggest-airport', label: 'Suggest Airport',     icon: '💡', desc: 'Community airport suggestions' },
+        { key: 'who-we-are',      label: 'Teams & Affiliates',  icon: '👥', desc: 'Public "Who are we?" page listing Official Teams and WF Affiliates with photos, descriptions and websites (/teams).' },
         { key: 'airspace',        label: 'Staffing Overview', icon: '🌐', desc: 'FIR staffing requirements and timelines' },
         { key: 'sector-planning', label: 'Sector Planning',   icon: '📋', desc: 'Per-user sector list. Shows WF sectors the user is participating in (Dep/Arr/Enroute) based on their FIR Events Access grants.' },
         { key: 'vatcan-codes',    label: 'VATCAN Codes',      icon: '🎧', desc: 'Per-sector VATCAN booking-plugin event IDs (under sidebar "WF ATC" category). Controllers paste these into the VATCAN plugin to see live slot data.' }

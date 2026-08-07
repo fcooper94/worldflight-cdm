@@ -1827,6 +1827,14 @@ select{ cursor:pointer; }
   box-shadow: 0 14px 40px rgba(56,189,248,0.55);
 }
 
+/* Admin team/affiliate entry modal — plain left-aligned inputs, no forced
+   uppercase, so the admin sees values exactly as they'll be stored/shown */
+#adminEntryModal .modal-card input {
+  text-transform: none;
+  text-align: left;
+  letter-spacing: normal;
+}
+
 /* ===== LOGIN CHOICE MODAL ===== */
 button.login-btn { border: 0; cursor: pointer; font-family: inherit; }
 .login-modal-card { position: relative; max-width: 380px; width: 100%; text-align: left; }

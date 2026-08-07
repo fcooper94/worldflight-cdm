@@ -92,6 +92,14 @@ export default function renderLayout({
       </a>` : ''}
     </div>
 
+    ${pv('who-we-are') ? `<div class="nav-section">
+      <div class="nav-title">Who are we?</div>
+      <a href="/teams" class="nav-item" data-tooltip="Official Teams / WF Affiliates">
+        <span class="icon">${icons.users}</span>
+        <span class="label">Teams &amp; Affiliates</span>
+      </a>
+    </div>` : ''}
+
     ${pv('atc') || pv('airspace') || (pv('sector-planning') && hasFirAccess) ? `<div class="nav-section">
       <div class="nav-title">Planning</div>
       ${pv('atc') ? `<a href="/atc" class="nav-item" data-tooltip="WF Flow Control">

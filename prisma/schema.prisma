@@ -14,17 +14,26 @@ model OfficialTeam {
   mainCid           Int
   aircraftType      String
   country           String
+  sinceYear         Int?
+  description       String?
+  website           String?
+  sortOrder         Int      @default(0)
   participatingWf26 Boolean  @default(false)
   createdAt         DateTime @default(now())
 }
 
 model Affiliate {
   id                Int      @id @default(autoincrement())
+  name              String?
   callsign          String
   simType           String
   cid               Int
   sinceYear         Int?
   hasMembers        Boolean  @default(false)
+  aircraftType      String?
+  description       String?
+  website           String?
+  sortOrder         Int      @default(0)
   participatingWf26 Boolean  @default(false)
   createdAt         DateTime @default(now())
 }
@@ -445,6 +454,8 @@ model AffiliateApplication {
   hasMembers  Boolean   @default(false)
   contact     String?
   notes       String?
+  heardAbout  String?
+  website     String?
   source      String    @default("admin")
   status      String    @default("pending")
   decidedBy   Int?
@@ -454,4 +465,26 @@ model AffiliateApplication {
 
   @@index([status])
   @@index([cid])
+}
+
+model AffiliateApplicationPhoto {
+  id            Int      @id @default(autoincrement())
+  applicationId Int
+  filename      String
+  mime          String
+  data          Bytes
+  createdAt     DateTime @default(now())
+
+  @@index([applicationId])
+}
+
+model ProfilePhoto {
+  id         Int      @id @default(autoincrement())
+  entityType String
+  entityId   Int
+  mime       String
+  data       Bytes
+  updatedAt  DateTime @default(now())
+
+  @@unique([entityType, entityId])
 }
