@@ -427,6 +427,7 @@ function renderLayout(opts) {
     hasFirAccess: cid ? (userHasFirAccess(cid) || isAdminUser(cid)) : false,
     sectorPlanOutOfSync: (cid && isAdminUser(cid)) ? sectorPlanOutOfSyncCount : 0,
     canManageAffiliateMembers: cid ? canManageAffiliateMembers(cid) : false,
+    canManageTeamMembers: cid ? canManageTeamMembers(cid) : false,
     activeEvent: active ? { id: active.id, name: active.name, year: active.year } : null
   });
 }
@@ -1958,18 +1959,39 @@ function requireAdminPage(pageKey) {
 
 /* ===== WF TEAM MEMBERSHIP ===== */
 const teamMemberCids = new Set();
+const teamOwnerCids = new Set();    // mainCid of any OfficialTeam row
+const teamManagerCids = new Set();  // owners + members holding canManageMembers
 
 async function loadTeamMembers() {
   try {
     const rows = await prisma.userAdditionalRole.findMany({ where: { role: 'WF_TEAM' } });
     teamMemberCids.clear();
-    rows.forEach(r => teamMemberCids.add(r.cid));
-    console.log(`[TEAM] Loaded ${teamMemberCids.size} WF team members`);
+    teamManagerCids.clear();
+    rows.forEach(r => {
+      teamMemberCids.add(r.cid);
+      if (r.canManageMembers) teamManagerCids.add(Number(r.cid));
+    });
+    const owners = await prisma.officialTeam.findMany({ select: { mainCid: true } });
+    teamOwnerCids.clear();
+    owners.forEach(o => {
+      const c = Number(o.mainCid);
+      if (!c) return;
+      teamOwnerCids.add(c);
+      teamManagerCids.add(c);
+    });
+    console.log(`[TEAM] Loaded ${teamMemberCids.size} WF team members, ${teamOwnerCids.size} owners`);
   } catch (e) {}
 }
 
+// Owners count as team members so a team's main CID always reaches their HQ,
+// even without an explicit WF_TEAM role row.
 function isTeamMember(cid) {
-  return !!cid && teamMemberCids.has(Number(cid));
+  const n = Number(cid);
+  return !!n && (teamMemberCids.has(n) || teamOwnerCids.has(n));
+}
+
+function canManageTeamMembers(cid) {
+  return !!cid && teamManagerCids.has(Number(cid));
 }
 
 function requireTeamMember(req, res, next) {
@@ -2101,24 +2123,44 @@ async function fetchVatsimName(cid) {
 // One booking per participating team per flow-restricted sector, filed under
 // the team owner's mainCid. SLOTTED picks the spare slot whose TOBT is
 // closest to the sector's dep_time_utc.
+//
+// Teams flagged `multiSlot` are the exception: each of their aircraft gets its
+// OWN slot, booked under that aircraft's own mainCid, because they fly several
+// airframes simultaneously rather than sharing one.
 async function autoAssignTeamBookings({ reason = '' } = {}) {
   try {
     const teamRows = await prisma.officialTeam.findMany({
       where: { participatingWf26: true },
-      select: { teamName: true, mainCid: true, callsign: true, aircraftType: true }
+      select: { teamName: true, mainCid: true, callsign: true, aircraftType: true, multiSlot: true }
     });
 
-    // Collapse multi-callsign teams to one entry per teamName (use the first
-    // row's callsign/type as the representative aircraft for the booking).
+    // multiSlot is a team-level property; honour it if any row of the team
+    // carries it, so a partially-flagged fleet still behaves consistently.
+    const multiSlotTeams = new Set();
+    for (const t of teamRows) {
+      if (t.multiSlot) multiSlotTeams.add(String(t.teamName || '').trim().toUpperCase());
+    }
+
+    // A "booking unit" is whatever claims one slot. Normally that's the whole
+    // team (one entry per teamName, first callsign representing it); for
+    // multiSlot teams it's each individual aircraft.
     const teamsByName = new Map();
     for (const t of teamRows) {
       const name = String(t.teamName || '').trim().toUpperCase();
       if (!name || !t.mainCid || !t.callsign) continue;
-      if (!teamsByName.has(name)) {
+      const callsign = String(t.callsign).toUpperCase();
+      if (multiSlotTeams.has(name)) {
+        teamsByName.set(`${name}|${callsign}`, {
+          teamName: name,
+          mainCid: Number(t.mainCid),
+          callsign,
+          ownCallsignOnly: true
+        });
+      } else if (!teamsByName.has(name)) {
         teamsByName.set(name, {
           teamName: name,
           mainCid: Number(t.mainCid),
-          callsign: String(t.callsign).toUpperCase()
+          callsign
         });
       }
     }
@@ -2142,7 +2184,12 @@ async function autoAssignTeamBookings({ reason = '' } = {}) {
     let created = 0;
     for (const team of teamsByName.values()) {
       const teamCid = team.mainCid;
-      const teamCallsigns = teamCallsignsByName.get(team.teamName) || new Set([team.callsign]);
+      // multiSlot units only "already have" a sector if THEIR OWN aircraft is
+      // booked on it — otherwise the first aircraft would satisfy the check
+      // for the whole fleet and the rest would never get a slot.
+      const teamCallsigns = team.ownCallsignOnly
+        ? new Set([team.callsign])
+        : (teamCallsignsByName.get(team.teamName) || new Set([team.callsign]));
 
       for (const row of adminSheetCache) {
         const flow = sharedFlowTypes[`${row.from}-${row.to}`] || 'NONE';
@@ -2379,7 +2426,7 @@ function getFlowRestriction(scheduleRow) {
 
 // SimBrief URL for an affiliate sector. Honours the claimed pilot's
 // booking (TOBT if any) and embeds the WF Affiliate remarks.
-function buildAffiliateSimbriefUrl(scheduleRow, affiliate, claimedCid, includeRoute = true) {
+function buildAffiliateSimbriefUrl(scheduleRow, affiliate, claimedCid, includeRoute = true, label = 'WorldFlight Affiliate') {
   if (!scheduleRow) return '';
   const flow = sharedFlowTypes[`${scheduleRow.from}-${scheduleRow.to}`] || 'NONE';
   const sectorPrefix = `${scheduleRow.from}-${scheduleRow.to}|${scheduleRow.date_utc}|${scheduleRow.dep_time_utc}`;
@@ -2391,7 +2438,7 @@ function buildAffiliateSimbriefUrl(scheduleRow, affiliate, claimedCid, includeRo
   }
   const tobt = booking?.tobtTimeUtc || null;
 
-  const remarkParts = ['WorldFlight Affiliate'];
+  const remarkParts = [label];
   if (flow !== 'NONE') {
     if (tobt) remarkParts.push(`WF TCT/${String(tobt).replace(':', '')}z`);
     else if (booking) remarkParts.push('WF Booking Confirmed');
@@ -17497,7 +17544,16 @@ async function requireTeamManager(req, res, next) {
   const row = await prisma.userAdditionalRole.findUnique({
     where: { cid_role: { cid, role: 'WF_TEAM' } }
   }).catch(() => null);
-  if (!row?.canManageMembers) return res.status(403).json({ error: 'Not allowed to manage members.' });
+  // A team's main CID always manages its own members, with or without a
+  // WF_TEAM role row of their own.
+  if (!row?.canManageMembers) {
+    const owned = await prisma.officialTeam.findFirst({
+      where: { mainCid: cid }, select: { teamName: true }
+    }).catch(() => null);
+    if (!owned) return res.status(403).json({ error: 'Not allowed to manage members.' });
+    req._viewerTeamName = String(owned.teamName || '').trim().toUpperCase() || null;
+    return next();
+  }
   req._viewerTeamName = row.teamName || null;
   next();
 }
@@ -17771,542 +17827,9 @@ async function resolveUserAffiliate(cid) {
   return aff;
 }
 
-app.get('/affiliates/hq', requireLogin, async (req, res) => {
-  const user = req.session.user.data;
-  const cid = Number(user.cid);
-  const isAdmin = isAdminUser(cid);
-
-  // Admin read-only override: /affiliates/hq?id=N opens any affiliate's HQ.
-  // Read-only when the admin isn't the main CID of the requested affiliate.
-  const requestedId = Number(req.query.id) || null;
-  let affiliate;
-  let readOnly = false;
-  if (requestedId && isAdmin) {
-    affiliate = await prisma.affiliate.findUnique({ where: { id: requestedId } });
-    if (!affiliate) return renderForbidden(req, res, 'Affiliate not found.');
-    readOnly = (Number(affiliate.cid) !== cid);
-  } else {
-    if (!isAffiliate(cid)) {
-      return renderForbidden(req, res, 'This page is for WF affiliates only.');
-    }
-    affiliate = await resolveUserAffiliate(cid);
-    // Holds the WF_AFFILIATE role but no Affiliate row points at their CID
-    // (e.g. the affiliate's main CID was transferred). Show a clear notice
-    // instead of a half-empty HQ.
-    if (!affiliate) {
-      const content = `
-      <section class="card" style="max-width:640px;margin:48px auto;padding:36px;text-align:center;">
-        <div style="display:flex;align-items:center;justify-content:center;width:56px;height:56px;margin:0 auto 18px;border-radius:50%;color:#fbbf24;background:rgba(245,158,11,0.12);">
-          <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-        </div>
-        <h2 style="margin:0 0 10px;">No affiliate linked to your account</h2>
-        <p style="color:var(--muted);font-size:13.5px;line-height:1.6;margin:0 0 8px;">Your account has WF Affiliate access, but CID <strong>${cid}</strong> isn't currently linked to any affiliate — the affiliate may have been transferred to a different main CID, or removed.</p>
-        <p style="color:var(--muted);font-size:13.5px;line-height:1.6;margin:0;">If you believe this is a mistake, please contact the WorldFlight team.</p>
-      </section>`;
-      return res.send(renderLayout({ title: 'Affiliate HQ', user, isAdmin, content, layoutClass: 'dashboard-full' }));
-    }
-  }
-  // CID whose presence/stats the page should reflect. In read-only mode
-  // that's the affiliate's main CID, not the admin's.
-  const viewedCid = readOnly ? Number(affiliate?.cid || 0) : cid;
-
-  // Member name resolution (main CID + AffiliateMember rows).
-  // Pull every member regardless of active flag so the Our Members table can
-  // show inactive ones with a red cross. memberOptions (used for the schedule
-  // claim dropdown) stays filtered to active only.
-  let memberOptions = [];   // active members — fed to the claim-select dropdown
-  let allMembers = [];       // every member including inactive — fed to the table
-  let claimByNumber = {};
-  let memberCount = 0;
-  if (affiliate) {
-    const memberRows = await prisma.affiliateMember.findMany({
-      where: { affiliateId: affiliate.id }
-    });
-    const activeByCid = {};
-    memberRows.forEach(m => { activeByCid[Number(m.cid)] = m.active !== false; });
-    const allMemberCids = [...new Set([Number(affiliate.cid), ...memberRows.map(m => Number(m.cid))])];
-    memberCount = allMemberCids.length;
-
-    const [users, mailSubs] = await Promise.all([
-      prisma.user.findMany({ where: { cid: { in: allMemberCids } }, select: { cid: true, name: true } }).catch(() => []),
-      prisma.mailingListSubscriber.findMany({ where: { cid: { in: allMemberCids } }, select: { cid: true, firstName: true, lastName: true } }).catch(() => [])
-    ]);
-    const nameByCid = {};
-    users.forEach(u => { if (u.name) nameByCid[Number(u.cid)] = u.name; });
-    mailSubs.forEach(s => {
-      const c = Number(s.cid);
-      if (nameByCid[c]) return;
-      const nm = [s.firstName, s.lastName].filter(Boolean).join(' ').trim();
-      if (nm) nameByCid[c] = nm;
-    });
-    if (!nameByCid[cid] && user?.personal?.name_full) nameByCid[cid] = user.personal.name_full;
-
-    allMembers = allMemberCids
-      .map(c => {
-        const isMain = c === Number(affiliate.cid);
-        return {
-          cid: c,
-          name: nameByCid[c] || ('CID ' + c),
-          isMain,
-          active: isMain ? true : (activeByCid[c] !== false)
-        };
-      })
-      .sort((a, b) => (b.isMain - a.isMain) || a.name.localeCompare(b.name));
-    memberOptions = allMembers.filter(m => m.active);
-
-    const claims = await prisma.affiliateSectorClaim.findMany({
-      where: { affiliateId: affiliate.id }
-    }).catch(() => []);
-    claims.forEach(cl => { claimByNumber[cl.sectorNumber] = Number(cl.cid); });
-  }
-
-  // Solo "released" sectors — persisted as a claim with cid=0 sentinel
-  const releasedSectorSet = new Set();
-  if (affiliate && !affiliate.hasMembers) {
-    Object.entries(claimByNumber).forEach(([n, c]) => { if (c === 0) releasedSectorSet.add(n); });
-  }
-
-  const sinceYear = affiliate?.sinceYear || null;
-  const isSolo = !!(affiliate && !affiliate.hasMembers);
-  // A "multiple users" affiliate with no other active members yet behaves like
-  // a solo one on the schedule: the main is auto-assigned to every sector with
-  // the release × instead of a one-entry dropdown of Unclaimed rows.
-  const soloSchedule = !!(affiliate && (!affiliate.hasMembers || !memberOptions.some(m => !m.isMain)));
-  // Main CID holders manage members on /affiliates/my-members, so their HQ
-  // shows the public-profile editor instead of the Our Members table.
-  const isMainHolder = !!(affiliate && !readOnly && Number(affiliate.cid) === cid);
-  const profilePhotoRow = affiliate
-    ? await prisma.profilePhoto.findUnique({
-        where: { entityType_entityId: { entityType: 'affiliate', entityId: affiliate.id } },
-        select: { updatedAt: true }
-      }).catch(() => null)
-    : null;
-  const soloPilot = soloSchedule ? memberOptions.find(m => m.isMain) || null : null;
-
-  // Live VATSIM presence — pilot or controller, otherwise offline
-  let livePresence = { kind: 'offline', label: 'Offline', detail: '—' };
-  if (isSolo) {
-    const pilotMatch = (cachedPilots || []).find(p => Number(p.cid) === viewedCid);
-    if (pilotMatch) {
-      const fp = pilotMatch.flight_plan || {};
-      const route = fp.departure && fp.arrival ? ` (${fp.departure} → ${fp.arrival})` : '';
-      livePresence = {
-        kind: 'pilot',
-        label: 'Online · Flying',
-        detail: `${pilotMatch.callsign}${route}`
-      };
-    } else {
-      const atcMatch = (cachedControllers || []).find(c => Number(c.cid) === viewedCid);
-      if (atcMatch) {
-        const freq = atcMatch.frequency && atcMatch.frequency !== '199.998' ? ` · ${atcMatch.frequency}` : '';
-        livePresence = {
-          kind: 'atc',
-          label: 'Online · Controlling',
-          detail: `${atcMatch.callsign}${freq}`
-        };
-      }
-    }
-  }
-  const showSchedule = isAdmin || isPageEnabled('schedule');
-  const showAtcRoute = isAdmin || isPageEnabled('atc-route');
-  // Flow Restrictions + TCT/Status columns follow the same visibility key as
-  // the schedule page's flow info — admin-only/hidden keeps them off this page.
-  const showFlowInfo = isAdmin || isPageEnabled('flow-restrictions');
-  const scheduleRows = showSchedule ? (adminSheetCache || []).filter(r => r.from && r.to && r.number) : [];
-
-  function timeWindow(hhmm) {
-    const m = (hhmm || '').match(/^(\d{2}):?(\d{2})$/);
-    if (!m) return hhmm || '';
-    let mins = parseInt(m[1]) * 60 + parseInt(m[2]);
-    const lo = (mins - 60 + 1440) % 1440;
-    const hi = (mins + 60) % 1440;
-    const fmt = v => `${String(Math.floor(v / 60)).padStart(2, '0')}${String(v % 60).padStart(2, '0')}`;
-    return `${fmt(lo)}-${fmt(hi)}z`;
-  }
-
-  // Use the module-level getFlowStatus
-  const flowStatus = getFlowStatus;
-
-  const memberOptsHtml = memberOptions
-    .map(m => `<option value="${m.cid}">${escapeHtml(m.name)}${m.isMain ? ' (main)' : ''}</option>`)
-    .join('');
-
-  const content = `
-    <div class="affiliate-hq-wrap">
-
-      ${readOnly ? `
-      <section class="card aff-readonly-banner">
-        <span class="aff-readonly-badge">Admin · Read-only view</span>
-        <span class="aff-readonly-text">Viewing <strong>${escapeHtml(affiliate.name || affiliate.callsign || '')}</strong> as administrator. No actions are available.</span>
-        <a href="/official-teams" class="ot-btn">← Back to Affiliates</a>
-      </section>
-      ` : ''}
-
-      ${affiliate ? `
-      <section class="card side-label-card aff-identity-card">
-        <div class="card-side-body aff-identity-body">
-          <div class="aff-identity-main">
-            <div class="aff-identity-eyebrow">Official WorldFlight Affiliate</div>
-            <div class="aff-identity-name">${escapeHtml(affiliate.name || affiliate.callsign || '')}</div>
-            <div class="aff-identity-meta">
-              <span class="ot-simtype" data-sim="${escapeHtml((affiliate.simType || '').toUpperCase())}">${escapeHtml(affiliate.simType || '—')}</span>
-              ${sinceYear ? `<span class="ot-since">Affiliate since ${sinceYear}</span>` : ''}
-              <span class="aff-member-count">${memberCount} ${memberCount === 1 ? 'member' : 'members'}</span>
-            </div>
-          </div>
-        </div>
-      </section>
-      ` : ''}
-
-      <div class="affiliate-hq">
-      <section class="card affiliate-welcome-card">
-        <h2 class="aff-welcome-title">Welcome${affiliate ? `, ${escapeHtml(affiliate.name || affiliate.callsign || '')}` : ''}</h2>
-        <p class="aff-welcome-lead">
-          Thank you for being a WorldFlight Affiliate and being part of our community! Our affiliates
-          are an essential part of the WorldFlight community — helping to grow awareness, raise funds
-          for charity, and share the spirit of aviation with pilots and supporters around the world.
-        </p>
-        <p class="aff-welcome-lead">
-          To ensure that every affiliate maintains the same high standards and represents the
-          WorldFlight name with pride, each affiliate group or individual is expected to sign up to
-          the following charter:
-        </p>
-
-        <ol class="aff-charter">
-          <li>
-            <h4>Professionalism and Skill</h4>
-            <p>Affiliates will aim to maintain a good standard of piloting, following their own
-              procedures and remaining courteous and competent in all interactions. This helps ensure
-              that we are welcomed in any airspace we visit, reflecting positively on the wider
-              WorldFlight community.</p>
-          </li>
-          <li>
-            <h4>Respect for VATSIM and ATC</h4>
-            <p>Affiliates understand that VATSIM experiences extremely high traffic levels during
-              WorldFlight week. Courtesy and patience are essential — controllers volunteer their
-              time to make this event possible, and affiliates should always show appreciation and
-              professionalism.</p>
-          </li>
-          <li>
-            <h4>No Preferential Treatment</h4>
-            <p>Affiliates will not request or expect any kind of special treatment from ATC or other
-              pilots. WorldFlight Affiliates are community participants, not official WorldFlight
-              teams, and share the same airspace and service as all other pilots.</p>
-          </li>
-          <li>
-            <h4>Public Conduct and Streaming</h4>
-            <p>When streaming or posting content publicly, affiliates will represent the WorldFlight
-              community in a respectful, positive, and family-friendly manner, mindful that they are
-              ambassadors for the event and its charity goals.</p>
-          </li>
-          <li>
-            <h4>Community Spirit</h4>
-            <p>Affiliates' number one priority is to support the WorldFlight event and its charities.
-              The goal is to help raise awareness, funds, and enthusiasm for aviation while celebrating
-              the teamwork and camaraderie that make WorldFlight special.</p>
-          </li>
-          <li>
-            <h4>Fun and Friendship</h4>
-            <p>Above all, affiliates are here to have fun, share a passion for flight simulation, and
-              make lasting friendships around the world while helping raise money for great causes.</p>
-          </li>
-        </ol>
-      </section>
-
-      <div class="affiliate-hq-side">
-        <section class="card affiliate-banner-card">
-          <div class="affiliate-banner-wrap">
-            <img src="/affiliate-banner.jpg" alt="WorldFlight Affiliate" class="affiliate-banner" />
-          </div>
-        </section>
-
-        ${isSolo && !readOnly ? `
-        <section class="card aff-stats-card">
-          <header class="aff-members-header">
-            <h3 class="section-title" style="margin:0;">My VATSIM Stats</h3>
-            <a href="https://stats.vatsim.net/stats/${cid}" target="_blank" rel="noopener" class="aff-stats-link">View on VATSIM →</a>
-          </header>
-          <div class="aff-stats-grid">
-            <div class="aff-stat">
-              <div class="aff-stat-label">CID</div>
-              <div class="aff-stat-value mono">${cid}</div>
-            </div>
-            <div class="aff-stat">
-              <div class="aff-stat-label">Name</div>
-              <div class="aff-stat-value">${escapeHtml(user?.personal?.name_full || '—')}</div>
-            </div>
-            <div class="aff-stat">
-              <div class="aff-stat-label">Controller Rating</div>
-              <div class="aff-stat-value">
-                <span class="aff-rating-pill">${escapeHtml(user?.vatsim?.rating?.short || '—')}</span>
-                <span class="aff-rating-long">${escapeHtml(user?.vatsim?.rating?.long || '')}</span>
-              </div>
-            </div>
-            <div class="aff-stat">
-              <div class="aff-stat-label">Pilot Rating</div>
-              <div class="aff-stat-value">
-                <span class="aff-rating-pill">${escapeHtml(user?.vatsim?.pilotrating?.short || '—')}</span>
-                <span class="aff-rating-long">${escapeHtml(user?.vatsim?.pilotrating?.long || '')}</span>
-              </div>
-            </div>
-            <div class="aff-stat">
-              <div class="aff-stat-label">Division</div>
-              <div class="aff-stat-value">${escapeHtml(user?.vatsim?.division?.name || user?.vatsim?.division?.id || '—')}</div>
-            </div>
-            <div class="aff-stat">
-              <div class="aff-stat-label">Region</div>
-              <div class="aff-stat-value">${escapeHtml(user?.vatsim?.region?.name || user?.vatsim?.region?.id || '—')}</div>
-            </div>
-            <div class="aff-stat">
-              <div class="aff-stat-label">Live Status</div>
-              <div class="aff-stat-value">
-                <span class="aff-status-dot aff-status-${livePresence.kind}"></span>
-                ${escapeHtml(livePresence.label)}
-              </div>
-            </div>
-            <div class="aff-stat">
-              <div class="aff-stat-label">${livePresence.kind === 'atc' ? 'Position' : 'Callsign'}</div>
-              <div class="aff-stat-value mono">${escapeHtml(livePresence.detail || '—')}</div>
-            </div>
-          </div>
-        </section>
-        ` : isMainHolder ? `
-        <section class="card aff-profile-card">
-          <header class="aff-members-header">
-            <h3 class="section-title" style="margin:0;">Public Profile</h3>
-            <span style="font-size:11px;color:var(--muted);">Shown on the Teams &amp; Affiliates page</span>
-          </header>
-          <form id="affProfileForm" style="display:flex;flex-direction:column;gap:4px;margin-top:12px;">
-            <label style="font-size:13px;margin:0 0 4px;">Website Link</label>
-            <input name="website" type="text" maxlength="200" placeholder="https://..." value="${escapeHtml(affiliate.website || '')}" style="text-transform:none;text-align:left;" />
-
-            <label style="font-size:13px;margin:12px 0 4px;">Aircraft Type</label>
-            <input name="aircraftType" type="text" maxlength="10" placeholder="e.g. B744" value="${escapeHtml(affiliate.aircraftType || '')}" style="text-transform:none;text-align:left;" />
-
-            <label style="font-size:13px;margin:12px 0 4px;">Bio</label>
-            <textarea name="description" rows="4" maxlength="1000" placeholder="Who you are, what you fly, where you're based…" style="width:100%;box-sizing:border-box;resize:vertical;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-family:inherit;font-size:14px;">${escapeHtml(affiliate.description || '')}</textarea>
-
-            <label style="font-size:13px;margin:12px 0 4px;">Profile Picture</label>
-            <div style="display:flex;gap:14px;align-items:center;">
-              ${profilePhotoRow
-                ? `<img src="/api/profile-photo/affiliate/${affiliate.id}?v=${new Date(profilePhotoRow.updatedAt).getTime()}" alt="Profile photo" style="width:72px;height:72px;object-fit:cover;border-radius:10px;border:1px solid var(--border);flex-shrink:0;" />`
-                : `<div style="width:72px;height:72px;border-radius:10px;border:2px dashed var(--border);display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:11px;flex-shrink:0;">None</div>`}
-              <input name="photo" type="file" accept="image/*" style="font-size:13px;" />
-            </div>
-
-            <div style="display:flex;align-items:center;gap:12px;margin-top:16px;">
-              <button type="submit" class="action-btn primary">Save profile</button>
-              <span id="affProfileMsg" style="display:none;font-size:13px;"></span>
-            </div>
-          </form>
-          <script>
-            (function() {
-              var form = document.getElementById('affProfileForm');
-              var msg = document.getElementById('affProfileMsg');
-              form.addEventListener('submit', async function(e) {
-                e.preventDefault();
-                var photoInput = form.querySelector('input[name="photo"]');
-                if (photoInput.files[0] && photoInput.files[0].size > 5 * 1024 * 1024) {
-                  msg.textContent = 'Photo must be under 5 MB';
-                  msg.style.color = '#f87171'; msg.style.display = '';
-                  return;
-                }
-                var fd = new FormData(form);
-                try {
-                  var r = await fetch('/api/affiliates/hq/profile', { method: 'POST', credentials: 'same-origin', body: fd });
-                  var d = await r.json().catch(function() { return {}; });
-                  if (r.ok) {
-                    msg.textContent = 'Saved!';
-                    msg.style.color = '#4ade80'; msg.style.display = '';
-                    if (photoInput.files[0]) setTimeout(function() { location.reload(); }, 600);
-                  } else {
-                    msg.textContent = d.error || 'Failed to save';
-                    msg.style.color = '#f87171'; msg.style.display = '';
-                  }
-                } catch (err) {
-                  msg.textContent = 'Failed to save';
-                  msg.style.color = '#f87171'; msg.style.display = '';
-                }
-              });
-            })();
-          </script>
-        </section>
-        ` : `
-        <section class="card aff-members-card">
-          <header class="aff-members-header">
-            <h3 class="section-title" style="margin:0;">Our Members</h3>
-            <span class="aff-member-count">${memberCount} ${memberCount === 1 ? 'member' : 'members'}</span>
-          </header>
-          ${allMembers.length === 0 ? `
-            <div class="ot-empty">
-              <div class="ot-empty-title">No members yet</div>
-              <div class="ot-empty-sub">Use the My Members page to add CIDs.</div>
-            </div>
-          ` : `
-            <div class="ot-table-wrap">
-              <table class="ot-table">
-                <thead>
-                  <tr>
-                    <th>Name</th>
-                    <th>CID</th>
-                    <th class="ot-th-center">Active</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${allMembers.map(m => `
-                    <tr${!m.active ? ' class="mm-inactive-row"' : ''}>
-                      <td class="ot-cell-name">${escapeHtml(m.name)}</td>
-                      <td class="ot-cell-cid">${m.cid}</td>
-                      <td class="ot-cell-active">${m.active
-                        ? '<span class="mm-active-static" title="Active">✓</span>'
-                        : '<span class="mm-inactive-static" title="Inactive">✕</span>'}</td>
-                      <td style="text-align:right;">
-                        ${m.isMain ? `<span class="aff-main-badge">Main</span>` : ''}
-                      </td>
-                    </tr>
-                  `).join('')}
-                </tbody>
-              </table>
-            </div>
-          `}
-        </section>
-        `}
-      </div>
-      </div>
-
-      ${affiliate ? `
-      <section class="card aff-schedule-card">
-        <header class="aff-schedule-header">
-          <h3 class="section-title" style="margin:0;">${soloSchedule ? 'My Bookings &amp; Slots' : 'Assign Pilots / Our Bookings &amp; Slots'}</h3>
-          ${showSchedule ? `<a href="/schedule" class="aff-schedule-link">View full schedule</a>` : ''}
-        </header>
-
-        ${!showSchedule ? `
-          <div class="ot-empty">
-            <div class="ot-empty-title">Route not yet announced</div>
-            <div class="ot-empty-sub">The full WorldFlight 2026 schedule will appear here once published.</div>
-          </div>
-        ` : !scheduleRows.length ? `
-          <div class="ot-empty">
-            <div class="ot-empty-title">No sectors loaded</div>
-            <div class="ot-empty-sub">Check back soon — schedule data hasn't been loaded yet.</div>
-          </div>
-        ` : `
-          <div class="ot-table-wrap">
-            <table class="ot-table">
-              <thead>
-                <tr>
-                  <th>Sector</th>
-                  <th>Pilot</th>
-                  ${showFlowInfo ? `
-                  <th>Flow Restrictions</th>
-                  <th>Status</th>` : ''}
-                  ${showAtcRoute ? '<th>ATC Route</th>' : ''}
-                  <th>From</th>
-                  <th>To</th>
-                  <th>Date</th>
-                  <th>Dep Window</th>
-                  <th>Arr Window</th>
-                  <th>Plan</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${scheduleRows.map(r => {
-                  const released = releasedSectorSet.has(r.number);
-                  const claimedCid = soloSchedule
-                    ? (released ? null : (soloPilot ? soloPilot.cid : null))
-                    : (claimByNumber[r.number] || null);
-                  const flow = getFlowRestriction(r);
-                  const status = flowStatus(r, claimedCid);
-                  return `
-                  <tr data-sector="${escapeHtml(r.number)}">
-                    <td><span class="ot-cell-callsign">${escapeHtml(r.number)}</span></td>
-                    <td>
-                      ${readOnly ? (() => {
-                        if (soloSchedule) {
-                          if (released) return '<span class="ot-muted">Released</span>';
-                          return `<span class="aff-solo-row"><span class="aff-solo-pilot"><span class="aff-solo-pilot-name">${escapeHtml(soloPilot ? soloPilot.name : '')}</span><span class="aff-solo-pilot-cid">${soloPilot ? soloPilot.cid : ''}</span></span></span>`;
-                        }
-                        if (!claimedCid) return '<span class="ot-muted">— Unclaimed —</span>';
-                        const m = memberOptions.find(x => x.cid === claimedCid);
-                        return m ? `<span>${escapeHtml(m.name)} · ${m.cid}</span>` : `<span class="ot-muted">CID ${claimedCid}</span>`;
-                      })() : (soloSchedule ? (released ? `
-                        <button type="button" class="aff-solo-restore" data-sector="${escapeHtml(r.number)}">Unassigned</button>
-                      ` : `
-                        <span class="aff-solo-row">
-                          <span class="aff-solo-pilot">
-                            <span class="aff-solo-pilot-name">${escapeHtml(soloPilot ? soloPilot.name : '')}</span>
-                            <span class="aff-solo-pilot-cid">${soloPilot ? soloPilot.cid : ''}</span>
-                          </span>
-                          <span class="aff-solo-x-host">
-                            <span class="aff-solo-x" data-sector="${escapeHtml(r.number)}" role="button" tabindex="0" aria-label="Remove yourself from this sector">×</span>
-                            <span class="aff-solo-x-tip">If you are not flying this sector, please remove yourself to release any bookings / slots.</span>
-                          </span>
-                        </span>
-                      `) : `
-                        <select class="claim-select" data-sector="${escapeHtml(r.number)}">
-                          <option value="">— Unclaimed —</option>
-                          ${memberOptions.map(m => `<option value="${m.cid}" ${claimedCid === m.cid ? 'selected' : ''}>${escapeHtml(m.name)} · ${m.cid}</option>`).join('')}
-                        </select>
-                      `)}
-                    </td>
-                    ${showFlowInfo ? `
-                    <td><span class="flowtype-pill flowtype-${flow.cls}">${escapeHtml(flow.label)}</span></td>
-                    <td class="aff-status-cell"><span class="aff-flow-status aff-flow-${status.kind}">${
-                      status.kind === 'tobt'
-                        ? `<span class="aff-tobt-label">${escapeHtml(status.label)}</span><span class="aff-tobt-time">${escapeHtml(status.time)}</span><span class="tobt-help">?<span class="tobt-tooltip">This is your TCT (Target Connection Time).<br>Connect to VATSIM at this time.<br>We use TCT to stagger pilot connections at this airport so the network and controllers aren&#39;t overwhelmed.</span></span>`
-                        : escapeHtml(status.text)
-                    }</span></td>` : ''}
-                    ${showAtcRoute ? `<td>${(() => {
-                      const sbUrl = buildAffiliateSimbriefUrl(r, affiliate, claimedCid, showAtcRoute);
-                      const sbAttr = sbUrl.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
-                      const r2Attr = r.atc_route2 && r.atc_route2 !== '-' ? String(r.atc_route2).replace(/&/g, '&amp;').replace(/"/g, '&quot;') : '';
-                      return r.atc_route && r.atc_route !== '-'
-                        ? `<button type="button" class="aff-route-btn" data-route="${String(r.atc_route).replace(/&/g, '&amp;').replace(/"/g, '&quot;')}" data-route2="${r2Attr}" data-simbrief="${sbAttr}" data-from="${escapeHtml(r.from)}" data-to="${escapeHtml(r.to)}">ATC Route</button>`
-                        : `<span class="ot-muted" style="font-style:italic;" title="This information will be available once an ATC route has been agreed between the two airports.">Pending agreement</span>`;
-                    })()}</td>` : ''}
-                    <td><a class="aff-icao-link" href="/icao/${escapeHtml(r.from)}">${escapeHtml(r.from)}</a></td>
-                    <td><a class="aff-icao-link" href="/icao/${escapeHtml(r.to)}">${escapeHtml(r.to)}</a></td>
-                    <td><span class="ot-muted">${escapeHtml(r.date_utc || '')}</span></td>
-                    <td><span class="ot-muted">${timeWindow(r.dep_time_utc)}</span></td>
-                    <td><span class="ot-muted">${timeWindow(r.arr_time_utc)}</span></td>
-                    <td>${(() => {
-                      const sbUrl = buildAffiliateSimbriefUrl(r, affiliate, claimedCid, showAtcRoute);
-                      const sbAttr = sbUrl.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
-                      return `<a class="aff-route-btn aff-sb-btn" href="${sbAttr}" target="_blank" rel="noopener">Plan with SimBrief</a>`;
-                    })()}</td>
-                  </tr>
-                  `;
-                }).join('')}
-              </tbody>
-            </table>
-          </div>
-        `}
-      </section>
-      ` : ''}
-
-      <div id="affRouteModal" class="aff-route-modal" hidden>
-        <div class="aff-route-modal-backdrop"></div>
-        <div class="aff-route-modal-card" role="dialog" aria-modal="true" aria-labelledby="affRouteModalTitle">
-          <header class="aff-route-modal-header">
-            <div>
-              <div class="aff-route-modal-eyebrow">ATC Route</div>
-              <h3 id="affRouteModalTitle" class="aff-route-modal-title"><span id="affRouteModalSector">—</span></h3>
-            </div>
-            <button type="button" class="aff-route-modal-close" id="affRouteModalClose" aria-label="Close">×</button>
-          </header>
-          <pre class="aff-route-modal-body" id="affRouteModalBody"></pre>
-          <footer class="aff-route-modal-footer">
-            <button type="button" class="ot-btn" id="affRouteModalCopy">Copy to Clipboard</button>
-            <a id="affRouteModalSimbrief" class="aff-route-btn aff-sb-btn" href="#" target="_blank" rel="noopener">Plan with SimBrief</a>
-            <button type="button" class="ot-btn" id="affRouteModalDismiss">Close</button>
-          </footer>
-        </div>
-      </div>
-    </div>
-
-    <style>
+/* Shared HQ stylesheet — used by both the Affiliate HQ and the WF Team HQ
+   so the two pages stay visually identical. Pure CSS, no interpolation. */
+const HQ_STYLES = `    <style>
       .affiliate-hq-wrap {
         width: 100%;
         max-width: 2200px;
@@ -18563,6 +18086,9 @@ app.get('/affiliates/hq', requireLogin, async (req, res) => {
         box-shadow: 0 6px 22px rgba(0,0,0,0.30);
       }
       .affiliate-banner { display: block; width: 100%; height: auto; }
+      /* Team banner art is 16:9 while the affiliate one is ~2.09:1 — pin the
+         team image to the affiliate aspect so both HQs render an identical box. */
+      .affiliate-banner.team-banner { aspect-ratio: 1472 / 704; object-fit: cover; }
 
       /* Welcome card */
       .affiliate-welcome-card { padding: 28px 32px; }
@@ -19007,7 +18533,547 @@ app.get('/affiliates/hq', requireLogin, async (req, res) => {
         .aff-charter li { padding: 14px 14px 14px 48px; }
         .aff-charter li::before { left: 10px; top: 12px; }
       }
-    </style>
+    </style>`;
+
+app.get('/affiliates/hq', requireLogin, async (req, res) => {
+  const user = req.session.user.data;
+  const cid = Number(user.cid);
+  const isAdmin = isAdminUser(cid);
+
+  // Admin read-only override: /affiliates/hq?id=N opens any affiliate's HQ.
+  // Read-only when the admin isn't the main CID of the requested affiliate.
+  const requestedId = Number(req.query.id) || null;
+  let affiliate;
+  let readOnly = false;
+  if (requestedId && isAdmin) {
+    affiliate = await prisma.affiliate.findUnique({ where: { id: requestedId } });
+    if (!affiliate) return renderForbidden(req, res, 'Affiliate not found.');
+    readOnly = (Number(affiliate.cid) !== cid);
+  } else {
+    if (!isAffiliate(cid)) {
+      return renderForbidden(req, res, 'This page is for WF affiliates only.');
+    }
+    affiliate = await resolveUserAffiliate(cid);
+    // Holds the WF_AFFILIATE role but no Affiliate row points at their CID
+    // (e.g. the affiliate's main CID was transferred). Show a clear notice
+    // instead of a half-empty HQ.
+    if (!affiliate) {
+      const content = `
+      <section class="card" style="max-width:640px;margin:48px auto;padding:36px;text-align:center;">
+        <div style="display:flex;align-items:center;justify-content:center;width:56px;height:56px;margin:0 auto 18px;border-radius:50%;color:#fbbf24;background:rgba(245,158,11,0.12);">
+          <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        </div>
+        <h2 style="margin:0 0 10px;">No affiliate linked to your account</h2>
+        <p style="color:var(--muted);font-size:13.5px;line-height:1.6;margin:0 0 8px;">Your account has WF Affiliate access, but CID <strong>${cid}</strong> isn't currently linked to any affiliate — the affiliate may have been transferred to a different main CID, or removed.</p>
+        <p style="color:var(--muted);font-size:13.5px;line-height:1.6;margin:0;">If you believe this is a mistake, please contact the WorldFlight team.</p>
+      </section>`;
+      return res.send(renderLayout({ title: 'Affiliate HQ', user, isAdmin, content, layoutClass: 'dashboard-full' }));
+    }
+  }
+  // CID whose presence/stats the page should reflect. In read-only mode
+  // that's the affiliate's main CID, not the admin's.
+  const viewedCid = readOnly ? Number(affiliate?.cid || 0) : cid;
+
+  // Member name resolution (main CID + AffiliateMember rows).
+  // Pull every member regardless of active flag so the Our Members table can
+  // show inactive ones with a red cross. memberOptions (used for the schedule
+  // claim dropdown) stays filtered to active only.
+  let memberOptions = [];   // active members — fed to the claim-select dropdown
+  let allMembers = [];       // every member including inactive — fed to the table
+  let claimByNumber = {};
+  let memberCount = 0;
+  if (affiliate) {
+    const memberRows = await prisma.affiliateMember.findMany({
+      where: { affiliateId: affiliate.id }
+    });
+    const activeByCid = {};
+    memberRows.forEach(m => { activeByCid[Number(m.cid)] = m.active !== false; });
+    const allMemberCids = [...new Set([Number(affiliate.cid), ...memberRows.map(m => Number(m.cid))])];
+    memberCount = allMemberCids.length;
+
+    const [users, mailSubs] = await Promise.all([
+      prisma.user.findMany({ where: { cid: { in: allMemberCids } }, select: { cid: true, name: true } }).catch(() => []),
+      prisma.mailingListSubscriber.findMany({ where: { cid: { in: allMemberCids } }, select: { cid: true, firstName: true, lastName: true } }).catch(() => [])
+    ]);
+    const nameByCid = {};
+    users.forEach(u => { if (u.name) nameByCid[Number(u.cid)] = u.name; });
+    mailSubs.forEach(s => {
+      const c = Number(s.cid);
+      if (nameByCid[c]) return;
+      const nm = [s.firstName, s.lastName].filter(Boolean).join(' ').trim();
+      if (nm) nameByCid[c] = nm;
+    });
+    // 'User <cid>' is the dev/offline session placeholder, not a real name.
+    const sessName = user?.personal?.name_full;
+    if (!nameByCid[cid] && sessName && !/^User \d+$/.test(String(sessName).trim())) nameByCid[cid] = sessName;
+
+    allMembers = allMemberCids
+      .map(c => {
+        const isMain = c === Number(affiliate.cid);
+        return {
+          cid: c,
+          name: nameByCid[c] || '',
+          label: nameByCid[c] ? nameByCid[c] + ' · ' + c : String(c),
+          isMain,
+          active: isMain ? true : (activeByCid[c] !== false)
+        };
+      })
+      .sort((a, b) => (b.isMain - a.isMain) || (a.name || String(a.cid)).localeCompare(b.name || String(b.cid)));
+    memberOptions = allMembers.filter(m => m.active);
+
+    const claims = await prisma.affiliateSectorClaim.findMany({
+      where: { affiliateId: affiliate.id }
+    }).catch(() => []);
+    claims.forEach(cl => { claimByNumber[cl.sectorNumber] = Number(cl.cid); });
+  }
+
+  // Solo "released" sectors — persisted as a claim with cid=0 sentinel
+  const releasedSectorSet = new Set();
+  if (affiliate && !affiliate.hasMembers) {
+    Object.entries(claimByNumber).forEach(([n, c]) => { if (c === 0) releasedSectorSet.add(n); });
+  }
+
+  const sinceYear = affiliate?.sinceYear || null;
+  const isSolo = !!(affiliate && !affiliate.hasMembers);
+  // A "multiple users" affiliate with no other active members yet behaves like
+  // a solo one on the schedule: the main is auto-assigned to every sector with
+  // the release × instead of a one-entry dropdown of Unclaimed rows.
+  const soloSchedule = !!(affiliate && (!affiliate.hasMembers || !memberOptions.some(m => !m.isMain)));
+  // Main CID holders manage members on /affiliates/my-members, so their HQ
+  // shows the public-profile editor instead of the Our Members table.
+  const isMainHolder = !!(affiliate && !readOnly && Number(affiliate.cid) === cid);
+  const profilePhotoRow = affiliate
+    ? await prisma.profilePhoto.findUnique({
+        where: { entityType_entityId: { entityType: 'affiliate', entityId: affiliate.id } },
+        select: { updatedAt: true }
+      }).catch(() => null)
+    : null;
+  const soloPilot = soloSchedule ? memberOptions.find(m => m.isMain) || null : null;
+
+  // Live VATSIM presence — pilot or controller, otherwise offline
+  let livePresence = { kind: 'offline', label: 'Offline', detail: '—' };
+  if (isSolo) {
+    const pilotMatch = (cachedPilots || []).find(p => Number(p.cid) === viewedCid);
+    if (pilotMatch) {
+      const fp = pilotMatch.flight_plan || {};
+      const route = fp.departure && fp.arrival ? ` (${fp.departure} → ${fp.arrival})` : '';
+      livePresence = {
+        kind: 'pilot',
+        label: 'Online · Flying',
+        detail: `${pilotMatch.callsign}${route}`
+      };
+    } else {
+      const atcMatch = (cachedControllers || []).find(c => Number(c.cid) === viewedCid);
+      if (atcMatch) {
+        const freq = atcMatch.frequency && atcMatch.frequency !== '199.998' ? ` · ${atcMatch.frequency}` : '';
+        livePresence = {
+          kind: 'atc',
+          label: 'Online · Controlling',
+          detail: `${atcMatch.callsign}${freq}`
+        };
+      }
+    }
+  }
+  const showSchedule = isAdmin || isPageEnabled('schedule');
+  const showAtcRoute = isAdmin || isPageEnabled('atc-route');
+  // Flow Restrictions + TCT/Status columns follow the same visibility key as
+  // the schedule page's flow info — admin-only/hidden keeps them off this page.
+  const showFlowInfo = isAdmin || isPageEnabled('flow-restrictions');
+  const scheduleRows = showSchedule ? (adminSheetCache || []).filter(r => r.from && r.to && r.number) : [];
+
+  function timeWindow(hhmm) {
+    const m = (hhmm || '').match(/^(\d{2}):?(\d{2})$/);
+    if (!m) return hhmm || '';
+    let mins = parseInt(m[1]) * 60 + parseInt(m[2]);
+    const lo = (mins - 60 + 1440) % 1440;
+    const hi = (mins + 60) % 1440;
+    const fmt = v => `${String(Math.floor(v / 60)).padStart(2, '0')}${String(v % 60).padStart(2, '0')}`;
+    return `${fmt(lo)}-${fmt(hi)}z`;
+  }
+
+  // Use the module-level getFlowStatus
+  const flowStatus = getFlowStatus;
+
+  const memberOptsHtml = memberOptions
+    .map(m => `<option value="${m.cid}">${escapeHtml(m.label)}${m.isMain ? ' (main)' : ''}</option>`)
+    .join('');
+
+  const content = `
+    <div class="affiliate-hq-wrap">
+
+      ${readOnly ? `
+      <section class="card aff-readonly-banner">
+        <span class="aff-readonly-badge">Admin · Read-only view</span>
+        <span class="aff-readonly-text">Viewing <strong>${escapeHtml(affiliate.name || affiliate.callsign || '')}</strong> as administrator. No actions are available.</span>
+        <a href="/official-teams" class="ot-btn">← Back to Affiliates</a>
+      </section>
+      ` : ''}
+
+      ${affiliate ? `
+      <section class="card side-label-card aff-identity-card">
+        <div class="card-side-body aff-identity-body">
+          <div class="aff-identity-main">
+            <div class="aff-identity-eyebrow">Official WorldFlight Affiliate</div>
+            <div class="aff-identity-name">${escapeHtml(affiliate.name || affiliate.callsign || '')}</div>
+            <div class="aff-identity-meta">
+              <span class="ot-simtype" data-sim="${escapeHtml((affiliate.simType || '').toUpperCase())}">${escapeHtml(affiliate.simType || '—')}</span>
+              ${sinceYear ? `<span class="ot-since">Affiliate since ${sinceYear}</span>` : ''}
+              <span class="aff-member-count">${memberCount} ${memberCount === 1 ? 'member' : 'members'}</span>
+            </div>
+          </div>
+        </div>
+      </section>
+      ` : ''}
+
+      <div class="affiliate-hq">
+      <section class="card affiliate-welcome-card">
+        <h2 class="aff-welcome-title">Welcome${affiliate ? `, ${escapeHtml(affiliate.name || affiliate.callsign || '')}` : ''}</h2>
+        <p class="aff-welcome-lead">
+          Thank you for being a WorldFlight Affiliate and being part of our community! Our affiliates
+          are an essential part of the WorldFlight community — helping to grow awareness, raise funds
+          for charity, and share the spirit of aviation with pilots and supporters around the world.
+        </p>
+        <p class="aff-welcome-lead">
+          To ensure that every affiliate maintains the same high standards and represents the
+          WorldFlight name with pride, each affiliate group or individual is expected to sign up to
+          the following charter:
+        </p>
+
+        <ol class="aff-charter">
+          <li>
+            <h4>Professionalism and Skill</h4>
+            <p>Affiliates will aim to maintain a good standard of piloting, following their own
+              procedures and remaining courteous and competent in all interactions. This helps ensure
+              that we are welcomed in any airspace we visit, reflecting positively on the wider
+              WorldFlight community.</p>
+          </li>
+          <li>
+            <h4>Respect for VATSIM and ATC</h4>
+            <p>Affiliates understand that VATSIM experiences extremely high traffic levels during
+              WorldFlight week. Courtesy and patience are essential — controllers volunteer their
+              time to make this event possible, and affiliates should always show appreciation and
+              professionalism.</p>
+          </li>
+          <li>
+            <h4>No Preferential Treatment</h4>
+            <p>Affiliates will not request or expect any kind of special treatment from ATC or other
+              pilots. WorldFlight Affiliates are community participants, not official WorldFlight
+              teams, and share the same airspace and service as all other pilots.</p>
+          </li>
+          <li>
+            <h4>Public Conduct and Streaming</h4>
+            <p>When streaming or posting content publicly, affiliates will represent the WorldFlight
+              community in a respectful, positive, and family-friendly manner, mindful that they are
+              ambassadors for the event and its charity goals.</p>
+          </li>
+          <li>
+            <h4>Community Spirit</h4>
+            <p>Affiliates' number one priority is to support the WorldFlight event and its charities.
+              The goal is to help raise awareness, funds, and enthusiasm for aviation while celebrating
+              the teamwork and camaraderie that make WorldFlight special.</p>
+          </li>
+          <li>
+            <h4>Fun and Friendship</h4>
+            <p>Above all, affiliates are here to have fun, share a passion for flight simulation, and
+              make lasting friendships around the world while helping raise money for great causes.</p>
+          </li>
+        </ol>
+      </section>
+
+      <div class="affiliate-hq-side">
+        <section class="card affiliate-banner-card">
+          <div class="affiliate-banner-wrap">
+            <img src="/affiliate-banner.jpg" alt="WorldFlight Affiliate" class="affiliate-banner" />
+          </div>
+        </section>
+
+        ${isSolo && !readOnly ? `
+        <section class="card aff-stats-card">
+          <header class="aff-members-header">
+            <h3 class="section-title" style="margin:0;">My VATSIM Stats</h3>
+            <a href="https://stats.vatsim.net/stats/${cid}" target="_blank" rel="noopener" class="aff-stats-link">View on VATSIM →</a>
+          </header>
+          <div class="aff-stats-grid">
+            <div class="aff-stat">
+              <div class="aff-stat-label">CID</div>
+              <div class="aff-stat-value mono">${cid}</div>
+            </div>
+            <div class="aff-stat">
+              <div class="aff-stat-label">Name</div>
+              <div class="aff-stat-value">${escapeHtml(user?.personal?.name_full || '—')}</div>
+            </div>
+            <div class="aff-stat">
+              <div class="aff-stat-label">Controller Rating</div>
+              <div class="aff-stat-value">
+                <span class="aff-rating-pill">${escapeHtml(user?.vatsim?.rating?.short || '—')}</span>
+                <span class="aff-rating-long">${escapeHtml(user?.vatsim?.rating?.long || '')}</span>
+              </div>
+            </div>
+            <div class="aff-stat">
+              <div class="aff-stat-label">Pilot Rating</div>
+              <div class="aff-stat-value">
+                <span class="aff-rating-pill">${escapeHtml(user?.vatsim?.pilotrating?.short || '—')}</span>
+                <span class="aff-rating-long">${escapeHtml(user?.vatsim?.pilotrating?.long || '')}</span>
+              </div>
+            </div>
+            <div class="aff-stat">
+              <div class="aff-stat-label">Division</div>
+              <div class="aff-stat-value">${escapeHtml(user?.vatsim?.division?.name || user?.vatsim?.division?.id || '—')}</div>
+            </div>
+            <div class="aff-stat">
+              <div class="aff-stat-label">Region</div>
+              <div class="aff-stat-value">${escapeHtml(user?.vatsim?.region?.name || user?.vatsim?.region?.id || '—')}</div>
+            </div>
+            <div class="aff-stat">
+              <div class="aff-stat-label">Live Status</div>
+              <div class="aff-stat-value">
+                <span class="aff-status-dot aff-status-${livePresence.kind}"></span>
+                ${escapeHtml(livePresence.label)}
+              </div>
+            </div>
+            <div class="aff-stat">
+              <div class="aff-stat-label">${livePresence.kind === 'atc' ? 'Position' : 'Callsign'}</div>
+              <div class="aff-stat-value mono">${escapeHtml(livePresence.detail || '—')}</div>
+            </div>
+          </div>
+        </section>
+        ` : isMainHolder ? `
+        <section class="card aff-profile-card">
+          <header class="aff-members-header">
+            <h3 class="section-title" style="margin:0;">Public Profile</h3>
+            <span style="font-size:11px;color:var(--muted);">Shown on the Teams &amp; Affiliates page</span>
+          </header>
+          <form id="affProfileForm" style="display:flex;flex-direction:column;gap:4px;margin-top:12px;">
+            <label style="font-size:13px;margin:0 0 4px;">Website Link</label>
+            <input name="website" type="text" maxlength="200" placeholder="https://..." value="${escapeHtml(affiliate.website || '')}" style="text-transform:none;text-align:left;" />
+
+            <label style="font-size:13px;margin:12px 0 4px;">Aircraft Type</label>
+            <input name="aircraftType" type="text" maxlength="10" placeholder="e.g. B744" value="${escapeHtml(affiliate.aircraftType || '')}" style="text-transform:none;text-align:left;" />
+
+            <label style="font-size:13px;margin:12px 0 4px;">Bio</label>
+            <textarea name="description" rows="4" maxlength="1000" placeholder="Who you are, what you fly, where you're based…" style="width:100%;box-sizing:border-box;resize:vertical;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-family:inherit;font-size:14px;">${escapeHtml(affiliate.description || '')}</textarea>
+
+            <label style="font-size:13px;margin:12px 0 4px;">Profile Picture</label>
+            <div style="display:flex;gap:14px;align-items:center;">
+              ${profilePhotoRow
+                ? `<img src="/api/profile-photo/affiliate/${affiliate.id}?v=${new Date(profilePhotoRow.updatedAt).getTime()}" alt="Profile photo" style="width:72px;height:72px;object-fit:cover;border-radius:10px;border:1px solid var(--border);flex-shrink:0;" />`
+                : `<div style="width:72px;height:72px;border-radius:10px;border:2px dashed var(--border);display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:11px;flex-shrink:0;">None</div>`}
+              <input name="photo" type="file" accept="image/*" style="font-size:13px;" />
+            </div>
+
+            <div style="display:flex;align-items:center;gap:12px;margin-top:16px;">
+              <button type="submit" class="action-btn primary">Save profile</button>
+              <span id="affProfileMsg" style="display:none;font-size:13px;"></span>
+            </div>
+          </form>
+          <script>
+            (function() {
+              var form = document.getElementById('affProfileForm');
+              var msg = document.getElementById('affProfileMsg');
+              form.addEventListener('submit', async function(e) {
+                e.preventDefault();
+                var photoInput = form.querySelector('input[name="photo"]');
+                if (photoInput.files[0] && photoInput.files[0].size > 5 * 1024 * 1024) {
+                  msg.textContent = 'Photo must be under 5 MB';
+                  msg.style.color = '#f87171'; msg.style.display = '';
+                  return;
+                }
+                var fd = new FormData(form);
+                try {
+                  var r = await fetch('/api/affiliates/hq/profile', { method: 'POST', credentials: 'same-origin', body: fd });
+                  var d = await r.json().catch(function() { return {}; });
+                  if (r.ok) {
+                    msg.textContent = 'Saved!';
+                    msg.style.color = '#4ade80'; msg.style.display = '';
+                    if (photoInput.files[0]) setTimeout(function() { location.reload(); }, 600);
+                  } else {
+                    msg.textContent = d.error || 'Failed to save';
+                    msg.style.color = '#f87171'; msg.style.display = '';
+                  }
+                } catch (err) {
+                  msg.textContent = 'Failed to save';
+                  msg.style.color = '#f87171'; msg.style.display = '';
+                }
+              });
+            })();
+          </script>
+        </section>
+        ` : `
+        <section class="card aff-members-card">
+          <header class="aff-members-header">
+            <h3 class="section-title" style="margin:0;">Our Members</h3>
+            <span class="aff-member-count">${memberCount} ${memberCount === 1 ? 'member' : 'members'}</span>
+          </header>
+          ${allMembers.length === 0 ? `
+            <div class="ot-empty">
+              <div class="ot-empty-title">No members yet</div>
+              <div class="ot-empty-sub">Use the My Members page to add CIDs.</div>
+            </div>
+          ` : `
+            <div class="ot-table-wrap">
+              <table class="ot-table">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>CID</th>
+                    <th class="ot-th-center">Active</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${allMembers.map(m => `
+                    <tr${!m.active ? ' class="mm-inactive-row"' : ''}>
+                      <td class="ot-cell-name">${escapeHtml(m.name || '—')}</td>
+                      <td class="ot-cell-cid">${m.cid}</td>
+                      <td class="ot-cell-active">${m.active
+                        ? '<span class="mm-active-static" title="Active">✓</span>'
+                        : '<span class="mm-inactive-static" title="Inactive">✕</span>'}</td>
+                      <td style="text-align:right;">
+                        ${m.isMain ? `<span class="aff-main-badge">Main</span>` : ''}
+                      </td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>
+          `}
+        </section>
+        `}
+      </div>
+      </div>
+
+      ${affiliate ? `
+      <section class="card aff-schedule-card">
+        <header class="aff-schedule-header">
+          <h3 class="section-title" style="margin:0;">${soloSchedule ? 'My Bookings &amp; Slots' : 'Assign Pilots / Our Bookings &amp; Slots'}</h3>
+          ${showSchedule ? `<a href="/schedule" class="aff-schedule-link">View full schedule</a>` : ''}
+        </header>
+
+        ${!showSchedule ? `
+          <div class="ot-empty">
+            <div class="ot-empty-title">Route not yet announced</div>
+            <div class="ot-empty-sub">The full WorldFlight 2026 schedule will appear here once published.</div>
+          </div>
+        ` : !scheduleRows.length ? `
+          <div class="ot-empty">
+            <div class="ot-empty-title">No sectors loaded</div>
+            <div class="ot-empty-sub">Check back soon — schedule data hasn't been loaded yet.</div>
+          </div>
+        ` : `
+          <div class="ot-table-wrap">
+            <table class="ot-table">
+              <thead>
+                <tr>
+                  <th>Sector</th>
+                  <th>Pilot</th>
+                  ${showFlowInfo ? `
+                  <th>Flow Restrictions</th>
+                  <th>Status</th>` : ''}
+                  ${showAtcRoute ? '<th>ATC Route</th>' : ''}
+                  <th>From</th>
+                  <th>To</th>
+                  <th>Date</th>
+                  <th>Dep Window</th>
+                  <th>Arr Window</th>
+                  <th>Plan</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${scheduleRows.map(r => {
+                  const released = releasedSectorSet.has(r.number);
+                  const claimedCid = soloSchedule
+                    ? (released ? null : (soloPilot ? soloPilot.cid : null))
+                    : (claimByNumber[r.number] || null);
+                  const flow = getFlowRestriction(r);
+                  const status = flowStatus(r, claimedCid);
+                  return `
+                  <tr data-sector="${escapeHtml(r.number)}">
+                    <td><span class="ot-cell-callsign">${escapeHtml(r.number)}</span></td>
+                    <td>
+                      ${readOnly ? (() => {
+                        if (soloSchedule) {
+                          if (released) return '<span class="ot-muted">Released</span>';
+                          return `<span class="aff-solo-row"><span class="aff-solo-pilot"><span class="aff-solo-pilot-name">${escapeHtml(soloPilot ? soloPilot.name : '')}</span><span class="aff-solo-pilot-cid">${soloPilot ? soloPilot.cid : ''}</span></span></span>`;
+                        }
+                        if (!claimedCid) return '<span class="ot-muted">— Unclaimed —</span>';
+                        const m = memberOptions.find(x => x.cid === claimedCid);
+                        return m ? `<span>${escapeHtml(m.label)}</span>` : `<span class="ot-muted">${claimedCid}</span>`;
+                      })() : (soloSchedule ? (released ? `
+                        <button type="button" class="aff-solo-restore" data-sector="${escapeHtml(r.number)}">Unassigned</button>
+                      ` : `
+                        <span class="aff-solo-row">
+                          <span class="aff-solo-pilot">
+                            <span class="aff-solo-pilot-name">${escapeHtml(soloPilot ? soloPilot.name : '')}</span>
+                            <span class="aff-solo-pilot-cid">${soloPilot ? soloPilot.cid : ''}</span>
+                          </span>
+                          <span class="aff-solo-x-host">
+                            <span class="aff-solo-x" data-sector="${escapeHtml(r.number)}" role="button" tabindex="0" aria-label="Remove yourself from this sector">×</span>
+                            <span class="aff-solo-x-tip">If you are not flying this sector, please remove yourself to release any bookings / slots.</span>
+                          </span>
+                        </span>
+                      `) : `
+                        <select class="claim-select" data-sector="${escapeHtml(r.number)}">
+                          <option value="">— Unclaimed —</option>
+                          ${memberOptions.map(m => `<option value="${m.cid}" ${claimedCid === m.cid ? 'selected' : ''}>${escapeHtml(m.label)}</option>`).join('')}
+                        </select>
+                      `)}
+                    </td>
+                    ${showFlowInfo ? `
+                    <td><span class="flowtype-pill flowtype-${flow.cls}">${escapeHtml(flow.label)}</span></td>
+                    <td class="aff-status-cell"><span class="aff-flow-status aff-flow-${status.kind}">${
+                      status.kind === 'tobt'
+                        ? `<span class="aff-tobt-label">${escapeHtml(status.label)}</span><span class="aff-tobt-time">${escapeHtml(status.time)}</span><span class="tobt-help">?<span class="tobt-tooltip">This is your TCT (Target Connection Time).<br>Connect to VATSIM at this time.<br>We use TCT to stagger pilot connections at this airport so the network and controllers aren&#39;t overwhelmed.</span></span>`
+                        : escapeHtml(status.text)
+                    }</span></td>` : ''}
+                    ${showAtcRoute ? `<td>${(() => {
+                      const sbUrl = buildAffiliateSimbriefUrl(r, affiliate, claimedCid, showAtcRoute);
+                      const sbAttr = sbUrl.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+                      const r2Attr = r.atc_route2 && r.atc_route2 !== '-' ? String(r.atc_route2).replace(/&/g, '&amp;').replace(/"/g, '&quot;') : '';
+                      return r.atc_route && r.atc_route !== '-'
+                        ? `<button type="button" class="aff-route-btn" data-route="${String(r.atc_route).replace(/&/g, '&amp;').replace(/"/g, '&quot;')}" data-route2="${r2Attr}" data-simbrief="${sbAttr}" data-from="${escapeHtml(r.from)}" data-to="${escapeHtml(r.to)}">ATC Route</button>`
+                        : `<span class="ot-muted" style="font-style:italic;" title="This information will be available once an ATC route has been agreed between the two airports.">Pending agreement</span>`;
+                    })()}</td>` : ''}
+                    <td><a class="aff-icao-link" href="/icao/${escapeHtml(r.from)}">${escapeHtml(r.from)}</a></td>
+                    <td><a class="aff-icao-link" href="/icao/${escapeHtml(r.to)}">${escapeHtml(r.to)}</a></td>
+                    <td><span class="ot-muted">${escapeHtml(r.date_utc || '')}</span></td>
+                    <td><span class="ot-muted">${timeWindow(r.dep_time_utc)}</span></td>
+                    <td><span class="ot-muted">${timeWindow(r.arr_time_utc)}</span></td>
+                    <td>${(() => {
+                      const sbUrl = buildAffiliateSimbriefUrl(r, affiliate, claimedCid, showAtcRoute);
+                      const sbAttr = sbUrl.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+                      return `<a class="aff-route-btn aff-sb-btn" href="${sbAttr}" target="_blank" rel="noopener">Plan with SimBrief</a>`;
+                    })()}</td>
+                  </tr>
+                  `;
+                }).join('')}
+              </tbody>
+            </table>
+          </div>
+        `}
+      </section>
+      ` : ''}
+
+      <div id="affRouteModal" class="aff-route-modal" hidden>
+        <div class="aff-route-modal-backdrop"></div>
+        <div class="aff-route-modal-card" role="dialog" aria-modal="true" aria-labelledby="affRouteModalTitle">
+          <header class="aff-route-modal-header">
+            <div>
+              <div class="aff-route-modal-eyebrow">ATC Route</div>
+              <h3 id="affRouteModalTitle" class="aff-route-modal-title"><span id="affRouteModalSector">—</span></h3>
+            </div>
+            <button type="button" class="aff-route-modal-close" id="affRouteModalClose" aria-label="Close">×</button>
+          </header>
+          <pre class="aff-route-modal-body" id="affRouteModalBody"></pre>
+          <footer class="aff-route-modal-footer">
+            <button type="button" class="ot-btn" id="affRouteModalCopy">Copy to Clipboard</button>
+            <a id="affRouteModalSimbrief" class="aff-route-btn aff-sb-btn" href="#" target="_blank" rel="noopener">Plan with SimBrief</a>
+            <button type="button" class="ot-btn" id="affRouteModalDismiss">Close</button>
+          </footer>
+        </div>
+      </div>
+    </div>
+
+    ${HQ_STYLES}
 
     <script>
       (function() {
@@ -19419,7 +19485,9 @@ app.get('/affiliates/my-members', requireLogin, requireAffiliateOwner, async (re
       const nm = [s.firstName, s.lastName].filter(Boolean).join(' ').trim();
       if (nm) nameByCid[c] = nm;
     });
-    if (!nameByCid[cid] && user?.personal?.name_full) nameByCid[cid] = user.personal.name_full;
+    // 'User <cid>' is the dev/offline session placeholder, not a real name.
+    const sessName = user?.personal?.name_full;
+    if (!nameByCid[cid] && sessName && !/^User \d+$/.test(String(sessName).trim())) nameByCid[cid] = sessName;
   }
 
   const membersByAff = {};
@@ -19880,77 +19948,68 @@ app.get('/admin', (req, res) => {
 });
 
 /* ===== TEAM MEMBER PAGES (WF_TEAM role) ===== */
-app.get('/team/management', requireLogin, requireTeamMember, async (req, res) => {
-  const user = req.session.user.data;
-  const cid = Number(user.cid);
-  const isAdmin = isAdminUser(cid);
+/* ===========================
+   WF TEAM HQ  (mirrors the Affiliate HQ)
+   ===========================
+   Replaces the old /team/management + /team/bookings pair with a single HQ
+   page plus a Manage Members page, matching the affiliate layout and reusing
+   HQ_STYLES so both surfaces stay visually identical. */
 
-  // Resolve the viewer's team name
-  const wfTeamRow = await prisma.userAdditionalRole.findUnique({
-    where: { cid_role: { cid, role: 'WF_TEAM' } }
+// Resolve which team a CID belongs to. Member role wins; falls back to
+// ownership so a team's main CID reaches their HQ without a WF_TEAM row.
+async function resolveUserTeamName(cid) {
+  const n = Number(cid);
+  if (!n) return null;
+  const row = await prisma.userAdditionalRole.findUnique({
+    where: { cid_role: { cid: n, role: 'WF_TEAM' } }
+  }).catch(() => null);
+  if (row?.teamName) return String(row.teamName).trim().toUpperCase();
+  const owned = await prisma.officialTeam.findFirst({
+    where: { mainCid: n }, select: { teamName: true }
+  }).catch(() => null);
+  return owned?.teamName ? String(owned.teamName).trim().toUpperCase() : null;
+}
+
+// Everything both team pages need. teamNameUpper is the uppercase key used on
+// UserAdditionalRole; OfficialTeam rows may be mixed case, so match loosely.
+async function loadTeamContext(teamNameUpper, viewerCid, sessionName) {
+  const [allTeams, allRoles] = await Promise.all([
+    prisma.officialTeam.findMany({ orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }] }),
+    prisma.userAdditionalRole.findMany({ where: { role: 'WF_TEAM' } })
+  ]);
+  const fleet = allTeams.filter(t => String(t.teamName || '').trim().toUpperCase() === teamNameUpper);
+  const roles = allRoles.filter(r => String(r.teamName || '').trim().toUpperCase() === teamNameUpper);
+
+  const primary = fleet[0] || null;                 // holds the public profile
+  const displayName = primary?.teamName || teamNameUpper;
+  const ownerCids = new Set(fleet.map(t => Number(t.mainCid)).filter(Boolean));
+  const memberCids = new Set(roles.map(r => Number(r.cid)).filter(Boolean));
+
+  const permsByCid = {};
+  roles.forEach(r => {
+    permsByCid[Number(r.cid)] = {
+      canEditBookings: r.canEditBookings !== false,
+      canManageMembers: !!r.canManageMembers,
+      participating: r.participating !== false
+    };
   });
-  const teamName = wfTeamRow?.teamName || null;
 
-  // Active event name (for the Participating checkbox label)
-  let activeEventName = 'this event';
-  if (activeEventId) {
-    const ev = await prisma.wfEvent.findUnique({ where: { id: activeEventId } }).catch(() => null);
-    if (ev?.name) activeEventName = ev.name;
-  }
-
-  // Fleet + team members
-  let fleet = [];
-  let anyParticipating = false;
-  let ownerCids = new Set();
-  let memberCids = new Set();
-  if (teamName) {
-    const allTeams = await prisma.officialTeam.findMany({
-      select: { callsign: true, aircraftType: true, participatingWf26: true, teamName: true, mainCid: true }
-    });
-    for (const t of allTeams) {
-      if (String(t.teamName || '').trim().toUpperCase() !== teamName) continue;
-      fleet.push({
-        callsign: String(t.callsign || '').toUpperCase(),
-        aircraftType: String(t.aircraftType || '').toUpperCase(),
-        active: !!t.participatingWf26
-      });
-      if (t.participatingWf26) anyParticipating = true;
-      if (t.mainCid) ownerCids.add(Number(t.mainCid));
-    }
-    fleet.sort((a, b) => a.callsign.localeCompare(b.callsign));
-
-    const memberRoles = await prisma.userAdditionalRole.findMany({
-      where: { role: 'WF_TEAM' },
-      select: { cid: true, teamName: true }
-    });
-    memberRoles.forEach(r => {
-      if (String(r.teamName || '').trim().toUpperCase() === teamName && r.cid) {
-        memberCids.add(Number(r.cid));
-      }
-    });
-  }
-
-  // Union of owners + members → resolve names (User → Staff/Doc reqs →
-  // mailing list → session), same cascade as /team/bookings
-  const allCids = new Set([...ownerCids, ...memberCids]);
+  // Name cascade: User → staff/doc requests → mailing list → session
+  const allCids = [...new Set([...ownerCids, ...memberCids])];
   const nameByCid = {};
-  if (allCids.size) {
-    const cidList = [...allCids];
+  if (allCids.length) {
     const [users, staffReqs, docReqs, mailSubs] = await Promise.all([
-      prisma.user.findMany({ where: { cid: { in: cidList } }, select: { cid: true, name: true } }).catch(() => []),
+      prisma.user.findMany({ where: { cid: { in: allCids } }, select: { cid: true, name: true } }).catch(() => []),
       prisma.staffAccessRequest.findMany({
-        where: { cid: { in: cidList }, name: { not: null } },
-        select: { cid: true, name: true, createdAt: true },
-        orderBy: { createdAt: 'desc' }
+        where: { cid: { in: allCids }, name: { not: null } },
+        select: { cid: true, name: true }, orderBy: { createdAt: 'desc' }
       }).catch(() => []),
       prisma.documentationAccessRequest.findMany({
-        where: { cid: { in: cidList }, name: { not: null } },
-        select: { cid: true, name: true, createdAt: true },
-        orderBy: { createdAt: 'desc' }
+        where: { cid: { in: allCids }, name: { not: null } },
+        select: { cid: true, name: true }, orderBy: { createdAt: 'desc' }
       }).catch(() => []),
       prisma.mailingListSubscriber.findMany({
-        where: { cid: { in: cidList } },
-        select: { cid: true, firstName: true, lastName: true }
+        where: { cid: { in: allCids } }, select: { cid: true, firstName: true, lastName: true }
       }).catch(() => [])
     ]);
     users.forEach(u => { if (u.name) nameByCid[Number(u.cid)] = u.name; });
@@ -19962,1116 +20021,976 @@ app.get('/team/management', requireLogin, requireTeamMember, async (req, res) =>
       const nm = [s.firstName, s.lastName].filter(Boolean).join(' ').trim();
       if (nm) nameByCid[c] = nm;
     });
-    const sessionName = req.session?.user?.data?.personal?.name_full;
-    if (sessionName && !nameByCid[cid]) nameByCid[cid] = sessionName;
+    // A dev/offline session synthesises 'User <cid>' as its name — that is a
+    // placeholder, not a real name, so don't let it mask the CID-only display.
+    if (sessionName && !/^User \d+$/.test(String(sessionName).trim()) && !nameByCid[Number(viewerCid)]) {
+      nameByCid[Number(viewerCid)] = sessionName;
+    }
   }
 
-  // Team Members = WF_TEAM role holders for this team (owners are shown
-  // on Our Fleet; if an owner also holds WF_TEAM, they'll appear here too).
-  // Load each member's perms so the Edit Perms modal opens pre-filled.
-  const memberPermsRows = teamName ? await prisma.userAdditionalRole.findMany({
-    where: { role: 'WF_TEAM' }
-  }) : [];
-  const permsByCid = {};
-  memberPermsRows.forEach(r => {
-    if (String(r.teamName || '').trim().toUpperCase() === teamName) {
-      permsByCid[Number(r.cid)] = {
-        canEditBookings: r.canEditBookings !== false,
-        canManageMembers: !!r.canManageMembers,
-        participating: r.participating !== false
-      };
-    }
-  });
-  // Team Members list = owners + explicit member-role holders. Owners are
-  // always included so the team owner is visible on the roster even when
-  // they don't hold a separate WF_TEAM role row. Sort puts owners first.
-  const teamMembers = [...new Set([...ownerCids, ...memberCids])].map(c => ({
-    cid: c,
-    name: nameByCid[c] || '',
-    isOwner: ownerCids.has(c),
-    perms: permsByCid[c] || { canEditBookings: true, canManageMembers: false, participating: true }
-  })).sort((a, b) => {
-    if (a.isOwner !== b.isOwner) return a.isOwner ? -1 : 1;
-    return a.cid - b.cid;
-  });
+  // name is '' when unknown — callers show the CID alone rather than a
+  // placeholder that would read as "CID 123 · 123" next to the CID column.
+  const members = allCids.map(c => {
+    const name = nameByCid[c] || '';
+    return {
+      cid: c,
+      name,
+      label: name ? `${name} · ${c}` : String(c),
+      isOwner: ownerCids.has(c),
+      perms: permsByCid[c] || { canEditBookings: true, canManageMembers: false, participating: true }
+    };
+  }).sort((a, b) => (a.isOwner !== b.isOwner ? (a.isOwner ? -1 : 1) : (a.name || String(a.cid)).localeCompare(b.name || String(b.cid))));
 
-  // Can the viewer manage others?
-  const viewerPerms = permsByCid[cid] || null;
-  const viewerCanManage = isAdmin || !!(viewerPerms && viewerPerms.canManageMembers);
+  return { fleet, primary, displayName, ownerCids, memberCids, members, nameByCid, permsByCid };
+}
 
-  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({
-    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
-  }[c]));
+// The WF Team charter, shown on every team's HQ.
+const WF_TEAM_CHARTER = [
+  ['Professional Standards', 'Each team will maintain a high level of piloting proficiency and follow their respective Standard Operating Procedures (SOPs). This ensures we are welcomed in any airspace we visit through our consistent commitment to safe, skilled, and professional aviation practices.'],
+  ['Courtesy and Respect', 'We recognize that VATSIM experiences extraordinary levels of traffic during World Flight Week. Our teams will remain courteous, patient, and respectful towards air traffic controllers and other pilots at all times.'],
+  ['Equal Treatment', 'Teams will not request, nor imply a request for, preferential treatment via radio communication or public broadcasts, including live streams.'],
+  ['Public Conduct', 'When live streaming, teams represent the entire World Flight Group and our charity partners. All participants are expected to act professionally and respectfully.'],
+  ['Support and Collaboration', 'Our foremost priority is to support every team within the World Flight Group. We are united in helping one another complete the journey, raise funds for our respective charities, and enjoy the experience together.'],
+  ['Schedule Flexibility', 'The published schedule serves as a guide. Teams should aim to operate between 30 minutes ahead of and up to 60 minutes behind the scheduled times. This flexibility ensures a relaxed, enjoyable experience without undue pressure regarding exact departure or arrival times.'],
+  ['Enjoyment and Community', 'Above all, our mission is to have fun, contribute to worthy causes, and build lasting friendships with fellow enthusiasts around the world.']
+];
 
-  const content = `
-    <section class="card card-full" style="margin-bottom:20px;">
-      <h2 style="margin:0 0 4px;">${teamName ? esc(teamName) : 'Team Management'}</h2>
-      ${teamName
-        ? `<p style="color:var(--muted);font-size:13px;margin:0;">Your team's fleet and roster.</p>`
-        : `<p style="color:var(--muted);font-size:13px;margin:0;">Your team membership is not linked to an Official Team yet. Ask an admin to set your team in Access Management.</p>`}
-    </section>
-
-    ${teamName ? `
-    <div class="tm-grid">
-      <section class="card card-full" style="grid-column:1/-1;">
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px;">
-          <h2 style="margin:0;">Team Members</h2>
-          ${viewerCanManage ? '<button type="button" class="action-btn primary" id="tmAddBtn" style="font-size:12px;padding:6px 14px;">Add Member</button>' : ''}
-        </div>
-        ${teamMembers.length === 0 ? `
-          <p style="color:var(--muted);font-size:13px;"><em>No team members yet.</em></p>
-        ` : `
-          <div style="overflow-x:auto;">
-            <table class="tm-table">
-              <thead>
-                <tr>
-                  <th>CID</th>
-                  <th>Full Name</th>
-                  <th>Role</th>
-                  <th>Active?</th>
-                  ${viewerCanManage ? '<th style="text-align:right;">Actions</th>' : ''}
-                </tr>
-              </thead>
-              <tbody>
-                ${teamMembers.map(m => `
-                  <tr${m.isOwner ? ' class="tm-owner-row"' : ''}>
-                    <td style="font-family:monospace;font-size:13px;">${m.cid}</td>
-                    <td><strong>${esc(m.name) || '<span style="color:var(--muted);">Unknown</span>'}</strong></td>
-                    <td>${m.isOwner
-                      ? '<span class="tm-role-badge tm-role-owner"><svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M5 16L3 7l5.5 5L12 4l3.5 8L21 7l-2 9H5zm0 2h14v2H5v-2z"/></svg>Owner</span>'
-                      : '<span class="tm-role-badge tm-role-member">Member</span>'}</td>
-                    <td>${(m.isOwner || m.perms.participating)
-                      ? '<span style="color:#4ade80;font-weight:600;">Yes</span>'
-                      : '<span style="color:var(--muted);">No</span>'}</td>
-                    ${viewerCanManage ? `
-                      <td style="text-align:right;white-space:nowrap;">
-                        ${m.isOwner
-                          ? '<span style="font-size:11px;color:var(--muted);font-style:italic;">Managed by Admins</span>'
-                          : `
-                            <button type="button" class="action-btn tm-edit-btn"
-                              data-cid="${m.cid}"
-                              data-name="${esc(m.name || '')}"
-                              data-edit="${m.perms.canEditBookings ? '1' : '0'}"
-                              data-manage="${m.perms.canManageMembers ? '1' : '0'}"
-                              data-part="${m.perms.participating ? '1' : '0'}"
-                              style="font-size:11px;padding:4px 10px;margin-right:4px;">Edit Perms</button>
-                            <button type="button" class="tobt-btn cancel tm-del-btn"
-                              data-cid="${m.cid}"
-                              data-name="${esc(m.name || '')}"
-                              ${m.cid === cid ? 'disabled title="You can&#39;t remove yourself"' : ''}
-                              style="font-size:11px;padding:4px 10px;">Delete</button>
-                          `}
-                      </td>
-                    ` : ''}
-                  </tr>
-                `).join('')}
-              </tbody>
-            </table>
-          </div>
-        `}
-      </section>
-
-      <section class="card">
-        <h2>Fleet</h2>
-        ${fleet.length === 0 ? `
-          <p style="color:var(--muted);font-size:13px;"><em>No aircraft registered for this team yet.</em></p>
-        ` : `
-          <div style="overflow-x:auto;">
-            <table class="tm-table">
-              <thead>
-                <tr><th>Callsign</th><th>A/C Type</th><th>Active?</th></tr>
-              </thead>
-              <tbody>
-                ${fleet.map(f => `
-                  <tr>
-                    <td><strong>${esc(f.callsign)}</strong></td>
-                    <td>${esc(f.aircraftType) || '\u2014'}</td>
-                    <td>${f.active
-                      ? '<span style="color:#4ade80;font-weight:600;">Yes</span>'
-                      : '<span style="color:var(--muted);">No</span>'}</td>
-                  </tr>
-                `).join('')}
-              </tbody>
-            </table>
-          </div>
-        `}
-      </section>
-    </div>
-    ` : ''}
-
-    ${viewerCanManage ? `
-    <div id="tmPermsModal" class="route-modal" hidden>
-      <div class="route-modal-backdrop"></div>
-      <div class="route-modal-card" role="dialog" aria-modal="true" style="max-width:420px;">
-        <div class="route-modal-header">
-          <div style="font-weight:700;font-size:14px;">Edit Team Member Perms</div>
-          <button type="button" id="tmPermsClose" class="route-modal-close" aria-label="Close">&times;</button>
-        </div>
-        <div id="tmPermsTarget" style="font-size:13px;color:var(--muted);margin-bottom:4px;"></div>
-        <label class="tm-check">
-          <input type="checkbox" id="tmPermEdit" />
-          <span>Can edit bookings</span>
-        </label>
-        <label class="tm-check">
-          <input type="checkbox" id="tmPermManage" />
-          <span>Can manage team members</span>
-        </label>
-        <label class="tm-check">
-          <input type="checkbox" id="tmPermPart" />
-          <span>Participating in ${esc(activeEventName)}</span>
-        </label>
-        <div id="tmPermsError" style="display:none;color:#f87171;font-size:12px;margin-top:8px;"></div>
-        <div class="route-modal-actions" style="gap:8px;">
-          <button type="button" id="tmPermsCancel" class="route-modal-copy" style="background:transparent;color:var(--text);border:1px solid var(--border);">Cancel</button>
-          <button type="button" id="tmPermsSave" class="route-modal-copy">Save</button>
-        </div>
-      </div>
-    </div>
-
-    <div id="tmAddModal" class="route-modal" hidden>
-      <div class="route-modal-backdrop"></div>
-      <div class="route-modal-card" role="dialog" aria-modal="true" style="max-width:420px;">
-        <div class="route-modal-header">
-          <div style="font-weight:700;font-size:14px;">Add Team Member</div>
-          <button type="button" id="tmAddClose" class="route-modal-close" aria-label="Close">&times;</button>
-        </div>
-        <label style="font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:4px;">
-          VATSIM CID
-          <input type="text" id="tmAddCid" inputmode="numeric" maxlength="10" placeholder="e.g. 1303570"
-            style="padding:8px 10px;background:var(--panel);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:14px;" />
-        </label>
-        <label class="tm-check">
-          <input type="checkbox" id="tmAddEdit" />
-          <span>Can edit bookings</span>
-        </label>
-        <label class="tm-check">
-          <input type="checkbox" id="tmAddManage" />
-          <span>Can manage team members</span>
-        </label>
-        <label class="tm-check">
-          <input type="checkbox" id="tmAddPart" checked />
-          <span>Participating in ${esc(activeEventName)}</span>
-        </label>
-        <div id="tmAddError" style="display:none;color:#f87171;font-size:12px;margin-top:8px;"></div>
-        <div class="route-modal-actions" style="gap:8px;">
-          <button type="button" id="tmAddCancel" class="route-modal-copy" style="background:transparent;color:var(--text);border:1px solid var(--border);">Cancel</button>
-          <button type="button" id="tmAddSave" class="route-modal-copy">Add Member</button>
-        </div>
-      </div>
-    </div>
-
-    <div id="tmDelModal" class="route-modal" hidden>
-      <div class="route-modal-backdrop"></div>
-      <div class="route-modal-card" role="dialog" aria-modal="true" style="max-width:400px;">
-        <div class="route-modal-header">
-          <div style="font-weight:700;font-size:14px;">Remove Team Member</div>
-          <button type="button" id="tmDelClose" class="route-modal-close" aria-label="Close">&times;</button>
-        </div>
-        <p id="tmDelBody" style="font-size:13px;color:var(--text);margin:4px 0 0;"></p>
-        <p style="font-size:12px;color:var(--muted);margin:4px 0 0;">They'll lose access to team pages and will no longer appear in your roster.</p>
-        <div id="tmDelError" style="display:none;color:#f87171;font-size:12px;margin-top:8px;"></div>
-        <div class="route-modal-actions" style="gap:8px;">
-          <button type="button" id="tmDelCancel" class="route-modal-copy" style="background:transparent;color:var(--text);border:1px solid var(--border);">Cancel</button>
-          <button type="button" id="tmDelConfirm" class="route-modal-copy" style="background:#ef4444;color:#fff;">Remove</button>
-        </div>
-      </div>
-    </div>
-    ` : ''}
-
-    <style>
-      .tm-grid {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 20px;
-        align-items: start;
-      }
-      @media (max-width: 800px) { .tm-grid { grid-template-columns: 1fr; } }
-      .tm-table { width: 100%; border-collapse: collapse; }
-      .tm-table th { font-size: 12px; font-weight: 600; color: var(--muted); text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--border); }
-      .tm-table td { font-size: 13px; padding: 10px 12px; border-bottom: 1px solid var(--border); }
-      .tm-table tbody tr:last-child td { border-bottom: none; }
-      .tm-table tbody tr:hover { background: rgba(255,255,255,0.02); }
-      .tm-owner-row { background: rgba(245,158,11,0.04); }
-      .tm-role-badge { display: inline-flex; align-items: center; gap: 3px; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; }
-      .tm-role-owner { background: rgba(245,158,11,0.16); color: #fbbf24; border: 1px solid rgba(245,158,11,0.4); }
-      .tm-role-member { background: rgba(56,189,248,0.1); color: var(--accent); border: 1px solid rgba(56,189,248,0.3); }
-      .route-modal[hidden] { display: none; }
-      .route-modal {
-        position: fixed; inset: 0; z-index: 500;
-        display: flex; align-items: center; justify-content: center;
-      }
-      .route-modal-backdrop {
-        position: absolute; inset: 0; background: rgba(0,0,0,0.6);
-      }
-      .route-modal-card {
-        position: relative;
-        background: var(--panel);
-        border: 1px solid var(--border);
-        border-radius: 10px;
-        padding: 16px;
-        width: min(420px, 92vw);
-        max-height: 80vh;
-        display: flex; flex-direction: column; gap: 10px;
-      }
-      .route-modal-header {
-        display: flex; align-items: center; justify-content: space-between;
-      }
-      .route-modal-close {
-        background: none; border: none; color: var(--muted);
-        font-size: 22px; cursor: pointer; line-height: 1; padding: 0 4px;
-      }
-      .route-modal-close:hover { color: var(--text); }
-      .route-modal-actions {
-        display: flex; justify-content: flex-end; margin-top: 4px;
-      }
-      .route-modal-copy {
-        padding: 6px 14px; background: var(--accent); color: #fff;
-        border: none; border-radius: 6px;
-        font-weight: 600; cursor: pointer; font-family: inherit;
-      }
-      .tm-check {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        font-size: 13px;
-        color: var(--text);
-        cursor: pointer;
-        padding: 9px 12px;
-        background: var(--panel2);
-        border: 1px solid var(--border);
-        border-radius: 8px;
-        transition: background 0.15s ease, border-color 0.15s ease;
-        user-select: none;
-      }
-      .tm-check:hover {
-        background: rgba(56,189,248,0.06);
-        border-color: rgba(56,189,248,0.35);
-      }
-      .tm-check input[type="checkbox"] {
-        appearance: none;
-        -webkit-appearance: none;
-        width: 18px;
-        height: 18px;
-        border: 1.5px solid var(--border);
-        border-radius: 4px;
-        background: var(--panel);
-        cursor: pointer;
-        display: grid;
-        place-content: center;
-        transition: background 0.15s ease, border-color 0.15s ease;
-        flex-shrink: 0;
-        margin: 0;
-      }
-      .tm-check input[type="checkbox"]:hover {
-        border-color: var(--accent);
-      }
-      .tm-check input[type="checkbox"]:checked {
-        background: var(--accent);
-        border-color: var(--accent);
-      }
-      .tm-check input[type="checkbox"]:checked::after {
-        content: '';
-        width: 10px;
-        height: 5px;
-        border-left: 2px solid #020617;
-        border-bottom: 2px solid #020617;
-        transform: rotate(-45deg) translate(1px, -1px);
-      }
-      .tm-check input[type="checkbox"]:focus-visible {
-        outline: 2px solid var(--accent);
-        outline-offset: 2px;
-      }
-      .tm-check:has(input:checked) {
-        background: rgba(56,189,248,0.08);
-        border-color: rgba(56,189,248,0.4);
-      }
-    </style>
-
-    ${viewerCanManage ? `
-    <script>
-    (function() {
-      function bindModal(modal) {
-        var backdrop = modal.querySelector('.route-modal-backdrop');
-        function close() { modal.hidden = true; }
-        backdrop.addEventListener('click', close);
-        document.addEventListener('keydown', function(e) {
-          if (!modal.hidden && e.key === 'Escape') close();
-        });
-        return { close: close };
-      }
-
-      // ---- Edit Perms ----
-      var permsModal = document.getElementById('tmPermsModal');
-      var permsTarget = document.getElementById('tmPermsTarget');
-      var cbEdit = document.getElementById('tmPermEdit');
-      var cbManage = document.getElementById('tmPermManage');
-      var cbPart = document.getElementById('tmPermPart');
-      var permsErr = document.getElementById('tmPermsError');
-      var permsSave = document.getElementById('tmPermsSave');
-      var permsBind = bindModal(permsModal);
-      document.getElementById('tmPermsClose').addEventListener('click', permsBind.close);
-      document.getElementById('tmPermsCancel').addEventListener('click', permsBind.close);
-      var permsCid = null;
-
-      document.addEventListener('click', function(e) {
-        var btn = e.target.closest('.tm-edit-btn');
-        if (!btn) return;
-        permsCid = Number(btn.dataset.cid);
-        permsTarget.textContent = (btn.dataset.name || 'Unknown') + ' (CID ' + btn.dataset.cid + ')';
-        cbEdit.checked = btn.dataset.edit === '1';
-        cbManage.checked = btn.dataset.manage === '1';
-        cbPart.checked = btn.dataset.part === '1';
-        permsErr.style.display = 'none';
-        permsErr.textContent = '';
-        permsModal.hidden = false;
-      });
-
-      permsSave.addEventListener('click', async function() {
-        if (!permsCid) return;
-        permsSave.disabled = true; permsSave.textContent = 'Saving...';
-        try {
-          var res = await fetch('/api/team/members/' + permsCid + '/perms', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'same-origin',
-            body: JSON.stringify({
-              canEditBookings: cbEdit.checked,
-              canManageMembers: cbManage.checked,
-              participating: cbPart.checked
-            })
-          });
-          if (!res.ok) {
-            var data = await res.json().catch(function() { return {}; });
-            permsErr.textContent = data.error || 'Update failed';
-            permsErr.style.display = '';
-            permsSave.disabled = false; permsSave.textContent = 'Save';
-            return;
-          }
-          location.reload();
-        } catch (err) {
-          permsErr.textContent = 'Network error.';
-          permsErr.style.display = '';
-          permsSave.disabled = false; permsSave.textContent = 'Save';
-        }
-      });
-
-      // ---- Add Member ----
-      var addModal = document.getElementById('tmAddModal');
-      var addBtn = document.getElementById('tmAddBtn');
-      var addCid = document.getElementById('tmAddCid');
-      var addEdit = document.getElementById('tmAddEdit');
-      var addManage = document.getElementById('tmAddManage');
-      var addPart = document.getElementById('tmAddPart');
-      var addErr = document.getElementById('tmAddError');
-      var addSave = document.getElementById('tmAddSave');
-      var addBind = bindModal(addModal);
-      document.getElementById('tmAddClose').addEventListener('click', addBind.close);
-      document.getElementById('tmAddCancel').addEventListener('click', addBind.close);
-
-      if (addBtn) addBtn.addEventListener('click', function() {
-        addCid.value = '';
-        addEdit.checked = false;
-        addManage.checked = false;
-        addPart.checked = true;
-        addErr.style.display = 'none';
-        addErr.textContent = '';
-        addModal.hidden = false;
-        setTimeout(function() { addCid.focus(); }, 0);
-      });
-
-      addSave.addEventListener('click', async function() {
-        var cidVal = (addCid.value || '').trim();
-        if (!/^\\d{4,10}$/.test(cidVal)) {
-          addErr.textContent = 'Enter a valid VATSIM CID.';
-          addErr.style.display = '';
-          return;
-        }
-        addSave.disabled = true; addSave.textContent = 'Adding...';
-        try {
-          var res = await fetch('/api/team/members', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'same-origin',
-            body: JSON.stringify({
-              cid: Number(cidVal),
-              canEditBookings: addEdit.checked,
-              canManageMembers: addManage.checked,
-              participating: addPart.checked
-            })
-          });
-          if (!res.ok) {
-            var data = await res.json().catch(function() { return {}; });
-            addErr.textContent = data.error || 'Failed to add member';
-            addErr.style.display = '';
-            addSave.disabled = false; addSave.textContent = 'Add Member';
-            return;
-          }
-          location.reload();
-        } catch (err) {
-          addErr.textContent = 'Network error.';
-          addErr.style.display = '';
-          addSave.disabled = false; addSave.textContent = 'Add Member';
-        }
-      });
-
-      // ---- Delete Member ----
-      var delModal = document.getElementById('tmDelModal');
-      var delBody = document.getElementById('tmDelBody');
-      var delErr = document.getElementById('tmDelError');
-      var delConfirm = document.getElementById('tmDelConfirm');
-      var delBind = bindModal(delModal);
-      document.getElementById('tmDelClose').addEventListener('click', delBind.close);
-      document.getElementById('tmDelCancel').addEventListener('click', delBind.close);
-      var delCid = null;
-
-      document.addEventListener('click', function(e) {
-        var btn = e.target.closest('.tm-del-btn');
-        if (!btn || btn.disabled) return;
-        delCid = Number(btn.dataset.cid);
-        var name = btn.dataset.name || 'this member';
-        delBody.textContent = 'Remove ' + name + ' (CID ' + btn.dataset.cid + ') from the team?';
-        delErr.style.display = 'none';
-        delErr.textContent = '';
-        delModal.hidden = false;
-      });
-
-      delConfirm.addEventListener('click', async function() {
-        if (!delCid) return;
-        delConfirm.disabled = true; delConfirm.textContent = 'Removing...';
-        try {
-          var res = await fetch('/api/team/members/' + delCid, {
-            method: 'DELETE',
-            credentials: 'same-origin'
-          });
-          if (!res.ok) {
-            var data = await res.json().catch(function() { return {}; });
-            delErr.textContent = data.error || 'Delete failed';
-            delErr.style.display = '';
-            delConfirm.disabled = false; delConfirm.textContent = 'Remove';
-            return;
-          }
-          location.reload();
-        } catch (err) {
-          delErr.textContent = 'Network error.';
-          delErr.style.display = '';
-          delConfirm.disabled = false; delConfirm.textContent = 'Remove';
-        }
-      });
-    })();
-    </script>
-    ` : ''}
-  `;
-
-  const pageTitle = teamName ? `${teamName} - Team Management` : 'Team Management';
-  res.send(renderLayout({ title: pageTitle, user, isAdmin, content, layoutClass: 'dashboard-full' }));
-});
-
-app.get('/team/bookings', requireLogin, requireTeamMember, async (req, res) => {
+app.get('/team/hq', requireLogin, async (req, res) => {
   const user = req.session.user.data;
   const cid = Number(user.cid);
   const isAdmin = isAdminUser(cid);
+
+  // Admin read-only override: /team/hq?id=<OfficialTeam row id>
+  const requestedId = Number(req.query.id) || null;
+  let teamNameUpper = null;
+  let readOnly = false;
+  if (requestedId && isAdmin) {
+    const row = await prisma.officialTeam.findUnique({ where: { id: requestedId } }).catch(() => null);
+    if (!row) return renderForbidden(req, res, 'Team not found.');
+    teamNameUpper = String(row.teamName || '').trim().toUpperCase();
+    readOnly = Number(row.mainCid) !== cid;
+  } else {
+    if (!isTeamMember(cid)) {
+      return renderForbidden(req, res, 'This page is for WF team members only.');
+    }
+    teamNameUpper = await resolveUserTeamName(cid);
+  }
+
+  if (!teamNameUpper) {
+    const content = `
+      <section class="card" style="max-width:640px;margin:48px auto;padding:36px;text-align:center;">
+        <h2 style="margin:0 0 10px;">No team linked to your account</h2>
+        <p style="color:var(--muted);font-size:13.5px;line-height:1.6;margin:0;">Your account has WF Team access, but CID <strong>${cid}</strong> isn't linked to a team yet. Please contact the WorldFlight team.</p>
+      </section>`;
+    return res.send(renderLayout({ title: 'WF Team HQ', user, isAdmin, content, layoutClass: 'dashboard-full' }));
+  }
+
+  const ctx = await loadTeamContext(teamNameUpper, cid, user?.personal?.name_full);
+  const { fleet, primary, displayName, ownerCids, members } = ctx;
+  const isMainHolder = !readOnly && ownerCids.has(cid);
+  const viewerPerms = ctx.permsByCid[cid] || null;
+  const canEditBookings = !readOnly && (isAdmin || isMainHolder || viewerPerms?.canEditBookings !== false);
+  const canManageFleet = !readOnly && (isAdmin || canManageTeamMembers(cid));
+
+  const profilePhotoRow = primary
+    ? await prisma.profilePhoto.findUnique({
+        where: { entityType_entityId: { entityType: 'team', entityId: primary.id } },
+        select: { updatedAt: true }
+      }).catch(() => null)
+    : null;
+
   const showAtcRoute = isAdmin || isPageEnabled('atc-route');
+  const showFlowInfo = isAdmin || isPageEnabled('flow-restrictions');
+  const sinceYear = primary?.sinceYear || null;
+  const aircraftTypes = [...new Set(fleet.map(t => String(t.aircraftType || '').toUpperCase()).filter(Boolean))];
 
-  // Resolve the user's team name → all callsigns across every aircraft row
-  // that belongs to that team (teams can have multiple OfficialTeam rows,
-  // one per a/c). Team name is stored uppercase; match case-insensitively
-  // against OfficialTeam rows in case operators used mixed case there.
-  const wfTeamRow = await prisma.userAdditionalRole.findUnique({
-    where: { cid_role: { cid, role: 'WF_TEAM' } }
+  // Callsigns that are participating in the active event, plus their a/c type
+  // Every aircraft in the fleet can carry a booking — the slot is tied to the
+  // CID, so the airframe is just a label the team chooses.
+  const teamCallsigns = new Set();
+  const callsignAircraft = {};
+  fleet.forEach(t => {
+    const cs = String(t.callsign || '').toUpperCase();
+    if (!cs) return;
+    teamCallsigns.add(cs);
+    callsignAircraft[cs] = String(t.aircraftType || '').toUpperCase();
   });
+  // Aircraft picker options, in fleet order so the original airframe is first.
+  const fleetCallsigns = fleet
+    .filter(t => t.callsign)
+    .map(t => ({ callsign: String(t.callsign).toUpperCase(), aircraftType: String(t.aircraftType || '').toUpperCase() }));
 
-  let teamName = wfTeamRow?.teamName || null;
-  const canEditBookings = isAdmin || (wfTeamRow?.canEditBookings !== false);
-  let teamCallsigns = new Set();
-  let teamHasAnyRows = false;
-  const callsignAircraftType = {};
-  if (teamName) {
-    const allTeams = await prisma.officialTeam.findMany({
-      select: { teamName: true, callsign: true, aircraftType: true, participatingWf26: true }
-    });
-    allTeams.forEach(t => {
-      if (String(t.teamName || '').trim().toUpperCase() !== teamName) return;
-      teamHasAnyRows = true;
-      if (!t.participatingWf26) return;
-      const cs = String(t.callsign).toUpperCase();
-      teamCallsigns.add(cs);
-      callsignAircraftType[cs] = String(t.aircraftType || '').toUpperCase();
-    });
-  }
-  const teamParticipating = teamCallsigns.size > 0;
+  // Assignee dropdown: owners + members (participating ones first)
+  const assignees = members.slice();
 
-  // Active event name (used for the "not participating" message)
-  let activeEventName = 'this event';
-  if (activeEventId) {
-    const ev = await prisma.wfEvent.findUnique({ where: { id: activeEventId } }).catch(() => null);
-    if (ev?.name) activeEventName = ev.name;
+  function timeWindow(hhmm) {
+    if (!hhmm) return '';
+    const m = String(hhmm).match(/^(\d{1,2}):?(\d{2})$/);
+    if (!m) return hhmm;
+    const mins = parseInt(m[1]) * 60 + parseInt(m[2]);
+    const lo = (mins - 60 + 1440) % 1440;
+    const hi = (mins + 60) % 1440;
+    const fmt = v => `${String(Math.floor(v / 60)).padStart(2, '0')}${String(v % 60).padStart(2, '0')}`;
+    return `${fmt(lo)}-${fmt(hi)}z`;
   }
 
-  // Build the list of possible assignees for this team's bookings:
-  //   - the team owner (every OfficialTeam row's mainCid for this team)
-  //   - every WF_TEAM member linked to this team
-  // Names come from the User table. Current booking CIDs are also added so the
-  // dropdown never loses a pre-existing selection.
-  const assigneeCids = new Set();
-  if (teamName) {
-    const [teamRowsForOwners, teamMemberRoles] = await Promise.all([
-      prisma.officialTeam.findMany({
-        where: { participatingWf26: true },
-        select: { teamName: true, mainCid: true }
-      }),
-      prisma.userAdditionalRole.findMany({
-        where: { role: 'WF_TEAM' },
-        select: { cid: true, teamName: true }
-      })
-    ]);
-    teamRowsForOwners.forEach(t => {
-      if (String(t.teamName || '').trim().toUpperCase() === teamName && t.mainCid) {
-        assigneeCids.add(Number(t.mainCid));
-      }
-    });
-    teamMemberRoles.forEach(r => {
-      if (String(r.teamName || '').trim().toUpperCase() === teamName && r.cid) {
-        assigneeCids.add(Number(r.cid));
-      }
-    });
-  }
-
-  const seen = new Set();
-  const rows = Object.values(tobtBookingsByKey)
+  // The team's bookings, one row per booking (so multi-aircraft fleets keep a
+  // row per callsign on the same sector).
+  const seenBooking = new Set();
+  const bookingRows = Object.values(tobtBookingsByKey)
+    .filter(b => b && b.callsign && teamCallsigns.has(String(b.callsign).toUpperCase()))
     .filter(b => {
-      if (!b || !b.callsign || !teamCallsigns.has(String(b.callsign).toUpperCase())) return false;
-      const key = `${b.cid}:${b.slotKey}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
+      const k = `${b.cid}:${b.slotKey}`;
+      if (seenBooking.has(k)) return false;
+      seenBooking.add(k);
       return true;
     })
-    .map(booking => {
-      const slotKey = booking.slotKey;
-      const parts = slotKey.split('|');
-      const sectorPart = parts[0];
-      const dateUtc = parts[1];
-      const depTimeUtc = parts[2];
-      const [from, to] = sectorPart.split('-');
+    .map(b => {
+      const parts = String(b.slotKey).split('|');
+      const [from, to] = String(parts[0] || '').split('-');
       const wfRow = adminSheetCache.find(r =>
-        r.from === from && r.to === to && r.date_utc === dateUtc && r.dep_time_utc === depTimeUtc
-      );
-      const wfSector = wfRow?.number || '-';
-      const atcRoute = showAtcRoute ? (wfRow?.atc_route || '-') : '-';
-      const atcRoute2 = showAtcRoute ? (wfRow?.atc_route2 || '') : '';
-      const tobt = typeof booking.tobtTimeUtc === 'string' ? booking.tobtTimeUtc : null;
-      const callsign = booking.callsign;
-      const aircraftType = callsignAircraftType[String(callsign || '').toUpperCase()] || '';
-
-      // Departure window = dep ± 1h, wrapping across midnight as needed.
-      let depWindow = null;
-      if (/^\d{2}:\d{2}$/.test(depTimeUtc)) {
-        const [dh, dm] = depTimeUtc.split(':').map(Number);
-        const mid = dh * 60 + dm;
-        const shift = (mins) => {
-          const t = ((mins % 1440) + 1440) % 1440;
-          const h = String(Math.floor(t / 60)).padStart(2, '0');
-          const m = String(t % 60).padStart(2, '0');
-          return `${h}:${m}`;
-        };
-        depWindow = `${shift(mid - 60)}Z – ${shift(mid + 60)}Z`;
-      }
-
-      const pilotCid = booking.cid || null;
-      const cidPart = pilotCid ? ` - CID ${pilotCid}` : '';
-      const remark = (tobt
-        ? `WF Official Team - TCT ${tobt}z`
-        : 'WF Official Team'
-      ) + `${cidPart} - planning.worldflight.center`;
-      const sbParams = new URLSearchParams({
-        orig: from,
-        dest: to,
-        route: atcRoute && atcRoute !== '-' ? atcRoute : '',
-        callsign: callsign || '',
-        type: aircraftType,
-        manualrmk: remark
-      });
-      if (tobt) {
-        const [hh, mm] = tobt.split(':');
-        sbParams.set('deph', hh);
-        sbParams.set('depm', mm);
-      }
-      const simbriefUrl = 'https://dispatch.simbrief.com/options/custom?' + sbParams.toString();
-
-      return {
-        wfSector,
-        callsign,
-        pilotCid,
-        from,
-        to,
-        dateUtc,
-        depTimeUtc,
-        depWindow,
-        tobt,
-        atcRoute,
-        atcRoute2,
-        aircraftType,
-        simbriefUrl,
-        slotKey,
-        bookingCid: booking.cid
-      };
+        r.from === from && r.to === to && r.date_utc === parts[1] && r.dep_time_utc === parts[2]
+      ) || null;
+      return { b, wfRow, sector: wfRow?.number || '—' };
     })
-    .sort((a, b) => {
-      const an = parseInt(String(a.wfSector).replace(/\D/g, ''), 10);
-      const bn = parseInt(String(b.wfSector).replace(/\D/g, ''), 10);
-      if (!Number.isNaN(an) && !Number.isNaN(bn) && an !== bn) return an - bn;
-      return String(a.wfSector).localeCompare(String(b.wfSector));
-    });
-
-  // Include every current bookingCid so the edit dropdown never loses a
-  // pre-existing selection, then resolve display names. The User table is
-  // authoritative — it's upserted on every login from VATSIM's
-  // personal.name_full. Fall back to local request tables / session for
-  // CIDs that have never logged in.
-  rows.forEach(r => { if (r.bookingCid) assigneeCids.add(Number(r.bookingCid)); });
-  const nameByCid = {};
-  if (assigneeCids.size) {
-    const cidList = [...assigneeCids];
-    const [users, staffReqs, docReqs, mailSubs] = await Promise.all([
-      prisma.user.findMany({ where: { cid: { in: cidList } }, select: { cid: true, name: true } }).catch(() => []),
-      prisma.staffAccessRequest.findMany({
-        where: { cid: { in: cidList }, name: { not: null } },
-        select: { cid: true, name: true, createdAt: true },
-        orderBy: { createdAt: 'desc' }
-      }).catch(() => []),
-      prisma.documentationAccessRequest.findMany({
-        where: { cid: { in: cidList }, name: { not: null } },
-        select: { cid: true, name: true, createdAt: true },
-        orderBy: { createdAt: 'desc' }
-      }).catch(() => []),
-      prisma.mailingListSubscriber.findMany({
-        where: { cid: { in: cidList } },
-        select: { cid: true, firstName: true, lastName: true }
-      }).catch(() => [])
-    ]);
-    users.forEach(u => { if (u.name) nameByCid[Number(u.cid)] = u.name; });
-    staffReqs.forEach(r => { if (r.name && !nameByCid[Number(r.cid)]) nameByCid[Number(r.cid)] = r.name; });
-    docReqs.forEach(r => { if (r.name && !nameByCid[Number(r.cid)]) nameByCid[Number(r.cid)] = r.name; });
-    mailSubs.forEach(s => {
-      const c = Number(s.cid);
-      if (nameByCid[c]) return;
-      const nm = [s.firstName, s.lastName].filter(Boolean).join(' ').trim();
-      if (nm) nameByCid[c] = nm;
-    });
-    // Session fallback — the viewer themselves (covers the first page load
-    // after login before the User upsert is visible)
-    const sessionName = req.session?.user?.data?.personal?.name_full;
-    if (sessionName && !nameByCid[cid]) {
-      nameByCid[cid] = sessionName;
-      // Opportunistically persist, in case login pre-dated the upsert change
-      prisma.user.upsert({
-        where: { cid },
-        update: { name: sessionName },
-        create: { cid, name: sessionName }
-      }).catch(() => {});
-    }
-  }
-  const teamAssignees = [...assigneeCids]
-    .map(c => ({ cid: c, name: nameByCid[c] || '' }))
-    .sort((a, b) => (a.name || '').localeCompare(b.name || '') || a.cid - b.cid);
-  rows.forEach(r => { r.pilotName = nameByCid[Number(r.bookingCid)] || ''; });
+    .sort((x, y) => String(x.sector).localeCompare(String(y.sector)) || String(x.b.callsign).localeCompare(String(y.b.callsign)));
 
   const content = `
-    <section class="card my-slots-card">
-      <h2>Slots / Bookings</h2>
-      <p style="color:var(--muted);font-size:13px;margin-bottom:16px;">
-        ${!teamName
-          ? 'Your team membership is not linked to an Official Team yet. Ask an admin to set your team in Access Management.'
-          : !teamParticipating
-            ? `<strong>${teamName}</strong> is not participating in ${activeEventName}.`
-            : `Bookings for any callsign belonging to <strong>${teamName}</strong> (${[...teamCallsigns].sort().join(', ')}).`}
-      </p>
-      ${!teamName || !teamParticipating ? '' : rows.length === 0 ? `
-        <p style="color:var(--muted);"><em>No bookings yet for your team callsigns.</em></p>
-      ` : `
-        <div class="my-slots-table-wrapper">
-          <table class="my-slots-table" style="min-width:0;table-layout:auto;">
+    <div class="affiliate-hq-wrap">
+
+      ${readOnly ? `
+      <section class="card aff-readonly-banner">
+        <span class="aff-readonly-badge">Admin · Read-only view</span>
+        <span class="aff-readonly-text">Viewing <strong>${escapeHtml(displayName)}</strong> as administrator. No actions are available.</span>
+        <a href="/official-teams" class="ot-btn">← Back to Teams</a>
+      </section>
+      ` : ''}
+
+      <section class="card side-label-card aff-identity-card">
+        <div class="card-side-body aff-identity-body">
+          <div class="aff-identity-main">
+            <div class="aff-identity-eyebrow">Official WorldFlight Team</div>
+            <div class="aff-identity-name">${escapeHtml(displayName)}</div>
+            <div class="aff-identity-meta">
+              ${aircraftTypes.map(a => `<span class="ot-cell-actype">${escapeHtml(a)}</span>`).join('')}
+              ${primary?.country ? `<span class="ot-cell-country">${escapeHtml(primary.country)}</span>` : ''}
+              ${sinceYear ? `<span class="ot-since">Member since ${sinceYear}</span>` : ''}
+              <span class="aff-member-count">${members.length} ${members.length === 1 ? 'member' : 'members'}</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div class="affiliate-hq">
+        <section class="card affiliate-welcome-card">
+          <h2 class="aff-welcome-title">Welcome, ${escapeHtml(displayName)}</h2>
+          <p class="aff-welcome-lead">
+            To maintain the high standards, professionalism, and camaraderie that define our
+            community — and to foster positive relationships with one another, our charity partners,
+            supporters, and VATSIM — each team is expected to adhere to the following charter:
+          </p>
+
+          <ol class="aff-charter">
+            ${WF_TEAM_CHARTER.map(([title, body]) => `
+            <li>
+              <h4>${escapeHtml(title)}</h4>
+              <p>${escapeHtml(body)}</p>
+            </li>`).join('')}
+          </ol>
+        </section>
+
+        <div class="affiliate-hq-side">
+          <section class="card affiliate-banner-card">
+            <div class="affiliate-banner-wrap">
+              <img src="/team-banner.jpg" alt="WorldFlight Team" class="affiliate-banner team-banner" />
+            </div>
+          </section>
+
+          ${isMainHolder ? `
+          <section class="card aff-profile-card aff-members-card">
+            <header class="aff-members-header">
+              <h3 class="section-title" style="margin:0;">Public Profile</h3>
+              <span style="font-size:11px;color:var(--muted);">Shown on the Teams &amp; Affiliates page</span>
+            </header>
+            <form id="teamProfileForm" style="display:flex;flex-direction:column;gap:4px;margin-top:12px;">
+              <label style="font-size:13px;margin:0 0 4px;">Website Link</label>
+              <input name="website" type="text" maxlength="200" placeholder="https://..." value="${escapeHtml(primary?.website || '')}" style="text-transform:none;text-align:left;" />
+
+              <label style="font-size:13px;margin:12px 0 4px;">Bio</label>
+              <textarea name="description" rows="4" maxlength="1000" placeholder="Who you are, what you fly, where you're based…" style="width:100%;box-sizing:border-box;resize:vertical;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-family:inherit;font-size:14px;">${escapeHtml(primary?.description || '')}</textarea>
+
+              <label style="font-size:13px;margin:12px 0 4px;">Profile Picture</label>
+              <div style="display:flex;gap:14px;align-items:center;">
+                ${profilePhotoRow
+                  ? `<img src="/api/profile-photo/team/${primary.id}?v=${new Date(profilePhotoRow.updatedAt).getTime()}" alt="Profile photo" style="width:72px;height:72px;object-fit:cover;border-radius:10px;border:1px solid var(--border);flex-shrink:0;" />`
+                  : `<div style="width:72px;height:72px;border-radius:10px;border:2px dashed var(--border);display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:11px;flex-shrink:0;">None</div>`}
+                <input name="photo" type="file" accept="image/*" style="font-size:13px;" />
+              </div>
+
+              <div style="display:flex;align-items:center;gap:12px;margin-top:16px;">
+                <button type="submit" class="action-btn primary">Save profile</button>
+                <span id="teamProfileMsg" style="display:none;font-size:13px;"></span>
+              </div>
+            </form>
+          </section>
+          ` : `
+          <section class="card aff-members-card">
+            <header class="aff-members-header">
+              <h3 class="section-title" style="margin:0;">Our Members</h3>
+              <span class="aff-member-count">${members.length} ${members.length === 1 ? 'member' : 'members'}</span>
+            </header>
+            <div class="ot-table-wrap">
+              <table class="ot-table">
+                <thead>
+                  <tr><th>Name</th><th>CID</th><th class="ot-th-center">Flying</th><th></th></tr>
+                </thead>
+                <tbody>
+                  ${members.map(m => `
+                    <tr${!m.perms.participating ? ' class="mm-inactive-row"' : ''}>
+                      <td class="ot-cell-name">${escapeHtml(m.name || '—')}</td>
+                      <td class="ot-cell-cid">${m.cid}</td>
+                      <td class="ot-cell-active">${m.perms.participating
+                        ? '<span class="mm-active-static" title="Participating">✓</span>'
+                        : '<span class="mm-inactive-static" title="Not participating">✕</span>'}</td>
+                      <td style="text-align:right;">${m.isOwner ? '<span class="aff-main-badge">Main</span>' : ''}</td>
+                    </tr>`).join('')}
+                </tbody>
+              </table>
+            </div>
+          </section>
+          `}
+        </div>
+      </div>
+
+      <section class="card aff-members-card">
+        <header class="aff-members-header">
+          <h3 class="section-title" style="margin:0;">Our Fleet</h3>
+          <div style="display:flex;align-items:center;gap:12px;">
+            <span class="aff-member-count">${fleet.length} aircraft</span>
+            ${canManageFleet ? `<button type="button" class="ot-btn" id="fleetAddBtn">+ Add Aircraft</button>` : ''}
+          </div>
+        </header>
+        ${canManageFleet ? '<div id="fleetMsg" style="display:none;font-size:12px;margin:0 0 10px;"></div>' : ''}
+        <div class="ot-table-wrap">
+          <table class="ot-table">
             <thead>
               <tr>
-                <th>WF Sector</th>
-                <th>Callsign</th>
-                <th>Dep</th>
-                <th>Arr</th>
-                <th class="col-tobt">Date</th>
-                <th>Dep Window</th>
-                <th>Flow Type</th>
-                ${showAtcRoute ? '<th>ATC Route</th>' : ''}
-                <th>Plan</th>
-                <th></th>
+                <th>Callsign</th><th>Aircraft</th><th>Country</th>
+                ${canManageFleet ? '<th class="ot-th-actions"></th>' : ''}
               </tr>
             </thead>
             <tbody>
-              ${rows.map(r => {
-                const hasRoute = r.atcRoute && r.atcRoute !== '-';
-                const routeAttr = hasRoute
-                  ? String(r.atcRoute).replace(/&/g, '&amp;').replace(/"/g, '&quot;')
-                  : '';
-                const route2Attr = r.atcRoute2 && r.atcRoute2 !== '-' ? String(r.atcRoute2).replace(/&/g, '&amp;').replace(/"/g, '&quot;') : '';
-                return `
-                <tr>
-                  <td><button class="sector-details-btn" data-from="${r.from}" data-to="${r.to}" data-wf="${r.wfSector}">${r.wfSector}</button></td>
-                  <td style="white-space:nowrap;">
-                    <strong>${r.callsign}</strong>
-                    <span class="tobt-help" style="margin-left:4px;">i<span class="tobt-tooltip">Callsign: <b>${r.callsign}</b><br>Pilot: <b>${r.pilotName || '—'}</b><br>CID: <b>${r.bookingCid}</b></span></span>
-                    ${canEditBookings ? `<button type="button" class="team-cs-edit-btn" data-slot-key="${r.slotKey}" data-callsign="${r.callsign}" data-cid="${r.bookingCid}" title="Edit callsign / pilot" style="margin-left:4px;background:rgba(56,189,248,0.08);border:1px solid rgba(56,189,248,0.25);color:var(--accent);border-radius:4px;padding:2px 6px;font-size:11px;cursor:pointer;">Edit</button>` : ''}
-                  </td>
-                  <td><a href="/icao/${r.from}">${r.from}</a></td>
-                  <td><a href="/icao/${r.to}">${r.to}</a></td>
-                  <td>${r.dateUtc}</td>
-                  <td>${r.depWindow || '—'}</td>
-                  <td>${r.tobt
-                    ? `Slotted - <span style="color:#4ade80;font-weight:600;">${r.tobt.replace(':','')}z</span> <span class="tobt-help">?<span class="tobt-tooltip">This is your TCT (Target Connection Time).<br>Connect to VATSIM at this time.<br>We use TCT to stagger pilot connections at this airport so the network and controllers aren&#39;t overwhelmed.</span></span>`
-                    : `<span style="color:#4ade80;font-weight:600;">Booking Confirmed</span> <span class="tobt-help">?<span class="tobt-tooltip">You have a booking for this sector. Slots are not required.<br><b>Plan to depart within the Dep Window.</b></span></span>`}</td>
-                  ${showAtcRoute ? `<td>${hasRoute
-                    ? `<button type="button" class="show-route-btn" data-route="${routeAttr}" data-route2="${route2Attr}">Show Route</button>`
-                    : '<span style="color:var(--muted);font-size:11px;font-style:italic;" title="This information will be available once an ATC route has been agreed between the two airports.">Pending agreement</span>'}</td>` : ''}
-                  <td>
-                    <a class="simbrief-btn" href="${r.simbriefUrl}" target="_blank" rel="noopener">
-                      <span class="simbrief-logo">SB</span>
-                      <span class="simbrief-text">Plan<span class="simbrief-text-long"> with SimBrief</span></span>
-                    </a>
-                  </td>
-                  <td>
-                    <button type="button" class="tobt-btn cancel cancel-slot-btn"
-                      data-slot-key="${r.slotKey}" data-booking-cid="${r.bookingCid}" data-callsign="${r.callsign}">
-                      Cancel
-                    </button>
-                  </td>
-                </tr>
-              `;}).join('')}
+              ${fleet.map(t => `
+                <tr data-fleet-id="${t.id}">
+                  <td><span class="ot-cell-callsign">${escapeHtml(String(t.callsign || '').toUpperCase())}</span></td>
+                  <td><span class="ot-cell-actype">${escapeHtml(String(t.aircraftType || '').toUpperCase())}</span></td>
+                  <td><span class="ot-cell-country">${escapeHtml(t.country || '—')}</span></td>
+                  ${canManageFleet ? `<td class="ot-cell-actions">
+                    <button class="ot-btn fleet-edit-btn" data-id="${t.id}" data-callsign="${escapeHtml(String(t.callsign || '').toUpperCase())}" data-actype="${escapeHtml(String(t.aircraftType || '').toUpperCase())}" data-country="${escapeHtml(t.country || '')}">Edit</button>
+                    <button class="ot-btn ot-btn-danger fleet-delete-btn" data-id="${t.id}" data-callsign="${escapeHtml(String(t.callsign || '').toUpperCase())}"${fleet.length <= 1 ? ' disabled title="A team must keep at least one aircraft"' : ''}>Delete</button>
+                  </td>` : ''}
+                </tr>`).join('')}
             </tbody>
           </table>
         </div>
-      `}
-    </section>
+      </section>
 
-    <div id="routeModal" class="route-modal" hidden>
-      <div class="route-modal-backdrop"></div>
-      <div class="route-modal-card" role="dialog" aria-modal="true" aria-labelledby="routeModalTitle">
-        <div class="route-modal-header">
-          <div id="routeModalTitle" style="font-weight:700;font-size:14px;">ATC Route</div>
-          <button type="button" id="routeModalClose" class="route-modal-close" aria-label="Close">&times;</button>
+      ${canManageFleet ? `
+      <div id="fleetModal" class="modal hidden">
+        <div class="modal-backdrop"></div>
+        <div class="modal-card card" style="max-width:420px;text-align:left;">
+          <h3 id="fleetModalTitle" style="text-align:center;">Add Aircraft</h3>
+          <form id="fleetForm">
+            <input type="hidden" id="fleetEditId" value="" />
+            <label style="display:block;margin:10px 0 6px;">Callsign</label>
+            <input name="callsign" type="text" maxlength="10" required placeholder="e.g. BAW37C" style="text-transform:uppercase;text-align:left;letter-spacing:normal;" />
+
+            <label style="display:block;margin:10px 0 6px;">Aircraft Type</label>
+            <input name="aircraftType" type="text" maxlength="10" required placeholder="e.g. B744" style="text-transform:uppercase;text-align:left;letter-spacing:normal;" />
+
+            <label style="display:block;margin:10px 0 6px;">Country</label>
+            <input name="country" type="text" maxlength="60" placeholder="e.g. UK" style="text-transform:none;text-align:left;letter-spacing:normal;" />
+
+            <div class="modal-actions" style="margin-top:16px;">
+              <button type="button" class="action-btn" id="fleetCancel">Cancel</button>
+              <button type="submit" class="action-btn primary">Save</button>
+            </div>
+          </form>
         </div>
-        <div id="routeModalBody" class="route-modal-body"></div>
-        <div class="route-modal-actions">
-          <button type="button" id="routeModalCloseAction" class="route-modal-copy route-modal-secondary">Close</button>
-      <button type="button" id="routeModalCopy" class="route-modal-copy" style="display:none;">Copy</button>
+      </div>
+      ` : ''}
+
+      <section class="card aff-schedule-card">
+        <header class="aff-schedule-header">
+          <h3 class="section-title" style="margin:0;">Our Bookings &amp; Slots</h3>
+          ${isPageEnabled('schedule') || isAdmin ? `<a href="/schedule" class="aff-schedule-link">View full schedule</a>` : ''}
+        </header>
+
+        ${!bookingRows.length ? `
+          <div class="ot-empty">
+            <div class="ot-empty-title">No bookings yet</div>
+            <div class="ot-empty-sub">Bookings are assigned automatically for sectors with a flow restriction. They'll appear here as soon as they're allocated.</div>
+          </div>
+        ` : `
+          <div class="ot-table-wrap">
+            <table class="ot-table">
+              <thead>
+                <tr>
+                  <th>Sector</th>
+                  <th>Callsign</th>
+                  <th>VATSIM Account <span class="tobt-help wft-info">i<span class="tobt-tooltip">This is the VATSIM account you will be connected as for this sector.</span></span></th>
+                  ${showFlowInfo ? '<th>Flow Restrictions</th><th>Status</th>' : ''}
+                  ${showAtcRoute ? '<th>ATC Route</th>' : ''}
+                  <th>From</th>
+                  <th>To</th>
+                  <th>Date</th>
+                  <th>Dep Window</th>
+                  <th>Arr Window</th>
+                  <th>Plan</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${bookingRows.map(({ b, wfRow, sector }) => {
+                  const cs = String(b.callsign || '').toUpperCase();
+                  const flow = wfRow ? getFlowRestriction(wfRow) : { cls: 'none', label: 'None' };
+                  const status = wfRow ? getFlowStatus(wfRow, Number(b.cid)) : { kind: 'empty', text: '—' };
+                  const sbUrl = wfRow ? buildAffiliateSimbriefUrl(wfRow, { callsign: cs }, Number(b.cid), showAtcRoute, 'WorldFlight Team') : '';
+                  const sbAttr = String(sbUrl).replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+                  return `
+                  <tr data-sector="${escapeHtml(sector)}">
+                    <td><span class="ot-cell-callsign">${escapeHtml(sector)}</span></td>
+                    <td>
+                      ${canEditBookings && fleetCallsigns.length > 1 ? `
+                        <select class="claim-select team-ac-select"
+                                data-slot-key="${escapeHtml(b.slotKey)}"
+                                data-booking-cid="${Number(b.cid)}"
+                                data-prev="${escapeHtml(cs)}">
+                          ${fleetCallsigns.map(f => `<option value="${escapeHtml(f.callsign)}" ${f.callsign === cs ? 'selected' : ''}>${escapeHtml(f.callsign)}${f.aircraftType ? ' · ' + escapeHtml(f.aircraftType) : ''}</option>`).join('')}
+                        </select>
+                      ` : `<span class="ot-cell-actype">${escapeHtml(cs)}${callsignAircraft[cs] ? ' · ' + escapeHtml(callsignAircraft[cs]) : ''}</span>`}
+                    </td>
+                    <td>
+                      ${canEditBookings ? `
+                        <select class="claim-select team-pilot-select"
+                                data-slot-key="${escapeHtml(b.slotKey)}"
+                                data-callsign="${escapeHtml(cs)}"
+                                data-booking-cid="${Number(b.cid)}">
+                          ${assignees.map(m => `<option value="${m.cid}" ${Number(b.cid) === m.cid ? 'selected' : ''}>${escapeHtml(m.label)}</option>`).join('')}
+                        </select>
+                      ` : `<span>${escapeHtml(ctx.nameByCid[Number(b.cid)] ? `${ctx.nameByCid[Number(b.cid)]} · ${b.cid}` : String(b.cid))}</span>`}
+                    </td>
+                    ${showFlowInfo ? `
+                    <td><span class="flowtype-pill flowtype-${flow.cls}">${escapeHtml(flow.label)}</span></td>
+                    <td class="aff-status-cell"><span class="aff-flow-status aff-flow-${status.kind}">${
+                      status.kind === 'tobt'
+                        ? `<span class="aff-tobt-label">${escapeHtml(status.label)}</span><span class="aff-tobt-time">${escapeHtml(status.time)}</span><span class="tobt-help">?<span class="tobt-tooltip">This is your TCT (Target Connection Time).<br>Connect to VATSIM at this time.<br>We use TCT to stagger pilot connections at this airport so the network and controllers aren&#39;t overwhelmed.</span></span>`
+                        : escapeHtml(status.text)
+                    }</span></td>` : ''}
+                    ${showAtcRoute ? `<td>${wfRow && wfRow.atc_route && wfRow.atc_route !== '-'
+                      ? `<button type="button" class="aff-route-btn" data-route="${String(wfRow.atc_route).replace(/&/g, '&amp;').replace(/"/g, '&quot;')}" data-route2="${wfRow.atc_route2 && wfRow.atc_route2 !== '-' ? String(wfRow.atc_route2).replace(/&/g, '&amp;').replace(/"/g, '&quot;') : ''}" data-simbrief="${sbAttr}" data-from="${escapeHtml(wfRow.from)}" data-to="${escapeHtml(wfRow.to)}">ATC Route</button>`
+                      : `<span class="ot-muted" style="font-style:italic;" title="This information will be available once an ATC route has been agreed between the two airports.">Pending agreement</span>`}</td>` : ''}
+                    <td><a class="aff-icao-link" href="/icao/${escapeHtml(wfRow?.from || '')}">${escapeHtml(wfRow?.from || '—')}</a></td>
+                    <td><a class="aff-icao-link" href="/icao/${escapeHtml(wfRow?.to || '')}">${escapeHtml(wfRow?.to || '—')}</a></td>
+                    <td><span class="ot-muted">${escapeHtml(wfRow?.date_utc || '')}</span></td>
+                    <td><span class="ot-muted">${timeWindow(wfRow?.dep_time_utc)}</span></td>
+                    <td><span class="ot-muted">${timeWindow(wfRow?.arr_time_utc)}</span></td>
+                    <td>${sbUrl ? `<a class="aff-route-btn aff-sb-btn" href="${sbAttr}" target="_blank" rel="noopener">Plan with SimBrief</a>` : '<span class="ot-muted">—</span>'}</td>
+                  </tr>`;
+                }).join('')}
+              </tbody>
+            </table>
+          </div>
+        `}
+      </section>
+
+      <div id="affRouteModal" class="aff-route-modal" hidden>
+        <div class="aff-route-modal-backdrop"></div>
+        <div class="aff-route-modal-card" role="dialog" aria-modal="true" aria-labelledby="affRouteModalTitle">
+          <header class="aff-route-modal-header">
+            <div>
+              <div class="aff-route-modal-eyebrow">ATC Route</div>
+              <h3 id="affRouteModalTitle" class="aff-route-modal-title"><span id="affRouteModalSector">—</span></h3>
+            </div>
+            <button type="button" class="aff-route-modal-close" id="affRouteModalClose" aria-label="Close">×</button>
+          </header>
+          <pre class="aff-route-modal-body" id="affRouteModalBody"></pre>
+          <footer class="aff-route-modal-footer">
+            <button type="button" class="ot-btn" id="affRouteModalCopy">Copy to Clipboard</button>
+            <a id="affRouteModalSimbrief" class="aff-route-btn aff-sb-btn" href="#" target="_blank" rel="noopener">Plan with SimBrief</a>
+            <button type="button" class="ot-btn" id="affRouteModalDismiss">Close</button>
+          </footer>
         </div>
       </div>
     </div>
 
-    <div id="teamCsModal" class="route-modal" hidden>
-      <div class="route-modal-backdrop"></div>
-      <div class="route-modal-card" role="dialog" aria-modal="true" aria-labelledby="teamCsModalTitle" style="max-width:420px;">
-        <div class="route-modal-header">
-          <div id="teamCsModalTitle" style="font-weight:700;font-size:14px;">Edit Booking</div>
-          <button type="button" id="teamCsClose" class="route-modal-close" aria-label="Close">&times;</button>
-        </div>
-        <div style="display:flex;flex-direction:column;gap:12px;">
-          <label style="font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:4px;">
-            Callsign
-            <input type="text" id="teamCsCallsign" maxlength="10" style="padding:8px 10px;background:var(--panel);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:14px;text-transform:uppercase;font-family:monospace;" />
-          </label>
-          <label style="font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:4px;">
-            Pilot
-            <select id="teamCsCid" style="padding:8px 10px;background:var(--panel);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:14px;">
-              ${teamAssignees.map(a => `<option value="${a.cid}">${(a.name || 'Unknown').replace(/</g,'&lt;')} (${a.cid})</option>`).join('')}
-            </select>
-          </label>
-          <div id="teamCsError" style="display:none;color:#f87171;font-size:12px;"></div>
-        </div>
-        <div class="route-modal-actions" style="gap:8px;">
-          <button type="button" id="teamCsCancel" class="route-modal-copy" style="background:transparent;color:var(--text);border:1px solid var(--border);">Cancel</button>
-          <button type="button" id="teamCsSave" class="route-modal-copy">Save</button>
-        </div>
-      </div>
-    </div>
+    ${HQ_STYLES}
 
     <style>
-      .show-route-btn {
-        padding: 4px 10px;
-        background: rgba(56,189,248,0.08);
-        border: 1px solid rgba(56,189,248,0.25);
-        color: var(--accent);
-        border-radius: 6px;
-        font-size: 12px;
-        cursor: pointer;
-        font-family: inherit;
+      .wft-info {
+        margin-left: 6px;
+        text-transform: none;
+        letter-spacing: 0;
       }
-      .show-route-btn:hover { background: rgba(56,189,248,0.16); }
-      .route-modal[hidden] { display: none; }
-      .route-modal { position: fixed; inset: 0; z-index: 500; display: flex; align-items: center; justify-content: center; }
-      .route-modal-backdrop { position: absolute; inset: 0; background: rgba(0,0,0,0.6); }
-      .route-modal-card {
-        position: relative; background: var(--panel); border: 1px solid var(--border);
-        border-radius: 10px; padding: 16px; width: min(640px, 92vw); max-height: 80vh;
-        display: flex; flex-direction: column; gap: 12px;
+      .wft-info .tobt-tooltip {
+        white-space: normal;
+        width: 250px;
+        text-align: left;
+        font-weight: 400;
       }
-      .route-modal-header { display: flex; align-items: center; justify-content: space-between; }
-      .route-modal-close {
-        background: none; border: none; color: var(--muted); font-size: 22px; cursor: pointer;
-        line-height: 1; padding: 0 4px;
-      }
-      .route-modal-close:hover { color: var(--text); }
-      .route-modal-body {
-        font-family: 'JetBrains Mono', ui-monospace, monospace;
-        font-size: 13px; line-height: 1.5; color: var(--text);
-        background: var(--panel2); border: 1px solid var(--border);
-        border-radius: 8px; padding: 12px; overflow: auto; word-break: break-word; white-space: pre-wrap;
-      }
-      .route-modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
-      .route-modal-copy {
-        padding: 6px 14px; background: var(--accent); color: #fff; border: none; border-radius: 6px;
-        font-weight: 600; cursor: pointer; font-family: inherit;
-      }
-      .route-modal-copy.route-modal-secondary {
-        background: transparent; color: var(--text); border: 1px solid var(--border);
-      }
-      .route-modal-copy.route-modal-secondary:hover { background: var(--panel2); }
     </style>
 
     <script>
-    (function() {
-      var modal = document.getElementById('routeModal');
-      var body = document.getElementById('routeModalBody');
-      var closeBtn = document.getElementById('routeModalClose');
-      var copyBtn = document.getElementById('routeModalCopy');
-      var closeActionBtn = document.getElementById('routeModalCloseAction');
-      var backdrop = modal.querySelector('.route-modal-backdrop');
-
-      function makeCopyBtn(text) {
-        var btn = document.createElement('button');
-        btn.type = 'button';
-        btn.title = 'Copy route';
-        btn.style.cssText = 'background:none;border:none;color:var(--muted);cursor:pointer;padding:2px;margin-left:6px;vertical-align:middle;';
-        btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
-        btn.addEventListener('click', function() {
-          navigator.clipboard.writeText(text).then(function() {
-            btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
-            setTimeout(function() {
-              btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
-            }, 1200);
-          }).catch(function() {});
+      (function() {
+        // ----- Tooltips (.tobt-tooltip is position:fixed, so JS places it) -----
+        function showTip(host) {
+          var tip = host.querySelector('.tobt-tooltip');
+          if (!tip) return;
+          tip.style.display = 'block';
+          var r = host.getBoundingClientRect();
+          var tw = tip.offsetWidth, th = tip.offsetHeight;
+          var left = r.left + r.width / 2 - tw / 2;
+          var top = r.bottom + 8;
+          if (top + th > window.innerHeight - 4) top = r.top - th - 8;
+          if (left < 4) left = 4;
+          if (left + tw > window.innerWidth - 4) left = window.innerWidth - tw - 4;
+          tip.style.left = left + 'px';
+          tip.style.top = top + 'px';
+        }
+        var TIP_HOSTS = '.wft-info, .aff-flow-tobt';
+        document.addEventListener('mouseover', function(e) {
+          var host = e.target.closest && e.target.closest(TIP_HOSTS);
+          if (host && !(e.relatedTarget && host.contains(e.relatedTarget))) showTip(host);
         });
-        return btn;
-      }
-      function makePctBadge(pct) {
-        var s = document.createElement('span');
-        s.style.cssText = 'font-size:10px;padding:1px 6px;border-radius:4px;background:rgba(56,189,248,0.12);color:var(--accent);border:1px solid rgba(56,189,248,0.3);letter-spacing:0;text-transform:none;margin-left:6px;';
-        s.textContent = pct + '%';
-        return s;
-      }
-      function open(route, route2, splitPct) {
-        body.textContent = '';
-        body.innerHTML = '';
-        if (route) {
-          var lbl1 = document.createElement('div');
-          lbl1.style.cssText = 'display:flex;align-items:center;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--accent);font-family:inherit;margin-bottom:6px;';
-          lbl1.textContent = route2 ? 'Primary Route' : 'ATC Route';
-          if (route2 && splitPct != null) lbl1.appendChild(makePctBadge(splitPct));
-          lbl1.appendChild(makeCopyBtn(route));
-          body.appendChild(lbl1);
-          var r1 = document.createElement('span');
-          r1.textContent = route;
-          body.appendChild(r1);
-        }
-        if (route2) {
-          var sep = document.createElement('div');
-          sep.style.cssText = 'display:flex;align-items:center;margin:12px 0 8px;padding-top:10px;border-top:1px solid var(--border);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--accent);font-family:inherit;';
-          sep.textContent = 'Secondary Route';
-          if (splitPct != null) sep.appendChild(makePctBadge(100 - splitPct));
-          sep.appendChild(makeCopyBtn(route2));
-          body.appendChild(sep);
-          var r2 = document.createElement('span');
-          r2.textContent = route2;
-          body.appendChild(r2);
-        }
-        modal.hidden = false;
-      }
-      function close() { modal.hidden = true; }
+        document.addEventListener('mouseout', function(e) {
+          var host = e.target.closest && e.target.closest(TIP_HOSTS);
+          if (!host || (e.relatedTarget && host.contains(e.relatedTarget))) return;
+          var tip = host.querySelector('.tobt-tooltip');
+          if (tip) tip.style.display = 'none';
+        });
 
-      document.addEventListener('click', function(e) {
-        var btn = e.target.closest('.show-route-btn');
-        if (btn) {
-          var pct = btn.getAttribute('data-split-pct');
-          open(btn.getAttribute('data-route') || '', btn.getAttribute('data-route2') || '', pct != null ? Number(pct) : null);
-          return;
-        }
-      });
-      closeBtn.addEventListener('click', close);
-      if (closeActionBtn) closeActionBtn.addEventListener('click', close);
-      backdrop.addEventListener('click', close);
-      document.addEventListener('keydown', function(e) { if (!modal.hidden && e.key === 'Escape') close(); });
-      copyBtn.addEventListener('click', async function() {
-        try {
-          await navigator.clipboard.writeText(body.textContent || '');
-          var prev = copyBtn.textContent;
-          copyBtn.textContent = 'Copied';
-          setTimeout(function() { copyBtn.textContent = prev; }, 1200);
-        } catch (e) {}
-      });
-    })();
-    </script>
-
-    <script>
-    document.addEventListener('click', function(e) {
-      var btn = e.target.closest('.sector-details-btn');
-      if (!btn) return;
-      e.preventDefault();
-      var wf = btn.dataset.wf;
-      var from = btn.dataset.from;
-      var to = btn.dataset.to;
-      window.location.href = '/sector/' + wf + '/' + from + '/' + to;
-    });
-    </script>
-
-    <script>
-    document.querySelectorAll('.tobt-help').forEach(function(el) {
-      var tip = el.querySelector('.tobt-tooltip');
-      if (!tip) return;
-      el.addEventListener('mouseenter', function() {
-        var r = el.getBoundingClientRect();
-        tip.style.display = 'block';
-        var tw = tip.offsetWidth;
-        var th = tip.offsetHeight;
-        var left = r.left + r.width / 2 - tw / 2;
-        var top = r.bottom + 8;
-        if (top + th > window.innerHeight) top = r.top - th - 8;
-        if (left < 4) left = 4;
-        if (left + tw > window.innerWidth - 4) left = window.innerWidth - tw - 4;
-        tip.style.left = left + 'px';
-        tip.style.top = top + 'px';
-      });
-      el.addEventListener('mouseleave', function() {
-        tip.style.display = 'none';
-      });
-    });
-    </script>
-
-    <script>
-    document.addEventListener('click', function(e) {
-      var btn = e.target.closest('.cancel-slot-btn');
-      if (!btn) return;
-      e.preventDefault();
-
-      var slotKey = btn.dataset.slotKey;
-      var bookingCid = btn.dataset.bookingCid;
-      var callsign = btn.dataset.callsign || '';
-      if (!slotKey || !bookingCid) return;
-
-      openConfirmModalAsync({
-        title: 'Cancel Team Booking',
-        message: 'You are about to cancel a booking for ' + callsign + '. This will remove it for the whole team. Are you sure?',
-        confirmText: 'Yes, Cancel Booking',
-        cancelText: 'Go Back',
-        onConfirm: async function(ctx) {
-          var res = await fetch('/api/tobt/team-cancel', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ slotKey: slotKey, bookingCid: bookingCid })
-          });
-          if (!res.ok) {
-            var err = await res.json().catch(function() { return {}; });
-            ctx.set('Cancel failed', err.error || 'Unable to cancel booking');
-            return false;
+        // ----- Aircraft picker (multi-aircraft fleets) -----
+        // Slots are tied to the CID, so swapping the airframe only relabels the
+        // booking — it never moves the slot.
+        document.addEventListener('change', async function(e) {
+          var sel = e.target.closest('.team-ac-select');
+          if (!sel) return;
+          var prev = sel.dataset.prev;
+          sel.classList.add('claim-saving');
+          try {
+            var r = await fetch('/api/team/bookings/update', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'same-origin',
+              body: JSON.stringify({
+                slotKey: sel.dataset.slotKey,
+                cid: Number(sel.dataset.bookingCid),
+                callsign: sel.value,
+                bookingCid: Number(sel.dataset.bookingCid)
+              })
+            });
+            var d = await r.json().catch(function() { return {}; });
+            if (!r.ok) throw new Error(d.error || 'Failed to save');
+            sel.dataset.prev = sel.value;
+            // Keep the pilot dropdown's callsign in step, or the next pilot
+            // change would send the old airframe and undo this.
+            var row = sel.closest('tr');
+            var pilot = row && row.querySelector('.team-pilot-select');
+            if (pilot) pilot.dataset.callsign = sel.value;
+          } catch (err) {
+            sel.value = prev;
+            alert(err.message || 'Failed to change aircraft');
+          } finally {
+            sel.classList.remove('claim-saving');
           }
-          setTimeout(function() { location.reload(); }, 500);
-          return true;
-        }
-      });
-    });
-    </script>
+        });
 
-    <script>
-    (function() {
-      var modal = document.getElementById('teamCsModal');
-      var csInput = document.getElementById('teamCsCallsign');
-      var cidInput = document.getElementById('teamCsCid');
-      var errEl = document.getElementById('teamCsError');
-      var saveBtn = document.getElementById('teamCsSave');
-      var closeBtn = document.getElementById('teamCsClose');
-      var cancelBtn = document.getElementById('teamCsCancel');
-      var backdrop = modal.querySelector('.route-modal-backdrop');
-      var currentSlotKey = null;
-      var currentBookingCid = null;
+        // ----- Pilot assignment -----
+        document.addEventListener('change', async function(e) {
+          var sel = e.target.closest('.team-pilot-select');
+          if (!sel) return;
+          var prev = sel.dataset.bookingCid;
+          sel.classList.add('claim-saving');
+          try {
+            var r = await fetch('/api/team/bookings/update', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'same-origin',
+              body: JSON.stringify({
+                slotKey: sel.dataset.slotKey,
+                cid: Number(sel.value),
+                callsign: sel.dataset.callsign,
+                bookingCid: Number(prev)
+              })
+            });
+            var d = await r.json().catch(function() { return {}; });
+            if (!r.ok) throw new Error(d.error || 'Failed to save');
+            sel.dataset.bookingCid = sel.value;
+          } catch (err) {
+            sel.value = prev;
+            alert(err.message || 'Failed to assign pilot');
+          } finally {
+            sel.classList.remove('claim-saving');
+          }
+        });
 
-      function open(slotKey, callsign, cid) {
-        currentSlotKey = slotKey;
-        currentBookingCid = cid != null ? Number(cid) : null;
-        csInput.value = callsign || '';
-        if (cid != null && cidInput.querySelector('option[value="' + cid + '"]')) {
-          cidInput.value = String(cid);
-        } else if (cidInput.options.length) {
-          cidInput.selectedIndex = 0;
-        }
-        errEl.style.display = 'none';
-        errEl.textContent = '';
-        modal.hidden = false;
-        setTimeout(function() { csInput.focus(); csInput.select(); }, 0);
-      }
-      function close() { modal.hidden = true; currentSlotKey = null; currentBookingCid = null; }
+        // ----- Our Fleet -----
+        var fleetModal = document.getElementById('fleetModal');
+        if (fleetModal) {
+          var fleetForm = document.getElementById('fleetForm');
+          var fleetMsg = document.getElementById('fleetMsg');
+          var fleetEditId = document.getElementById('fleetEditId');
 
-      document.addEventListener('click', function(e) {
-        var btn = e.target.closest('.team-cs-edit-btn');
-        if (!btn) return;
-        open(btn.dataset.slotKey, btn.dataset.callsign, btn.dataset.cid);
-      });
-      closeBtn.addEventListener('click', close);
-      cancelBtn.addEventListener('click', close);
-      backdrop.addEventListener('click', close);
-      document.addEventListener('keydown', function(e) {
-        if (!modal.hidden && e.key === 'Escape') close();
-      });
+          function fmsg(text, ok) {
+            fleetMsg.textContent = text;
+            fleetMsg.style.color = ok ? '#4ade80' : '#f87171';
+            fleetMsg.style.display = '';
+          }
+          function openFleet(record) {
+            fleetForm.reset();
+            fleetEditId.value = record ? record.id : '';
+            document.getElementById('fleetModalTitle').textContent = record ? 'Edit Aircraft' : 'Add Aircraft';
+            if (record) {
+              fleetForm.querySelector('[name="callsign"]').value = record.callsign || '';
+              fleetForm.querySelector('[name="aircraftType"]').value = record.actype || '';
+              fleetForm.querySelector('[name="country"]').value = record.country || '';
+            }
+            fleetModal.classList.remove('hidden');
+          }
+          function closeFleet() { fleetModal.classList.add('hidden'); }
 
-      saveBtn.addEventListener('click', async function() {
-        if (!currentSlotKey) return;
-        var callsign = (csInput.value || '').trim().toUpperCase();
-        var cid = (cidInput.value || '').trim();
-        if (!/^[A-Z0-9]{2,10}$/.test(callsign)) {
-          errEl.textContent = 'Callsign must be 2–10 alphanumeric characters.';
-          errEl.style.display = '';
-          return;
-        }
-        if (!cid) {
-          errEl.textContent = 'Please pick a pilot.';
-          errEl.style.display = '';
-          return;
-        }
-        saveBtn.disabled = true;
-        saveBtn.textContent = 'Saving...';
-        try {
-          var res = await fetch('/api/team/bookings/update', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'same-origin',
-            body: JSON.stringify({ slotKey: currentSlotKey, callsign: callsign, cid: Number(cid), bookingCid: currentBookingCid })
+          document.getElementById('fleetAddBtn').addEventListener('click', function() { openFleet(null); });
+          document.getElementById('fleetCancel').addEventListener('click', closeFleet);
+          fleetModal.querySelector('.modal-backdrop').addEventListener('click', closeFleet);
+
+          document.addEventListener('click', function(e) {
+            var edit = e.target.closest('.fleet-edit-btn');
+            if (edit) {
+              openFleet({
+                id: edit.dataset.id,
+                callsign: edit.dataset.callsign,
+                actype: edit.dataset.actype,
+                country: edit.dataset.country
+              });
+            }
           });
-          if (!res.ok) {
-            var data = await res.json().catch(function() { return {}; });
-            errEl.textContent = data.error || 'Update failed';
-            errEl.style.display = '';
-            saveBtn.disabled = false;
-            saveBtn.textContent = 'Save';
+
+          fleetForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            var fd = new FormData(fleetForm);
+            var payload = {
+              callsign: (fd.get('callsign') || '').toString().trim().toUpperCase(),
+              aircraftType: (fd.get('aircraftType') || '').toString().trim().toUpperCase(),
+              country: (fd.get('country') || '').toString().trim()
+            };
+            var id = fleetEditId.value;
+            try {
+              var r = await fetch(id ? '/api/team/fleet/' + id : '/api/team/fleet', {
+                method: id ? 'PATCH' : 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'same-origin',
+                body: JSON.stringify(payload)
+              });
+              var d = await r.json().catch(function() { return {}; });
+              if (!r.ok) { fmsg(d.error || 'Failed to save aircraft', false); closeFleet(); return; }
+              location.reload();
+            } catch (err) { fmsg('Failed to save aircraft', false); closeFleet(); }
+          });
+
+          document.addEventListener('click', async function(e) {
+            var del = e.target.closest('.fleet-delete-btn');
+            if (!del || del.disabled) return;
+            if (!confirm('Delete ' + del.dataset.callsign + '? Any bookings held by this callsign will move to another aircraft in your fleet, or be cancelled if none remains.')) return;
+            try {
+              var r = await fetch('/api/team/fleet/' + del.dataset.id, { method: 'DELETE', credentials: 'same-origin' });
+              var d = await r.json().catch(function() { return {}; });
+              if (!r.ok) { fmsg(d.error || 'Failed to delete', false); return; }
+              location.reload();
+            } catch (err) { fmsg('Failed to delete', false); }
+          });
+        }
+
+        // ----- Public profile -----
+        var pform = document.getElementById('teamProfileForm');
+        if (pform) {
+          var pmsg = document.getElementById('teamProfileMsg');
+          pform.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            var photoInput = pform.querySelector('input[name="photo"]');
+            if (photoInput.files[0] && photoInput.files[0].size > 5 * 1024 * 1024) {
+              pmsg.textContent = 'Photo must be under 5 MB';
+              pmsg.style.color = '#f87171'; pmsg.style.display = '';
+              return;
+            }
+            try {
+              var r = await fetch('/api/team/hq/profile', { method: 'POST', credentials: 'same-origin', body: new FormData(pform) });
+              var d = await r.json().catch(function() { return {}; });
+              if (r.ok) {
+                pmsg.textContent = 'Saved!';
+                pmsg.style.color = '#4ade80'; pmsg.style.display = '';
+                if (photoInput.files[0]) setTimeout(function() { location.reload(); }, 600);
+              } else {
+                pmsg.textContent = d.error || 'Failed to save';
+                pmsg.style.color = '#f87171'; pmsg.style.display = '';
+              }
+            } catch (err) {
+              pmsg.textContent = 'Failed to save';
+              pmsg.style.color = '#f87171'; pmsg.style.display = '';
+            }
+          });
+        }
+
+        // ----- ATC route modal -----
+        var modal = document.getElementById('affRouteModal');
+        var body = document.getElementById('affRouteModalBody');
+        var sectorEl = document.getElementById('affRouteModalSector');
+        var sbLink = document.getElementById('affRouteModalSimbrief');
+        function closeModal() { modal.hidden = true; }
+        document.addEventListener('click', function(e) {
+          var btn = e.target.closest('.aff-route-btn[data-route]');
+          if (btn) {
+            var r2 = btn.dataset.route2;
+            body.textContent = btn.dataset.route + (r2 ? '\\n\\n--- Secondary route ---\\n' + r2 : '');
+            sectorEl.textContent = btn.dataset.from + ' → ' + btn.dataset.to;
+            sbLink.href = btn.dataset.simbrief || '#';
+            modal.hidden = false;
             return;
           }
-          location.reload();
-        } catch (err) {
-          errEl.textContent = 'Network error. Try again.';
-          errEl.style.display = '';
-          saveBtn.disabled = false;
-          saveBtn.textContent = 'Save';
-        }
-      });
-    })();
+          if (e.target.closest('#affRouteModalClose') || e.target.closest('#affRouteModalDismiss') || e.target.closest('.aff-route-modal-backdrop')) {
+            closeModal();
+          }
+          if (e.target.closest('#affRouteModalCopy')) {
+            navigator.clipboard.writeText(body.textContent || '').catch(function() {});
+          }
+        });
+        document.addEventListener('keydown', function(e) {
+          if (e.key === 'Escape' && !modal.hidden) closeModal();
+        });
+      })();
     </script>
   `;
-  const pageTitle = teamName ? `${teamName} - Bookings` : 'Our Bookings';
+
+  const pageTitle = readOnly ? `${displayName} - HQ (Admin View)` : `${displayName} — WF Team HQ`;
   res.send(renderLayout({ title: pageTitle, user, isAdmin, content, layoutClass: 'dashboard-full' }));
 });
+
+// Main CID (or admin) edits the team's public profile. Applied to EVERY
+// OfficialTeam row of the team so all its fleet cards on /teams stay in sync.
+app.post('/api/team/hq/profile', requireLogin, (req, res, next) => {
+  profilePhotoUpload.single('photo')(req, res, (err) => {
+    if (err) return res.status(400).json({ error: err.code === 'LIMIT_FILE_SIZE' ? 'Photo must be under 5 MB' : 'Upload failed: ' + err.message });
+    next();
+  });
+}, async (req, res) => {
+  const cid = Number(req.session.user.data.cid);
+  try {
+    const teamNameUpper = await resolveUserTeamName(cid);
+    if (!teamNameUpper) return res.status(403).json({ error: 'Your team is not linked.' });
+    const all = await prisma.officialTeam.findMany();
+    const fleet = all.filter(t => String(t.teamName || '').trim().toUpperCase() === teamNameUpper);
+    if (!fleet.some(t => Number(t.mainCid) === cid) && !isAdminUser(cid)) {
+      return res.status(403).json({ error: 'Only the team Main CID can edit the public profile' });
+    }
+    const data = {
+      website: cleanWebsite(req.body?.website),
+      description: req.body?.description ? String(req.body.description).trim().slice(0, 1000) : null
+    };
+    for (const t of fleet) {
+      await prisma.officialTeam.update({ where: { id: t.id }, data }).catch(() => {});
+      await saveProfilePhoto('team', t.id, req.file);
+    }
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+/* ===== OUR FLEET (team-side aircraft management) =====
+   Available to team managers (main CIDs + members holding canManageMembers).
+   Marking an aircraft active makes it eligible for auto-assignment, so these
+   endpoints re-run assignment and always verify the row belongs to the
+   caller's own team. */
+async function requireFleetManager(req, res, next) {
+  const cid = Number(req.session?.user?.data?.cid);
+  if (!cid) return res.status(403).json({ error: 'Forbidden' });
+  if (!isAdminUser(cid) && !canManageTeamMembers(cid)) {
+    return res.status(403).json({ error: 'You do not have permission to manage the fleet.' });
+  }
+  const teamNameUpper = await resolveUserTeamName(cid);
+  if (!teamNameUpper) return res.status(403).json({ error: 'Your team is not linked.' });
+  req._fleetTeam = teamNameUpper;
+  next();
+}
+
+// Callsigns must stay unique across every team so bookings resolve to one owner.
+async function callsignTakenBy(callsign, exceptId) {
+  const rows = await prisma.officialTeam.findMany({ select: { id: true, callsign: true } });
+  return rows.find(r => String(r.callsign || '').toUpperCase() === callsign && r.id !== exceptId) || null;
+}
+
+app.post('/api/team/fleet', requireLogin, requireFleetManager, async (req, res) => {
+  const callsign = String(req.body?.callsign || '').trim().toUpperCase();
+  const aircraftType = String(req.body?.aircraftType || '').trim().toUpperCase();
+  if (!/^[A-Z0-9]{2,10}$/.test(callsign)) return res.status(400).json({ error: 'Callsign must be 2-10 letters/numbers' });
+  if (!aircraftType) return res.status(400).json({ error: 'Aircraft type is required' });
+
+  try {
+    if (await callsignTakenBy(callsign, null)) {
+      return res.status(409).json({ error: `Callsign ${callsign} is already in use` });
+    }
+    const all = await prisma.officialTeam.findMany({ orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }] });
+    const fleet = all.filter(t => String(t.teamName || '').trim().toUpperCase() === req._fleetTeam);
+    const primary = fleet[0];
+    if (!primary) return res.status(400).json({ error: 'Team has no existing aircraft to copy details from.' });
+
+    const created = await prisma.officialTeam.create({
+      data: {
+        teamName: primary.teamName,
+        callsign,
+        mainCid: primary.mainCid,
+        aircraftType,
+        country: String(req.body?.country || primary.country || '').trim(),
+        sinceYear: primary.sinceYear,
+        multiSlot: primary.multiSlot,
+        description: primary.description,
+        website: primary.website,
+        sortOrder: await resolveSortOrder(null, prisma.officialTeam),
+        // Teams no longer set this per aircraft — inherit the team's own
+        // participation so a new airframe behaves like the rest of the fleet.
+        // (Auto-assign books once per team, so extra aircraft never claim
+        // extra slots.) Admins still control it on the Teams page.
+        participatingWf26: req.body?.participatingWf26 !== undefined
+          ? (req.body.participatingWf26 === true || String(req.body.participatingWf26) === 'true')
+          : !!primary.participatingWf26
+      }
+    });
+    await loadTeamMembers();
+    if (created.participatingWf26) {
+      autoAssignTeamThenAffiliate({ reason: `fleet aircraft ${created.id} added` }).catch(() => {});
+    }
+    console.log(`[TEAM] ${req._fleetTeam}: aircraft ${callsign} (${aircraftType}) added by CID ${req.session.user.data.cid}`);
+    res.json({ success: true, id: created.id });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.patch('/api/team/fleet/:id', requireLogin, requireFleetManager, async (req, res) => {
+  const id = Number(req.params.id);
+  try {
+    const row = await prisma.officialTeam.findUnique({ where: { id } });
+    if (!row) return res.status(404).json({ error: 'Aircraft not found' });
+    if (String(row.teamName || '').trim().toUpperCase() !== req._fleetTeam) {
+      return res.status(403).json({ error: 'That aircraft belongs to another team.' });
+    }
+
+    const data = {};
+    if (req.body?.callsign !== undefined) {
+      const cs = String(req.body.callsign).trim().toUpperCase();
+      if (!/^[A-Z0-9]{2,10}$/.test(cs)) return res.status(400).json({ error: 'Callsign must be 2-10 letters/numbers' });
+      if (await callsignTakenBy(cs, id)) return res.status(409).json({ error: `Callsign ${cs} is already in use` });
+      data.callsign = cs;
+    }
+    if (req.body?.aircraftType !== undefined) data.aircraftType = String(req.body.aircraftType).trim().toUpperCase();
+    if (req.body?.country !== undefined) data.country = String(req.body.country).trim();
+    if (req.body?.participatingWf26 !== undefined) data.participatingWf26 = req.body.participatingWf26 === true || String(req.body.participatingWf26) === 'true';
+    if (!Object.keys(data).length) return res.status(400).json({ error: 'No fields to update' });
+
+    await prisma.officialTeam.update({ where: { id }, data });
+
+    // A renamed callsign must carry its bookings with it, or they'd be orphaned
+    // (the team's booking list is matched by callsign).
+    if (data.callsign && data.callsign !== String(row.callsign || '').toUpperCase()) {
+      const oldCs = String(row.callsign || '').toUpperCase();
+      const bookings = await prisma.tobtBooking.findMany({ where: { callsign: oldCs } });
+      for (const bk of bookings) {
+        await prisma.tobtBooking.update({ where: { id: bk.id }, data: { callsign: data.callsign } }).catch(() => {});
+        const memBk = tobtBookingsByKey[`${bk.cid}:${bk.slotKey}`];
+        if (memBk) memBk.callsign = data.callsign;
+        vatcanPushForSlotKey(bk.slotKey);
+      }
+      if (bookings.length) console.log(`[TEAM] ${req._fleetTeam}: ${oldCs} renamed to ${data.callsign} — ${bookings.length} booking(s) moved`);
+    }
+
+    await loadTeamMembers();
+    if (data.participatingWf26 === true) {
+      autoAssignTeamThenAffiliate({ reason: `fleet aircraft ${id} activated` }).catch(() => {});
+    }
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.delete('/api/team/fleet/:id', requireLogin, requireFleetManager, async (req, res) => {
+  const id = Number(req.params.id);
+  try {
+    const row = await prisma.officialTeam.findUnique({ where: { id } });
+    if (!row) return res.status(404).json({ error: 'Aircraft not found' });
+    if (String(row.teamName || '').trim().toUpperCase() !== req._fleetTeam) {
+      return res.status(403).json({ error: 'That aircraft belongs to another team.' });
+    }
+    const all = await prisma.officialTeam.findMany({ select: { id: true, teamName: true } });
+    const mine = all.filter(t => String(t.teamName || '').trim().toUpperCase() === req._fleetTeam);
+    if (mine.length <= 1) {
+      return res.status(400).json({ error: 'A team must keep at least one aircraft. Ask an admin to remove the team entirely.' });
+    }
+    await deleteOfficialTeamRowCascade(id);
+    await loadTeamMembers();
+    console.log(`[TEAM] ${req._fleetTeam}: aircraft ${row.callsign} deleted by CID ${req.session.user.data.cid}`);
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+/* ===== MANAGE MEMBERS (mirrors /affiliates/my-members) ===== */
+app.get('/team/manage-members', requireLogin, async (req, res) => {
+  const user = req.session.user.data;
+  const cid = Number(user.cid);
+  const isAdmin = isAdminUser(cid);
+
+  if (!canManageTeamMembers(cid) && !isAdmin) {
+    return renderForbidden(req, res, 'This page is only available to team Main CIDs.');
+  }
+  const teamNameUpper = await resolveUserTeamName(cid);
+  if (!teamNameUpper) return renderForbidden(req, res, 'Your team is not linked.');
+
+  const ctx = await loadTeamContext(teamNameUpper, cid, user?.personal?.name_full);
+  const { displayName, members, fleet } = ctx;
+  const activeCallsigns = fleet.filter(t => t.participatingWf26).map(t => String(t.callsign || '').toUpperCase());
+
+  const content = `
+    <div class="mm-wrap">
+      <header class="mm-header">
+        <div>
+          <h2 class="mm-page-title">Manage Members</h2>
+          <p class="mm-page-subtitle">Manage who can access your team's HQ. Adding a CID grants them <strong>WF Team</strong> access.</p>
+        </div>
+        <a href="/team/hq" class="ot-btn">← Back to HQ</a>
+      </header>
+
+      <section class="card mm-card">
+        <div class="mm-card-header">
+          <div class="mm-card-title">
+            <span class="ot-cell-callsign mm-callsign">${escapeHtml(displayName)}</span>
+            ${activeCallsigns.map(c => `<span class="ot-cell-actype">${escapeHtml(c)}</span>`).join('')}
+            <span class="mm-count">${members.length} member${members.length === 1 ? '' : 's'}</span>
+          </div>
+          <div class="mm-add-row">
+            <span class="mm-add-prefix">+</span>
+            <input type="number" class="mm-cid-input" id="teamAddCid" placeholder="Enter CID" inputmode="numeric" />
+            <button class="ot-btn mm-add-btn" id="teamAddBtn">Add Member</button>
+          </div>
+        </div>
+        <div id="teamMemberMsg" style="display:none;font-size:12px;margin:0 0 10px;"></div>
+
+        <div class="ot-table-wrap">
+          <table class="ot-table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>CID</th>
+                <th class="ot-th-center">Flying this event</th>
+                <th class="ot-th-center">Can edit bookings</th>
+                <th class="ot-th-center">Can manage members</th>
+                <th class="ot-th-actions"></th>
+              </tr>
+            </thead>
+            <tbody>
+              ${members.map(m => `
+                <tr data-cid="${m.cid}"${!m.perms.participating ? ' class="mm-inactive-row"' : ''}>
+                  <td class="ot-cell-name">${escapeHtml(m.name || '—')}${m.isOwner ? ' <span class="aff-main-badge">Main</span>' : ''}</td>
+                  <td class="ot-cell-cid">${m.cid}</td>
+                  <td class="ot-cell-active">
+                    <input type="checkbox" class="wf-check team-perm" data-cid="${m.cid}" data-perm="participating" ${m.perms.participating ? 'checked' : ''} ${m.isOwner ? 'disabled title="Managed by Admins"' : ''} />
+                  </td>
+                  <td class="ot-cell-active">
+                    <input type="checkbox" class="wf-check team-perm" data-cid="${m.cid}" data-perm="canEditBookings" ${m.perms.canEditBookings ? 'checked' : ''} ${m.isOwner ? 'disabled title="Managed by Admins"' : ''} />
+                  </td>
+                  <td class="ot-cell-active">
+                    <input type="checkbox" class="wf-check team-perm" data-cid="${m.cid}" data-perm="canManageMembers" ${m.perms.canManageMembers ? 'checked' : ''} ${m.isOwner ? 'disabled title="Managed by Admins"' : ''} />
+                  </td>
+                  <td class="ot-cell-actions">
+                    ${m.isOwner || m.cid === cid ? '<span class="ot-muted" style="font-size:11px;">—</span>'
+                      : `<button class="ot-btn ot-btn-danger team-remove-btn" data-cid="${m.cid}" data-name="${escapeHtml(m.name || String(m.cid))}">Remove</button>`}
+                  </td>
+                </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+
+    ${HQ_STYLES}
+
+    <script>
+      (function() {
+        var msg = document.getElementById('teamMemberMsg');
+        function show(text, ok) {
+          msg.textContent = text;
+          msg.style.color = ok ? '#4ade80' : '#f87171';
+          msg.style.display = '';
+        }
+
+        document.getElementById('teamAddBtn').addEventListener('click', async function() {
+          var input = document.getElementById('teamAddCid');
+          var cid = Number(input.value);
+          if (!cid) { show('Enter a valid CID', false); return; }
+          try {
+            var r = await fetch('/api/team/members', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'same-origin',
+              body: JSON.stringify({ cid: cid })
+            });
+            var d = await r.json().catch(function() { return {}; });
+            if (!r.ok) { show(d.error || 'Failed to add member', false); return; }
+            location.reload();
+          } catch (e) { show('Failed to add member', false); }
+        });
+
+        document.addEventListener('change', async function(e) {
+          var cb = e.target.closest('.team-perm');
+          if (!cb) return;
+          var body = {};
+          body[cb.dataset.perm] = cb.checked;
+          try {
+            var r = await fetch('/api/team/members/' + cb.dataset.cid + '/perms', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'same-origin',
+              body: JSON.stringify(body)
+            });
+            var d = await r.json().catch(function() { return {}; });
+            if (!r.ok) throw new Error(d.error || 'Failed');
+            show('Saved', true);
+          } catch (err) {
+            cb.checked = !cb.checked;
+            show(err.message || 'Failed to update', false);
+          }
+        });
+
+        document.addEventListener('click', async function(e) {
+          var btn = e.target.closest('.team-remove-btn');
+          if (!btn) return;
+          if (!confirm('Remove ' + (btn.dataset.name || 'this member') + ' (CID ' + btn.dataset.cid + ') from the team? They will lose access to your Team HQ.')) return;
+          try {
+            var r = await fetch('/api/team/members/' + btn.dataset.cid, { method: 'DELETE', credentials: 'same-origin' });
+            var d = await r.json().catch(function() { return {}; });
+            if (!r.ok) { show(d.error || 'Failed to remove', false); return; }
+            location.reload();
+          } catch (err) { show('Failed to remove', false); }
+        });
+      })();
+    </script>
+  `;
+
+  res.send(renderLayout({ title: 'Manage Members', user, isAdmin, content, layoutClass: 'dashboard-full' }));
+});
+
+// Old team pages folded into the HQ
+app.get('/team/management', requireLogin, (req, res) => res.redirect(301, '/team/hq'));
+app.get('/team/bookings', requireLogin, (req, res) => res.redirect(301, '/team/hq'));
 
 app.get('/admin/control-panel', requireAdmin, async (req, res) => {
   const user = req.session.user.data;
@@ -21275,7 +21194,7 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
   applications.sort((a, b) => (a.status === 'pending' ? 0 : 1) - (b.status === 'pending' ? 0 : 1));
   const pendingApps = applications.filter(a => a.status === 'pending');
 
-  const teamRecord = (t) => JSON.stringify({ teamName: t.teamName, callsign: t.callsign, mainCid: t.mainCid, aircraftType: t.aircraftType, country: t.country, sinceYear: t.sinceYear, description: t.description, website: t.website, sortOrder: t.sortOrder, participatingWf26: t.participatingWf26 }).replace(/'/g, '&#39;');
+  const teamRecord = (t) => JSON.stringify({ teamName: t.teamName, callsign: t.callsign, mainCid: t.mainCid, aircraftType: t.aircraftType, country: t.country, sinceYear: t.sinceYear, multiSlot: t.multiSlot, description: t.description, website: t.website, sortOrder: t.sortOrder, participatingWf26: t.participatingWf26 }).replace(/'/g, '&#39;');
   const affRecord = (a) => JSON.stringify({ name: a.name, callsign: a.callsign, simType: a.simType, cid: a.cid, sinceYear: a.sinceYear, hasMembers: a.hasMembers, aircraftType: a.aircraftType, description: a.description, website: a.website, sortOrder: a.sortOrder, participatingWf26: a.participatingWf26 }).replace(/'/g, '&#39;');
   const appRecord = (a) => JSON.stringify({
     id: a.id, callsign: a.callsign, simType: a.simType, cid: a.cid, hasMembers: a.hasMembers,
@@ -21338,7 +21257,12 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
             <tbody>
               ${teams.map(t => `
                 <tr data-team-id="${t.id}">
-                  <td class="ot-cell-name">${escapeHtml(t.teamName)}</td>
+                  <td class="ot-cell-name">
+                    ${escapeHtml(t.teamName)}
+                    <a class="ot-open-link" href="/team/hq?id=${t.id}" target="_blank" rel="noopener" title="Open WF Team HQ (read-only)" aria-label="Open WF Team HQ">
+                      <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                    </a>
+                  </td>
                   <td><span class="ot-cell-callsign">${escapeHtml(t.callsign)}</span></td>
                   <td class="ot-cell-cid">${t.mainCid}</td>
                   <td><span class="ot-cell-actype">${escapeHtml(t.aircraftType)}</span></td>
@@ -21629,6 +21553,13 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
     <label style="display:block; margin:10px 0 6px;">Country</label>
     <input name="country" type="text" placeholder="e.g. UK" required />
 
+    <label style="display:block; margin:10px 0 6px;">Multiple aircraft that can each have a slot?</label>
+    <select name="multiSlot">
+      <option value="false" selected>No — the team shares one slot per sector</option>
+      <option value="true">Yes — every aircraft gets its own slot</option>
+    </select>
+    <p style="font-size:11px;color:var(--muted);margin:6px 0 0;line-height:1.5;">Applies to the whole team. When Yes, each aircraft in the fleet is allocated its own TOBT slot on flow-restricted sectors, booked under that aircraft's Main CID.</p>
+
     <label style="display:block; margin:10px 0 6px;">Member Since <span style="color:var(--muted);font-weight:400;">(shown on the public page)</span></label>
     <select name="teamSinceYear">
       <option value="" selected>Not set</option>
@@ -21877,6 +21808,8 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
           form.querySelector('input[name="country"]').value = record.country || '';
           var teamYearSel = form.querySelector('select[name="teamSinceYear"]');
           if (teamYearSel) teamYearSel.value = record.sinceYear ? String(record.sinceYear) : '';
+          var multiSel = form.querySelector('select[name="multiSlot"]');
+          if (multiSel) multiSel.value = record.multiSlot ? 'true' : 'false';
         } else {
           form.querySelector('input[name="affiliateCallsign"]').value = record.callsign || '';
           var affNameIn = form.querySelector('input[name="affiliateName"]');
@@ -22045,6 +21978,7 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
         payload.aircraftType = (fd.get('aircraftType') || '').toString().trim().toUpperCase();
         payload.country = (fd.get('country') || '').toString().trim();
         payload.sinceYear = (fd.get('teamSinceYear') || '').toString() || null;
+        payload.multiSlot = String(fd.get('multiSlot') || 'false') === 'true';
       } else {
         payload.callsign = (fd.get('affiliateCallsign') || '').toString().trim().toUpperCase();
         payload.simType = (fd.get('simType') || '').toString().trim().toUpperCase();
@@ -22294,6 +22228,7 @@ app.post('/api/admin/official-teams', requireAdmin, profilePhotoUpload.single('p
       aircraftType: String(aircraftType).trim().toUpperCase(),
       country: String(country).trim(),
       sinceYear: yr,
+      multiSlot: asBool(req.body?.multiSlot),
       description: description ? String(description).trim().slice(0, 1000) : null,
       website: cleanWebsite(website),
       sortOrder: await resolveSortOrder(req.body?.sortOrder, prisma.officialTeam),
@@ -22361,10 +22296,10 @@ app.post('/api/admin/affiliates', requireAdmin, profilePhotoUpload.single('photo
 });
 
 // Delete Official Team
-app.delete('/api/admin/official-teams/:id', requireAdmin, async (req, res) => {
-  const id = Number(req.params.id);
-  if (!id) return res.status(400).json({ error: 'Invalid id' });
-
+// Delete one OfficialTeam (aircraft) row, reassigning its bookings to another
+// aircraft in the same team or cancelling them when none remains. Shared by the
+// admin Teams page and the team-side Our Fleet editor so both behave alike.
+async function deleteOfficialTeamRowCascade(id) {
   // Look up the aircraft being deleted so we can reassign its bookings
   const deletedRow = await prisma.officialTeam.findUnique({ where: { id } }).catch(() => null);
   await prisma.officialTeam.delete({ where: { id } }).catch(() => null);
@@ -22445,7 +22380,13 @@ app.delete('/api/admin/official-teams/:id', requireAdmin, async (req, res) => {
       }
     }
   }
+}
 
+app.delete('/api/admin/official-teams/:id', requireAdmin, async (req, res) => {
+  const id = Number(req.params.id);
+  if (!id) return res.status(400).json({ error: 'Invalid id' });
+  await deleteOfficialTeamRowCascade(id);
+  await loadTeamMembers();
   return res.json({ success: true });
 });
 
@@ -23113,6 +23054,7 @@ app.patch('/api/admin/official-teams/:id', requireAdmin, profilePhotoUpload.sing
     }
     data.sinceYear = yr;
   }
+  if (body.multiSlot !== undefined) data.multiSlot = asBool(body.multiSlot);
   if (body.description !== undefined) data.description = String(body.description).trim().slice(0, 1000) || null;
   if (body.website !== undefined) data.website = cleanWebsite(body.website);
   if (body.sortOrder !== undefined && String(body.sortOrder).trim() !== '') data.sortOrder = Math.max(0, Number(body.sortOrder) || 0);
@@ -23121,6 +23063,22 @@ app.patch('/api/admin/official-teams/:id', requireAdmin, profilePhotoUpload.sing
 
   if (Object.keys(data).length) await prisma.officialTeam.update({ where: { id }, data });
   await saveProfilePhoto('team', id, req.file);
+
+  // multiSlot describes the whole team, so keep every aircraft in the fleet in
+  // step — otherwise auto-assignment would see a half-flagged fleet.
+  if (data.multiSlot !== undefined) {
+    const row = await prisma.officialTeam.findUnique({ where: { id }, select: { teamName: true } }).catch(() => null);
+    if (row?.teamName) {
+      const all = await prisma.officialTeam.findMany({ select: { id: true, teamName: true } });
+      const key = String(row.teamName).trim().toUpperCase();
+      for (const t of all) {
+        if (t.id === id) continue;
+        if (String(t.teamName || '').trim().toUpperCase() !== key) continue;
+        await prisma.officialTeam.update({ where: { id: t.id }, data: { multiSlot: data.multiSlot } }).catch(() => {});
+      }
+    }
+  }
+
   autoAssignTeamThenAffiliate({ reason: `team ${id} patched` }).catch(() => {});
   return res.json({ success: true });
 });

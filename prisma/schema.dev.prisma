@@ -15,6 +15,7 @@ model OfficialTeam {
   aircraftType      String
   country           String
   sinceYear         Int?
+  multiSlot         Boolean  @default(false)
   description       String?
   website           String?
   sortOrder         Int      @default(0)

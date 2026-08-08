@@ -9,6 +9,7 @@ export default function renderLayout({
   hasFirAccess = false,
   sectorPlanOutOfSync = 0,
   canManageAffiliateMembers = false,
+  canManageTeamMembers = false,
   content,
   layoutClass = '',
   pageVisibility = {},
@@ -126,15 +127,15 @@ export default function renderLayout({
 
     ${isTeamMember ? `
     <div class="nav-section">
-      <div class="nav-title">Team Member</div>
-      <a href="/team/management" class="nav-item" data-tooltip="Team Management">
+      <div class="nav-title">WF Team</div>
+      <a href="/team/hq" class="nav-item" data-tooltip="WF Team HQ">
+        <span class="icon">${icons.briefcase}</span>
+        <span class="label">WF Team HQ</span>
+      </a>
+      ${canManageTeamMembers ? `<a href="/team/manage-members" class="nav-item" data-tooltip="Manage Members">
         <span class="icon">${icons.users}</span>
-        <span class="label">Team Management</span>
-      </a>
-      <a href="/team/bookings" class="nav-item" data-tooltip="Our Bookings">
-        <span class="icon">${icons.clipboard}</span>
-        <span class="label">Our Bookings</span>
-      </a>
+        <span class="label">Manage Members</span>
+      </a>` : ''}
     </div>
     ` : ''}
 
