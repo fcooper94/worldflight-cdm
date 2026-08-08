@@ -2131,8 +2131,13 @@ async function autoAssignTeamBookings({ reason = '' } = {}) {
   try {
     const teamRows = await prisma.officialTeam.findMany({
       where: { participatingWf26: true },
-      select: { teamName: true, mainCid: true, callsign: true, aircraftType: true, multiSlot: true }
+      select: { id: true, teamName: true, mainCid: true, callsign: true, aircraftType: true, multiSlot: true }
     });
+    // Aircraft a team has marked as NOT flying a given sector — never book those.
+    // Optional-chained: the delegate is missing until the Prisma client is
+    // regenerated after a schema change, and this runs on every startup.
+    const optOutRows = (await prisma.teamSectorOptOut?.findMany().catch(() => [])) || [];
+    const optedOut = new Set(optOutRows.map(o => `${o.officialTeamId}|${o.sectorNumber}`));
 
     // multiSlot is a team-level property; honour it if any row of the team
     // carries it, so a partially-flagged fleet still behaves consistently.
@@ -2154,13 +2159,15 @@ async function autoAssignTeamBookings({ reason = '' } = {}) {
           teamName: name,
           mainCid: Number(t.mainCid),
           callsign,
+          fleetId: t.id,
           ownCallsignOnly: true
         });
       } else if (!teamsByName.has(name)) {
         teamsByName.set(name, {
           teamName: name,
           mainCid: Number(t.mainCid),
-          callsign
+          callsign,
+          fleetId: t.id
         });
       }
     }
@@ -2194,6 +2201,9 @@ async function autoAssignTeamBookings({ reason = '' } = {}) {
       for (const row of adminSheetCache) {
         const flow = sharedFlowTypes[`${row.from}-${row.to}`] || 'NONE';
         if (flow === 'NONE') continue;
+
+        // The team marked this aircraft as not flying this sector.
+        if (row.number && optedOut.has(`${team.fleetId}|${row.number}`)) continue;
 
         const sectorPrefix = `${row.from}-${row.to}|${row.date_utc}|${row.dep_time_utc}`;
 
@@ -20155,6 +20165,94 @@ app.get('/team/hq', requireLogin, async (req, res) => {
     })
     .sort((x, y) => String(x.sector).localeCompare(String(y.sector)) || String(x.b.callsign).localeCompare(String(y.b.callsign)));
 
+  // ---- Multi-slot teams: every aircraft can hold its own slot, so the
+  // bookings table lists every sector with a sub-row per aircraft and a
+  // flying/not-flying checkbox. Absence of an opt-out row means flying.
+  const isMultiSlot = fleet.some(t => t.multiSlot);
+  const optOutRows = isMultiSlot
+    ? ((await prisma.teamSectorOptOut?.findMany({
+        where: { officialTeamId: { in: fleet.map(t => t.id) } }
+      }).catch(() => [])) || [])
+    : [];
+  const optedOut = new Set(optOutRows.map(o => `${o.officialTeamId}|${o.sectorNumber}`));
+
+  const bookingByCsSector = {};
+  if (isMultiSlot) {
+    Object.values(tobtBookingsByKey).forEach(b => {
+      if (!b || !b.callsign) return;
+      const cs = String(b.callsign).toUpperCase();
+      if (!teamCallsigns.has(cs)) return;
+      const p = String(b.slotKey).split('|');
+      bookingByCsSector[`${cs}|${p[0]}|${p[1]}|${p[2]}`] = b;
+    });
+  }
+
+  const multiSlotTable = !isMultiSlot ? '' : `
+          <p class="wft-multi-note">Each aircraft holds its own slot. Untick an aircraft to release its slot for a sector it isn't flying.</p>
+          <div class="ot-table-wrap">
+            <table class="ot-table wft-multi-table">
+              <thead>
+                <tr>
+                  <th>Sector</th>
+                  <th class="ot-th-center">Flying</th>
+                  <th>Callsign</th>
+                  <th>VATSIM Account <span class="tobt-help wft-info">i<span class="tobt-tooltip">This is the VATSIM account you will be connected as for this sector.</span></span></th>
+                  ${showFlowInfo ? '<th>Flow Restrictions</th><th>Status</th>' : ''}
+                  ${showAtcRoute ? '<th>ATC Route</th>' : ''}
+                  <th>From</th><th>To</th><th>Date</th><th>Dep Window</th><th>Arr Window</th><th>Plan</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${(adminSheetCache || []).filter(r => r.number).map(r => {
+                  const flow = getFlowRestriction(r);
+                  const restricted = (sharedFlowTypes[`${r.from}-${r.to}`] || 'NONE') !== 'NONE';
+                  return fleet.map((t, i) => {
+                    const cs = String(t.callsign || '').toUpperCase();
+                    const b = bookingByCsSector[`${cs}|${r.from}-${r.to}|${r.date_utc}|${r.dep_time_utc}`] || null;
+                    const flying = !optedOut.has(`${t.id}|${r.number}`);
+                    const status = b ? getFlowStatus(r, Number(b.cid)) : null;
+                    const acctCid = b ? Number(b.cid) : Number(t.mainCid);
+                    const acctLabel = ctx.nameByCid[acctCid] ? `${ctx.nameByCid[acctCid]} · ${acctCid}` : String(acctCid || '—');
+                    const sbUrl = buildAffiliateSimbriefUrl(r, { callsign: cs }, b ? Number(b.cid) : null, showAtcRoute, 'WorldFlight Team');
+                    const sbAttr = String(sbUrl).replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+                    const first = i === 0;
+                    return `
+                    <tr class="${first ? 'wft-group-start' : ''}${flying ? '' : ' mm-inactive-row'}">
+                      <td>${first ? `<span class="ot-cell-callsign">${escapeHtml(r.number)}</span>` : ''}</td>
+                      <td class="ot-cell-active">
+                        <input type="checkbox" class="wf-check team-flying" data-fleet-id="${t.id}" data-sector="${escapeHtml(r.number)}" ${flying ? 'checked' : ''} ${canEditBookings ? '' : 'disabled'} title="${flying ? 'Flying this sector' : 'Not flying this sector'}" />
+                      </td>
+                      <td><span class="ot-cell-actype">${escapeHtml(cs)}${t.aircraftType ? ' · ' + escapeHtml(String(t.aircraftType).toUpperCase()) : ''}</span></td>
+                      <td>
+                        ${b && canEditBookings ? `
+                          <select class="claim-select team-pilot-select" data-slot-key="${escapeHtml(b.slotKey)}" data-callsign="${escapeHtml(cs)}" data-booking-cid="${Number(b.cid)}">
+                            ${assignees.map(m => `<option value="${m.cid}" ${Number(b.cid) === m.cid ? 'selected' : ''}>${escapeHtml(m.label)}</option>`).join('')}
+                          </select>
+                        ` : `<span class="${b ? '' : 'ot-muted'}">${escapeHtml(acctLabel)}</span>`}
+                      </td>
+                      ${showFlowInfo ? `
+                      <td>${first ? `<span class="flowtype-pill flowtype-${flow.cls}">${escapeHtml(flow.label)}</span>` : ''}</td>
+                      <td class="aff-status-cell">${!flying
+                        ? '<span class="ot-muted">Not flying</span>'
+                        : (status && status.kind === 'tobt'
+                          ? `<span class="aff-flow-status aff-flow-tobt"><span class="aff-tobt-label">${escapeHtml(status.label)}</span><span class="aff-tobt-time">${escapeHtml(status.time)}</span><span class="tobt-help">?<span class="tobt-tooltip">This is your TCT (Target Connection Time).<br>Connect to VATSIM at this time.<br>We use TCT to stagger pilot connections at this airport so the network and controllers aren&#39;t overwhelmed.</span></span></span>`
+                          : `<span class="aff-flow-status aff-flow-${status ? status.kind : 'empty'}">${escapeHtml(status ? status.text : (restricted ? 'Awaiting slot' : '—'))}</span>`)}</td>` : ''}
+                      ${showAtcRoute ? `<td>${first ? (r.atc_route && r.atc_route !== '-'
+                        ? `<button type="button" class="aff-route-btn" data-route="${String(r.atc_route).replace(/&/g, '&amp;').replace(/"/g, '&quot;')}" data-route2="${r.atc_route2 && r.atc_route2 !== '-' ? String(r.atc_route2).replace(/&/g, '&amp;').replace(/"/g, '&quot;') : ''}" data-simbrief="${sbAttr}" data-from="${escapeHtml(r.from)}" data-to="${escapeHtml(r.to)}">ATC Route</button>`
+                        : `<span class="ot-muted" style="font-style:italic;">Pending agreement</span>`) : ''}</td>` : ''}
+                      <td>${first ? `<a class="aff-icao-link" href="/icao/${escapeHtml(r.from)}">${escapeHtml(r.from)}</a>` : ''}</td>
+                      <td>${first ? `<a class="aff-icao-link" href="/icao/${escapeHtml(r.to)}">${escapeHtml(r.to)}</a>` : ''}</td>
+                      <td><span class="ot-muted">${first ? escapeHtml(r.date_utc || '') : ''}</span></td>
+                      <td><span class="ot-muted">${first ? timeWindow(r.dep_time_utc) : ''}</span></td>
+                      <td><span class="ot-muted">${first ? timeWindow(r.arr_time_utc) : ''}</span></td>
+                      <td>${flying ? `<a class="aff-route-btn aff-sb-btn" href="${sbAttr}" target="_blank" rel="noopener">Plan with SimBrief</a>` : '<span class="ot-muted">—</span>'}</td>
+                    </tr>`;
+                  }).join('');
+                }).join('')}
+              </tbody>
+            </table>
+          </div>`;
+
   const content = `
     <div class="affiliate-hq-wrap">
 
@@ -20275,7 +20373,7 @@ app.get('/team/hq', requireLogin, async (req, res) => {
           <table class="ot-table">
             <thead>
               <tr>
-                <th>Callsign</th><th>Aircraft</th><th>Country</th>
+                <th>Callsign</th><th>Aircraft</th><th>Country</th><th>VATSIM Account</th>
                 ${canManageFleet ? '<th class="ot-th-actions"></th>' : ''}
               </tr>
             </thead>
@@ -20285,8 +20383,9 @@ app.get('/team/hq', requireLogin, async (req, res) => {
                   <td><span class="ot-cell-callsign">${escapeHtml(String(t.callsign || '').toUpperCase())}</span></td>
                   <td><span class="ot-cell-actype">${escapeHtml(String(t.aircraftType || '').toUpperCase())}</span></td>
                   <td><span class="ot-cell-country">${escapeHtml(t.country || '—')}</span></td>
+                  <td class="ot-cell-cid">${escapeHtml(ctx.nameByCid[Number(t.mainCid)] ? ctx.nameByCid[Number(t.mainCid)] + ' · ' + t.mainCid : String(t.mainCid || '—'))}</td>
                   ${canManageFleet ? `<td class="ot-cell-actions">
-                    <button class="ot-btn fleet-edit-btn" data-id="${t.id}" data-callsign="${escapeHtml(String(t.callsign || '').toUpperCase())}" data-actype="${escapeHtml(String(t.aircraftType || '').toUpperCase())}" data-country="${escapeHtml(t.country || '')}">Edit</button>
+                    <button class="ot-btn fleet-edit-btn" data-id="${t.id}" data-callsign="${escapeHtml(String(t.callsign || '').toUpperCase())}" data-actype="${escapeHtml(String(t.aircraftType || '').toUpperCase())}" data-country="${escapeHtml(t.country || '')}" data-maincid="${t.mainCid || ''}">Edit</button>
                     <button class="ot-btn ot-btn-danger fleet-delete-btn" data-id="${t.id}" data-callsign="${escapeHtml(String(t.callsign || '').toUpperCase())}"${fleet.length <= 1 ? ' disabled title="A team must keep at least one aircraft"' : ''}>Delete</button>
                   </td>` : ''}
                 </tr>`).join('')}
@@ -20311,6 +20410,9 @@ app.get('/team/hq', requireLogin, async (req, res) => {
             <label style="display:block;margin:10px 0 6px;">Country</label>
             <input name="country" type="text" maxlength="60" placeholder="e.g. UK" style="text-transform:none;text-align:left;letter-spacing:normal;" />
 
+            <label style="display:block;margin:10px 0 6px;">VATSIM Account <span style="color:var(--muted);font-weight:400;">(CID this aircraft books under)</span></label>
+            <input name="mainCid" type="number" inputmode="numeric" placeholder="e.g. 1303570" style="text-align:left;letter-spacing:normal;" />
+
             <div class="modal-actions" style="margin-top:16px;">
               <button type="button" class="action-btn" id="fleetCancel">Cancel</button>
               <button type="submit" class="action-btn primary">Save</button>
@@ -20326,7 +20428,7 @@ app.get('/team/hq', requireLogin, async (req, res) => {
           ${isPageEnabled('schedule') || isAdmin ? `<a href="/schedule" class="aff-schedule-link">View full schedule</a>` : ''}
         </header>
 
-        ${!bookingRows.length ? `
+        ${isMultiSlot ? multiSlotTable : !bookingRows.length ? `
           <div class="ot-empty">
             <div class="ot-empty-title">No bookings yet</div>
             <div class="ot-empty-sub">Bookings are assigned automatically for sectors with a flow restriction. They'll appear here as soon as they're allocated.</div>
@@ -20437,6 +20539,16 @@ app.get('/team/hq', requireLogin, async (req, res) => {
         text-align: left;
         font-weight: 400;
       }
+      .wft-multi-note {
+        font-size: 12px;
+        color: var(--muted);
+        margin: 0 0 12px;
+      }
+      /* Sector groups: a heavier rule marks where each sector's aircraft start */
+      .wft-multi-table tbody tr.wft-group-start > td {
+        border-top: 2px solid var(--border);
+      }
+      .wft-multi-table tbody td { padding-top: 6px; padding-bottom: 6px; }
     </style>
 
     <script>
@@ -20466,6 +20578,33 @@ app.get('/team/hq', requireLogin, async (req, res) => {
           if (!host || (e.relatedTarget && host.contains(e.relatedTarget))) return;
           var tip = host.querySelector('.tobt-tooltip');
           if (tip) tip.style.display = 'none';
+        });
+
+        // ----- Flying / not flying per aircraft per sector (multi-slot teams) -----
+        document.addEventListener('change', async function(e) {
+          var cb = e.target.closest('.team-flying');
+          if (!cb) return;
+          cb.disabled = true;
+          try {
+            var r = await fetch('/api/team/sectors/toggle', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'same-origin',
+              body: JSON.stringify({
+                fleetId: Number(cb.dataset.fleetId),
+                sectorNumber: cb.dataset.sector,
+                flying: cb.checked
+              })
+            });
+            var d = await r.json().catch(function() { return {}; });
+            if (!r.ok) throw new Error(d.error || 'Failed to save');
+            // Slot allocation happens server-side, so reload to show the result.
+            location.reload();
+          } catch (err) {
+            cb.checked = !cb.checked;
+            cb.disabled = false;
+            alert(err.message || 'Failed to update');
+          }
         });
 
         // ----- Aircraft picker (multi-aircraft fleets) -----
@@ -20553,6 +20692,7 @@ app.get('/team/hq', requireLogin, async (req, res) => {
               fleetForm.querySelector('[name="callsign"]').value = record.callsign || '';
               fleetForm.querySelector('[name="aircraftType"]').value = record.actype || '';
               fleetForm.querySelector('[name="country"]').value = record.country || '';
+              fleetForm.querySelector('[name="mainCid"]').value = record.mainCid || '';
             }
             fleetModal.classList.remove('hidden');
           }
@@ -20569,7 +20709,8 @@ app.get('/team/hq', requireLogin, async (req, res) => {
                 id: edit.dataset.id,
                 callsign: edit.dataset.callsign,
                 actype: edit.dataset.actype,
-                country: edit.dataset.country
+                country: edit.dataset.country,
+                mainCid: edit.dataset.maincid
               });
             }
           });
@@ -20580,7 +20721,8 @@ app.get('/team/hq', requireLogin, async (req, res) => {
             var payload = {
               callsign: (fd.get('callsign') || '').toString().trim().toUpperCase(),
               aircraftType: (fd.get('aircraftType') || '').toString().trim().toUpperCase(),
-              country: (fd.get('country') || '').toString().trim()
+              country: (fd.get('country') || '').toString().trim(),
+              mainCid: (fd.get('mainCid') || '').toString().trim()
             };
             var id = fleetEditId.value;
             try {
@@ -20746,7 +20888,9 @@ app.post('/api/team/fleet', requireLogin, requireFleetManager, async (req, res) 
       data: {
         teamName: primary.teamName,
         callsign,
-        mainCid: primary.mainCid,
+        // Each aircraft books under its own VATSIM account when the team runs
+        // multiple slots; falls back to the team's existing account.
+        mainCid: Number(req.body?.mainCid) || primary.mainCid,
         aircraftType,
         country: String(req.body?.country || primary.country || '').trim(),
         sinceYear: primary.sinceYear,
@@ -20792,6 +20936,11 @@ app.patch('/api/team/fleet/:id', requireLogin, requireFleetManager, async (req, 
     }
     if (req.body?.aircraftType !== undefined) data.aircraftType = String(req.body.aircraftType).trim().toUpperCase();
     if (req.body?.country !== undefined) data.country = String(req.body.country).trim();
+    if (req.body?.mainCid !== undefined && String(req.body.mainCid).trim() !== '') {
+      const mc = Number(req.body.mainCid);
+      if (!Number.isInteger(mc) || mc <= 0) return res.status(400).json({ error: 'VATSIM account must be a valid CID' });
+      data.mainCid = mc;
+    }
     if (req.body?.participatingWf26 !== undefined) data.participatingWf26 = req.body.participatingWf26 === true || String(req.body.participatingWf26) === 'true';
     if (!Object.keys(data).length) return res.status(400).json({ error: 'No fields to update' });
 
@@ -20837,6 +20986,67 @@ app.delete('/api/team/fleet/:id', requireLogin, requireFleetManager, async (req,
     await deleteOfficialTeamRowCascade(id);
     await loadTeamMembers();
     console.log(`[TEAM] ${req._fleetTeam}: aircraft ${row.callsign} deleted by CID ${req.session.user.data.cid}`);
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Mark one aircraft as flying / not flying a sector. Unchecking releases any
+// slot it holds there so another team can take it; re-checking lets
+// auto-assignment allocate a fresh one.
+app.post('/api/team/sectors/toggle', requireLogin, async (req, res) => {
+  const cid = Number(req.session?.user?.data?.cid);
+  const fleetId = Number(req.body?.fleetId);
+  const sectorNumber = String(req.body?.sectorNumber || '').trim();
+  const flying = req.body?.flying === true || String(req.body?.flying) === 'true';
+  if (!cid || !fleetId || !sectorNumber) return res.status(400).json({ error: 'Bad request' });
+
+  try {
+    const teamNameUpper = await resolveUserTeamName(cid);
+    if (!teamNameUpper) return res.status(403).json({ error: 'Your team is not linked.' });
+
+    const row = await prisma.officialTeam.findUnique({ where: { id: fleetId } });
+    if (!row || String(row.teamName || '').trim().toUpperCase() !== teamNameUpper) {
+      return res.status(403).json({ error: 'That aircraft belongs to another team.' });
+    }
+    // Same permission as assigning pilots to bookings.
+    const perms = await prisma.userAdditionalRole.findUnique({
+      where: { cid_role: { cid, role: 'WF_TEAM' } }
+    }).catch(() => null);
+    const isOwner = Number(row.mainCid) === cid || (await prisma.officialTeam.findFirst({ where: { mainCid: cid }, select: { id: true } }).catch(() => null)) !== null;
+    if (!isAdminUser(cid) && !isOwner && perms?.canEditBookings === false) {
+      return res.status(403).json({ error: 'You do not have permission to edit bookings.' });
+    }
+
+    const sched = (adminSheetCache || []).find(r => r.number === sectorNumber);
+    if (!sched) return res.status(400).json({ error: 'Unknown sector' });
+
+    if (flying) {
+      await prisma.teamSectorOptOut.deleteMany({ where: { officialTeamId: fleetId, sectorNumber } });
+      autoAssignTeamThenAffiliate({ reason: `${row.callsign} opted in to ${sectorNumber}` }).catch(() => {});
+    } else {
+      await prisma.teamSectorOptOut.upsert({
+        where: { officialTeamId_sectorNumber: { officialTeamId: fleetId, sectorNumber } },
+        update: {},
+        create: { officialTeamId: fleetId, sectorNumber }
+      });
+      // Release whatever this aircraft holds on the sector
+      const prefix = `${sched.from}-${sched.to}|${sched.date_utc}|${sched.dep_time_utc}`;
+      const cs = String(row.callsign || '').toUpperCase();
+      const bookings = await prisma.tobtBooking.findMany({
+        where: { callsign: cs, slotKey: { startsWith: prefix } }
+      });
+      for (const bk of bookings) {
+        await prisma.tobtBooking.delete({ where: { id: bk.id } }).catch(() => null);
+        const bookingKey = `${Number(bk.cid)}:${bk.slotKey}`;
+        deleteBookingByBookingKey(bookingKey);
+        if (tobtBookingsByCid[Number(bk.cid)]) tobtBookingsByCid[Number(bk.cid)].delete(bookingKey);
+        try { io.emit('bookingCancelled', { slotKey: bk.slotKey }); } catch {}
+        vatcanPushForSlotKey(bk.slotKey);
+      }
+      if (bookings.length) console.log(`[TEAM] ${cs} opted out of ${sectorNumber} — released ${bookings.length} slot(s)`);
+    }
     res.json({ success: true });
   } catch (e) {
     res.status(500).json({ error: e.message });

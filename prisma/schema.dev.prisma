@@ -483,3 +483,13 @@ model ProfilePhoto {
 
   @@unique([entityType, entityId])
 }
+
+model TeamSectorOptOut {
+  id             Int      @id @default(autoincrement())
+  officialTeamId Int
+  sectorNumber   String
+  createdAt      DateTime @default(now())
+
+  @@unique([officialTeamId, sectorNumber])
+  @@index([officialTeamId])
+}
