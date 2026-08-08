@@ -31,8 +31,15 @@ The **WorldFlight Planning Portal** is the operations site for the annual *World
 | ~8670  | Sector detail page (`/sector/:wf/:from/:to`) |
 | ~9340  | Schedule page (`/schedule`) |
 | ~15900 | My Slots API data |
-| ~17300 | Affiliate portal |
-| ~19500 | Team bookings |
+| ~17100 | VATCAN push helpers + startup reconcile |
+| ~17850 | `HQ_STYLES` — stylesheet shared by both HQ pages |
+| ~18670 | Affiliate HQ (`/affiliates/hq`) |
+| ~20050 | Affiliate My Members (`/affiliates/my-members`) |
+| ~20650 | WF Team HQ (`/team/hq`) |
+| ~21790 | Team Manage Members (`/team/manage-members`) |
+| ~22110 | Admin Teams / Affiliates / Applications (`/official-teams`) |
+| ~23390 | Public affiliate application form (`/affiliate-apply`) |
+| ~23630 | Public Teams & Affiliates page (`/teams`) |
 | ~21870 | Schedule table editing UI |
 | ~24050 | Route resolve API (`/api/resolve-route`) |
 | ~24400 | Schedule row update/add APIs |
@@ -57,6 +64,10 @@ The **WorldFlight Planning Portal** is the operations site for the annual *World
 | `prisma/schema.dev.prisma` | Local SQLite at `prisma/dev.db` | `npm run dev` → option 2 (Offline Dev) |
 
 **Both schemas must be edited together** for any column add/remove. They drift otherwise.
+
+Tables added for the teams/affiliates work, all keyed on the row that owns them:
+`ProfilePhoto`, `NavdataFile`, `AffiliateApplication`, `AffiliateApplicationPhoto`,
+`TeamSectorOptOut`, `TeamSectorAssignment`.
 
 ## Dev / prod sync workflow
 
@@ -211,6 +222,95 @@ Controller-facing slot bookings are pushed live to the VATCAN bookings plugin vi
 
 **Shape of the payload** matches the existing public endpoint `/api/slots/<wf>.json` exactly — `[{cid, slot:"HHMM"}, ...]`. The slot string is the TOBT minute without colon. VATCAN replaces the full list on every push (no diffing), so always send all bookings for the sector.
 
+## Teams, Affiliates and their HQs
+
+Two near-identical surfaces, deliberately kept in sync. Both use `HQ_STYLES`
+(one shared `<style>` constant, ~700 lines) so they cannot drift apart — edit it
+once and both pages change.
+
+| | Official Teams | WF Affiliates |
+|---|---|---|
+| Record | `OfficialTeam` | `Affiliate` |
+| Group key | `teamName` | `name` (falls back to `callsign`) |
+| HQ | `/team/hq` | `/affiliates/hq` |
+| Members page | `/team/manage-members` | `/affiliates/my-members` |
+| Fleet flag | `multiSlot` | `multiAircraft` |
+
+**One row per aircraft.** A multi-aircraft operator is *several rows sharing a
+name*, not a parent with children. Each row carries its own callsign, aircraft
+type and CID, and auto-assignment books each one its own slot. Grouping happens
+at render time — public page, admin tables and the HQ all collapse the rows into
+one operator. There is no fleet table.
+
+**The fleet flags are team-level.** Setting `multiSlot`/`multiAircraft` on one
+row syncs it across every row sharing the name, or auto-assignment sees a
+half-flagged fleet and behaves inconsistently.
+
+**Shared-slot teams (`multiSlot` false)** fly one aircraft at a time. Our Fleet
+shows an Active radio; activating an aircraft deactivates the others, moves the
+team's existing bookings onto the new callsign and re-pushes VATCAN. Affiliates
+have no equivalent — `multiAircraft` false simply means one row.
+
+**Per-sector control.** Both HQs list *every* sector, not just booked ones:
+
+- Teams: `TeamSectorOptOut` (not flying) and `TeamSectorAssignment` (planned
+  VATSIM account for a sector with no slot yet). Auto-assign skips opted-out
+  pairs and books under the planned account when a slot appears.
+- Affiliates: both jobs are already done by `AffiliateSectorClaim` — `cid = 0`
+  is the "not flying" sentinel, a positive cid is the assigned pilot. No new
+  table was needed.
+
+**Public page (`/teams`, key `who-we-are`).** One card per operator. Values that
+differ across the fleet collapse to `Multiple` / `Multi-National` with a
+CSS-only hover breakdown; callsigns render as `ANZ361 & 2 more`. Shared-slot
+teams show the *active* aircraft's details instead of rolling up.
+
+**Permissions.** `canEditBookings` and `canManageMembers` live on the
+`UserAdditionalRole` WF_TEAM row. Main CIDs and admins bypass both. New members
+are created view-only (`canEditBookings: false`). Reads still default
+*permissive* when no role row exists at all — that is how a team's main CID
+works without one.
+
+## Affiliate applications
+
+`AffiliateApplication` (+ `AffiliateApplicationPhoto`, stored in the DB). Public
+form at `/affiliate-apply` (logged-in users only, one pending application per
+CID, up to 5 photos); admin queue is the Applications tab on `/official-teams`.
+Approving creates the `Affiliate` as participating and carries the website,
+notes and first photo into their public profile.
+
+## Profile photos
+
+`ProfilePhoto` keyed on `entityType` + `entityId` (`team` / `affiliate`), served
+from `/api/profile-photo/:type/:id`. Written by admins via the entry modal and by
+operators via the Public Profile editor on their HQ (main CID only). Profile
+edits apply to **every row of the group** so all its cards stay consistent.
+
+## Auth and access
+
+- **Login is VATSIM-only.** The top-right button opens a modal offering VATSIM
+  OAuth or an explanation that a VATSIM account is required, linking to
+  `my.vatsim.net/register`. An email/password system was built and reverted —
+  do not reintroduce it without asking.
+- **Admin impersonation.** "View site as this user" on `/admin/access-management`
+  parks the admin session in `req.session.impersonatorUser`; an amber banner with
+  "Return to normal view" (`POST /impersonate/stop`) shows on every page.
+- **FIR access has two sources**: manual `FirEventAccess` grants, and the VATSIM
+  **WF FIR Management spreadsheet** (`lib/fir-management.mjs`, two Google Sheets
+  docs, resynced hourly). Spreadsheet grants show as read-only AUTO chips in
+  access management and cannot be revoked there.
+- **Role hygiene**: `revokeAffiliateRoleIfOrphaned()` drops WF_AFFILIATE when a
+  CID is no longer any affiliate's main CID nor an active member — called on
+  affiliate delete, main-CID transfer and member removal.
+
+## Navdata survives deploys
+
+Railway's filesystem is ephemeral, so files uploaded via `/admin/airac` used to
+vanish on every deploy. Uploads are now mirrored into `NavdataFile` and restored
+to disk at bootstrap. For the four `earth_*.dat` files the **newer AIRAC cycle
+wins**, so committing a newer cycle to the repo is not shadowed by an old
+upload; `fir-boundaries.geojson` has no cycle, so the DB copy always wins.
+
 ## Common gotchas
 
 - Map padding for `fitBounds` is in **pixels**, not a percentage. For routes that span widely on one axis but not the other, use asymmetric padding (`[20, 50]`) and pick which axis gets more padding based on `spanLat > spanLon`.
@@ -228,6 +328,12 @@ Controller-facing slot bookings are pushed live to the VATCAN bookings plugin vi
 - **Globals set on the airport portal**: `window.IS_LOGGED_IN`, `window.ICAO`, `window.IS_WORLD_FLIGHT`, `window.WF_LEG`, `window.VATSIM_USER`. Inline page script populates them — reliable for client-side checks within the portal context.
 - **`adminSheetCache`** is the in-memory cache of `WfScheduleRow`s for the active event. Each row: `{ number: 'WF2601', from: 'KDEN', to: 'EGLL', dateUtc, depTimeUtc, arrTimeUtc, blockTime, atcRoute, ... }`. Used heavily for WF-route checks across the app.
 - **`sync-prod.mjs` deliberately skips `PageVisibility`** — visibility flags are per-environment so toggling in dev doesn't depend on prod state.
+- **Book the slot's OWN key.** `allTobtSlots` keys carry a `#2`/`#3` suffix when a flow rate puts several slots in the same minute (above ~45/hr). Rebuilding the key from the `HH:MM` time drops the suffix, so `isSlotTaken()` never sees the real slot as taken and every later assignment stacks onto one key — this put 32 pilots on 20:58 once. All three auto-assign paths now use `bestKey`.
+- **A new Prisma model needs a full `npm run dev` restart**, not just a nodemon reload — `prisma generate` only runs from `start.js`, and on Windows it fails with `EPERM` on the engine DLL while nodemon holds it. Symptom: `Cannot read properties of undefined (reading 'upsert')`. Guard new delegates with `prisma.model?.findMany()` so pages still render. Railway is unaffected (`postinstall` regenerates).
+- **VATCAN only hears about mutations.** Pushes are queued by booking changes and the dirty set is in-memory, so anything changed while the server was down never reached VATCAN. `vatcanReconcileOnStartup()` now re-pushes every flow-restricted sector once per boot.
+- **`.tobt-tooltip` is `position: fixed`** — it needs the JS positioner to be visible at all. Copying the markup to a new page without the handler yields a tooltip that never appears.
+- **PowerShell here-strings mangle commit messages** containing quotes or apostrophes. Write the message to a file and use `git commit -F <file>`.
+- **Editing `index.js` with Python**: read and write with `newline=''` and `encoding='utf-8'`, and never `Set-Content` a Prisma schema (it adds a BOM that Prisma rejects). Anchor replacements on a unique surrounding block — several template snippets are near-identical between the affiliate and team pages.
 
 ## Tools the user values
 

@@ -393,7 +393,15 @@
       "Bash(curl -s -b /tmp/cc.txt -X POST -H 'Content-Type: application/json' -d '{\"fleetId\":7,\"sectorNumber\":\"WF2603\",\"cid\":999999}' http://localhost:8080/api/team/sectors/assign -w \" [%{http_code}]\\\\n\")",
       "Bash(curl -s -b /tmp/cc.txt -X POST -H 'Content-Type: application/json' -d '{\"fleetId\":11,\"sectorNumber\":\"WF2603\",\"cid\":1303570}' http://localhost:8080/api/team/sectors/assign -w \" [%{http_code}]\\\\n\")",
       "Bash(cd /c/dev/WorldFlight-Planning; echo \"=== simType usages ===\"; grep -n \"simType\" index.js | grep -v \"escapeHtml\\\\|placeholder\\\\|option value\\\\|label\\\\|<th>\\\\|data-sim\" | head -12; echo; echo \"=== hasMembers usages ===\"; grep -n \"hasMembers\" index.js | grep -v \"form.querySelector\\\\|fd.get\\\\|option value\\\\|<select\\\\|<label\" | head -12)",
-      "Bash(cd /c/dev/WorldFlight-Planning; grep -n \"releasedSectorSet\\\\|const scheduleRows\\\\|claimByNumber =\\\\|memberOptions = \\\\|const showSchedule\" index.js | sed -n '1,14p')"
+      "Bash(cd /c/dev/WorldFlight-Planning; grep -n \"releasedSectorSet\\\\|const scheduleRows\\\\|claimByNumber =\\\\|memberOptions = \\\\|const showSchedule\" index.js | sed -n '1,14p')",
+      "PowerShell(node \"C:\\\\Users\\\\Fraser\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--dev-WorldFlight-Planning\\\\943bd8e0-dc87-4b34-b5be-0f1ce0b8c5c5\\\\scratchpad\\\\names.js\")",
+      "PowerShell(node \"C:\\\\Users\\\\Fraser\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--dev-WorldFlight-Planning\\\\943bd8e0-dc87-4b34-b5be-0f1ce0b8c5c5\\\\scratchpad\\\\check-hasmembers.js\" 2>$null)",
+      "Bash(awk '/<tr data-team-id=/,/<\\\\/tr>/' index.js)",
+      "PowerShell(node \"C:\\\\Users\\\\Fraser\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--dev-WorldFlight-Planning\\\\943bd8e0-dc87-4b34-b5be-0f1ce0b8c5c5\\\\scratchpad\\\\groups.js\")",
+      "Bash(python -)",
+      "Bash(cp /tmp/ot.html \"C:/Users/Fraser/AppData/Local/Temp/claude/c--dev-WorldFlight-Planning/943bd8e0-dc87-4b34-b5be-0f1ce0b8c5c5/scratchpad/ot.html\")",
+      "PowerShell(cd C:\\\\dev\\\\WorldFlight-Planning; python \"C:\\\\Users\\\\Fraser\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--dev-WorldFlight-Planning\\\\943bd8e0-dc87-4b34-b5be-0f1ce0b8c5c5\\\\scratchpad\\\\patch_claude.py\"; \"---\"; \\(Get-Content CLAUDE.md | Measure-Object -Line\\).Lines)",
+      "Bash(cd /c/dev/WorldFlight-Planning; sed -n '221,250p' CLAUDE.md; echo \"...\"; sed -n '310,333p' CLAUDE.md | head -12)"
     ]
   }
 }

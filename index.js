@@ -18715,6 +18715,7 @@ app.get('/affiliates/hq', requireLogin, async (req, res) => {
   let allMembers = [];       // every member including inactive — fed to the table
   let claimByNumber = {};
   let memberCount = 0;
+  const nameByCid = {};   // shared with the fleet card / multi-aircraft table
   if (affiliate) {
     const memberRows = await prisma.affiliateMember.findMany({
       where: { affiliateId: affiliate.id }
@@ -18728,7 +18729,6 @@ app.get('/affiliates/hq', requireLogin, async (req, res) => {
       prisma.user.findMany({ where: { cid: { in: allMemberCids } }, select: { cid: true, name: true } }).catch(() => []),
       prisma.mailingListSubscriber.findMany({ where: { cid: { in: allMemberCids } }, select: { cid: true, firstName: true, lastName: true } }).catch(() => [])
     ]);
-    const nameByCid = {};
     users.forEach(u => { if (u.name) nameByCid[Number(u.cid)] = u.name; });
     mailSubs.forEach(s => {
       const c = Number(s.cid);
@@ -22137,6 +22137,37 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
   // Pending first, then decided ones (newest first within each group)
   applications.sort((a, b) => (a.status === 'pending' ? 0 : 1) - (b.status === 'pending' ? 0 : 1));
   const pendingApps = applications.filter(a => a.status === 'pending');
+  // A team flying several aircraft is one operator: one row listing the fleet
+  // rather than a row per airframe.
+  const teamAdminGroups = [];
+  const teamSeen = new Set();
+  for (const t of teams) {
+    const key = String(t.teamName || '').trim().toUpperCase();
+    const siblings = teams.filter(x => String(x.teamName || '').trim().toUpperCase() === key);
+    if (siblings.length > 1) {
+      if (teamSeen.has(key)) continue;
+      teamSeen.add(key);
+      teamAdminGroups.push({ rows: siblings, primary: siblings[0] });
+    } else {
+      teamAdminGroups.push({ rows: [t], primary: t });
+    }
+  }
+
+  // Multi-aircraft affiliates are one operator: show a single row listing the
+  // whole fleet rather than repeating them once per aircraft.
+  const affiliateGroups = [];
+  const affSeen = new Set();
+  for (const a of affiliates) {
+    const key = String(a.name || a.callsign || '').trim().toUpperCase();
+    const siblings = affiliates.filter(x => String(x.name || x.callsign || '').trim().toUpperCase() === key);
+    if (a.multiAircraft && siblings.length > 1) {
+      if (affSeen.has(key)) continue;
+      affSeen.add(key);
+      affiliateGroups.push({ rows: siblings, primary: siblings[0] });
+    } else {
+      affiliateGroups.push({ rows: [a], primary: a });
+    }
+  }
 
   const teamRecord = (t) => JSON.stringify({ teamName: t.teamName, callsign: t.callsign, mainCid: t.mainCid, aircraftType: t.aircraftType, country: t.country, sinceYear: t.sinceYear, multiSlot: t.multiSlot, description: t.description, website: t.website, sortOrder: t.sortOrder, participatingWf26: t.participatingWf26 }).replace(/'/g, '&#39;');
   const affRecord = (a) => JSON.stringify({ name: a.name, callsign: a.callsign, simType: a.simType, cid: a.cid, sinceYear: a.sinceYear, hasMembers: a.hasMembers, multiAircraft: a.multiAircraft, aircraftType: a.aircraftType, description: a.description, website: a.website, sortOrder: a.sortOrder, participatingWf26: a.participatingWf26 }).replace(/'/g, '&#39;');
@@ -22163,12 +22194,12 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
         <button class="ot-tab active" data-tab="teams" role="tab" type="button">
           <svg class="ot-tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
           <span>Official Teams</span>
-          <span class="ot-tab-count">${teams.length}</span>
+          <span class="ot-tab-count">${teamAdminGroups.length}</span>
         </button>
         <button class="ot-tab" data-tab="affiliates" role="tab" type="button">
           <svg class="ot-tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
           <span>WF Affiliates</span>
-          <span class="ot-tab-count">${affiliates.length}</span>
+          <span class="ot-tab-count">${affiliateGroups.length}</span>
         </button>
         <button class="ot-tab" data-tab="applications" role="tab" type="button">
           <svg class="ot-tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="15" x2="15" y2="15"/><line x1="9" y1="11" x2="12" y2="11"/></svg>
@@ -22199,7 +22230,7 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
               </tr>
             </thead>
             <tbody>
-              ${teams.map(t => `
+              ${teamAdminGroups.map(g => { const t = g.primary; return `
                 <tr data-team-id="${t.id}">
                   <td class="ot-cell-name">
                     ${escapeHtml(t.teamName)}
@@ -22207,9 +22238,9 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
                       <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
                     </a>
                   </td>
-                  <td><span class="ot-cell-callsign">${escapeHtml(t.callsign)}</span></td>
-                  <td class="ot-cell-cid">${t.mainCid}</td>
-                  <td><span class="ot-cell-actype">${escapeHtml(t.aircraftType)}</span></td>
+                  <td>${g.rows.map(r => `<span class="ot-cell-callsign">${escapeHtml(String(r.callsign || '').toUpperCase())}</span>`).join(' ')}</td>
+                  <td class="ot-cell-cid">${[...new Set(g.rows.map(r => r.mainCid))].join(', ')}</td>
+                  <td>${[...new Set(g.rows.map(r => String(r.aircraftType || '').toUpperCase()))].map(x => `<span class="ot-cell-actype">${escapeHtml(x)}</span>`).join(' ')}</td>
                   <td><span class="ot-cell-country">${escapeHtml(t.country)}</span></td>
                   <td class="ot-cell-active">
                     <input
@@ -22225,7 +22256,7 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
                     <button class="ot-btn ot-btn-danger" data-action="delete-team" data-id="${t.id}">Delete</button>
                   </td>
                 </tr>
-              `).join('')}
+              `; }).join('')}
             </tbody>
           </table>
         </div>
@@ -22252,11 +22283,13 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
               </tr>
             </thead>
             <tbody>
-              ${affiliates.map(a => `
+              ${affiliateGroups.map(g => { const a = g.primary; return `
                 <tr data-affiliate-id="${a.id}">
                   <td class="ot-cell-name">
                     <span class="ot-cell-callsign">${escapeHtml(a.name || a.callsign)}</span>
-                    ${a.name && a.name !== a.callsign ? `<span style="font-size:11px;color:var(--muted);font-family:monospace;margin-left:6px;">${escapeHtml(a.callsign)}</span>` : ''}
+                    ${g.rows.length > 1
+                      ? `<span style="font-size:11px;color:var(--muted);font-family:monospace;margin-left:6px;">${g.rows.map(r => escapeHtml(String(r.callsign || '').toUpperCase())).join(' &middot; ')}</span>`
+                      : (a.name && a.name !== a.callsign ? `<span style="font-size:11px;color:var(--muted);font-family:monospace;margin-left:6px;">${escapeHtml(a.callsign)}</span>` : '')}
                     <a class="ot-open-link" href="/affiliates/hq?id=${a.id}" target="_blank" rel="noopener" title="Open Affiliate HQ (read-only)" aria-label="Open Affiliate HQ">
                       <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
                     </a>
@@ -22280,7 +22313,7 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
                     <button class="ot-btn ot-btn-danger" data-action="delete-affiliate" data-id="${a.id}">Delete</button>
                   </td>
                 </tr>
-              `).join('')}
+              `; }).join('')}
             </tbody>
           </table>
         </div>
