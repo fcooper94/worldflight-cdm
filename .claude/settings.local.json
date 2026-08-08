@@ -369,7 +369,22 @@
       "Bash(curl -s -b /tmp/cC.txt -X POST -H 'Content-Type: application/json' -d '{\"fleetId\":24,\"sectorNumber\":\"WF2602\",\"flying\":false}' http://localhost:8080/api/team/sectors/toggle -w \" [%{http_code}]\\\\n\")",
       "Bash(node \"C:/Users/Fraser/AppData/Local/Temp/claude/c--dev-WorldFlight-Planning/943bd8e0-dc87-4b34-b5be-0f1ce0b8c5c5/scratchpad/check-hamilton.js\")",
       "Bash(curl -s -b /tmp/cC.txt -X POST -H 'Content-Type: application/json' -d '{\"fleetId\":7,\"sectorNumber\":\"WF2602\",\"flying\":false}' http://localhost:8080/api/team/sectors/toggle -w \" [%{http_code}]\\\\n\")",
-      "Bash(curl -s -b /tmp/cC.txt -X POST -H 'Content-Type: application/json' -d '{\"fleetId\":24,\"sectorNumber\":\"WF2602\",\"flying\":true}' http://localhost:8080/api/team/sectors/toggle -w \" [%{http_code}]\\\\n\")"
+      "Bash(curl -s -b /tmp/cC.txt -X POST -H 'Content-Type: application/json' -d '{\"fleetId\":24,\"sectorNumber\":\"WF2602\",\"flying\":true}' http://localhost:8080/api/team/sectors/toggle -w \" [%{http_code}]\\\\n\")",
+      "Bash(cd /c/dev/WorldFlight-Planning; node -c index.js && echo \"SYNTAX OK\"; echo \"--- server-side enforcement still in place? ---\"; grep -n \"You do not have permission to edit bookings\" index.js | head)",
+      "PowerShell(node \"C:\\\\Users\\\\Fraser\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--dev-WorldFlight-Planning\\\\943bd8e0-dc87-4b34-b5be-0f1ce0b8c5c5\\\\scratchpad\\\\check-user.js\")",
+      "Bash(rm -f /tmp/cG.txt)",
+      "Bash(curl -s -o /dev/null -c /tmp/cG.txt \"http://localhost:8080/dev-login?cid=1267983\")",
+      "Bash(curl -s -b /tmp/cG.txt -X POST -H 'Content-Type: application/json' -d '{\"canEditBookings\":false}' http://localhost:8080/api/team/members/1239051/perms -w \" [%{http_code}]\\\\n\")",
+      "Bash(node \"C:/Users/Fraser/AppData/Local/Temp/claude/c--dev-WorldFlight-Planning/943bd8e0-dc87-4b34-b5be-0f1ce0b8c5c5/scratchpad/check-user.js\")",
+      "Bash(rm -f /tmp/cH.txt)",
+      "Bash(curl -s -o /dev/null -c /tmp/cH.txt \"http://localhost:8080/dev-login?cid=1239051\")",
+      "Bash(curl -s -b /tmp/cH.txt -o /tmp/hqI.html -w \"hq as 1239051: %{http_code}\\\\n\" http://localhost:8080/team/hq)",
+      "Bash(curl -s -b /tmp/cH.txt -X POST -H 'Content-Type: application/json' -d '{\"slotKey\":\"x\",\"cid\":1267983,\"callsign\":\"ANZ361\",\"bookingCid\":1267983}' http://localhost:8080/api/team/bookings/update -w \" [%{http_code}]\\\\n\")",
+      "Bash(cd /c/dev/WorldFlight-Planning; grep -n -A 10 \"const data = {\" index.js | grep -n -B 2 -A 8 \"role: 'WF_TEAM',\" | head -20)",
+      "Bash(cd /c/dev/WorldFlight-Planning; grep -n \"function openConfirmModal\\\\|window.openConfirmModal\" layout.js index.js | head)",
+      "Bash(awk '/----- Pilot assignment -----/,/^        \\\\}\\\\\\);$/' index.js)",
+      "Bash(awk '/WF TEAM HQ  \\\\\\(mirrors/,/MANAGE MEMBERS \\\\\\(mirrors/' index.js)",
+      "Bash(awk '/WF TEAM HQ  \\\\\\(mirrors/,/^\\\\/\\\\* ===== AFFILIATE/' index.js)"
     ]
   }
 }

@@ -17591,7 +17591,9 @@ app.post('/api/team/members', requireLogin, requireTeamManager, async (req, res)
     cid: targetCid,
     role: 'WF_TEAM',
     teamName: viewerTeam,
-    canEditBookings: req.body?.canEditBookings !== false,
+    // New members start with view-only access — the team grants booking edit
+    // and member management explicitly on the Manage Members page.
+    canEditBookings: req.body?.canEditBookings === true,
     canManageMembers: !!req.body?.canManageMembers,
     participating: req.body?.participating !== false
   };
@@ -20101,6 +20103,9 @@ app.get('/team/hq', requireLogin, async (req, res) => {
   const viewerPerms = ctx.permsByCid[cid] || null;
   const canEditBookings = !readOnly && (isAdmin || isMainHolder || viewerPerms?.canEditBookings !== false);
   const canManageFleet = !readOnly && (isAdmin || canManageTeamMembers(cid));
+  // The Manage Members shortcut is only useful to someone who can both change
+  // the roster and reassign the accounts on bookings.
+  const canManageTeam = canManageFleet && canEditBookings;
 
   const profilePhotoRow = primary
     ? await prisma.profilePhoto.findUnique({
@@ -20196,7 +20201,7 @@ app.get('/team/hq', requireLogin, async (req, res) => {
                   <th>Sector</th>
                   <th class="ot-th-center">Flying</th>
                   <th>Callsign</th>
-                  <th>VATSIM Account <span class="tobt-help wft-info">i<span class="tobt-tooltip">This is the VATSIM account you will be connected as for this sector.</span></span></th>
+                  <th>VATSIM Account <span class="tobt-help wft-info">i<span class="tobt-tooltip">This is the VATSIM account you will be connected as for this sector.</span></span>${canManageTeam ? `<a href="/team/manage-members" class="wft-th-link" title="Add or remove the accounts available here">Manage Members</a>` : ''}</th>
                   ${showFlowInfo ? '<th>Flow Restrictions</th><th>Status</th>' : ''}
                   ${showAtcRoute ? '<th>ATC Route</th>' : ''}
                   <th>From</th><th>To</th><th>Date</th><th>Dep Window</th><th>Arr Window</th><th>Plan</th>
@@ -20220,15 +20225,15 @@ app.get('/team/hq', requireLogin, async (req, res) => {
                     <tr class="${first ? 'wft-group-start' : ''}${flying ? '' : ' mm-inactive-row'}">
                       <td>${first ? `<span class="ot-cell-callsign">${escapeHtml(r.number)}</span>` : ''}</td>
                       <td class="ot-cell-active">
-                        <input type="checkbox" class="wf-check team-flying" data-fleet-id="${t.id}" data-sector="${escapeHtml(r.number)}" ${flying ? 'checked' : ''} ${canEditBookings ? '' : 'disabled'} title="${flying ? 'Flying this sector' : 'Not flying this sector'}" />
+                        <input type="checkbox" class="wf-check team-flying" data-restricted="${restricted ? '1' : '0'}" data-fleet-id="${t.id}" data-sector="${escapeHtml(r.number)}" ${flying ? 'checked' : ''} ${canEditBookings ? '' : 'disabled'} title="${flying ? 'Flying this sector' : 'Not flying this sector'}" />
                       </td>
                       <td><span class="ot-cell-actype">${escapeHtml(cs)}${t.aircraftType ? ' · ' + escapeHtml(String(t.aircraftType).toUpperCase()) : ''}</span></td>
                       <td>
-                        ${b && canEditBookings ? `
-                          <select class="claim-select team-pilot-select" data-slot-key="${escapeHtml(b.slotKey)}" data-callsign="${escapeHtml(cs)}" data-booking-cid="${Number(b.cid)}">
+                        ${b ? `
+                          <select class="claim-select team-pilot-select" data-slot-key="${escapeHtml(b.slotKey)}" data-callsign="${escapeHtml(cs)}" data-booking-cid="${Number(b.cid)}"${canEditBookings ? '' : ' disabled title="You do not have permission to edit bookings"'}>
                             ${assignees.map(m => `<option value="${m.cid}" ${Number(b.cid) === m.cid ? 'selected' : ''}>${escapeHtml(m.label)}</option>`).join('')}
                           </select>
-                        ` : `<span class="${b ? '' : 'ot-muted'}">${escapeHtml(acctLabel)}</span>`}
+                        ` : `<span class="ot-muted">${escapeHtml(acctLabel)}</span>`}
                       </td>
                       ${showFlowInfo ? `
                       <td>${first ? `<span class="flowtype-pill flowtype-${flow.cls}">${escapeHtml(flow.label)}</span>` : ''}</td>
@@ -20245,7 +20250,7 @@ app.get('/team/hq', requireLogin, async (req, res) => {
                       <td><span class="ot-muted">${first ? escapeHtml(r.date_utc || '') : ''}</span></td>
                       <td><span class="ot-muted">${first ? timeWindow(r.dep_time_utc) : ''}</span></td>
                       <td><span class="ot-muted">${first ? timeWindow(r.arr_time_utc) : ''}</span></td>
-                      <td>${flying ? `<a class="aff-route-btn aff-sb-btn" href="${sbAttr}" target="_blank" rel="noopener">Plan with SimBrief</a>` : '<span class="ot-muted">—</span>'}</td>
+                      <td><a class="aff-route-btn aff-sb-btn" href="${sbAttr}" target="_blank" rel="noopener">Plan with SimBrief</a></td>
                     </tr>`;
                   }).join('');
                 }).join('')}
@@ -20368,12 +20373,13 @@ app.get('/team/hq', requireLogin, async (req, res) => {
             ${canManageFleet ? `<button type="button" class="ot-btn" id="fleetAddBtn">+ Add Aircraft</button>` : ''}
           </div>
         </header>
+        ${!isMultiSlot && fleet.length > 1 ? '<p class="wft-multi-note">Your team flies one aircraft at a time — the active aircraft is the callsign used for every booking and shown on the public Teams page.</p>' : ''}
         ${canManageFleet ? '<div id="fleetMsg" style="display:none;font-size:12px;margin:0 0 10px;"></div>' : ''}
         <div class="ot-table-wrap">
           <table class="ot-table">
             <thead>
               <tr>
-                <th>Callsign</th><th>Aircraft</th><th>Country</th><th>VATSIM Account</th>
+                <th>Callsign</th><th>Aircraft</th><th>Country</th>${isMultiSlot ? '<th>VATSIM Account</th>' : '<th class="ot-th-center">Active</th>'}
                 ${canManageFleet ? '<th class="ot-th-actions"></th>' : ''}
               </tr>
             </thead>
@@ -20383,7 +20389,13 @@ app.get('/team/hq', requireLogin, async (req, res) => {
                   <td><span class="ot-cell-callsign">${escapeHtml(String(t.callsign || '').toUpperCase())}</span></td>
                   <td><span class="ot-cell-actype">${escapeHtml(String(t.aircraftType || '').toUpperCase())}</span></td>
                   <td><span class="ot-cell-country">${escapeHtml(t.country || '—')}</span></td>
-                  <td class="ot-cell-cid">${escapeHtml(ctx.nameByCid[Number(t.mainCid)] ? ctx.nameByCid[Number(t.mainCid)] + ' · ' + t.mainCid : String(t.mainCid || '—'))}</td>
+                  ${isMultiSlot
+                    ? `<td class="ot-cell-cid">${escapeHtml(ctx.nameByCid[Number(t.mainCid)] ? ctx.nameByCid[Number(t.mainCid)] + ' · ' + t.mainCid : String(t.mainCid || '—'))}</td>`
+                    : `<td class="ot-cell-active">${canManageFleet
+                        ? `<input type="radio" name="fleetActive" class="fleet-activate" data-id="${t.id}" data-callsign="${escapeHtml(String(t.callsign || '').toUpperCase())}" ${t.participatingWf26 ? 'checked' : ''} title="Fly this aircraft" />`
+                        : (t.participatingWf26
+                          ? '<span class="mm-active-static" title="Active">✓</span>'
+                          : '<span class="mm-inactive-static" title="Not active">✕</span>')}</td>`}
                   ${canManageFleet ? `<td class="ot-cell-actions">
                     <button class="ot-btn fleet-edit-btn" data-id="${t.id}" data-callsign="${escapeHtml(String(t.callsign || '').toUpperCase())}" data-actype="${escapeHtml(String(t.aircraftType || '').toUpperCase())}" data-country="${escapeHtml(t.country || '')}" data-maincid="${t.mainCid || ''}">Edit</button>
                     <button class="ot-btn ot-btn-danger fleet-delete-btn" data-id="${t.id}" data-callsign="${escapeHtml(String(t.callsign || '').toUpperCase())}"${fleet.length <= 1 ? ' disabled title="A team must keep at least one aircraft"' : ''}>Delete</button>
@@ -20410,8 +20422,9 @@ app.get('/team/hq', requireLogin, async (req, res) => {
             <label style="display:block;margin:10px 0 6px;">Country</label>
             <input name="country" type="text" maxlength="60" placeholder="e.g. UK" style="text-transform:none;text-align:left;letter-spacing:normal;" />
 
+            ${isMultiSlot ? `
             <label style="display:block;margin:10px 0 6px;">VATSIM Account <span style="color:var(--muted);font-weight:400;">(CID this aircraft books under)</span></label>
-            <input name="mainCid" type="number" inputmode="numeric" placeholder="e.g. 1303570" style="text-align:left;letter-spacing:normal;" />
+            <input name="mainCid" type="number" inputmode="numeric" placeholder="e.g. 1303570" style="text-align:left;letter-spacing:normal;" />` : ''}
 
             <div class="modal-actions" style="margin-top:16px;">
               <button type="button" class="action-btn" id="fleetCancel">Cancel</button>
@@ -20440,7 +20453,7 @@ app.get('/team/hq', requireLogin, async (req, res) => {
                 <tr>
                   <th>Sector</th>
                   <th>Callsign</th>
-                  <th>VATSIM Account <span class="tobt-help wft-info">i<span class="tobt-tooltip">This is the VATSIM account you will be connected as for this sector.</span></span></th>
+                  <th>VATSIM Account <span class="tobt-help wft-info">i<span class="tobt-tooltip">This is the VATSIM account you will be connected as for this sector.</span></span>${canManageTeam ? `<a href="/team/manage-members" class="wft-th-link" title="Add or remove the accounts available here">Manage Members</a>` : ''}</th>
                   ${showFlowInfo ? '<th>Flow Restrictions</th><th>Status</th>' : ''}
                   ${showAtcRoute ? '<th>ATC Route</th>' : ''}
                   <th>From</th>
@@ -20462,24 +20475,15 @@ app.get('/team/hq', requireLogin, async (req, res) => {
                   <tr data-sector="${escapeHtml(sector)}">
                     <td><span class="ot-cell-callsign">${escapeHtml(sector)}</span></td>
                     <td>
-                      ${canEditBookings && fleetCallsigns.length > 1 ? `
-                        <select class="claim-select team-ac-select"
-                                data-slot-key="${escapeHtml(b.slotKey)}"
-                                data-booking-cid="${Number(b.cid)}"
-                                data-prev="${escapeHtml(cs)}">
-                          ${fleetCallsigns.map(f => `<option value="${escapeHtml(f.callsign)}" ${f.callsign === cs ? 'selected' : ''}>${escapeHtml(f.callsign)}${f.aircraftType ? ' · ' + escapeHtml(f.aircraftType) : ''}</option>`).join('')}
-                        </select>
-                      ` : `<span class="ot-cell-actype">${escapeHtml(cs)}${callsignAircraft[cs] ? ' · ' + escapeHtml(callsignAircraft[cs]) : ''}</span>`}
+                      <span class="ot-cell-actype">${escapeHtml(cs)}${callsignAircraft[cs] ? ' · ' + escapeHtml(callsignAircraft[cs]) : ''}</span>
                     </td>
                     <td>
-                      ${canEditBookings ? `
-                        <select class="claim-select team-pilot-select"
-                                data-slot-key="${escapeHtml(b.slotKey)}"
-                                data-callsign="${escapeHtml(cs)}"
-                                data-booking-cid="${Number(b.cid)}">
-                          ${assignees.map(m => `<option value="${m.cid}" ${Number(b.cid) === m.cid ? 'selected' : ''}>${escapeHtml(m.label)}</option>`).join('')}
-                        </select>
-                      ` : `<span>${escapeHtml(ctx.nameByCid[Number(b.cid)] ? `${ctx.nameByCid[Number(b.cid)]} · ${b.cid}` : String(b.cid))}</span>`}
+                      <select class="claim-select team-pilot-select"
+                              data-slot-key="${escapeHtml(b.slotKey)}"
+                              data-callsign="${escapeHtml(cs)}"
+                              data-booking-cid="${Number(b.cid)}"${canEditBookings ? '' : ' disabled title="You do not have permission to edit bookings"'}>
+                        ${assignees.map(m => `<option value="${m.cid}" ${Number(b.cid) === m.cid ? 'selected' : ''}>${escapeHtml(m.label)}</option>`).join('')}
+                      </select>
                     </td>
                     ${showFlowInfo ? `
                     <td><span class="flowtype-pill flowtype-${flow.cls}">${escapeHtml(flow.label)}</span></td>
@@ -20518,9 +20522,19 @@ app.get('/team/hq', requireLogin, async (req, res) => {
           <pre class="aff-route-modal-body" id="affRouteModalBody"></pre>
           <footer class="aff-route-modal-footer">
             <button type="button" class="ot-btn" id="affRouteModalCopy">Copy to Clipboard</button>
-            <a id="affRouteModalSimbrief" class="aff-route-btn aff-sb-btn" href="#" target="_blank" rel="noopener">Plan with SimBrief</a>
+            ${isMultiSlot ? '' : `<a id="affRouteModalSimbrief" class="aff-route-btn aff-sb-btn" href="#" target="_blank" rel="noopener">Plan with SimBrief</a>`}
             <button type="button" class="ot-btn" id="affRouteModalDismiss">Close</button>
           </footer>
+        </div>
+      </div>
+
+      <!-- Slot changes reallocate server-side then reload, which takes a moment
+           on a 43-sector route - cover the page so the stale state cannot be
+           misread as the new one. -->
+      <div id="wftBusy" class="wft-busy" hidden>
+        <div class="wft-busy-card">
+          <span class="wft-spinner"></span>
+          <span id="wftBusyLabel">Working...</span>
         </div>
       </div>
     </div>
@@ -20533,6 +20547,56 @@ app.get('/team/hq', requireLogin, async (req, res) => {
         text-transform: none;
         letter-spacing: 0;
       }
+      /* Active-aircraft radio: ring + filled core, matching the accent palette */
+      .fleet-activate {
+        appearance: none;
+        -webkit-appearance: none;
+        width: 20px;
+        height: 20px;
+        margin: 0;
+        border-radius: 50%;
+        border: 2px solid var(--border);
+        background: var(--panel2);
+        cursor: pointer;
+        display: inline-grid;
+        place-content: center;
+        transition: border-color .15s ease, background .15s ease, box-shadow .15s ease;
+      }
+      .fleet-activate::before {
+        content: '';
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        background: transparent;
+        transform: scale(0.4);
+        transition: transform .15s ease, background .15s ease;
+      }
+      .fleet-activate:hover:not(:checked) { border-color: var(--accent); }
+      .fleet-activate:focus-visible {
+        outline: none;
+        box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 28%, transparent);
+      }
+      .fleet-activate:checked {
+        border-color: #22c55e;
+        background: color-mix(in srgb, #22c55e 16%, transparent);
+      }
+      .fleet-activate:checked::before {
+        background: #22c55e;
+        transform: scale(1);
+      }
+      .fleet-activate:disabled { opacity: 0.5; cursor: not-allowed; }
+
+      .wft-th-link {
+        margin-left: 10px;
+        font-size: 10.5px;
+        font-weight: 600;
+        text-transform: none;
+        letter-spacing: 0;
+        color: var(--accent);
+        text-decoration: none;
+        white-space: nowrap;
+      }
+      .wft-th-link:hover { text-decoration: underline; }
       .wft-info .tobt-tooltip {
         white-space: normal;
         width: 250px;
@@ -20549,6 +20613,50 @@ app.get('/team/hq', requireLogin, async (req, res) => {
         border-top: 2px solid var(--border);
       }
       .wft-multi-table tbody td { padding-top: 6px; padding-bottom: 6px; }
+
+      /* Read-only dropdowns for members without booking-edit permission */
+      .claim-select:disabled,
+      .wf-check:disabled {
+        opacity: 0.55;
+        cursor: not-allowed;
+      }
+      .claim-select:disabled { background: var(--panel2); }
+
+      /* Busy overlay for actions that reallocate slots and then reload */
+      .wft-busy {
+        position: fixed;
+        inset: 0;
+        z-index: 4000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(2, 6, 23, 0.62);
+        backdrop-filter: blur(2px);
+      }
+      .wft-busy[hidden] { display: none; }
+      .wft-busy-card {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding: 18px 26px;
+        border-radius: 12px;
+        background: var(--panel);
+        border: 1px solid var(--border);
+        box-shadow: 0 12px 44px rgba(0,0,0,0.55);
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--text);
+      }
+      .wft-spinner {
+        width: 22px;
+        height: 22px;
+        flex-shrink: 0;
+        border-radius: 50%;
+        border: 2.5px solid rgba(148,163,184,0.25);
+        border-top-color: var(--accent);
+        animation: wft-spin .7s linear infinite;
+      }
+      @keyframes wft-spin { to { transform: rotate(360deg); } }
     </style>
 
     <script>
@@ -20580,11 +20688,26 @@ app.get('/team/hq', requireLogin, async (req, res) => {
           if (tip) tip.style.display = 'none';
         });
 
+        // ----- Busy overlay for anything that reallocates slots then reloads -----
+        var busyEl = document.getElementById('wftBusy');
+        var busyLabel = document.getElementById('wftBusyLabel');
+        function showBusy(text) {
+          if (!busyEl) return;
+          busyLabel.textContent = text || 'Working...';
+          busyEl.hidden = false;
+        }
+        function hideBusy() { if (busyEl) busyEl.hidden = true; }
+
         // ----- Flying / not flying per aircraft per sector (multi-slot teams) -----
         document.addEventListener('change', async function(e) {
           var cb = e.target.closest('.team-flying');
           if (!cb) return;
+          // Sectors with no flow restriction have no slot to move, so the row
+          // can be updated in place - a full reload of a 43-sector table is by
+          // far the slowest part of this action.
+          var needsReload = cb.dataset.restricted === '1';
           cb.disabled = true;
+          if (needsReload) showBusy(cb.checked ? 'Allocating slot...' : 'Releasing slot...');
           try {
             var r = await fetch('/api/team/sectors/toggle', {
               method: 'POST',
@@ -20598,48 +20721,43 @@ app.get('/team/hq', requireLogin, async (req, res) => {
             });
             var d = await r.json().catch(function() { return {}; });
             if (!r.ok) throw new Error(d.error || 'Failed to save');
-            // Slot allocation happens server-side, so reload to show the result.
-            location.reload();
+            if (needsReload) { location.reload(); return; }
+            var row = cb.closest('tr');
+            if (row) {
+              row.classList.toggle('mm-inactive-row', !cb.checked);
+              var cell = row.querySelector('.aff-status-cell');
+              if (cell) {
+                cell.innerHTML = cb.checked
+                  ? '<span class="aff-flow-status aff-flow-empty">—</span>'
+                  : '<span class="ot-muted">Not flying</span>';
+              }
+            }
+            cb.title = cb.checked ? 'Flying this sector' : 'Not flying this sector';
+            cb.disabled = false;
           } catch (err) {
             cb.checked = !cb.checked;
             cb.disabled = false;
+            hideBusy();
             alert(err.message || 'Failed to update');
           }
         });
 
-        // ----- Aircraft picker (multi-aircraft fleets) -----
-        // Slots are tied to the CID, so swapping the airframe only relabels the
-        // booking — it never moves the slot.
+        // ----- Active aircraft (shared-slot teams fly one at a time) -----
         document.addEventListener('change', async function(e) {
-          var sel = e.target.closest('.team-ac-select');
-          if (!sel) return;
-          var prev = sel.dataset.prev;
-          sel.classList.add('claim-saving');
+          var radio = e.target.closest('.fleet-activate');
+          if (!radio || !radio.checked) return;
+          showBusy('Switching to ' + radio.dataset.callsign + '...');
           try {
-            var r = await fetch('/api/team/bookings/update', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              credentials: 'same-origin',
-              body: JSON.stringify({
-                slotKey: sel.dataset.slotKey,
-                cid: Number(sel.dataset.bookingCid),
-                callsign: sel.value,
-                bookingCid: Number(sel.dataset.bookingCid)
-              })
+            var r = await fetch('/api/team/fleet/' + radio.dataset.id + '/activate', {
+              method: 'POST', credentials: 'same-origin'
             });
             var d = await r.json().catch(function() { return {}; });
-            if (!r.ok) throw new Error(d.error || 'Failed to save');
-            sel.dataset.prev = sel.value;
-            // Keep the pilot dropdown's callsign in step, or the next pilot
-            // change would send the old airframe and undo this.
-            var row = sel.closest('tr');
-            var pilot = row && row.querySelector('.team-pilot-select');
-            if (pilot) pilot.dataset.callsign = sel.value;
+            if (!r.ok) throw new Error(d.error || 'Failed to activate');
+            location.reload();
           } catch (err) {
-            sel.value = prev;
-            alert(err.message || 'Failed to change aircraft');
-          } finally {
-            sel.classList.remove('claim-saving');
+            hideBusy();
+            radio.checked = false;
+            alert(err.message || 'Failed to activate aircraft');
           }
         });
 
@@ -20648,6 +20766,12 @@ app.get('/team/hq', requireLogin, async (req, res) => {
           var sel = e.target.closest('.team-pilot-select');
           if (!sel) return;
           var prev = sel.dataset.bookingCid;
+          var picked = sel.options[sel.selectedIndex] ? sel.options[sel.selectedIndex].text : sel.value;
+          var ok = await openConfirmModal({
+            title: 'Change VATSIM account?',
+            message: 'Confirm you would like to change the associated VATSIM account for this booking to ' + picked + '. This is not necessarily who in your team is flying the sector - it is whose account will be connected on VATSIM for the booking.'
+          });
+          if (!ok) { sel.value = prev; return; }
           sel.classList.add('claim-saving');
           try {
             var r = await fetch('/api/team/bookings/update', {
@@ -20692,7 +20816,8 @@ app.get('/team/hq', requireLogin, async (req, res) => {
               fleetForm.querySelector('[name="callsign"]').value = record.callsign || '';
               fleetForm.querySelector('[name="aircraftType"]').value = record.actype || '';
               fleetForm.querySelector('[name="country"]').value = record.country || '';
-              fleetForm.querySelector('[name="mainCid"]').value = record.mainCid || '';
+              var mcInput = fleetForm.querySelector('[name="mainCid"]');
+              if (mcInput) mcInput.value = record.mainCid || '';
             }
             fleetModal.classList.remove('hidden');
           }
@@ -20725,6 +20850,7 @@ app.get('/team/hq', requireLogin, async (req, res) => {
               mainCid: (fd.get('mainCid') || '').toString().trim()
             };
             var id = fleetEditId.value;
+            showBusy(id ? 'Saving aircraft...' : 'Adding aircraft...');
             try {
               var r = await fetch(id ? '/api/team/fleet/' + id : '/api/team/fleet', {
                 method: id ? 'PATCH' : 'POST',
@@ -20733,21 +20859,26 @@ app.get('/team/hq', requireLogin, async (req, res) => {
                 body: JSON.stringify(payload)
               });
               var d = await r.json().catch(function() { return {}; });
-              if (!r.ok) { fmsg(d.error || 'Failed to save aircraft', false); closeFleet(); return; }
+              if (!r.ok) { hideBusy(); fmsg(d.error || 'Failed to save aircraft', false); closeFleet(); return; }
               location.reload();
-            } catch (err) { fmsg('Failed to save aircraft', false); closeFleet(); }
+            } catch (err) { hideBusy(); fmsg('Failed to save aircraft', false); closeFleet(); }
           });
 
           document.addEventListener('click', async function(e) {
             var del = e.target.closest('.fleet-delete-btn');
             if (!del || del.disabled) return;
-            if (!confirm('Delete ' + del.dataset.callsign + '? Any bookings held by this callsign will move to another aircraft in your fleet, or be cancelled if none remains.')) return;
+            var okDel = await openConfirmModal({
+              title: 'Delete Aircraft',
+              message: 'Delete ' + del.dataset.callsign + '? Any bookings held by this callsign will move to another aircraft in your fleet, or be cancelled if none remains.'
+            });
+            if (!okDel) return;
+            showBusy('Removing aircraft...');
             try {
               var r = await fetch('/api/team/fleet/' + del.dataset.id, { method: 'DELETE', credentials: 'same-origin' });
               var d = await r.json().catch(function() { return {}; });
-              if (!r.ok) { fmsg(d.error || 'Failed to delete', false); return; }
+              if (!r.ok) { hideBusy(); fmsg(d.error || 'Failed to delete', false); return; }
               location.reload();
-            } catch (err) { fmsg('Failed to delete', false); }
+            } catch (err) { hideBusy(); fmsg('Failed to delete', false); }
           });
         }
 
@@ -20793,7 +20924,7 @@ app.get('/team/hq', requireLogin, async (req, res) => {
             var r2 = btn.dataset.route2;
             body.textContent = btn.dataset.route + (r2 ? '\\n\\n--- Secondary route ---\\n' + r2 : '');
             sectorEl.textContent = btn.dataset.from + ' → ' + btn.dataset.to;
-            sbLink.href = btn.dataset.simbrief || '#';
+            if (sbLink) sbLink.href = btn.dataset.simbrief || '#';
             modal.hidden = false;
             return;
           }
@@ -20970,6 +21101,45 @@ app.patch('/api/team/fleet/:id', requireLogin, requireFleetManager, async (req, 
   }
 });
 
+// Shared-slot teams fly one airframe at a time, so activating an aircraft
+// deactivates the rest, moves the team's existing bookings onto the new
+// callsign, and lets auto-assignment fill anything still outstanding.
+app.post('/api/team/fleet/:id/activate', requireLogin, requireFleetManager, async (req, res) => {
+  const id = Number(req.params.id);
+  try {
+    const all = await prisma.officialTeam.findMany();
+    const mine = all.filter(t => String(t.teamName || '').trim().toUpperCase() === req._fleetTeam);
+    const target = mine.find(t => t.id === id);
+    if (!target) return res.status(403).json({ error: 'That aircraft belongs to another team.' });
+
+    const previous = mine.filter(t => t.participatingWf26 && t.id !== id);
+    await prisma.officialTeam.update({ where: { id }, data: { participatingWf26: true } });
+    for (const t of previous) {
+      await prisma.officialTeam.update({ where: { id: t.id }, data: { participatingWf26: false } }).catch(() => {});
+    }
+
+    // Carry existing bookings over to the newly active callsign.
+    const newCs = String(target.callsign || '').toUpperCase();
+    const oldCallsigns = previous.map(t => String(t.callsign || '').toUpperCase()).filter(Boolean);
+    if (oldCallsigns.length) {
+      const bookings = await prisma.tobtBooking.findMany({ where: { callsign: { in: oldCallsigns } } });
+      for (const bk of bookings) {
+        await prisma.tobtBooking.update({ where: { id: bk.id }, data: { callsign: newCs } }).catch(() => {});
+        const memBk = tobtBookingsByKey[`${bk.cid}:${bk.slotKey}`];
+        if (memBk) memBk.callsign = newCs;
+        vatcanPushForSlotKey(bk.slotKey);
+      }
+      if (bookings.length) console.log(`[TEAM] ${req._fleetTeam}: activated ${newCs} — moved ${bookings.length} booking(s)`);
+    }
+
+    await loadTeamMembers();
+    autoAssignTeamThenAffiliate({ reason: `${newCs} activated` }).catch(() => {});
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.delete('/api/team/fleet/:id', requireLogin, requireFleetManager, async (req, res) => {
   const id = Number(req.params.id);
   try {
@@ -21014,7 +21184,8 @@ app.post('/api/team/sectors/toggle', requireLogin, async (req, res) => {
     const perms = await prisma.userAdditionalRole.findUnique({
       where: { cid_role: { cid, role: 'WF_TEAM' } }
     }).catch(() => null);
-    const isOwner = Number(row.mainCid) === cid || (await prisma.officialTeam.findFirst({ where: { mainCid: cid }, select: { id: true } }).catch(() => null)) !== null;
+    // teamOwnerCids is the in-memory owner set - no query needed here.
+    const isOwner = Number(row.mainCid) === cid || teamOwnerCids.has(cid);
     if (!isAdminUser(cid) && !isOwner && perms?.canEditBookings === false) {
       return res.status(403).json({ error: 'You do not have permission to edit bookings.' });
     }
@@ -21024,17 +21195,23 @@ app.post('/api/team/sectors/toggle', requireLogin, async (req, res) => {
 
     if (flying) {
       await prisma.teamSectorOptOut.deleteMany({ where: { officialTeamId: fleetId, sectorNumber } });
-      autoAssignTeamThenAffiliate({ reason: `${row.callsign} opted in to ${sectorNumber}` }).catch(() => {});
+      // Only restricted sectors have a slot to hand back, and the client waits
+      // on this call before reloading, so await it there.
+      if ((sharedFlowTypes[`${sched.from}-${sched.to}`] || 'NONE') !== 'NONE') {
+        await autoAssignTeamThenAffiliate({ reason: `${row.callsign} opted in to ${sectorNumber}` }).catch(() => {});
+      }
     } else {
       await prisma.teamSectorOptOut.upsert({
         where: { officialTeamId_sectorNumber: { officialTeamId: fleetId, sectorNumber } },
         update: {},
         create: { officialTeamId: fleetId, sectorNumber }
       });
-      // Release whatever this aircraft holds on the sector
+      // Release whatever this aircraft holds on the sector. Unrestricted
+      // sectors never hold slots, so skip the lookup entirely.
+      const flowType = sharedFlowTypes[`${sched.from}-${sched.to}`] || 'NONE';
       const prefix = `${sched.from}-${sched.to}|${sched.date_utc}|${sched.dep_time_utc}`;
       const cs = String(row.callsign || '').toUpperCase();
-      const bookings = await prisma.tobtBooking.findMany({
+      const bookings = flowType === 'NONE' ? [] : await prisma.tobtBooking.findMany({
         where: { callsign: cs, slotKey: { startsWith: prefix } }
       });
       for (const bk of bookings) {
@@ -21183,7 +21360,12 @@ app.get('/team/manage-members', requireLogin, async (req, res) => {
         document.addEventListener('click', async function(e) {
           var btn = e.target.closest('.team-remove-btn');
           if (!btn) return;
-          if (!confirm('Remove ' + (btn.dataset.name || 'this member') + ' (CID ' + btn.dataset.cid + ') from the team? They will lose access to your Team HQ.')) return;
+          var who = btn.dataset.name ? btn.dataset.name + ' (CID ' + btn.dataset.cid + ')' : 'CID ' + btn.dataset.cid;
+          var okRemove = await openConfirmModal({
+            title: 'Remove Member',
+            message: 'Remove ' + who + ' from the team? They will lose access to your Team HQ.'
+          });
+          if (!okRemove) return;
           try {
             var r = await fetch('/api/team/members/' + btn.dataset.cid, { method: 'DELETE', credentials: 'same-origin' });
             var d = await r.json().catch(function() { return {}; });
@@ -22861,6 +23043,29 @@ app.get('/teams', requirePageEnabled('who-we-are'), async (req, res) => {
   // Badge shows the joining year — no year set means no badge at all.
   const badgeFor = (sinceYear) => sinceYear ? `Member Since ${sinceYear}` : null;
 
+  // A multi-slot team flying several aircraft is one entry on the public page,
+  // with its callsigns/types/countries/accounts rolled up. Everything else
+  // stays one card per aircraft row.
+  const teamGroups = [];
+  const groupedNames = new Set();
+  for (const t of teams) {
+    const key = String(t.teamName || '').trim().toUpperCase();
+    const siblings = teams.filter(x => String(x.teamName || '').trim().toUpperCase() === key);
+    if (siblings.length > 1) {
+      if (groupedNames.has(key)) continue;
+      groupedNames.add(key);
+      teamGroups.push({
+        rows: siblings,
+        primary: siblings[0],
+        multi: siblings.some(x => x.multiSlot),
+        // Shared-slot teams fly one aircraft at a time; the card shows it.
+        active: siblings.find(x => x.participatingWf26) || siblings[0]
+      });
+    } else {
+      teamGroups.push({ rows: [t], primary: t, multi: !!t.multiSlot, active: t });
+    }
+  }
+
   const card = (type, id, name, facts, description, website, badge) => `
     <div class="wwa-card">
       <div class="wwa-photo">
@@ -22875,7 +23080,7 @@ app.get('/teams', requirePageEnabled('who-we-are'), async (req, res) => {
           ${facts.filter(f => f[1] != null && f[1] !== '').map(f => `
           <div class="wwa-fact">
             <span class="wwa-fact-label">${escapeHtml(f[0])}</span>
-            <span class="wwa-fact-value">${escapeHtml(String(f[1]))}</span>
+            <span class="wwa-fact-value">${f[1] && f[1].html ? f[1].html : escapeHtml(String(f[1]))}</span>
           </div>`).join('')}
         </div>
         ${description ? `<p class="wwa-desc">${escapeHtml(description)}</p>` : ''}
@@ -22891,13 +23096,40 @@ app.get('/teams', requirePageEnabled('who-we-are'), async (req, res) => {
 
     <h3 class="wwa-section-title">Official Teams</h3>
     <p class="wwa-section-intro">These are the Official Teams participating in WorldFlight. All the below simulators are full-size flight simulators.</p>
-    ${teams.length ? `<div class="wwa-grid">
-      ${teams.map(t => card('team', t.id, t.teamName, [
-        ['Callsign', t.callsign],
-        ['Aircraft', t.aircraftType],
-        ['Country', t.country],
-        ['Main CID', t.mainCid]
-      ], t.description, t.website, badgeFor(t.sinceYear))).join('')}
+    ${teamGroups.length ? `<div class="wwa-grid">
+      ${teamGroups.map(g => {
+        const rows = g.rows;
+        const p = g.primary;
+        const uniq = arr => [...new Set(arr.filter(v => v != null && String(v).trim() !== ''))];
+        const cs = r => String(r.callsign || '').toUpperCase();
+        const callsigns = rows.map(cs);
+        const types = uniq(rows.map(r => String(r.aircraftType || '').toUpperCase()));
+        const countries = uniq(rows.map(r => String(r.country || '').trim()));
+        const cids = uniq(rows.map(r => String(r.mainCid || '')));
+
+        // Differing values collapse to a single word with a hover breakdown.
+        const rollUp = (label, pick) => ({ html: `<span class="wwa-multi" tabindex="0">${escapeHtml(label)}<span class="wwa-multi-pop">${
+          rows.map(r => `${escapeHtml(cs(r))} &middot; ${escapeHtml(String(pick(r) || '—'))}`).join('<br>')
+        }</span></span>` });
+
+        const a = g.active || p;
+        const facts = g.multi && rows.length > 1
+          ? [
+            ['Callsign', callsigns.length > 1
+              ? { html: `<span class="wwa-multi" tabindex="0">${escapeHtml(callsigns[0])} &amp; ${callsigns.length - 1} more<span class="wwa-multi-pop">${callsigns.map(c => escapeHtml(c)).join('<br>')}</span></span>` }
+              : callsigns[0]],
+            ['Aircraft', types.length > 1 ? rollUp('Multiple', r => String(r.aircraftType || '').toUpperCase()) : types[0]],
+            ['Country', countries.length > 1 ? rollUp('Multi-National', r => r.country) : countries[0]],
+            ['Main CID', cids.length > 1 ? rollUp('Multiple', r => r.mainCid) : cids[0]]
+          ]
+          : [
+            ['Callsign', String(a.callsign || '').toUpperCase()],
+            ['Aircraft', String(a.aircraftType || '').toUpperCase()],
+            ['Country', a.country],
+            ['Main CID', a.mainCid]
+          ];
+        return card('team', p.id, p.teamName, facts, p.description, p.website, badgeFor(p.sinceYear));
+      }).join('')}
     </div>` : '<p style="color:var(--muted);font-size:13px;">No official teams registered yet.</p>'}
 
     <h3 class="wwa-section-title" style="margin-top:34px;">WF Affiliates</h3>
@@ -22943,13 +23175,18 @@ app.get('/teams', requirePageEnabled('who-we-are'), async (req, res) => {
       background: var(--panel2);
       border: 1px solid var(--border);
       border-radius: 12px;
-      overflow: hidden;
       display: flex;
       flex-direction: column;
       transition: border-color .15s ease;
     }
     .wwa-card:hover { border-color: var(--accent); }
-    .wwa-photo { position: relative; height: 150px; background: #10192e; }
+    .wwa-photo {
+      position: relative;
+      height: 150px;
+      background: #10192e;
+      overflow: hidden;
+      border-radius: 11px 11px 0 0;
+    }
     .wwa-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
     .wwa-photo-placeholder {
       width: 100%;
@@ -23012,7 +23249,34 @@ app.get('/teams', requirePageEnabled('who-we-are'), async (req, res) => {
       color: var(--text);
       font-family: 'SF Mono', 'Cascadia Code', Consolas, monospace;
       text-align: right;
+      word-break: break-word;
     }
+    .wwa-multi {
+      position: relative;
+      cursor: help;
+      border-bottom: 1px dotted currentColor;
+      outline: none;
+    }
+    .wwa-multi-pop {
+      display: none;
+      position: absolute;
+      right: 0;
+      bottom: calc(100% + 8px);
+      z-index: 30;
+      padding: 9px 13px;
+      border-radius: 8px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      box-shadow: 0 10px 28px rgba(0,0,0,0.5);
+      font-size: 11.5px;
+      font-weight: 500;
+      line-height: 1.8;
+      color: var(--text);
+      white-space: nowrap;
+      text-align: left;
+    }
+    .wwa-multi:hover .wwa-multi-pop,
+    .wwa-multi:focus .wwa-multi-pop { display: block; }
     .wwa-desc { font-size: 12.5px; color: var(--muted); line-height: 1.55; margin: 0; }
     .wwa-site {
       display: inline-flex;
