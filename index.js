@@ -2038,6 +2038,25 @@ function canManageAffiliateMembers(cid) {
   return !!cid && affiliateOwnerCids.has(Number(cid));
 }
 
+// Revoke WF_AFFILIATE from a CID when nothing justifies it any more — i.e.
+// they are no longer any affiliate's main CID nor an active member. Keeps the
+// role table linked to the actual Affiliate rows (stale roles otherwise let
+// people keep seeing Affiliate HQ after a transfer/delete).
+async function revokeAffiliateRoleIfOrphaned(cid) {
+  const n = Number(cid);
+  if (!n || isAdminUser(n)) return;
+  try {
+    const [stillMain, stillMember] = await Promise.all([
+      prisma.affiliate.findFirst({ where: { cid: n }, select: { id: true } }),
+      prisma.affiliateMember.findFirst({ where: { cid: n, active: true }, select: { id: true } })
+    ]);
+    if (stillMain || stillMember) return;
+    await prisma.userAdditionalRole.deleteMany({ where: { cid: n, role: 'WF_AFFILIATE' } });
+    affiliateCids.delete(n);
+    console.log(`[AFFILIATE] Revoked orphaned WF_AFFILIATE role for CID ${n}`);
+  } catch {}
+}
+
 function requireAffiliate(req, res, next) {
   const cid = Number(req.session?.user?.data?.cid);
   if (!cid || !isAffiliate(cid)) {
@@ -17742,6 +17761,21 @@ app.get('/affiliates/hq', requireLogin, async (req, res) => {
       return renderForbidden(req, res, 'This page is for WF affiliates only.');
     }
     affiliate = await resolveUserAffiliate(cid);
+    // Holds the WF_AFFILIATE role but no Affiliate row points at their CID
+    // (e.g. the affiliate's main CID was transferred). Show a clear notice
+    // instead of a half-empty HQ.
+    if (!affiliate) {
+      const content = `
+      <section class="card" style="max-width:640px;margin:48px auto;padding:36px;text-align:center;">
+        <div style="display:flex;align-items:center;justify-content:center;width:56px;height:56px;margin:0 auto 18px;border-radius:50%;color:#fbbf24;background:rgba(245,158,11,0.12);">
+          <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        </div>
+        <h2 style="margin:0 0 10px;">No affiliate linked to your account</h2>
+        <p style="color:var(--muted);font-size:13.5px;line-height:1.6;margin:0 0 8px;">Your account has WF Affiliate access, but CID <strong>${cid}</strong> isn't currently linked to any affiliate — the affiliate may have been transferred to a different main CID, or removed.</p>
+        <p style="color:var(--muted);font-size:13.5px;line-height:1.6;margin:0;">If you believe this is a mistake, please contact the WorldFlight team.</p>
+      </section>`;
+      return res.send(renderLayout({ title: 'Affiliate HQ', user, isAdmin, content, layoutClass: 'dashboard-full' }));
+    }
   }
   // CID whose presence/stats the page should reflect. In read-only mode
   // that's the affiliate's main CID, not the admin's.
@@ -17805,6 +17839,10 @@ app.get('/affiliates/hq', requireLogin, async (req, res) => {
 
   const sinceYear = affiliate?.sinceYear || null;
   const isSolo = !!(affiliate && !affiliate.hasMembers);
+  // A "multiple users" affiliate with no other active members yet behaves like
+  // a solo one on the schedule: the main is auto-assigned to every sector with
+  // the release × instead of a one-entry dropdown of Unclaimed rows.
+  const soloSchedule = !!(affiliate && (!affiliate.hasMembers || !memberOptions.some(m => !m.isMain)));
   // Main CID holders manage members on /affiliates/my-members, so their HQ
   // shows the public-profile editor instead of the Our Members table.
   const isMainHolder = !!(affiliate && !readOnly && Number(affiliate.cid) === cid);
@@ -17814,7 +17852,7 @@ app.get('/affiliates/hq', requireLogin, async (req, res) => {
         select: { updatedAt: true }
       }).catch(() => null)
     : null;
-  const soloPilot = isSolo ? memberOptions.find(m => m.isMain) || null : null;
+  const soloPilot = soloSchedule ? memberOptions.find(m => m.isMain) || null : null;
 
   // Live VATSIM presence — pilot or controller, otherwise offline
   let livePresence = { kind: 'offline', label: 'Offline', detail: '—' };
@@ -17842,6 +17880,9 @@ app.get('/affiliates/hq', requireLogin, async (req, res) => {
   }
   const showSchedule = isAdmin || isPageEnabled('schedule');
   const showAtcRoute = isAdmin || isPageEnabled('atc-route');
+  // Flow Restrictions + TCT/Status columns follow the same visibility key as
+  // the schedule page's flow info — admin-only/hidden keeps them off this page.
+  const showFlowInfo = isAdmin || isPageEnabled('flow-restrictions');
   const scheduleRows = showSchedule ? (adminSheetCache || []).filter(r => r.from && r.to && r.number) : [];
 
   function timeWindow(hhmm) {
@@ -17890,7 +17931,7 @@ app.get('/affiliates/hq', requireLogin, async (req, res) => {
 
       <div class="affiliate-hq">
       <section class="card affiliate-welcome-card">
-        <h2 class="aff-welcome-title">Welcome</h2>
+        <h2 class="aff-welcome-title">Welcome${affiliate ? `, ${escapeHtml(affiliate.name || affiliate.callsign || '')}` : ''}</h2>
         <p class="aff-welcome-lead">
           Thank you for being a WorldFlight Affiliate and being part of our community! Our affiliates
           are an essential part of the WorldFlight community — helping to grow awareness, raise funds
@@ -18108,7 +18149,7 @@ app.get('/affiliates/hq', requireLogin, async (req, res) => {
       ${affiliate ? `
       <section class="card aff-schedule-card">
         <header class="aff-schedule-header">
-          <h3 class="section-title" style="margin:0;">${isSolo ? 'My Bookings &amp; Slots' : 'Assign Pilots / Our Bookings &amp; Slots'}</h3>
+          <h3 class="section-title" style="margin:0;">${soloSchedule ? 'My Bookings &amp; Slots' : 'Assign Pilots / Our Bookings &amp; Slots'}</h3>
           ${showSchedule ? `<a href="/schedule" class="aff-schedule-link">View full schedule</a>` : ''}
         </header>
 
@@ -18129,8 +18170,9 @@ app.get('/affiliates/hq', requireLogin, async (req, res) => {
                 <tr>
                   <th>Sector</th>
                   <th>Pilot</th>
+                  ${showFlowInfo ? `
                   <th>Flow Restrictions</th>
-                  <th>Status</th>
+                  <th>Status</th>` : ''}
                   ${showAtcRoute ? '<th>ATC Route</th>' : ''}
                   <th>From</th>
                   <th>To</th>
@@ -18143,7 +18185,7 @@ app.get('/affiliates/hq', requireLogin, async (req, res) => {
               <tbody>
                 ${scheduleRows.map(r => {
                   const released = releasedSectorSet.has(r.number);
-                  const claimedCid = isSolo
+                  const claimedCid = soloSchedule
                     ? (released ? null : (soloPilot ? soloPilot.cid : null))
                     : (claimByNumber[r.number] || null);
                   const flow = getFlowRestriction(r);
@@ -18153,14 +18195,14 @@ app.get('/affiliates/hq', requireLogin, async (req, res) => {
                     <td><span class="ot-cell-callsign">${escapeHtml(r.number)}</span></td>
                     <td>
                       ${readOnly ? (() => {
-                        if (isSolo) {
+                        if (soloSchedule) {
                           if (released) return '<span class="ot-muted">Released</span>';
                           return `<span class="aff-solo-row"><span class="aff-solo-pilot"><span class="aff-solo-pilot-name">${escapeHtml(soloPilot ? soloPilot.name : '')}</span><span class="aff-solo-pilot-cid">${soloPilot ? soloPilot.cid : ''}</span></span></span>`;
                         }
                         if (!claimedCid) return '<span class="ot-muted">— Unclaimed —</span>';
                         const m = memberOptions.find(x => x.cid === claimedCid);
                         return m ? `<span>${escapeHtml(m.name)} · ${m.cid}</span>` : `<span class="ot-muted">CID ${claimedCid}</span>`;
-                      })() : (isSolo ? (released ? `
+                      })() : (soloSchedule ? (released ? `
                         <button type="button" class="aff-solo-restore" data-sector="${escapeHtml(r.number)}">Unassigned</button>
                       ` : `
                         <span class="aff-solo-row">
@@ -18180,12 +18222,13 @@ app.get('/affiliates/hq', requireLogin, async (req, res) => {
                         </select>
                       `)}
                     </td>
+                    ${showFlowInfo ? `
                     <td><span class="flowtype-pill flowtype-${flow.cls}">${escapeHtml(flow.label)}</span></td>
-                    <td><span class="aff-flow-status aff-flow-${status.kind}">${
+                    <td class="aff-status-cell"><span class="aff-flow-status aff-flow-${status.kind}">${
                       status.kind === 'tobt'
                         ? `<span class="aff-tobt-label">${escapeHtml(status.label)}</span><span class="aff-tobt-time">${escapeHtml(status.time)}</span><span class="tobt-help">?<span class="tobt-tooltip">This is your TCT (Target Connection Time).<br>Connect to VATSIM at this time.<br>We use TCT to stagger pilot connections at this airport so the network and controllers aren&#39;t overwhelmed.</span></span>`
                         : escapeHtml(status.text)
-                    }</span></td>
+                    }</span></td>` : ''}
                     ${showAtcRoute ? `<td>${(() => {
                       const sbUrl = buildAffiliateSimbriefUrl(r, affiliate, claimedCid, showAtcRoute);
                       const sbAttr = sbUrl.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
@@ -18698,9 +18741,8 @@ app.get('/affiliates/hq', requireLogin, async (req, res) => {
       }
       .aff-solo-x-tip {
         position: absolute;
-        bottom: calc(100% + 10px);
-        left: 50%;
-        margin-left: -130px;
+        left: calc(100% + 10px);
+        top: 50%;
         width: 260px;
         padding: 10px 14px;
         background: var(--panel, #1e293b);
@@ -18714,7 +18756,7 @@ app.get('/affiliates/hq', requireLogin, async (req, res) => {
         box-shadow: 0 4px 16px rgba(0,0,0,0.45);
         opacity: 0;
         visibility: hidden;
-        transform: translateY(4px);
+        transform: translateY(-50%) translateX(4px);
         pointer-events: none;
         transition: opacity .15s, visibility .15s, transform .15s;
         z-index: 1000;
@@ -18723,7 +18765,7 @@ app.get('/affiliates/hq', requireLogin, async (req, res) => {
       .aff-solo-x-host:focus-within .aff-solo-x-tip {
         opacity: 1;
         visibility: visible;
-        transform: translateY(0);
+        transform: translateY(-50%) translateX(0);
       }
 
       /* Unassigned chip (clickable to restore) */
@@ -18948,7 +18990,9 @@ app.get('/affiliates/hq', requireLogin, async (req, res) => {
 
         function updateStatusCell(row, status) {
           if (!row || !status) return;
-          var cell = row.querySelector('td:nth-child(4)');
+          // Explicit class — the Status column may not be rendered at all when
+          // flow info is admin-only/hidden, and positional selectors break then.
+          var cell = row.querySelector('td.aff-status-cell');
           if (!cell) return;
           var span = document.createElement('span');
           span.className = 'aff-flow-status aff-flow-' + status.kind;
@@ -19163,7 +19207,10 @@ app.get('/affiliates/hq', requireLogin, async (req, res) => {
     </script>
   `;
 
-  const pageTitle = readOnly ? `${affiliate?.callsign || 'Affiliate'} - HQ (Admin View)` : 'Affiliate HQ';
+  const affDisplayName = affiliate ? (affiliate.name || affiliate.callsign || '') : '';
+  const pageTitle = readOnly
+    ? `${affDisplayName || 'Affiliate'} - HQ (Admin View)`
+    : (affDisplayName ? `${affDisplayName} — Affiliate HQ` : 'Affiliate HQ');
   res.send(renderLayout({ title: pageTitle, user, isAdmin, content, layoutClass: 'dashboard-full' }));
 });
 
@@ -19206,7 +19253,15 @@ app.post('/api/affiliates/hq/solo-toggle', requireLogin, requireAffiliate, async
 
   const affiliate = await resolveUserAffiliate(cid);
   if (!affiliate) return res.status(403).json({ error: 'Not in an affiliate' });
-  if (affiliate.hasMembers) return res.status(400).json({ error: 'This action is for solo affiliates only' });
+  // Solo actions are allowed while the affiliate has no OTHER active members —
+  // a "multiple users" affiliate that hasn't added anyone yet still works solo.
+  if (affiliate.hasMembers) {
+    const otherActive = await prisma.affiliateMember.findFirst({
+      where: { affiliateId: affiliate.id, active: true, NOT: { cid: Number(affiliate.cid) } },
+      select: { id: true }
+    }).catch(() => null);
+    if (otherActive) return res.status(400).json({ error: 'This action is for solo affiliates only' });
+  }
 
   const scheduleRow = (adminSheetCache || []).find(r => r.number === sectorNumber);
   if (!scheduleRow) return res.status(400).json({ error: 'Unknown sector' });
@@ -19695,6 +19750,13 @@ app.post('/api/affiliates/my/:affiliateId/members', requireLogin, async (req, re
     return res.status(400).json({ error: "You're already the main CID" });
   }
 
+  // Detect the solo→multi transition BEFORE adding: no other active members
+  // means the main has been implicitly assigned to every sector until now.
+  const wasSolo = !(await prisma.affiliateMember.findFirst({
+    where: { affiliateId, active: true, NOT: { cid: ownerCid } },
+    select: { id: true }
+  }).catch(() => null));
+
   try {
     await prisma.affiliateMember.create({
       data: { affiliateId, cid: memberCid }
@@ -19713,6 +19775,30 @@ app.post('/api/affiliates/my/:affiliateId/members', requireLogin, async (req, re
     create: { cid: memberCid, role: 'WF_AFFILIATE' }
   });
   affiliateCids.add(memberCid);
+
+  // First additional member: materialise the implicit solo assignment as real
+  // sector claims so the new dropdowns keep the main as pilot everywhere,
+  // instead of every sector dropping to Unclaimed. Released sectors (cid=0
+  // sentinel) and any existing claims are left untouched. Only happens on the
+  // solo→multi transition — later member adds change nothing.
+  if (wasSolo) {
+    try {
+      const existing = await prisma.affiliateSectorClaim.findMany({
+        where: { affiliateId },
+        select: { sectorNumber: true }
+      });
+      const taken = new Set(existing.map(c => c.sectorNumber));
+      let created = 0;
+      for (const row of (adminSheetCache || [])) {
+        if (!row.number || taken.has(row.number)) continue;
+        await prisma.affiliateSectorClaim.create({
+          data: { affiliateId, sectorNumber: row.number, cid: ownerCid }
+        }).catch(() => {});
+        created++;
+      }
+      if (created) console.log(`[AFFILIATE] Solo→multi for affiliate ${affiliateId}: kept main ${ownerCid} as pilot on ${created} sectors`);
+    } catch {}
+  }
 
   res.json({ ok: true });
 });
@@ -19753,6 +19839,9 @@ app.delete('/api/affiliates/my/:affiliateId/members/:cid', requireLogin, async (
   }
 
   await prisma.affiliateMember.deleteMany({ where: { affiliateId, cid: memberCid } });
+  // "They will lose access to your Affiliate HQ" — actually revoke the role
+  // unless something else (another affiliate/membership) still justifies it.
+  await revokeAffiliateRoleIfOrphaned(memberCid);
   res.json({ ok: true });
 });
 
@@ -22963,9 +23052,17 @@ app.delete('/api/admin/affiliates/:id', requireAdmin, async (req, res) => {
   const id = Number(req.params.id);
   if (!id) return res.status(400).json({ error: 'Invalid id' });
 
+  const existing = await prisma.affiliate.findUnique({ where: { id }, select: { cid: true } }).catch(() => null);
+  const memberRows = await prisma.affiliateMember.findMany({ where: { affiliateId: id }, select: { cid: true } }).catch(() => []);
+
   await prisma.affiliateMember.deleteMany({ where: { affiliateId: id } }).catch(() => null);
   await prisma.affiliate.delete({ where: { id } }).catch(() => null);
   await loadAffiliateOwners();
+
+  // Drop WF_AFFILIATE from anyone this delete orphaned (main + members)
+  if (existing) await revokeAffiliateRoleIfOrphaned(existing.cid);
+  for (const m of memberRows) await revokeAffiliateRoleIfOrphaned(m.cid);
+
   return res.json({ success: true });
 });
 
@@ -23024,6 +23121,11 @@ app.patch('/api/admin/affiliates/:id', requireAdmin, profilePhotoUpload.single('
   if (body.participatingWf26 !== undefined) data.participatingWf26 = asBool(body.participatingWf26);
   if (!Object.keys(data).length && !req.file) return res.status(400).json({ error: 'No fields to update' });
 
+  // Remember the previous main CID so a transfer can revoke their role below
+  const prevRow = data.cid !== undefined
+    ? await prisma.affiliate.findUnique({ where: { id }, select: { cid: true } }).catch(() => null)
+    : null;
+
   if (Object.keys(data).length) await prisma.affiliate.update({ where: { id }, data });
   await saveProfilePhoto('affiliate', id, req.file);
 
@@ -23039,6 +23141,11 @@ app.patch('/api/admin/affiliates/:id', requireAdmin, profilePhotoUpload.single('
     affiliateCids.add(data.cid);
   }
   await loadAffiliateOwners();
+
+  // Main CID transferred away — revoke the old holder's role if orphaned
+  if (prevRow && data.cid !== undefined && Number(prevRow.cid) !== Number(data.cid)) {
+    await revokeAffiliateRoleIfOrphaned(prevRow.cid);
+  }
 
   // If they just turned on participation, run auto-assignment (teams first, then affiliates).
   if (data.participatingWf26 === true) {
