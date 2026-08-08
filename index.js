@@ -2167,22 +2167,26 @@ async function autoAssignTeamBookings({ reason = '' } = {}) {
           if (cap.total > 0 && cap.remaining <= 0) continue;
           slotKey = `${sectorPrefix}|BOOKING_ONLY`;
         } else if (flow === 'SLOTTED') {
-          // Spare slots whose tobt is closest to dep_time_utc
+          // Spare slots whose tobt is closest to dep_time_utc. Book the slot's
+          // OWN key — above ~45/hr several slots share a minute and carry a
+          // #2/#3 suffix; rebuilding the key from `tobt` drops that suffix and
+          // stacks every pilot onto the same unsuffixed key.
           const sectorSlotPrefix = `${sectorPrefix}|`;
           const [dh, dm] = row.dep_time_utc.split(':').map(Number);
           const depMin = dh * 60 + dm;
           let best = null;
+          let bestKey = null;
           let bestDiff = Infinity;
           for (const [k, s] of Object.entries(allTobtSlots)) {
             if (!k.startsWith(sectorSlotPrefix)) continue;
             if (isSlotTaken(k)) continue; // taken
             const [th, tm] = s.tobt.split(':').map(Number);
             const diff = Math.abs((th * 60 + tm) - depMin);
-            if (diff < bestDiff) { best = s; bestDiff = diff; }
+            if (diff < bestDiff) { best = s; bestKey = k; bestDiff = diff; }
           }
           if (!best) continue;
           tobt = best.tobt;
-          slotKey = `${sectorPrefix}|${tobt}`;
+          slotKey = bestKey;
         }
         if (!slotKey) continue;
 
@@ -2289,21 +2293,24 @@ async function autoAssignAffiliateBookings({ reason = '' } = {}) {
           if (cap.total > 0 && cap.remaining <= 0) continue;
           slotKey = `${sectorPrefix}|BOOKING_ONLY`;
         } else if (flow === 'SLOTTED') {
+          // Book the slot's own key (may carry a #2/#3 suffix) — see the note
+          // in autoAssignTeamBookings.
           const sectorSlotPrefix = `${sectorPrefix}|`;
           const [dh, dm] = row.dep_time_utc.split(':').map(Number);
           const depMin = dh * 60 + dm;
           let best = null;
+          let bestKey = null;
           let bestDiff = Infinity;
           for (const [k, s] of Object.entries(allTobtSlots)) {
             if (!k.startsWith(sectorSlotPrefix)) continue;
             if (isSlotTaken(k)) continue; // taken
             const [th, tm] = s.tobt.split(':').map(Number);
             const diff = Math.abs((th * 60 + tm) - depMin);
-            if (diff < bestDiff) { best = s; bestDiff = diff; }
+            if (diff < bestDiff) { best = s; bestKey = k; bestDiff = diff; }
           }
           if (!best) continue;
           tobt = best.tobt;
-          slotKey = `${sectorPrefix}|${tobt}`;
+          slotKey = bestKey;
         }
         if (!slotKey) continue;
 
@@ -2503,21 +2510,24 @@ async function assignAffiliatePilotToSector(affiliate, scheduleRow, claimCid) {
     if (cap.total > 0 && cap.remaining <= 0) return;
     slotKey = `${sectorPrefix}|BOOKING_ONLY`;
   } else if (flow === 'SLOTTED') {
+    // Book the slot's own key (may carry a #2/#3 suffix) — see the note in
+    // autoAssignTeamBookings.
     const sectorSlotPrefix = `${sectorPrefix}|`;
     const [dh, dm] = scheduleRow.dep_time_utc.split(':').map(Number);
     const depMin = dh * 60 + dm;
     let best = null;
+    let bestKey = null;
     let bestDiff = Infinity;
     for (const [k, s] of Object.entries(allTobtSlots)) {
       if (!k.startsWith(sectorSlotPrefix)) continue;
       if (isSlotTaken(k)) continue; // taken
       const [th, tm] = s.tobt.split(':').map(Number);
       const diff = Math.abs((th * 60 + tm) - depMin);
-      if (diff < bestDiff) { best = s; bestDiff = diff; }
+      if (diff < bestDiff) { best = s; bestKey = k; bestDiff = diff; }
     }
     if (!best) return;
     tobt = best.tobt;
-    slotKey = `${sectorPrefix}|${tobt}`;
+    slotKey = bestKey;
   }
   if (!slotKey) return;
 
@@ -2848,7 +2858,10 @@ await (async () => {
 
   // Auto-assign bookings/slots for all participating teams (first), then
   // affiliates fill remaining slots. Both are idempotent — safe to re-run.
-  autoAssignTeamThenAffiliate({ reason: 'startup' }).catch(() => {});
+  // Once settled, reconcile VATCAN so it reflects the freshly loaded state.
+  autoAssignTeamThenAffiliate({ reason: 'startup' })
+    .catch(() => {})
+    .then(() => vatcanReconcileOnStartup());
 
   // Fetch winds aloft then pre-warm FIR analysis cache (wind data baked in)
   refreshWindAdjustments()
@@ -17030,6 +17043,22 @@ function vatcanPushForWf(wf) {
     const r = vatcanGetLastResult(String(wf).toUpperCase());
     if (r?.ok) vatcanDirtyWfs.delete(String(wf).toUpperCase());
   }, 2000);
+}
+
+// Startup reconcile — pushes are only queued by booking mutations, and the
+// dirty set lives in memory, so anything that changed while the server was
+// down (a deploy, a direct DB edit) never reaches VATCAN. Re-push every
+// flow-restricted sector once per boot so VATCAN always matches the DB.
+function vatcanReconcileOnStartup() {
+  if (!vatcanIsEnabled()) return;
+  const wfs = (adminSheetCache || [])
+    .filter(r => r?.number && r.from && r.to)
+    .filter(r => (sharedFlowTypes[`${r.from}-${r.to}`] || 'NONE') !== 'NONE')
+    .map(r => r.number);
+  if (!wfs.length) return;
+  console.log(`[VATCAN] Startup reconcile: re-pushing ${wfs.length} flow-restricted sector(s)`);
+  // Stagger so a heavily-restricted route doesn't burst the API in one tick.
+  wfs.forEach((wf, i) => setTimeout(() => vatcanPushForWf(wf), i * 400));
 }
 
 // Periodic safety sweep — re-push any sector whose last push wasn't a clean
