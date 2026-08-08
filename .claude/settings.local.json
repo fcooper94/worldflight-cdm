@@ -384,7 +384,14 @@
       "Bash(cd /c/dev/WorldFlight-Planning; grep -n \"function openConfirmModal\\\\|window.openConfirmModal\" layout.js index.js | head)",
       "Bash(awk '/----- Pilot assignment -----/,/^        \\\\}\\\\\\);$/' index.js)",
       "Bash(awk '/WF TEAM HQ  \\\\\\(mirrors/,/MANAGE MEMBERS \\\\\\(mirrors/' index.js)",
-      "Bash(awk '/WF TEAM HQ  \\\\\\(mirrors/,/^\\\\/\\\\* ===== AFFILIATE/' index.js)"
+      "Bash(awk '/WF TEAM HQ  \\\\\\(mirrors/,/^\\\\/\\\\* ===== AFFILIATE/' index.js)",
+      "Bash(cd /c/dev/WorldFlight-Planning; grep -n \"bookingRows\" index.js | head; echo \"---\"; sed -n '20440,20500p' index.js)",
+      "Bash(cd /c/dev/WorldFlight-Planning; grep -n \"const optedOut = new Set\" index.js; echo \"--- multi-slot account cell ---\"; grep -n -A 6 'const acctLabel = ctx.nameByCid\\\\[acctCid\\\\]' index.js | head -30)",
+      "Bash(rm -f /tmp/cc.txt)",
+      "Bash(curl -s -o /dev/null -c /tmp/cc.txt \"http://localhost:8080/dev-login?cid=811521\")",
+      "Bash(curl -s -b /tmp/cc.txt -X POST -H 'Content-Type: application/json' -d '{\"fleetId\":7,\"sectorNumber\":\"WF2602\",\"cid\":1303570}' http://localhost:8080/api/team/sectors/assign -w \" [%{http_code}]\\\\n\")",
+      "Bash(curl -s -b /tmp/cc.txt -X POST -H 'Content-Type: application/json' -d '{\"fleetId\":7,\"sectorNumber\":\"WF2603\",\"cid\":999999}' http://localhost:8080/api/team/sectors/assign -w \" [%{http_code}]\\\\n\")",
+      "Bash(curl -s -b /tmp/cc.txt -X POST -H 'Content-Type: application/json' -d '{\"fleetId\":11,\"sectorNumber\":\"WF2603\",\"cid\":1303570}' http://localhost:8080/api/team/sectors/assign -w \" [%{http_code}]\\\\n\")"
     ]
   }
 }

@@ -499,3 +499,14 @@ model TeamSectorOptOut {
   @@unique([officialTeamId, sectorNumber])
   @@index([officialTeamId])
 }
+
+model TeamSectorAssignment {
+  id             Int      @id @default(autoincrement())
+  officialTeamId Int
+  sectorNumber   String
+  cid            Int
+  updatedAt      DateTime @default(now())
+
+  @@unique([officialTeamId, sectorNumber])
+  @@index([officialTeamId])
+}

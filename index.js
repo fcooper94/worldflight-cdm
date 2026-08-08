@@ -2138,6 +2138,9 @@ async function autoAssignTeamBookings({ reason = '' } = {}) {
     // regenerated after a schema change, and this runs on every startup.
     const optOutRows = (await prisma.teamSectorOptOut?.findMany().catch(() => [])) || [];
     const optedOut = new Set(optOutRows.map(o => `${o.officialTeamId}|${o.sectorNumber}`));
+    // A team may have nominated who flies a sector before its slot existed.
+    const assignRows = (await prisma.teamSectorAssignment?.findMany().catch(() => [])) || [];
+    const plannedCid = new Map(assignRows.map(a => [`${a.officialTeamId}|${a.sectorNumber}`, Number(a.cid)]));
 
     // multiSlot is a team-level property; honour it if any row of the team
     // carries it, so a partially-flagged fleet still behaves consistently.
@@ -2190,7 +2193,7 @@ async function autoAssignTeamBookings({ reason = '' } = {}) {
 
     let created = 0;
     for (const team of teamsByName.values()) {
-      const teamCid = team.mainCid;
+      const teamCidDefault = team.mainCid;
       // multiSlot units only "already have" a sector if THEIR OWN aircraft is
       // booked on it — otherwise the first aircraft would satisfy the check
       // for the whole fleet and the rest would never get a slot.
@@ -2246,6 +2249,9 @@ async function autoAssignTeamBookings({ reason = '' } = {}) {
           slotKey = bestKey;
         }
         if (!slotKey) continue;
+
+        // Book under whoever the team planned for this sector, if anyone.
+        const teamCid = plannedCid.get(`${team.fleetId}|${row.number}`) || teamCidDefault;
 
         // Persist + memory (wrap to swallow unique-constraint races)
         try {
@@ -20152,6 +20158,22 @@ app.get('/team/hq', requireLogin, async (req, res) => {
   // The team's bookings, one row per booking (so multi-aircraft fleets keep a
   // row per callsign on the same sector).
   const seenBooking = new Set();
+  // Shared-slot teams see the whole route too: one row per sector, carrying
+  // the team's booking for that sector when one exists.
+  const activeAircraft = fleet.find(t => t.participatingWf26) || fleet[0] || null;
+  const teamBookingBySector = {};
+  Object.values(tobtBookingsByKey).forEach(b => {
+    if (!b || !b.callsign) return;
+    if (!teamCallsigns.has(String(b.callsign).toUpperCase())) return;
+    const p = String(b.slotKey).split('|');
+    teamBookingBySector[`${p[0]}|${p[1]}|${p[2]}`] = b;
+  });
+  const sectorRows = (adminSheetCache || []).filter(r => r.number).map(r => ({
+    wfRow: r,
+    sector: r.number,
+    b: teamBookingBySector[`${r.from}-${r.to}|${r.date_utc}|${r.dep_time_utc}`] || null
+  }));
+
   const bookingRows = Object.values(tobtBookingsByKey)
     .filter(b => b && b.callsign && teamCallsigns.has(String(b.callsign).toUpperCase()))
     .filter(b => {
@@ -20180,6 +20202,15 @@ app.get('/team/hq', requireLogin, async (req, res) => {
       }).catch(() => [])) || [])
     : [];
   const optedOut = new Set(optOutRows.map(o => `${o.officialTeamId}|${o.sectorNumber}`));
+
+  // Planned account per (aircraft, sector) for sectors with no booking yet.
+  const assignRows = fleet.length
+    ? ((await prisma.teamSectorAssignment?.findMany({
+        where: { officialTeamId: { in: fleet.map(t => t.id) } }
+      }).catch(() => [])) || [])
+    : [];
+  const assignedCid = {};
+  assignRows.forEach(a => { assignedCid[`${a.officialTeamId}|${a.sectorNumber}`] = Number(a.cid); });
 
   const bookingByCsSector = {};
   if (isMultiSlot) {
@@ -20216,7 +20247,7 @@ app.get('/team/hq', requireLogin, async (req, res) => {
                     const b = bookingByCsSector[`${cs}|${r.from}-${r.to}|${r.date_utc}|${r.dep_time_utc}`] || null;
                     const flying = !optedOut.has(`${t.id}|${r.number}`);
                     const status = b ? getFlowStatus(r, Number(b.cid)) : null;
-                    const acctCid = b ? Number(b.cid) : Number(t.mainCid);
+                    const acctCid = b ? Number(b.cid) : (assignedCid[`${t.id}|${r.number}`] || Number(t.mainCid));
                     const acctLabel = ctx.nameByCid[acctCid] ? `${ctx.nameByCid[acctCid]} · ${acctCid}` : String(acctCid || '—');
                     const sbUrl = buildAffiliateSimbriefUrl(r, { callsign: cs }, b ? Number(b.cid) : null, showAtcRoute, 'WorldFlight Team');
                     const sbAttr = String(sbUrl).replace(/&/g, '&amp;').replace(/"/g, '&quot;');
@@ -20229,11 +20260,9 @@ app.get('/team/hq', requireLogin, async (req, res) => {
                       </td>
                       <td><span class="ot-cell-actype">${escapeHtml(cs)}${t.aircraftType ? ' · ' + escapeHtml(String(t.aircraftType).toUpperCase()) : ''}</span></td>
                       <td>
-                        ${b ? `
-                          <select class="claim-select team-pilot-select" data-slot-key="${escapeHtml(b.slotKey)}" data-callsign="${escapeHtml(cs)}" data-booking-cid="${Number(b.cid)}"${canEditBookings ? '' : ' disabled title="You do not have permission to edit bookings"'}>
-                            ${assignees.map(m => `<option value="${m.cid}" ${Number(b.cid) === m.cid ? 'selected' : ''}>${escapeHtml(m.label)}</option>`).join('')}
-                          </select>
-                        ` : `<span class="ot-muted">${escapeHtml(acctLabel)}</span>`}
+                        <select class="claim-select team-pilot-select"${b ? ` data-slot-key="${escapeHtml(b.slotKey)}" data-callsign="${escapeHtml(cs)}" data-booking-cid="${Number(b.cid)}"` : ` data-fleet-id="${t.id}" data-sector="${escapeHtml(r.number)}"`} data-prev="${acctCid}"${canEditBookings ? '' : ' disabled title="You do not have permission to edit bookings"'}>
+                          ${assignees.map(m => `<option value="${m.cid}" ${acctCid === m.cid ? 'selected' : ''}>${escapeHtml(m.label)}</option>`).join('')}
+                        </select>
                       </td>
                       ${showFlowInfo ? `
                       <td>${first ? `<span class="flowtype-pill flowtype-${flow.cls}">${escapeHtml(flow.label)}</span>` : ''}</td>
@@ -20441,10 +20470,10 @@ app.get('/team/hq', requireLogin, async (req, res) => {
           ${isPageEnabled('schedule') || isAdmin ? `<a href="/schedule" class="aff-schedule-link">View full schedule</a>` : ''}
         </header>
 
-        ${isMultiSlot ? multiSlotTable : !bookingRows.length ? `
+        ${isMultiSlot ? multiSlotTable : !sectorRows.length ? `
           <div class="ot-empty">
-            <div class="ot-empty-title">No bookings yet</div>
-            <div class="ot-empty-sub">Bookings are assigned automatically for sectors with a flow restriction. They'll appear here as soon as they're allocated.</div>
+            <div class="ot-empty-title">No sectors loaded</div>
+            <div class="ot-empty-sub">Check back soon — the schedule hasn't been published yet.</div>
           </div>
         ` : `
           <div class="ot-table-wrap">
@@ -20465,11 +20494,15 @@ app.get('/team/hq', requireLogin, async (req, res) => {
                 </tr>
               </thead>
               <tbody>
-                ${bookingRows.map(({ b, wfRow, sector }) => {
-                  const cs = String(b.callsign || '').toUpperCase();
-                  const flow = wfRow ? getFlowRestriction(wfRow) : { cls: 'none', label: 'None' };
-                  const status = wfRow ? getFlowStatus(wfRow, Number(b.cid)) : { kind: 'empty', text: '—' };
-                  const sbUrl = wfRow ? buildAffiliateSimbriefUrl(wfRow, { callsign: cs }, Number(b.cid), showAtcRoute, 'WorldFlight Team') : '';
+                ${sectorRows.map(({ b, wfRow, sector }) => {
+                  // No booking yet: fall back to the aircraft the team is flying.
+                  const cs = String((b && b.callsign) || (activeAircraft && activeAircraft.callsign) || '').toUpperCase();
+                  const restricted = (sharedFlowTypes[`${wfRow.from}-${wfRow.to}`] || 'NONE') !== 'NONE';
+                  const flow = getFlowRestriction(wfRow);
+                  const status = b ? getFlowStatus(wfRow, Number(b.cid)) : null;
+                  const acctCid = b ? Number(b.cid) : (activeAircraft ? (assignedCid[`${activeAircraft.id}|${sector}`] || Number(activeAircraft.mainCid)) : 0);
+                  const acctLabel = ctx.nameByCid[acctCid] ? `${ctx.nameByCid[acctCid]} · ${acctCid}` : String(acctCid || '—');
+                  const sbUrl = buildAffiliateSimbriefUrl(wfRow, { callsign: cs }, b ? Number(b.cid) : null, showAtcRoute, 'WorldFlight Team');
                   const sbAttr = String(sbUrl).replace(/&/g, '&amp;').replace(/"/g, '&quot;');
                   return `
                   <tr data-sector="${escapeHtml(sector)}">
@@ -20478,19 +20511,16 @@ app.get('/team/hq', requireLogin, async (req, res) => {
                       <span class="ot-cell-actype">${escapeHtml(cs)}${callsignAircraft[cs] ? ' · ' + escapeHtml(callsignAircraft[cs]) : ''}</span>
                     </td>
                     <td>
-                      <select class="claim-select team-pilot-select"
-                              data-slot-key="${escapeHtml(b.slotKey)}"
-                              data-callsign="${escapeHtml(cs)}"
-                              data-booking-cid="${Number(b.cid)}"${canEditBookings ? '' : ' disabled title="You do not have permission to edit bookings"'}>
-                        ${assignees.map(m => `<option value="${m.cid}" ${Number(b.cid) === m.cid ? 'selected' : ''}>${escapeHtml(m.label)}</option>`).join('')}
+                      <select class="claim-select team-pilot-select"${b ? ` data-slot-key="${escapeHtml(b.slotKey)}" data-callsign="${escapeHtml(cs)}" data-booking-cid="${Number(b.cid)}"` : ` data-fleet-id="${activeAircraft ? activeAircraft.id : ''}" data-sector="${escapeHtml(sector)}"`} data-prev="${acctCid}"${canEditBookings ? '' : ' disabled title="You do not have permission to edit bookings"'}>
+                        ${assignees.map(m => `<option value="${m.cid}" ${acctCid === m.cid ? 'selected' : ''}>${escapeHtml(m.label)}</option>`).join('')}
                       </select>
                     </td>
                     ${showFlowInfo ? `
                     <td><span class="flowtype-pill flowtype-${flow.cls}">${escapeHtml(flow.label)}</span></td>
-                    <td class="aff-status-cell"><span class="aff-flow-status aff-flow-${status.kind}">${
-                      status.kind === 'tobt'
+                    <td class="aff-status-cell"><span class="aff-flow-status aff-flow-${status ? status.kind : 'empty'}">${
+                      status && status.kind === 'tobt'
                         ? `<span class="aff-tobt-label">${escapeHtml(status.label)}</span><span class="aff-tobt-time">${escapeHtml(status.time)}</span><span class="tobt-help">?<span class="tobt-tooltip">This is your TCT (Target Connection Time).<br>Connect to VATSIM at this time.<br>We use TCT to stagger pilot connections at this airport so the network and controllers aren&#39;t overwhelmed.</span></span>`
-                        : escapeHtml(status.text)
+                        : escapeHtml(status ? status.text : (restricted ? 'Awaiting slot' : '—'))
                     }</span></td>` : ''}
                     ${showAtcRoute ? `<td>${wfRow && wfRow.atc_route && wfRow.atc_route !== '-'
                       ? `<button type="button" class="aff-route-btn" data-route="${String(wfRow.atc_route).replace(/&/g, '&amp;').replace(/"/g, '&quot;')}" data-route2="${wfRow.atc_route2 && wfRow.atc_route2 !== '-' ? String(wfRow.atc_route2).replace(/&/g, '&amp;').replace(/"/g, '&quot;') : ''}" data-simbrief="${sbAttr}" data-from="${escapeHtml(wfRow.from)}" data-to="${escapeHtml(wfRow.to)}">ATC Route</button>`
@@ -20765,29 +20795,43 @@ app.get('/team/hq', requireLogin, async (req, res) => {
         document.addEventListener('change', async function(e) {
           var sel = e.target.closest('.team-pilot-select');
           if (!sel) return;
-          var prev = sel.dataset.bookingCid;
+          // Sectors with a slot update the booking; the rest record a planned
+          // account so teams can track the week before slots exist.
+          var hasBooking = !!sel.dataset.slotKey;
+          var prev = sel.dataset.prev || sel.dataset.bookingCid;
           var picked = sel.options[sel.selectedIndex] ? sel.options[sel.selectedIndex].text : sel.value;
           var ok = await openConfirmModal({
             title: 'Change VATSIM account?',
-            message: 'Confirm you would like to change the associated VATSIM account for this booking to ' + picked + '. This is not necessarily who in your team is flying the sector - it is whose account will be connected on VATSIM for the booking.'
+            message: hasBooking
+              ? 'Confirm you would like to change the associated VATSIM account for this booking to ' + picked + '. This is not necessarily who in your team is flying the sector - it is whose account will be connected on VATSIM for the booking.'
+              : 'Confirm you would like to set the VATSIM account for this sector to ' + picked + '. This is not necessarily who in your team is flying the sector - it is whose account will be connected on VATSIM if a slot is allocated.'
           });
           if (!ok) { sel.value = prev; return; }
           sel.classList.add('claim-saving');
           try {
-            var r = await fetch('/api/team/bookings/update', {
+            var url = hasBooking ? '/api/team/bookings/update' : '/api/team/sectors/assign';
+            var payload = hasBooking
+              ? {
+                  slotKey: sel.dataset.slotKey,
+                  cid: Number(sel.value),
+                  callsign: sel.dataset.callsign,
+                  bookingCid: Number(sel.dataset.bookingCid)
+                }
+              : {
+                  fleetId: Number(sel.dataset.fleetId),
+                  sectorNumber: sel.dataset.sector,
+                  cid: Number(sel.value)
+                };
+            var r = await fetch(url, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               credentials: 'same-origin',
-              body: JSON.stringify({
-                slotKey: sel.dataset.slotKey,
-                cid: Number(sel.value),
-                callsign: sel.dataset.callsign,
-                bookingCid: Number(prev)
-              })
+              body: JSON.stringify(payload)
             });
             var d = await r.json().catch(function() { return {}; });
             if (!r.ok) throw new Error(d.error || 'Failed to save');
-            sel.dataset.bookingCid = sel.value;
+            sel.dataset.prev = sel.value;
+            if (hasBooking) sel.dataset.bookingCid = sel.value;
           } catch (err) {
             sel.value = prev;
             alert(err.message || 'Failed to assign pilot');
@@ -21156,6 +21200,51 @@ app.delete('/api/team/fleet/:id', requireLogin, requireFleetManager, async (req,
     await deleteOfficialTeamRowCascade(id);
     await loadTeamMembers();
     console.log(`[TEAM] ${req._fleetTeam}: aircraft ${row.callsign} deleted by CID ${req.session.user.data.cid}`);
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Record who is expected to fly a sector that has no booking yet. Teams use
+// this to plan the week; auto-assignment honours it when a slot is allocated.
+app.post('/api/team/sectors/assign', requireLogin, async (req, res) => {
+  const cid = Number(req.session?.user?.data?.cid);
+  const fleetId = Number(req.body?.fleetId);
+  const sectorNumber = String(req.body?.sectorNumber || '').trim();
+  const assignCid = Number(req.body?.cid);
+  if (!cid || !fleetId || !sectorNumber || !assignCid) return res.status(400).json({ error: 'Bad request' });
+
+  try {
+    const teamNameUpper = await resolveUserTeamName(cid);
+    if (!teamNameUpper) return res.status(403).json({ error: 'Your team is not linked.' });
+
+    const all = await prisma.officialTeam.findMany();
+    const mine = all.filter(t => String(t.teamName || '').trim().toUpperCase() === teamNameUpper);
+    const row = mine.find(t => t.id === fleetId);
+    if (!row) return res.status(403).json({ error: 'That aircraft belongs to another team.' });
+
+    const perms = await prisma.userAdditionalRole.findUnique({
+      where: { cid_role: { cid, role: 'WF_TEAM' } }
+    }).catch(() => null);
+    const isOwner = teamOwnerCids.has(cid) || Number(row.mainCid) === cid;
+    if (!isAdminUser(cid) && !isOwner && perms?.canEditBookings === false) {
+      return res.status(403).json({ error: 'You do not have permission to edit bookings.' });
+    }
+
+    // Only accounts belonging to the team may be assigned.
+    const memberRoles = await prisma.userAdditionalRole.findMany({ where: { role: 'WF_TEAM' } });
+    const allowed = new Set(mine.map(t => Number(t.mainCid)).filter(Boolean));
+    memberRoles.forEach(r => {
+      if (String(r.teamName || '').trim().toUpperCase() === teamNameUpper && r.cid) allowed.add(Number(r.cid));
+    });
+    if (!allowed.has(assignCid)) return res.status(403).json({ error: 'That account is not part of your team.' });
+
+    await prisma.teamSectorAssignment.upsert({
+      where: { officialTeamId_sectorNumber: { officialTeamId: fleetId, sectorNumber } },
+      update: { cid: assignCid, updatedAt: new Date() },
+      create: { officialTeamId: fleetId, sectorNumber, cid: assignCid }
+    });
     res.json({ success: true });
   } catch (e) {
     res.status(500).json({ error: e.message });
