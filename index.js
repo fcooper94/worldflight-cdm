@@ -17957,10 +17957,12 @@ const HQ_STYLES = `    <style>
         .aff-identity-name { font-size: 28px; }
       }
 
-      /* 2-col welcome + (banner+members) row */
+      /* 2-col welcome + (banner+members) row. The side column caps at the
+         banner's natural width (760px + card padding) but shrinks with the
+         viewport instead of forcing horizontal scroll. */
       .affiliate-hq {
         display: grid;
-        grid-template-columns: minmax(0, 1fr) auto;
+        grid-template-columns: minmax(0, 1fr) min(790px, 48%);
         gap: 16px;
         align-items: stretch;
       }
@@ -18621,7 +18623,22 @@ const HQ_STYLES = `    <style>
       .wft-multi-table tbody tr.wft-group-start > td {
         border-top: 2px solid var(--border);
       }
-      .wft-multi-table tbody td { padding-top: 6px; padding-bottom: 6px; }
+      .wft-multi-table tbody td {
+        padding-top: 6px;
+        padding-bottom: 6px;
+        white-space: nowrap;
+      }
+      /* Compact pills in the multi-aircraft table — the full-size ones squeeze
+         the Date/Window columns into wrapping */
+      .wft-multi-table .flowtype-pill,
+      .wft-multi-table .aff-flow-status {
+        min-width: 0;
+        padding: 4px 12px;
+        font-size: 12px;
+      }
+      .wft-multi-table .aff-flow-tobt { padding: 3px 4px 3px 10px; gap: 6px; }
+      .wft-multi-table .aff-tobt-time { font-size: 12px; padding: 2px 8px; }
+      .wft-multi-table .aff-flow-empty { padding: 0; }
 
       /* Read-only dropdowns for members without booking-edit permission */
       .claim-select:disabled,
@@ -18956,7 +18973,7 @@ app.get('/affiliates/hq', requireLogin, async (req, res) => {
                       <td class="ot-cell-active">
                         <input type="checkbox" class="wf-check aff-flying" data-restricted="${restricted ? '1' : '0'}" data-aff-id="${a.id}" data-sector="${escapeHtml(r.number)}" ${flying ? 'checked' : ''} ${readOnly ? 'disabled' : ''} title="${flying ? 'Flying this sector' : 'Not flying this sector'}" />
                       </td>
-                      <td><span class="ot-cell-actype">${escapeHtml(cs)}${a.aircraftType ? ' \u00b7 ' + escapeHtml(String(a.aircraftType).toUpperCase()) : ''}</span></td>
+                      <td><span class="ot-cell-actype">${escapeHtml(cs)}</span></td>
                       <td><span class="${b ? '' : 'ot-muted'}">${escapeHtml(acctLabel)}</span></td>
                       <td>${first ? `<span class="flowtype-pill flowtype-${flow.cls}">${escapeHtml(flow.label)}</span>` : ''}</td>
                       <td class="aff-status-cell">${!flying
@@ -19133,8 +19150,10 @@ app.get('/affiliates/hq', requireLogin, async (req, res) => {
             <label style="font-size:13px;margin:0 0 4px;">Website Link</label>
             <input name="website" type="text" maxlength="200" placeholder="https://..." value="${escapeHtml(affiliate.website || '')}" style="text-transform:none;text-align:left;" />
 
+            ${isMultiAircraft ? '' : `
             <label style="font-size:13px;margin:12px 0 4px;">Aircraft Type</label>
             <input name="aircraftType" type="text" maxlength="10" placeholder="e.g. B744" value="${escapeHtml(affiliate.aircraftType || '')}" style="text-transform:none;text-align:left;" />
+            `}
 
             <label style="font-size:13px;margin:12px 0 4px;">Bio</label>
             <textarea name="description" rows="4" maxlength="1000" placeholder="Who you are, what you fly, where you're based…" style="width:100%;box-sizing:border-box;resize:vertical;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-family:inherit;font-size:14px;">${escapeHtml(affiliate.description || '')}</textarea>
@@ -19579,7 +19598,7 @@ app.get('/affiliates/hq', requireLogin, async (req, res) => {
           if (tip) tip.style.display = 'none';
         }
         document.addEventListener('mouseover', function(e) {
-          var pill = e.target.closest && e.target.closest('.aff-flow-tobt');
+          var pill = e.target.closest && e.target.closest('.aff-flow-tobt, .wft-info');
           if (pill) {
             if (e.relatedTarget && pill.contains(e.relatedTarget)) return;
             positionTooltipFor(pill);
@@ -19592,7 +19611,7 @@ app.get('/affiliates/hq', requireLogin, async (req, res) => {
           }
         });
         document.addEventListener('mouseout', function(e) {
-          var pill = e.target.closest && e.target.closest('.aff-flow-tobt');
+          var pill = e.target.closest && e.target.closest('.aff-flow-tobt, .wft-info');
           if (pill) {
             if (e.relatedTarget && pill.contains(e.relatedTarget)) return;
             hideTooltipIn(pill);
@@ -19739,7 +19758,11 @@ app.post('/api/affiliates/hq/profile', requireLogin, requireAffiliate, (req, res
       where: { id: affiliate.id },
       data: {
         website: cleanWebsite(req.body?.website),
-        aircraftType: req.body?.aircraftType ? String(req.body.aircraftType).trim().toUpperCase().slice(0, 10) : null,
+        // Multi-aircraft operators manage types per aircraft on the fleet card;
+        // the profile form doesn't render the field, so don't null it here.
+        ...(affiliate.multiAircraft ? {} : {
+          aircraftType: req.body?.aircraftType ? String(req.body.aircraftType).trim().toUpperCase().slice(0, 10) : null
+        }),
         description: req.body?.description ? String(req.body.description).trim().slice(0, 1000) : null
       }
     });
@@ -20837,7 +20860,7 @@ app.get('/team/hq', requireLogin, async (req, res) => {
                       <td class="ot-cell-active">
                         <input type="checkbox" class="wf-check team-flying" data-restricted="${restricted ? '1' : '0'}" data-fleet-id="${t.id}" data-sector="${escapeHtml(r.number)}" ${flying ? 'checked' : ''} ${canEditBookings ? '' : 'disabled'} title="${flying ? 'Flying this sector' : 'Not flying this sector'}" />
                       </td>
-                      <td><span class="ot-cell-actype">${escapeHtml(cs)}${t.aircraftType ? ' · ' + escapeHtml(String(t.aircraftType).toUpperCase()) : ''}</span></td>
+                      <td><span class="ot-cell-actype">${escapeHtml(cs)}</span></td>
                       <td>
                         <select class="claim-select team-pilot-select"${b ? ` data-slot-key="${escapeHtml(b.slotKey)}" data-callsign="${escapeHtml(cs)}" data-booking-cid="${Number(b.cid)}"` : ` data-fleet-id="${t.id}" data-sector="${escapeHtml(r.number)}"`} data-prev="${acctCid}"${canEditBookings ? '' : ' disabled title="You do not have permission to edit bookings"'}>
                           ${assignees.map(m => `<option value="${m.cid}" ${acctCid === m.cid ? 'selected' : ''}>${escapeHtml(m.label)}</option>`).join('')}

@@ -903,7 +903,9 @@ body.sidebar-collapsed .topbar{ padding-left: var(--sidebar-collapsed); }
   width: 100%;
   box-sizing: border-box;
   margin:0;
-  grid-template-columns: 1fr;
+  /* minmax(0,…) so wide content (e.g. the multi-aircraft slots table) shrinks
+     into its own scroll wrapper instead of forcing page-level overflow */
+  grid-template-columns: minmax(0, 1fr);
 }
 .dashboard-full .card{ max-width:none; width:100%; }
 
