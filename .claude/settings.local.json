@@ -391,7 +391,9 @@
       "Bash(curl -s -o /dev/null -c /tmp/cc.txt \"http://localhost:8080/dev-login?cid=811521\")",
       "Bash(curl -s -b /tmp/cc.txt -X POST -H 'Content-Type: application/json' -d '{\"fleetId\":7,\"sectorNumber\":\"WF2602\",\"cid\":1303570}' http://localhost:8080/api/team/sectors/assign -w \" [%{http_code}]\\\\n\")",
       "Bash(curl -s -b /tmp/cc.txt -X POST -H 'Content-Type: application/json' -d '{\"fleetId\":7,\"sectorNumber\":\"WF2603\",\"cid\":999999}' http://localhost:8080/api/team/sectors/assign -w \" [%{http_code}]\\\\n\")",
-      "Bash(curl -s -b /tmp/cc.txt -X POST -H 'Content-Type: application/json' -d '{\"fleetId\":11,\"sectorNumber\":\"WF2603\",\"cid\":1303570}' http://localhost:8080/api/team/sectors/assign -w \" [%{http_code}]\\\\n\")"
+      "Bash(curl -s -b /tmp/cc.txt -X POST -H 'Content-Type: application/json' -d '{\"fleetId\":11,\"sectorNumber\":\"WF2603\",\"cid\":1303570}' http://localhost:8080/api/team/sectors/assign -w \" [%{http_code}]\\\\n\")",
+      "Bash(cd /c/dev/WorldFlight-Planning; echo \"=== simType usages ===\"; grep -n \"simType\" index.js | grep -v \"escapeHtml\\\\|placeholder\\\\|option value\\\\|label\\\\|<th>\\\\|data-sim\" | head -12; echo; echo \"=== hasMembers usages ===\"; grep -n \"hasMembers\" index.js | grep -v \"form.querySelector\\\\|fd.get\\\\|option value\\\\|<select\\\\|<label\" | head -12)",
+      "Bash(cd /c/dev/WorldFlight-Planning; grep -n \"releasedSectorSet\\\\|const scheduleRows\\\\|claimByNumber =\\\\|memberOptions = \\\\|const showSchedule\" index.js | sed -n '1,14p')"
     ]
   }
 }

@@ -18551,6 +18551,121 @@ const HQ_STYLES = `    <style>
         .aff-charter li { padding: 14px 14px 14px 48px; }
         .aff-charter li::before { left: 10px; top: 12px; }
       }
+      .wft-info {
+        margin-left: 6px;
+        text-transform: none;
+        letter-spacing: 0;
+      }
+      /* Active-aircraft radio: ring + filled core, matching the accent palette */
+      .fleet-activate {
+        appearance: none;
+        -webkit-appearance: none;
+        width: 20px;
+        height: 20px;
+        margin: 0;
+        border-radius: 50%;
+        border: 2px solid var(--border);
+        background: var(--panel2);
+        cursor: pointer;
+        display: inline-grid;
+        place-content: center;
+        transition: border-color .15s ease, background .15s ease, box-shadow .15s ease;
+      }
+      .fleet-activate::before {
+        content: '';
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        background: transparent;
+        transform: scale(0.4);
+        transition: transform .15s ease, background .15s ease;
+      }
+      .fleet-activate:hover:not(:checked) { border-color: var(--accent); }
+      .fleet-activate:focus-visible {
+        outline: none;
+        box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 28%, transparent);
+      }
+      .fleet-activate:checked {
+        border-color: #22c55e;
+        background: color-mix(in srgb, #22c55e 16%, transparent);
+      }
+      .fleet-activate:checked::before {
+        background: #22c55e;
+        transform: scale(1);
+      }
+      .fleet-activate:disabled { opacity: 0.5; cursor: not-allowed; }
+
+      .wft-th-link {
+        margin-left: 10px;
+        font-size: 10.5px;
+        font-weight: 600;
+        text-transform: none;
+        letter-spacing: 0;
+        color: var(--accent);
+        text-decoration: none;
+        white-space: nowrap;
+      }
+      .wft-th-link:hover { text-decoration: underline; }
+      .wft-info .tobt-tooltip {
+        white-space: normal;
+        width: 250px;
+        text-align: left;
+        font-weight: 400;
+      }
+      .wft-multi-note {
+        font-size: 12px;
+        color: var(--muted);
+        margin: 0 0 12px;
+      }
+      /* Sector groups: a heavier rule marks where each sector's aircraft start */
+      .wft-multi-table tbody tr.wft-group-start > td {
+        border-top: 2px solid var(--border);
+      }
+      .wft-multi-table tbody td { padding-top: 6px; padding-bottom: 6px; }
+
+      /* Read-only dropdowns for members without booking-edit permission */
+      .claim-select:disabled,
+      .wf-check:disabled {
+        opacity: 0.55;
+        cursor: not-allowed;
+      }
+      .claim-select:disabled { background: var(--panel2); }
+
+      /* Busy overlay for actions that reallocate slots and then reload */
+      .wft-busy {
+        position: fixed;
+        inset: 0;
+        z-index: 4000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(2, 6, 23, 0.62);
+        backdrop-filter: blur(2px);
+      }
+      .wft-busy[hidden] { display: none; }
+      .wft-busy-card {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding: 18px 26px;
+        border-radius: 12px;
+        background: var(--panel);
+        border: 1px solid var(--border);
+        box-shadow: 0 12px 44px rgba(0,0,0,0.55);
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--text);
+      }
+      .wft-spinner {
+        width: 22px;
+        height: 22px;
+        flex-shrink: 0;
+        border-radius: 50%;
+        border: 2.5px solid rgba(148,163,184,0.25);
+        border-top-color: var(--accent);
+        animation: wft-spin .7s linear infinite;
+      }
+      @keyframes wft-spin { to { transform: rotate(360deg); } }
     </style>`;
 
 app.get('/affiliates/hq', requireLogin, async (req, res) => {
@@ -18651,6 +18766,41 @@ app.get('/affiliates/hq', requireLogin, async (req, res) => {
     Object.entries(claimByNumber).forEach(([n, c]) => { if (c === 0) releasedSectorSet.add(n); });
   }
 
+  // ---- Multi-aircraft affiliates ----------------------------------------
+  // Affiliate rows sharing a name are one operator with a fleet, mirroring how
+  // OfficialTeam rows share a teamName. Each aircraft keeps its own CID and is
+  // auto-assigned its own slot, so only the presentation needs grouping.
+  const affKey = affiliate
+    ? String(affiliate.name || affiliate.callsign || '').trim().toUpperCase()
+    : '';
+  const isMultiAircraft = !!(affiliate && affiliate.multiAircraft);
+  let affFleet = affiliate ? [affiliate] : [];
+  if (isMultiAircraft && affKey) {
+    const all = await prisma.affiliate.findMany({ orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }] }).catch(() => []);
+    const group = all.filter(a => String(a.name || a.callsign || '').trim().toUpperCase() === affKey);
+    if (group.length) affFleet = group;
+  }
+  // Per-aircraft claims: cid 0 means "not flying this sector".
+  const fleetClaims = {};
+  if (isMultiAircraft && affFleet.length) {
+    const rows = await prisma.affiliateSectorClaim.findMany({
+      where: { affiliateId: { in: affFleet.map(a => a.id) } }
+    }).catch(() => []);
+    rows.forEach(cl => { fleetClaims[`${cl.affiliateId}|${cl.sectorNumber}`] = Number(cl.cid); });
+  }
+  // Bookings held by any aircraft in the fleet, keyed by callsign + sector.
+  const fleetCallsignSet = new Set(affFleet.map(a => String(a.callsign || '').toUpperCase()).filter(Boolean));
+  const fleetBooking = {};
+  if (isMultiAircraft) {
+    Object.values(tobtBookingsByKey).forEach(b => {
+      if (!b || !b.callsign) return;
+      const cs = String(b.callsign).toUpperCase();
+      if (!fleetCallsignSet.has(cs)) return;
+      const parts = String(b.slotKey).split('|');
+      fleetBooking[`${cs}|${parts[0]}|${parts[1]}|${parts[2]}`] = b;
+    });
+  }
+
   const sinceYear = affiliate?.sinceYear || null;
   const isSolo = !!(affiliate && !affiliate.hasMembers);
   // A "multiple users" affiliate with no other active members yet behaves like
@@ -18711,6 +18861,124 @@ app.get('/affiliates/hq', requireLogin, async (req, res) => {
 
   // Use the module-level getFlowStatus
   const flowStatus = getFlowStatus;
+
+  const affIsMainHolder = !!(affiliate && !readOnly && affFleet.some(a => Number(a.cid) === cid));
+
+  const affFleetCard = !isMultiAircraft ? '' : `
+      <section class="card aff-members-card">
+        <header class="aff-members-header">
+          <h3 class="section-title" style="margin:0;">Our Fleet</h3>
+          <div style="display:flex;align-items:center;gap:12px;">
+            <span class="aff-member-count">${affFleet.length} aircraft</span>
+            ${affIsMainHolder ? `<button type="button" class="ot-btn" id="affFleetAddBtn">+ Add Aircraft</button>` : ''}
+          </div>
+        </header>
+        ${affIsMainHolder ? '<div id="affFleetMsg" style="display:none;font-size:12px;margin:0 0 10px;"></div>' : ''}
+        <div class="ot-table-wrap">
+          <table class="ot-table">
+            <thead>
+              <tr><th>Callsign</th><th>Aircraft</th><th>VATSIM Account</th>${affIsMainHolder ? '<th class="ot-th-actions"></th>' : ''}</tr>
+            </thead>
+            <tbody>
+              ${affFleet.map(a => `
+                <tr data-aff-fleet-id="${a.id}">
+                  <td><span class="ot-cell-callsign">${escapeHtml(String(a.callsign || '').toUpperCase())}</span></td>
+                  <td><span class="ot-cell-actype">${escapeHtml(String(a.aircraftType || '—').toUpperCase())}</span></td>
+                  <td class="ot-cell-cid">${escapeHtml(nameByCid[Number(a.cid)] ? nameByCid[Number(a.cid)] + ' \u00b7 ' + a.cid : String(a.cid || '—'))}</td>
+                  ${affIsMainHolder ? `<td class="ot-cell-actions">
+                    <button class="ot-btn aff-fleet-edit-btn" data-id="${a.id}" data-callsign="${escapeHtml(String(a.callsign || '').toUpperCase())}" data-actype="${escapeHtml(String(a.aircraftType || '').toUpperCase())}" data-cid="${a.cid || ''}">Edit</button>
+                    <button class="ot-btn ot-btn-danger aff-fleet-delete-btn" data-id="${a.id}" data-callsign="${escapeHtml(String(a.callsign || '').toUpperCase())}"${affFleet.length <= 1 ? ' disabled title="Keep at least one aircraft"' : ''}>Delete</button>
+                  </td>` : ''}
+                </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      ${affIsMainHolder ? `
+      <div id="affFleetModal" class="modal hidden">
+        <div class="modal-backdrop"></div>
+        <div class="modal-card card" style="max-width:420px;text-align:left;">
+          <h3 id="affFleetModalTitle" style="text-align:center;">Add Aircraft</h3>
+          <form id="affFleetForm">
+            <input type="hidden" id="affFleetEditId" value="" />
+            <label style="display:block;margin:10px 0 6px;">Callsign</label>
+            <input name="callsign" type="text" maxlength="10" required placeholder="e.g. STV4" style="text-transform:uppercase;text-align:left;letter-spacing:normal;" />
+
+            <label style="display:block;margin:10px 0 6px;">Aircraft Type</label>
+            <input name="aircraftType" type="text" maxlength="10" placeholder="e.g. B744" style="text-transform:uppercase;text-align:left;letter-spacing:normal;" />
+
+            <label style="display:block;margin:10px 0 6px;">VATSIM Account <span style="color:var(--muted);font-weight:400;">(CID this aircraft books under)</span></label>
+            <input name="cid" type="number" inputmode="numeric" required placeholder="e.g. 1303570" style="text-align:left;letter-spacing:normal;" />
+
+            <div class="modal-actions" style="margin-top:16px;">
+              <button type="button" class="action-btn" id="affFleetCancel">Cancel</button>
+              <button type="submit" class="action-btn primary">Save</button>
+            </div>
+          </form>
+        </div>
+      </div>` : ''}`;
+
+  const affMultiTable = !isMultiAircraft ? '' : `
+          <p class="wft-multi-note">Each aircraft holds its own slot. Untick an aircraft to release its slot for a sector it isn't flying.</p>
+          <div class="ot-table-wrap">
+            <table class="ot-table wft-multi-table">
+              <thead>
+                <tr>
+                  <th>Sector</th>
+                  <th class="ot-th-center">Flying</th>
+                  <th>Callsign</th>
+                  <th>VATSIM Account <span class="tobt-help wft-info">i<span class="tobt-tooltip">This is the VATSIM account that will be connected on VATSIM for this sector.</span></span></th>
+                  <th>Flow Restrictions</th>
+                  <th>Status</th>
+                  ${showAtcRoute ? '<th>ATC Route</th>' : ''}
+                  <th>From</th><th>To</th><th>Date</th><th>Dep Window</th><th>Arr Window</th><th>Plan</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${scheduleRows.map(r => {
+                  const flow = getFlowRestriction(r);
+                  const restricted = (sharedFlowTypes[`${r.from}-${r.to}`] || 'NONE') !== 'NONE';
+                  return affFleet.map((a, i) => {
+                    const cs = String(a.callsign || '').toUpperCase();
+                    const b = fleetBooking[`${cs}|${r.from}-${r.to}|${r.date_utc}|${r.dep_time_utc}`] || null;
+                    const claim = fleetClaims[`${a.id}|${r.number}`];
+                    const flying = claim !== 0;
+                    const status = b ? getFlowStatus(r, Number(b.cid)) : null;
+                    const acctCid = b ? Number(b.cid) : (claim && claim > 0 ? claim : Number(a.cid));
+                    const acctLabel = nameByCid[acctCid] ? `${nameByCid[acctCid]} \u00b7 ${acctCid}` : String(acctCid || '—');
+                    const sbUrl = buildAffiliateSimbriefUrl(r, { callsign: cs }, b ? Number(b.cid) : null, showAtcRoute);
+                    const sbAttr = String(sbUrl).replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+                    const first = i === 0;
+                    return `
+                    <tr class="${first ? 'wft-group-start' : ''}${flying ? '' : ' mm-inactive-row'}">
+                      <td>${first ? `<span class="ot-cell-callsign">${escapeHtml(r.number)}</span>` : ''}</td>
+                      <td class="ot-cell-active">
+                        <input type="checkbox" class="wf-check aff-flying" data-restricted="${restricted ? '1' : '0'}" data-aff-id="${a.id}" data-sector="${escapeHtml(r.number)}" ${flying ? 'checked' : ''} ${readOnly ? 'disabled' : ''} title="${flying ? 'Flying this sector' : 'Not flying this sector'}" />
+                      </td>
+                      <td><span class="ot-cell-actype">${escapeHtml(cs)}${a.aircraftType ? ' \u00b7 ' + escapeHtml(String(a.aircraftType).toUpperCase()) : ''}</span></td>
+                      <td><span class="${b ? '' : 'ot-muted'}">${escapeHtml(acctLabel)}</span></td>
+                      <td>${first ? `<span class="flowtype-pill flowtype-${flow.cls}">${escapeHtml(flow.label)}</span>` : ''}</td>
+                      <td class="aff-status-cell">${!flying
+                        ? '<span class="ot-muted">Not flying</span>'
+                        : (status && status.kind === 'tobt'
+                          ? `<span class="aff-flow-status aff-flow-tobt"><span class="aff-tobt-label">${escapeHtml(status.label)}</span><span class="aff-tobt-time">${escapeHtml(status.time)}</span><span class="tobt-help">?<span class="tobt-tooltip">This is your TCT (Target Connection Time).<br>Connect to VATSIM at this time.</span></span></span>`
+                          : `<span class="aff-flow-status aff-flow-${status ? status.kind : 'empty'}">${escapeHtml(status ? status.text : (restricted ? 'Awaiting slot' : '—'))}</span>`)}</td>
+                      ${showAtcRoute ? `<td>${first ? (r.atc_route && r.atc_route !== '-'
+                        ? `<button type="button" class="aff-route-btn" data-route="${String(r.atc_route).replace(/&/g, '&amp;').replace(/"/g, '&quot;')}" data-route2="${r.atc_route2 && r.atc_route2 !== '-' ? String(r.atc_route2).replace(/&/g, '&amp;').replace(/"/g, '&quot;') : ''}" data-simbrief="${sbAttr}" data-from="${escapeHtml(r.from)}" data-to="${escapeHtml(r.to)}">ATC Route</button>`
+                        : `<span class="ot-muted" style="font-style:italic;">Pending agreement</span>`) : ''}</td>` : ''}
+                      <td>${first ? `<a class="aff-icao-link" href="/icao/${escapeHtml(r.from)}">${escapeHtml(r.from)}</a>` : ''}</td>
+                      <td>${first ? `<a class="aff-icao-link" href="/icao/${escapeHtml(r.to)}">${escapeHtml(r.to)}</a>` : ''}</td>
+                      <td><span class="ot-muted">${first ? escapeHtml(r.date_utc || '') : ''}</span></td>
+                      <td><span class="ot-muted">${first ? timeWindow(r.dep_time_utc) : ''}</span></td>
+                      <td><span class="ot-muted">${first ? timeWindow(r.arr_time_utc) : ''}</span></td>
+                      <td><a class="aff-route-btn aff-sb-btn" href="${sbAttr}" target="_blank" rel="noopener">Plan with SimBrief</a></td>
+                    </tr>`;
+                  }).join('');
+                }).join('')}
+              </tbody>
+            </table>
+          </div>`;
 
   const memberOptsHtml = memberOptions
     .map(m => `<option value="${m.cid}">${escapeHtml(m.label)}${m.isMain ? ' (main)' : ''}</option>`)
@@ -18960,10 +19228,12 @@ app.get('/affiliates/hq', requireLogin, async (req, res) => {
       </div>
       </div>
 
+      ${affFleetCard}
+
       ${affiliate ? `
       <section class="card aff-schedule-card">
         <header class="aff-schedule-header">
-          <h3 class="section-title" style="margin:0;">${soloSchedule ? 'My Bookings &amp; Slots' : 'Assign Pilots / Our Bookings &amp; Slots'}</h3>
+          <h3 class="section-title" style="margin:0;">${isMultiAircraft ? 'Our Bookings &amp; Slots' : soloSchedule ? 'My Bookings &amp; Slots' : 'Assign Pilots / Our Bookings &amp; Slots'}</h3>
           ${showSchedule ? `<a href="/schedule" class="aff-schedule-link">View full schedule</a>` : ''}
         </header>
 
@@ -18977,7 +19247,7 @@ app.get('/affiliates/hq', requireLogin, async (req, res) => {
             <div class="ot-empty-title">No sectors loaded</div>
             <div class="ot-empty-sub">Check back soon — schedule data hasn't been loaded yet.</div>
           </div>
-        ` : `
+        ` : isMultiAircraft ? affMultiTable : `
           <div class="ot-table-wrap">
             <table class="ot-table">
               <thead>
@@ -19163,6 +19433,129 @@ app.get('/affiliates/hq', requireLogin, async (req, res) => {
 
         // Snapshot original values so we can revert on failure
         document.querySelectorAll('.claim-select').forEach(function(s) { s.dataset.prev = s.value; });
+
+        // ----- Multi-aircraft fleet -----
+        var affBusy = null;
+        function affShowBusy(text) {
+          if (!affBusy) {
+            affBusy = document.createElement('div');
+            affBusy.className = 'wft-busy';
+            affBusy.innerHTML = '<div class="wft-busy-card"><span class="wft-spinner"></span><span id="affBusyLabel"></span></div>';
+            document.body.appendChild(affBusy);
+          }
+          affBusy.querySelector('#affBusyLabel').textContent = text || 'Working...';
+          affBusy.hidden = false;
+        }
+        function affHideBusy() { if (affBusy) affBusy.hidden = true; }
+        function affMsg(text, ok) {
+          var el = document.getElementById('affFleetMsg');
+          if (!el) { if (!ok) alert(text); return; }
+          el.textContent = text;
+          el.style.color = ok ? '#4ade80' : '#f87171';
+          el.style.display = '';
+        }
+
+        var affFleetModal = document.getElementById('affFleetModal');
+        if (affFleetModal) {
+          var affFleetForm = document.getElementById('affFleetForm');
+          var affFleetEditId = document.getElementById('affFleetEditId');
+          function affOpenFleet(rec) {
+            affFleetForm.reset();
+            affFleetEditId.value = rec ? rec.id : '';
+            document.getElementById('affFleetModalTitle').textContent = rec ? 'Edit Aircraft' : 'Add Aircraft';
+            if (rec) {
+              affFleetForm.querySelector('[name="callsign"]').value = rec.callsign || '';
+              affFleetForm.querySelector('[name="aircraftType"]').value = rec.actype || '';
+              affFleetForm.querySelector('[name="cid"]').value = rec.cid || '';
+            }
+            affFleetModal.classList.remove('hidden');
+          }
+          function affCloseFleet() { affFleetModal.classList.add('hidden'); }
+          document.getElementById('affFleetAddBtn').addEventListener('click', function() { affOpenFleet(null); });
+          document.getElementById('affFleetCancel').addEventListener('click', affCloseFleet);
+          affFleetModal.querySelector('.modal-backdrop').addEventListener('click', affCloseFleet);
+
+          document.addEventListener('click', function(e) {
+            var ed = e.target.closest('.aff-fleet-edit-btn');
+            if (ed) affOpenFleet({ id: ed.dataset.id, callsign: ed.dataset.callsign, actype: ed.dataset.actype, cid: ed.dataset.cid });
+          });
+
+          affFleetForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            var fd = new FormData(affFleetForm);
+            var payload = {
+              callsign: (fd.get('callsign') || '').toString().trim().toUpperCase(),
+              aircraftType: (fd.get('aircraftType') || '').toString().trim().toUpperCase(),
+              cid: (fd.get('cid') || '').toString().trim()
+            };
+            var id = affFleetEditId.value;
+            affShowBusy(id ? 'Saving aircraft...' : 'Adding aircraft...');
+            try {
+              var r = await fetch(id ? '/api/affiliates/fleet/' + id : '/api/affiliates/fleet', {
+                method: id ? 'PATCH' : 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'same-origin',
+                body: JSON.stringify(payload)
+              });
+              var d = await r.json().catch(function() { return {}; });
+              if (!r.ok) { affHideBusy(); affCloseFleet(); affMsg(d.error || 'Failed to save aircraft', false); return; }
+              location.reload();
+            } catch (err) { affHideBusy(); affCloseFleet(); affMsg('Failed to save aircraft', false); }
+          });
+
+          document.addEventListener('click', async function(e) {
+            var del = e.target.closest('.aff-fleet-delete-btn');
+            if (!del || del.disabled) return;
+            var okDel = await openConfirmModal({
+              title: 'Delete Aircraft',
+              message: 'Delete ' + del.dataset.callsign + '? Any slots it holds will be released back to the pool.'
+            });
+            if (!okDel) return;
+            affShowBusy('Removing aircraft...');
+            try {
+              var r = await fetch('/api/affiliates/fleet/' + del.dataset.id, { method: 'DELETE', credentials: 'same-origin' });
+              var d = await r.json().catch(function() { return {}; });
+              if (!r.ok) { affHideBusy(); affMsg(d.error || 'Failed to delete', false); return; }
+              location.reload();
+            } catch (err) { affHideBusy(); affMsg('Failed to delete', false); }
+          });
+        }
+
+        // Flying / not flying per aircraft per sector
+        document.addEventListener('change', async function(e) {
+          var cb = e.target.closest('.aff-flying');
+          if (!cb) return;
+          var needsReload = cb.dataset.restricted === '1';
+          cb.disabled = true;
+          if (needsReload) affShowBusy(cb.checked ? 'Allocating slot...' : 'Releasing slot...');
+          try {
+            var r = await fetch('/api/affiliates/fleet/' + cb.dataset.affId + '/flying', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'same-origin',
+              body: JSON.stringify({ sectorNumber: cb.dataset.sector, flying: cb.checked })
+            });
+            var d = await r.json().catch(function() { return {}; });
+            if (!r.ok) throw new Error(d.error || 'Failed to save');
+            if (needsReload) { location.reload(); return; }
+            var row = cb.closest('tr');
+            if (row) {
+              row.classList.toggle('mm-inactive-row', !cb.checked);
+              var cell = row.querySelector('.aff-status-cell');
+              if (cell) {
+                cell.innerHTML = cb.checked
+                  ? '<span class="aff-flow-status aff-flow-empty">\u2014</span>'
+                  : '<span class="ot-muted">Not flying</span>';
+              }
+            }
+            cb.disabled = false;
+          } catch (err) {
+            cb.checked = !cb.checked;
+            cb.disabled = false;
+            affHideBusy();
+            alert(err.message || 'Failed to update');
+          }
+        });
 
         // TOBT tooltip — whole pill is the hover target. Delegated on document
         // so dynamically rebuilt cells (after a pilot reassignment) work too.
@@ -19351,6 +19744,192 @@ app.post('/api/affiliates/hq/profile', requireLogin, requireAffiliate, (req, res
       }
     });
     await saveProfilePhoto('affiliate', affiliate.id, req.file);
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+/* ===== AFFILIATE FLEET (multi-aircraft operators) =====
+   Affiliate rows sharing a name are one operator's fleet. Only a CID that owns
+   one of those rows may manage it; each aircraft keeps its own VATSIM account
+   and is auto-assigned its own slot. */
+async function resolveAffiliateFleet(cid) {
+  const mine = await prisma.affiliate.findFirst({ where: { cid: Number(cid) } });
+  if (!mine || !mine.multiAircraft) return null;
+  const key = String(mine.name || mine.callsign || '').trim().toUpperCase();
+  if (!key) return null;
+  const all = await prisma.affiliate.findMany({ orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }] });
+  return { key, rows: all.filter(a => String(a.name || a.callsign || '').trim().toUpperCase() === key), mine };
+}
+
+app.post('/api/affiliates/fleet', requireLogin, requireAffiliate, async (req, res) => {
+  const cid = Number(req.session.user.data.cid);
+  const callsign = String(req.body?.callsign || '').trim().toUpperCase();
+  const aircraftType = String(req.body?.aircraftType || '').trim().toUpperCase();
+  const acCid = Number(req.body?.cid);
+  if (!/^[A-Z0-9-]{2,10}$/.test(callsign)) return res.status(400).json({ error: 'Callsign must be 2-10 letters/numbers' });
+  if (!Number.isInteger(acCid) || acCid <= 0) return res.status(400).json({ error: 'A valid VATSIM CID is required' });
+
+  try {
+    const fleet = await resolveAffiliateFleet(cid);
+    if (!fleet) return res.status(403).json({ error: 'Your affiliate is not set up for multiple aircraft.' });
+
+    const clash = await prisma.affiliate.findFirst({ where: { callsign } });
+    if (clash) return res.status(409).json({ error: `Callsign ${callsign} is already in use` });
+
+    const p0 = fleet.rows[0] || fleet.mine;
+    const created = await prisma.affiliate.create({
+      data: {
+        name: p0.name,
+        callsign,
+        simType: p0.simType,
+        cid: acCid,
+        sinceYear: p0.sinceYear,
+        hasMembers: p0.hasMembers,
+        multiAircraft: true,
+        aircraftType: aircraftType || null,
+        description: p0.description,
+        website: p0.website,
+        sortOrder: await resolveSortOrder(null, prisma.affiliate),
+        participatingWf26: p0.participatingWf26
+      }
+    });
+    if (!isAdminUser(acCid)) {
+      await prisma.userAdditionalRole.upsert({
+        where: { cid_role: { cid: acCid, role: 'WF_AFFILIATE' } },
+        update: {}, create: { cid: acCid, role: 'WF_AFFILIATE' }
+      });
+      affiliateCids.add(acCid);
+    }
+    await loadAffiliateOwners();
+    if (created.participatingWf26) autoAssignTeamThenAffiliate({ reason: `affiliate aircraft ${created.id} added` }).catch(() => {});
+    console.log(`[AFFILIATE] ${fleet.key}: aircraft ${callsign} added by CID ${cid}`);
+    res.json({ success: true, id: created.id });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.patch('/api/affiliates/fleet/:id', requireLogin, requireAffiliate, async (req, res) => {
+  const cid = Number(req.session.user.data.cid);
+  const id = Number(req.params.id);
+  try {
+    const fleet = await resolveAffiliateFleet(cid);
+    if (!fleet) return res.status(403).json({ error: 'Your affiliate is not set up for multiple aircraft.' });
+    const row = fleet.rows.find(a => a.id === id);
+    if (!row) return res.status(403).json({ error: 'That aircraft belongs to another affiliate.' });
+
+    const data = {};
+    if (req.body?.callsign !== undefined) {
+      const cs = String(req.body.callsign).trim().toUpperCase();
+      if (!/^[A-Z0-9-]{2,10}$/.test(cs)) return res.status(400).json({ error: 'Callsign must be 2-10 letters/numbers' });
+      const clash = await prisma.affiliate.findFirst({ where: { callsign: cs, NOT: { id } } });
+      if (clash) return res.status(409).json({ error: `Callsign ${cs} is already in use` });
+      data.callsign = cs;
+    }
+    if (req.body?.aircraftType !== undefined) data.aircraftType = String(req.body.aircraftType).trim().toUpperCase() || null;
+    if (req.body?.cid !== undefined && String(req.body.cid).trim() !== '') {
+      const c2 = Number(req.body.cid);
+      if (!Number.isInteger(c2) || c2 <= 0) return res.status(400).json({ error: 'VATSIM account must be a valid CID' });
+      data.cid = c2;
+    }
+    if (!Object.keys(data).length) return res.status(400).json({ error: 'No fields to update' });
+    await prisma.affiliate.update({ where: { id }, data });
+
+    // A renamed callsign keeps its bookings.
+    if (data.callsign && data.callsign !== String(row.callsign || '').toUpperCase()) {
+      const oldCs = String(row.callsign || '').toUpperCase();
+      const bookings = await prisma.tobtBooking.findMany({ where: { callsign: oldCs } });
+      for (const bk of bookings) {
+        await prisma.tobtBooking.update({ where: { id: bk.id }, data: { callsign: data.callsign } }).catch(() => {});
+        const memBk = tobtBookingsByKey[`${bk.cid}:${bk.slotKey}`];
+        if (memBk) memBk.callsign = data.callsign;
+        vatcanPushForSlotKey(bk.slotKey);
+      }
+    }
+    await loadAffiliateOwners();
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.delete('/api/affiliates/fleet/:id', requireLogin, requireAffiliate, async (req, res) => {
+  const cid = Number(req.session.user.data.cid);
+  const id = Number(req.params.id);
+  try {
+    const fleet = await resolveAffiliateFleet(cid);
+    if (!fleet) return res.status(403).json({ error: 'Your affiliate is not set up for multiple aircraft.' });
+    const row = fleet.rows.find(a => a.id === id);
+    if (!row) return res.status(403).json({ error: 'That aircraft belongs to another affiliate.' });
+    if (fleet.rows.length <= 1) return res.status(400).json({ error: 'Keep at least one aircraft in the fleet.' });
+
+    // Release its slots first so they return to the pool.
+    const cs = String(row.callsign || '').toUpperCase();
+    const bookings = await prisma.tobtBooking.findMany({ where: { callsign: cs } });
+    for (const bk of bookings) {
+      await prisma.tobtBooking.delete({ where: { id: bk.id } }).catch(() => null);
+      const bookingKey = `${Number(bk.cid)}:${bk.slotKey}`;
+      deleteBookingByBookingKey(bookingKey);
+      if (tobtBookingsByCid[Number(bk.cid)]) tobtBookingsByCid[Number(bk.cid)].delete(bookingKey);
+      try { io.emit('bookingCancelled', { slotKey: bk.slotKey }); } catch {}
+      vatcanPushForSlotKey(bk.slotKey);
+    }
+    await prisma.affiliateSectorClaim.deleteMany({ where: { affiliateId: id } }).catch(() => null);
+    await prisma.affiliateMember.deleteMany({ where: { affiliateId: id } }).catch(() => null);
+    await prisma.affiliate.delete({ where: { id } });
+    await loadAffiliateOwners();
+    await revokeAffiliateRoleIfOrphaned(row.cid);
+    console.log(`[AFFILIATE] ${fleet.key}: aircraft ${cs} deleted by CID ${cid} (${bookings.length} slot(s) released)`);
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Flying / not flying for one aircraft on one sector (cid 0 = released).
+app.post('/api/affiliates/fleet/:id/flying', requireLogin, requireAffiliate, async (req, res) => {
+  const cid = Number(req.session.user.data.cid);
+  const id = Number(req.params.id);
+  const sectorNumber = String(req.body?.sectorNumber || '').trim();
+  const flying = req.body?.flying === true || String(req.body?.flying) === 'true';
+  if (!sectorNumber) return res.status(400).json({ error: 'sectorNumber required' });
+
+  try {
+    const fleet = await resolveAffiliateFleet(cid);
+    if (!fleet) return res.status(403).json({ error: 'Your affiliate is not set up for multiple aircraft.' });
+    const row = fleet.rows.find(a => a.id === id);
+    if (!row) return res.status(403).json({ error: 'That aircraft belongs to another affiliate.' });
+
+    const sched = (adminSheetCache || []).find(r => r.number === sectorNumber);
+    if (!sched) return res.status(400).json({ error: 'Unknown sector' });
+
+    if (flying) {
+      await prisma.affiliateSectorClaim.deleteMany({ where: { affiliateId: id, sectorNumber, cid: 0 } });
+      if ((sharedFlowTypes[`${sched.from}-${sched.to}`] || 'NONE') !== 'NONE') {
+        await autoAssignTeamThenAffiliate({ reason: `${row.callsign} opted in to ${sectorNumber}` }).catch(() => {});
+      }
+    } else {
+      await prisma.affiliateSectorClaim.upsert({
+        where: { affiliateId_sectorNumber: { affiliateId: id, sectorNumber } },
+        update: { cid: 0 },
+        create: { affiliateId: id, sectorNumber, cid: 0 }
+      });
+      const prefix = `${sched.from}-${sched.to}|${sched.date_utc}|${sched.dep_time_utc}`;
+      const cs = String(row.callsign || '').toUpperCase();
+      const bookings = (sharedFlowTypes[`${sched.from}-${sched.to}`] || 'NONE') === 'NONE'
+        ? []
+        : await prisma.tobtBooking.findMany({ where: { callsign: cs, slotKey: { startsWith: prefix } } });
+      for (const bk of bookings) {
+        await prisma.tobtBooking.delete({ where: { id: bk.id } }).catch(() => null);
+        const bookingKey = `${Number(bk.cid)}:${bk.slotKey}`;
+        deleteBookingByBookingKey(bookingKey);
+        if (tobtBookingsByCid[Number(bk.cid)]) tobtBookingsByCid[Number(bk.cid)].delete(bookingKey);
+        try { io.emit('bookingCancelled', { slotKey: bk.slotKey }); } catch {}
+        vatcanPushForSlotKey(bk.slotKey);
+      }
+    }
     res.json({ success: true });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -20571,123 +21150,7 @@ app.get('/team/hq', requireLogin, async (req, res) => {
 
     ${HQ_STYLES}
 
-    <style>
-      .wft-info {
-        margin-left: 6px;
-        text-transform: none;
-        letter-spacing: 0;
-      }
-      /* Active-aircraft radio: ring + filled core, matching the accent palette */
-      .fleet-activate {
-        appearance: none;
-        -webkit-appearance: none;
-        width: 20px;
-        height: 20px;
-        margin: 0;
-        border-radius: 50%;
-        border: 2px solid var(--border);
-        background: var(--panel2);
-        cursor: pointer;
-        display: inline-grid;
-        place-content: center;
-        transition: border-color .15s ease, background .15s ease, box-shadow .15s ease;
-      }
-      .fleet-activate::before {
-        content: '';
-        width: 9px;
-        height: 9px;
-        border-radius: 50%;
-        background: transparent;
-        transform: scale(0.4);
-        transition: transform .15s ease, background .15s ease;
-      }
-      .fleet-activate:hover:not(:checked) { border-color: var(--accent); }
-      .fleet-activate:focus-visible {
-        outline: none;
-        box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 28%, transparent);
-      }
-      .fleet-activate:checked {
-        border-color: #22c55e;
-        background: color-mix(in srgb, #22c55e 16%, transparent);
-      }
-      .fleet-activate:checked::before {
-        background: #22c55e;
-        transform: scale(1);
-      }
-      .fleet-activate:disabled { opacity: 0.5; cursor: not-allowed; }
 
-      .wft-th-link {
-        margin-left: 10px;
-        font-size: 10.5px;
-        font-weight: 600;
-        text-transform: none;
-        letter-spacing: 0;
-        color: var(--accent);
-        text-decoration: none;
-        white-space: nowrap;
-      }
-      .wft-th-link:hover { text-decoration: underline; }
-      .wft-info .tobt-tooltip {
-        white-space: normal;
-        width: 250px;
-        text-align: left;
-        font-weight: 400;
-      }
-      .wft-multi-note {
-        font-size: 12px;
-        color: var(--muted);
-        margin: 0 0 12px;
-      }
-      /* Sector groups: a heavier rule marks where each sector's aircraft start */
-      .wft-multi-table tbody tr.wft-group-start > td {
-        border-top: 2px solid var(--border);
-      }
-      .wft-multi-table tbody td { padding-top: 6px; padding-bottom: 6px; }
-
-      /* Read-only dropdowns for members without booking-edit permission */
-      .claim-select:disabled,
-      .wf-check:disabled {
-        opacity: 0.55;
-        cursor: not-allowed;
-      }
-      .claim-select:disabled { background: var(--panel2); }
-
-      /* Busy overlay for actions that reallocate slots and then reload */
-      .wft-busy {
-        position: fixed;
-        inset: 0;
-        z-index: 4000;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        background: rgba(2, 6, 23, 0.62);
-        backdrop-filter: blur(2px);
-      }
-      .wft-busy[hidden] { display: none; }
-      .wft-busy-card {
-        display: flex;
-        align-items: center;
-        gap: 14px;
-        padding: 18px 26px;
-        border-radius: 12px;
-        background: var(--panel);
-        border: 1px solid var(--border);
-        box-shadow: 0 12px 44px rgba(0,0,0,0.55);
-        font-size: 14px;
-        font-weight: 600;
-        color: var(--text);
-      }
-      .wft-spinner {
-        width: 22px;
-        height: 22px;
-        flex-shrink: 0;
-        border-radius: 50%;
-        border: 2.5px solid rgba(148,163,184,0.25);
-        border-top-color: var(--accent);
-        animation: wft-spin .7s linear infinite;
-      }
-      @keyframes wft-spin { to { transform: rotate(360deg); } }
-    </style>
 
     <script>
       (function() {
@@ -21676,9 +22139,9 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
   const pendingApps = applications.filter(a => a.status === 'pending');
 
   const teamRecord = (t) => JSON.stringify({ teamName: t.teamName, callsign: t.callsign, mainCid: t.mainCid, aircraftType: t.aircraftType, country: t.country, sinceYear: t.sinceYear, multiSlot: t.multiSlot, description: t.description, website: t.website, sortOrder: t.sortOrder, participatingWf26: t.participatingWf26 }).replace(/'/g, '&#39;');
-  const affRecord = (a) => JSON.stringify({ name: a.name, callsign: a.callsign, simType: a.simType, cid: a.cid, sinceYear: a.sinceYear, hasMembers: a.hasMembers, aircraftType: a.aircraftType, description: a.description, website: a.website, sortOrder: a.sortOrder, participatingWf26: a.participatingWf26 }).replace(/'/g, '&#39;');
+  const affRecord = (a) => JSON.stringify({ name: a.name, callsign: a.callsign, simType: a.simType, cid: a.cid, sinceYear: a.sinceYear, hasMembers: a.hasMembers, multiAircraft: a.multiAircraft, aircraftType: a.aircraftType, description: a.description, website: a.website, sortOrder: a.sortOrder, participatingWf26: a.participatingWf26 }).replace(/'/g, '&#39;');
   const appRecord = (a) => JSON.stringify({
-    id: a.id, callsign: a.callsign, simType: a.simType, cid: a.cid, hasMembers: a.hasMembers,
+    id: a.id, callsign: a.callsign, simType: a.simType, cid: a.cid, hasMembers: a.hasMembers, multiAircraft: a.multiAircraft,
     contact: a.contact, heardAbout: a.heardAbout, website: a.website, notes: a.notes,
     source: a.source, status: a.status, createdAt: a.createdAt,
     photoIds: (photosByApp[a.id] || [])
@@ -22107,6 +22570,13 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
     })()}
   </select>
 
+  <label style="display:block; margin:10px 0 6px;">Allow multiple aircraft?</label>
+  <select name="multiAircraft">
+    <option value="false" selected>No &mdash; one callsign</option>
+    <option value="true">Yes &mdash; a fleet, each aircraft gets its own slot</option>
+  </select>
+  <p style="font-size:11px;color:var(--muted);margin:6px 0 0;line-height:1.5;">Applies to every affiliate sharing this name. When Yes, they manage a fleet on their HQ and each aircraft is allocated its own slot.</p>
+
   <label style="display:block; margin:10px 0 6px;">Has multiple users?</label>
   <select name="hasMembers">
     <option value="false" selected>No</option>
@@ -22302,6 +22772,8 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
           if (yearSel) yearSel.value = record.sinceYear ? String(record.sinceYear) : '';
           var hasMembersSel = form.querySelector('select[name="hasMembers"]');
           if (hasMembersSel) hasMembersSel.value = record.hasMembers ? 'true' : 'false';
+          var multiAcSel = form.querySelector('select[name="multiAircraft"]');
+          if (multiAcSel) multiAcSel.value = record.multiAircraft ? 'true' : 'false';
           var affAcIn = form.querySelector('input[name="affAircraftType"]');
           if (affAcIn) affAcIn.value = record.aircraftType || '';
         }
@@ -22469,6 +22941,7 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
         payload.hasMembers = String(fd.get('hasMembers') || '').toLowerCase() === 'true';
         if (type === 'affiliate') {
           payload.name = (fd.get('affiliateName') || '').toString().trim();
+          payload.multiAircraft = String(fd.get('multiAircraft') || 'false') === 'true';
           payload.aircraftType = (fd.get('affAircraftType') || '').toString().trim().toUpperCase();
         }
         if (type === 'application') {
@@ -22745,6 +23218,7 @@ app.post('/api/admin/affiliates', requireAdmin, profilePhotoUpload.single('photo
       cid: Number(cid),
       sinceYear: yr,
       hasMembers: asBool(hasMembers),
+      multiAircraft: asBool(req.body?.multiAircraft),
       aircraftType: req.body?.aircraftType ? String(req.body.aircraftType).trim().toUpperCase().slice(0, 10) : null,
       description: description ? String(description).trim().slice(0, 1000) : null,
       website: cleanWebsite(website),
@@ -23231,12 +23705,53 @@ app.get('/teams', requirePageEnabled('who-we-are'), async (req, res) => {
       </a>
     </div>
     ${affiliates.length ? `<div class="wwa-grid">
-      ${affiliates.map(a => card('affiliate', a.id, a.name || a.callsign, [
-        ['Callsign', a.callsign],
-        ['Aircraft', a.aircraftType],
-        ['Sim Type', a.simType],
-        ['Main CID', a.cid]
-      ], a.description, a.website, badgeFor(a.sinceYear))).join('')}
+      ${(() => {
+        // Multi-aircraft affiliates sharing a name are one operator: roll their
+        // fleet into a single card, exactly like multi-slot teams.
+        const groups = [];
+        const seen = new Set();
+        for (const a of affiliates) {
+          const key = String(a.name || a.callsign || '').trim().toUpperCase();
+          const siblings = affiliates.filter(x => String(x.name || x.callsign || '').trim().toUpperCase() === key);
+          if (a.multiAircraft && siblings.length > 1) {
+            if (seen.has(key)) continue;
+            seen.add(key);
+            groups.push({ rows: siblings, primary: siblings[0], multi: true });
+          } else {
+            groups.push({ rows: [a], primary: a, multi: false });
+          }
+        }
+        return groups.map(g => {
+          const rows = g.rows;
+          const pr = g.primary;
+          const uniq = arr => [...new Set(arr.filter(v => v != null && String(v).trim() !== ''))];
+          const cs = r => String(r.callsign || '').toUpperCase();
+          const callsigns = rows.map(cs);
+          const types = uniq(rows.map(r => String(r.aircraftType || '').toUpperCase()));
+          const sims = uniq(rows.map(r => String(r.simType || '').trim()));
+          const cids = uniq(rows.map(r => String(r.cid || '')));
+          const rollUp = (label, pick) => ({ html: `<span class="wwa-multi" tabindex="0">${escapeHtml(label)}<span class="wwa-multi-pop">${
+            rows.map(r => `${escapeHtml(cs(r))} &middot; ${escapeHtml(String(pick(r) || '—'))}`).join('<br>')
+          }</span></span>` });
+
+          const facts = g.multi
+            ? [
+              ['Callsign', callsigns.length > 1
+                ? { html: `<span class="wwa-multi" tabindex="0">${escapeHtml(callsigns[0])} &amp; ${callsigns.length - 1} more<span class="wwa-multi-pop">${callsigns.map(c => escapeHtml(c)).join('<br>')}</span></span>` }
+                : callsigns[0]],
+              ['Aircraft', types.length > 1 ? rollUp('Multiple', r => String(r.aircraftType || '').toUpperCase()) : types[0]],
+              ['Sim Type', sims.length > 1 ? rollUp('Multiple', r => r.simType) : sims[0]],
+              ['Main CID', cids.length > 1 ? rollUp('Multiple', r => r.cid) : cids[0]]
+            ]
+            : [
+              ['Callsign', pr.callsign],
+              ['Aircraft', pr.aircraftType],
+              ['Sim Type', pr.simType],
+              ['Main CID', pr.cid]
+            ];
+          return card('affiliate', pr.id, pr.name || pr.callsign, facts, pr.description, pr.website, badgeFor(pr.sinceYear));
+        }).join('');
+      })()}
     </div>` : '<p style="color:var(--muted);font-size:13px;">No WF affiliates registered yet.</p>'}
   </section>
 
@@ -23663,6 +24178,7 @@ app.patch('/api/admin/affiliates/:id', requireAdmin, profilePhotoUpload.single('
     data.sinceYear = yr;
   }
   if (body.hasMembers !== undefined) data.hasMembers = asBool(body.hasMembers);
+  if (body.multiAircraft !== undefined) data.multiAircraft = asBool(body.multiAircraft);
   if (body.name !== undefined) data.name = String(body.name).trim().slice(0, 60) || null;
   if (body.aircraftType !== undefined) data.aircraftType = String(body.aircraftType).trim().toUpperCase().slice(0, 10) || null;
   if (body.description !== undefined) data.description = String(body.description).trim().slice(0, 1000) || null;
@@ -23691,6 +24207,21 @@ app.patch('/api/admin/affiliates/:id', requireAdmin, profilePhotoUpload.single('
     affiliateCids.add(data.cid);
   }
   await loadAffiliateOwners();
+
+  // multiAircraft describes the whole fleet, so keep every affiliate sharing
+  // this name in step — otherwise the HQ and public page disagree.
+  if (data.multiAircraft !== undefined) {
+    const row = await prisma.affiliate.findUnique({ where: { id }, select: { name: true, callsign: true } }).catch(() => null);
+    const key = String(row?.name || row?.callsign || '').trim().toUpperCase();
+    if (key) {
+      const all = await prisma.affiliate.findMany({ select: { id: true, name: true, callsign: true } });
+      for (const a of all) {
+        if (a.id === id) continue;
+        if (String(a.name || a.callsign || '').trim().toUpperCase() !== key) continue;
+        await prisma.affiliate.update({ where: { id: a.id }, data: { multiAircraft: data.multiAircraft } }).catch(() => {});
+      }
+    }
+  }
 
   // Main CID transferred away — revoke the old holder's role if orphaned
   if (prevRow && data.cid !== undefined && Number(prevRow.cid) !== Number(data.cid)) {

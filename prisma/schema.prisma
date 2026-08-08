@@ -31,6 +31,7 @@ model Affiliate {
   cid               Int
   sinceYear         Int?
   hasMembers        Boolean  @default(false)
+  multiAircraft     Boolean  @default(false)
   aircraftType      String?
   description       String?
   website           String?
