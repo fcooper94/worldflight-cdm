@@ -23690,6 +23690,7 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
   </label>
 
   <div class="modal-actions" style="margin-top:16px;">
+    <button type="button" class="action-btn" id="adminEntryPromote" style="display:none;margin-right:auto;">Promote to WF Team</button>
     <button type="button" class="action-btn" id="adminEntryCancel">Cancel</button>
     <button type="submit" class="action-btn primary" id="adminEntrySave">Save</button>
   </div>
@@ -23838,6 +23839,10 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
       }
       if (participatingRow) participatingRow.style.display = type === 'application' ? 'none' : '';
 
+      // Promotion only makes sense on an existing affiliate
+      var promoteBtn = document.getElementById('adminEntryPromote');
+      if (promoteBtn) promoteBtn.style.display = (type === 'affiliate' && editingId != null) ? '' : 'none';
+
       if (type === 'team') {
         titleEl.textContent = editingId ? 'Edit Official Team' : 'Add Official Team';
 
@@ -23968,6 +23973,40 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
       try { record = JSON.parse(btn.dataset.record || '{}'); } catch (err) { return; }
       record.id = Number(btn.dataset.id);
       openEntryModal(teamEdit ? 'team' : 'affiliate', record);
+    });
+
+    // ===== Promote affiliate -> Official WF Team =====
+    var promoteEntryBtn = document.getElementById('adminEntryPromote');
+    if (promoteEntryBtn) promoteEntryBtn.addEventListener('click', () => {
+      if (editingId == null) return;
+      var affId = editingId;
+      var nameIn = form.querySelector('input[name="affiliateName"]');
+      var csIn = form.querySelector('input[name="affiliateCallsign"]');
+      var displayName = (nameIn && nameIn.value.trim()) || (csIn && csIn.value.trim()) || 'This affiliate';
+      closeEntryModal();
+      openConfirmModalAsync({
+        title: 'Promote to WF Team',
+        message: displayName + ' becomes an Official WF Team: every aircraft, the profile photo, sector opt-outs and pilot assignments, and members with their permissions move across, then the affiliate entry is removed. Bookings are kept. Country (and any missing A/C type) is set to TBD - edit the new team to fill it in.',
+        confirmText: 'Promote',
+        onConfirm: async ({ showOk }) => {
+          try {
+            const r = await fetch('/api/admin/affiliates/' + affId + '/promote', { method: 'POST' });
+            const d = await r.json().catch(() => ({}));
+            if (!r.ok || !d.success) {
+              showOk('Promotion failed', (d && d.error) || ('HTTP ' + r.status));
+              return;
+            }
+            var msg = 'Created "' + d.teamName + '" with ' + d.aircraft + ' aircraft. ' + d.membersMoved + ' member(s) moved.';
+            if (d.membersSkipped && d.membersSkipped.length) {
+              msg += ' Skipped (already on another team): ' + d.membersSkipped.join(', ') + '.';
+            }
+            showOk('Promoted', msg + ' Reloading...');
+            setTimeout(() => location.reload(), 1600);
+          } catch (e) {
+            showOk('Promotion failed', String((e && e.message) || e));
+          }
+        }
+      });
     });
 
     // ===== Declined-chip reason tooltip =====
@@ -26306,6 +26345,134 @@ app.patch('/api/admin/affiliates/:id', requireAdmin, profilePhotoUpload.single('
   }
 
   return res.json({ success: true });
+});
+
+/* Promote an affiliate to an Official WF Team. A multi-aircraft operator is
+   several Affiliate rows sharing a name, so the whole group moves: one
+   OfficialTeam row per aircraft, each keeping its callsign, main CID, A/C
+   type and profile photo. Sector claims become the team equivalents (cid 0
+   sentinel -> opt-out, positive cid -> assignment), members get WF_TEAM roles
+   carrying their permissions, then the affiliate side is deleted. Bookings
+   are keyed by cid + callsign and both carry over unchanged, so they are not
+   touched. Country has no affiliate equivalent and is set to TBD. */
+app.post('/api/admin/affiliates/:id/promote', requireAdmin, async (req, res) => {
+  const id = Number(req.params.id);
+  if (!id) return res.status(400).json({ error: 'Invalid id' });
+
+  try {
+    const source = await prisma.affiliate.findUnique({ where: { id } });
+    if (!source) return res.status(404).json({ error: 'Affiliate not found' });
+
+    const groupKey = String(source.name || source.callsign || '').trim().toUpperCase();
+    const allAffiliates = await prisma.affiliate.findMany({ orderBy: { id: 'asc' } });
+    const group = allAffiliates.filter(a => String(a.name || a.callsign || '').trim().toUpperCase() === groupKey);
+
+    const teamName = String(source.name || source.callsign || '').trim().slice(0, 60);
+    const existingTeams = await prisma.officialTeam.findMany({ select: { teamName: true } });
+    if (existingTeams.some(t => String(t.teamName || '').trim().toUpperCase() === teamName.toUpperCase())) {
+      return res.status(409).json({ error: `An Official Team named "${teamName}" already exists` });
+    }
+
+    const summary = { teamName, aircraft: 0, membersMoved: 0, membersSkipped: [], optOuts: 0, assignments: 0 };
+    const nextSort = await resolveSortOrder(undefined, prisma.officialTeam);
+
+    for (const aff of group) {
+      const team = await prisma.officialTeam.create({
+        data: {
+          teamName,
+          callsign: String(aff.callsign || '').trim().toUpperCase(),
+          mainCid: Number(aff.cid) || 0,
+          aircraftType: String(aff.aircraftType || 'TBD').trim().toUpperCase(),
+          country: 'TBD',
+          sinceYear: aff.sinceYear,
+          multiSlot: !!aff.multiAircraft,
+          description: aff.description,
+          website: aff.website,
+          sortOrder: nextSort,
+          participatingWf26: !!aff.participatingWf26
+        }
+      });
+      summary.aircraft++;
+
+      // Profile photo follows its row across
+      await prisma.profilePhoto.update({
+        where: { entityType_entityId: { entityType: 'affiliate', entityId: aff.id } },
+        data: { entityType: 'team', entityId: team.id }
+      }).catch(() => null);
+
+      const claims = await prisma.affiliateSectorClaim.findMany({ where: { affiliateId: aff.id } }).catch(() => []);
+      for (const c of claims) {
+        if (Number(c.cid) === 0) {
+          const made = await prisma.teamSectorOptOut.create({
+            data: { officialTeamId: team.id, sectorNumber: c.sectorNumber }
+          }).catch(() => null);
+          if (made) summary.optOuts++;
+        } else if (Number(c.cid) > 0) {
+          const made = await prisma.teamSectorAssignment.create({
+            data: { officialTeamId: team.id, sectorNumber: c.sectorNumber, cid: Number(c.cid) }
+          }).catch(() => null);
+          if (made) summary.assignments++;
+        }
+      }
+      await prisma.affiliateSectorClaim.deleteMany({ where: { affiliateId: aff.id } }).catch(() => null);
+    }
+
+    // Members: one WF_TEAM role per member, carrying booking/member-management
+    // permissions from their WF_AFFILIATE role. Main CIDs need no role row
+    // (owners are covered by teamOwnerCids); members already on another team
+    // stay there and are reported back instead of being moved.
+    const mainCids = new Set(group.map(a => Number(a.cid)).filter(Boolean));
+    const memberRows = await prisma.affiliateMember.findMany({
+      where: { affiliateId: { in: group.map(a => a.id) } }
+    }).catch(() => []);
+    const seen = new Set();
+    for (const m of memberRows) {
+      const cid = Number(m.cid);
+      if (!cid || seen.has(cid) || mainCids.has(cid)) continue;
+      seen.add(cid);
+      const existingRole = await prisma.userAdditionalRole.findUnique({
+        where: { cid_role: { cid, role: 'WF_TEAM' } }
+      }).catch(() => null);
+      if (existingRole) {
+        summary.membersSkipped.push(cid);
+        continue;
+      }
+      const affRole = await prisma.userAdditionalRole.findUnique({
+        where: { cid_role: { cid, role: 'WF_AFFILIATE' } }
+      }).catch(() => null);
+      await prisma.userAdditionalRole.create({
+        data: {
+          cid,
+          role: 'WF_TEAM',
+          teamName,
+          canEditBookings: affRole ? !!affRole.canEditBookings : false,
+          canManageMembers: affRole ? !!affRole.canManageMembers : false,
+          participating: m.active !== false
+        }
+      });
+      teamMemberCids.add(cid);
+      summary.membersMoved++;
+    }
+
+    // Remove the affiliate side, then drop WF_AFFILIATE from anyone orphaned
+    await prisma.affiliateMember.deleteMany({ where: { affiliateId: { in: group.map(a => a.id) } } }).catch(() => null);
+    await prisma.affiliate.deleteMany({ where: { id: { in: group.map(a => a.id) } } }).catch(() => null);
+    for (const cid of mainCids) await revokeAffiliateRoleIfOrphaned(cid);
+    for (const m of memberRows) await revokeAffiliateRoleIfOrphaned(m.cid);
+
+    await loadTeamMembers();
+    await loadAffiliateOwners();
+
+    if (group.some(a => a.participatingWf26)) {
+      autoAssignTeamThenAffiliate({ reason: `affiliate ${id} promoted to team` }).catch(() => {});
+    }
+
+    console.log(`[PROMOTE] Affiliate "${teamName}" -> Official Team: ${summary.aircraft} aircraft, ${summary.membersMoved} member(s) moved, ${summary.membersSkipped.length} skipped, ${summary.optOuts} opt-out(s), ${summary.assignments} assignment(s)`);
+    return res.json({ success: true, ...summary });
+  } catch (e) {
+    console.error('[PROMOTE] failed:', e);
+    return res.status(500).json({ error: e.message || 'Promotion failed' });
+  }
 });
 
 
