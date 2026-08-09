@@ -18209,6 +18209,7 @@ const HQ_STYLES = `    <style>
         width: 100%;
         min-width: 240px;
         padding: 8px 34px 8px 12px;
+        text-overflow: ellipsis;
         background-color: var(--panel2);
         background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
         background-repeat: no-repeat;
@@ -18251,6 +18252,14 @@ const HQ_STYLES = `    <style>
         background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
       }
       .claim-saving { opacity: 0.55; pointer-events: none; }
+      /* In the schedule tables the account cell only shows "Name · CID", so the
+         240px picker width is wasted space next to the other columns. */
+      .aff-schedule-card .claim-select {
+        min-width: 0;
+        width: 190px;
+        padding: 6px 30px 6px 10px;
+        font-size: 12px;
+      }
 
       /* Solo affiliate: pilot is fixed (the main CID) */
       .aff-solo-row {
@@ -18474,19 +18483,21 @@ const HQ_STYLES = `    <style>
         border-top: 1px solid var(--border);
       }
 
-      /* Uniform pill styling for both Flow Restrictions and Status columns */
+      /* Uniform pill styling for both Flow Restrictions and Status columns.
+         Kept compact — the old 140px-min, 13px pills squeezed the Date and
+         Window columns into wrapping. */
       .aff-schedule-card .flowtype-pill,
       .aff-schedule-card .aff-flow-status {
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        padding: 7px 16px;
+        padding: 4px 12px;
         border-radius: 999px;
-        font-size: 13px;
+        font-size: 12px;
         font-weight: 700;
         letter-spacing: 0.04em;
         white-space: nowrap;
-        min-width: 140px;
+        min-width: 0;
         line-height: 1.2;
         border: 1px solid transparent;
         box-sizing: border-box;
@@ -18501,8 +18512,8 @@ const HQ_STYLES = `    <style>
       .aff-flow-tobt {
         background: rgba(56,189,248,0.16);
         border-color: rgba(56,189,248,0.55);
-        gap: 8px;
-        padding: 6px 6px 6px 14px;
+        gap: 6px;
+        padding: 3px 4px 3px 10px;
         box-shadow: 0 4px 14px rgba(56,189,248,0.10);
         cursor: help;
       }
@@ -18518,12 +18529,12 @@ const HQ_STYLES = `    <style>
       .aff-tobt-time {
         display: inline-flex;
         align-items: center;
-        padding: 3px 10px;
+        padding: 2px 8px;
         border-radius: 999px;
         background: rgba(56,189,248,0.32);
         color: #f0f9ff;
         font-family: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
-        font-size: 14px;
+        font-size: 12px;
         font-weight: 800;
         letter-spacing: 0.06em;
         font-variant-numeric: tabular-nums;
@@ -18628,17 +18639,6 @@ const HQ_STYLES = `    <style>
         padding-bottom: 6px;
         white-space: nowrap;
       }
-      /* Compact pills in the multi-aircraft table — the full-size ones squeeze
-         the Date/Window columns into wrapping */
-      .wft-multi-table .flowtype-pill,
-      .wft-multi-table .aff-flow-status {
-        min-width: 0;
-        padding: 4px 12px;
-        font-size: 12px;
-      }
-      .wft-multi-table .aff-flow-tobt { padding: 3px 4px 3px 10px; gap: 6px; }
-      .wft-multi-table .aff-tobt-time { font-size: 12px; padding: 2px 8px; }
-      .wft-multi-table .aff-flow-empty { padding: 0; }
 
       /* Read-only dropdowns for members without booking-edit permission */
       .claim-select:disabled,
@@ -21165,7 +21165,7 @@ app.get('/team/hq', requireLogin, async (req, res) => {
                   <tr data-sector="${escapeHtml(sector)}">
                     <td><span class="ot-cell-callsign">${escapeHtml(sector)}</span></td>
                     <td>
-                      <span class="ot-cell-actype">${escapeHtml(cs)}${callsignAircraft[cs] ? ' · ' + escapeHtml(callsignAircraft[cs]) : ''}</span>
+                      <span class="ot-cell-actype">${escapeHtml(cs)}</span>
                     </td>
                     <td>
                       <select class="claim-select team-pilot-select"${b ? ` data-slot-key="${escapeHtml(b.slotKey)}" data-callsign="${escapeHtml(cs)}" data-booking-cid="${Number(b.cid)}"` : ` data-fleet-id="${activeAircraft ? activeAircraft.id : ''}" data-sector="${escapeHtml(sector)}"`} data-prev="${acctCid}"${canEditBookings ? '' : ' disabled title="You do not have permission to edit bookings"'}>
@@ -22260,7 +22260,8 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
   const affRecord = (a) => JSON.stringify({ name: a.name, callsign: a.callsign, simType: a.simType, cid: a.cid, sinceYear: a.sinceYear, hasMembers: a.hasMembers, multiAircraft: a.multiAircraft, aircraftType: a.aircraftType, description: a.description, website: a.website, sortOrder: a.sortOrder, participatingWf26: a.participatingWf26 }).replace(/'/g, '&#39;');
   const appRecord = (a) => JSON.stringify({
     id: a.id, callsign: a.callsign, simType: a.simType, cid: a.cid, hasMembers: a.hasMembers, multiAircraft: a.multiAircraft,
-    contact: a.contact, heardAbout: a.heardAbout, website: a.website, notes: a.notes,
+    contact: a.contact, discord: a.discord, email: a.email,
+    heardAbout: a.heardAbout, website: a.website, notes: a.notes,
     source: a.source, status: a.status, createdAt: a.createdAt,
     photoIds: (photosByApp[a.id] || [])
   }).replace(/'/g, '&#39;');
@@ -22442,7 +22443,12 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
                   </td>
                   <td><span class="ot-simtype" data-sim="${escapeHtml((a.simType || '').toUpperCase())}">${escapeHtml(a.simType || '—')}</span></td>
                   <td class="ot-cell-cid">${a.cid}</td>
-                  <td class="ot-app-contact">${a.contact ? escapeHtml(a.contact) : '<span class="ot-muted">—</span>'}</td>
+                  <td class="ot-app-contact">${(() => {
+                    // New rows carry discord + email; older ones a single contact string.
+                    const bits = [a.discord, a.email].filter(Boolean).map(escapeHtml);
+                    if (bits.length) return bits.join('<br>');
+                    return a.contact ? escapeHtml(a.contact) : '<span class="ot-muted">—</span>';
+                  })()}</td>
                   <td class="ot-app-heard">${a.heardAbout ? escapeHtml(a.heardAbout) : '<span class="ot-muted">—</span>'}</td>
                   <td class="ot-app-notes" title="${a.notes ? escapeHtml(a.notes) : ''}">${a.notes ? escapeHtml(a.notes.length > 60 ? a.notes.slice(0, 60) + '…' : a.notes) : '<span class="ot-muted">—</span>'}</td>
                   <td class="ot-app-photos">${(photosByApp[a.id] || []).map(pid => `
@@ -22542,7 +22548,9 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
     .ot-app-status-approved { background: rgba(34,197,94,0.15); color: #4ade80; }
     .ot-app-status-declined { background: rgba(239,68,68,0.15); color: #f87171; }
     .ot-app-source { font-size: 11px; color: var(--muted); }
-    .ot-app-contact, .ot-app-notes { font-size: 12px; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .ot-app-notes { font-size: 12px; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    /* Two stacked lines (Discord + email) — clip each rather than the cell */
+    .ot-app-contact { font-size: 12px; max-width: 180px; overflow: hidden; line-height: 1.5; word-break: break-all; }
     .ot-app-heard { font-size: 12px; white-space: nowrap; }
     .ot-app-row { cursor: pointer; }
     .ot-app-row:hover td { background: rgba(255,255,255,0.03); }
@@ -22966,6 +22974,11 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
         ['Sim Type', esc(a.simType || '—')],
         ['CID', esc(a.cid)],
         ['Multiple users', a.hasMembers ? 'Yes' : 'No'],
+        ['Discord', esc(a.discord || '—')],
+        ['Email', a.email
+          ? '<a href="mailto:' + esc(a.email) + '" style="color:var(--accent);">' + esc(a.email) + '</a>'
+          : '—'],
+        // Legacy rows stored one combined contact string
         ['Contact', esc(a.contact || '—')],
         ['Heard via', esc(a.heardAbout || '—')],
         ['Website', a.website
@@ -23472,6 +23485,10 @@ app.delete('/api/admin/official-teams/:id', requireAdmin, async (req, res) => {
    creates the Affiliate (participating/active) exactly like the manual
    affiliate-create endpoint; the application row is kept as history. */
 
+// Community Discord — affiliates are expected to be members, so the apply
+// form and the admin queue both link to it.
+const WF_DISCORD_INVITE = 'https://discord.gg/FyWFMQyS2e';
+
 // Public application form. Logged-in users apply; the CID is taken from the
 // session. Not linked from the nav — share the URL directly.
 app.get('/affiliate-apply', async (req, res) => {
@@ -23502,7 +23519,7 @@ app.get('/affiliate-apply', async (req, res) => {
       <p style="color:var(--muted);margin:0 0 16px;">Applying as <strong>${escapeHtml(user.personal?.name_full || '')} (${cid})</strong></p>
       <form id="affApplyForm" style="display:flex;flex-direction:column;gap:4px;max-width:480px;">
         <label style="margin:6px 0 4px;">Name / Callsign *</label>
-        <input name="callsign" type="text" maxlength="40" required placeholder="e.g. FRENCH BAGUETTE" style="text-transform:uppercase;" />
+        <input name="callsign" type="text" maxlength="40" required placeholder="Your group or setup name" style="text-transform:uppercase;" />
 
         <label style="margin:10px 0 4px;">Sim Type *</label>
         <select name="simType" required>
@@ -23526,8 +23543,16 @@ app.get('/affiliate-apply', async (req, res) => {
           <option value="Referred by a friend">Referred by a friend</option>
         </select>
 
-        <label style="margin:10px 0 4px;">Contact (Discord / email)</label>
-        <input name="contact" type="text" maxlength="120" placeholder="So we can reach you outside VATSIM" />
+        <label style="margin:10px 0 4px;">Discord Username *</label>
+        <input name="discord" type="text" maxlength="60" required placeholder="e.g. yourname" style="text-transform:none;text-align:left;" />
+        <span style="font-size:12px;color:var(--muted);margin-top:6px;line-height:1.5;">
+          All WF Affiliates need to be in the WorldFlight community Discord — that's where we coordinate during the event.
+          <a href="${WF_DISCORD_INVITE}" target="_blank" rel="noopener" style="color:var(--accent);font-weight:600;">Join the Discord server</a>
+          if you aren't already a member.
+        </span>
+
+        <label style="margin:14px 0 4px;">Email *</label>
+        <input name="email" type="email" maxlength="120" required placeholder="you@example.com" style="text-transform:none;text-align:left;" />
 
         <label style="margin:10px 0 4px;">Website</label>
         <input name="website" type="url" maxlength="200" placeholder="If you have a website, link it here" />
@@ -24035,8 +24060,14 @@ app.post('/api/affiliate-applications', (req, res, next) => {
   const cid = Number(sessUser?.cid);
   if (!cid) return res.status(401).json({ error: 'You must be logged in to apply' });
 
-  const { callsign, simType, hasMembers, heardAbout, contact, website, notes } = req.body || {};
+  const { callsign, simType, hasMembers, heardAbout, discord, email, website, notes } = req.body || {};
   if (!callsign || !simType) return res.status(400).json({ error: 'Name/callsign and sim type are required' });
+
+  const discordName = String(discord || '').trim();
+  const emailAddr = String(email || '').trim();
+  if (!discordName) return res.status(400).json({ error: 'Discord username is required' });
+  if (!emailAddr) return res.status(400).json({ error: 'Email address is required' });
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailAddr)) return res.status(400).json({ error: 'Enter a valid email address' });
 
   const photos = (req.files || []).filter(f => /^image\//.test(f.mimetype));
   if ((req.files || []).length > photos.length) {
@@ -24058,7 +24089,8 @@ app.post('/api/affiliate-applications', (req, res, next) => {
         cid,
         hasMembers: String(hasMembers) === 'true',
         heardAbout: heardAbout ? String(heardAbout).trim().slice(0, 60) : null,
-        contact: contact ? String(contact).trim().slice(0, 120) : null,
+        discord: discordName.slice(0, 60),
+        email: emailAddr.slice(0, 120),
         // Force an http(s) scheme so the admin-side link can never be javascript: etc.
         website: website && String(website).trim()
           ? (/^https?:\/\//i.test(String(website).trim()) ? String(website).trim() : 'https://' + String(website).trim()).slice(0, 200)

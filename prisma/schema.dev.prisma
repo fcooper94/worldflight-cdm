@@ -448,7 +448,11 @@ model AffiliateApplication {
   cid         Int
   sinceYear   Int?
   hasMembers  Boolean   @default(false)
+  // contact is the legacy single free-text field; public applications now
+  // capture discord + email separately and both are required on the form.
   contact     String?
+  discord     String?
+  email       String?
   notes       String?
   heardAbout  String?
   website     String?
