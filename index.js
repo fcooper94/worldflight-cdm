@@ -20233,16 +20233,20 @@ app.get('/affiliates/hq', requireLogin, async (req, res) => {
 
         // Long affiliate names make the header title wrap onto two lines —
         // fall back to plain "Affiliate HQ" whenever the full title doesn't fit.
+        // (.header-center is absolutely positioned shrink-to-fit, so overflow
+        // never registers on scrollWidth — count rendered line boxes instead.)
         (function() {
           var headerTitle = document.querySelector('.header-center');
           if (!headerTitle) return;
           var fullTitle = headerTitle.textContent;
+          function isWrapped() {
+            var range = document.createRange();
+            range.selectNodeContents(headerTitle);
+            return range.getClientRects().length > 1;
+          }
           function fitHeaderTitle() {
             headerTitle.textContent = fullTitle;
-            headerTitle.style.whiteSpace = 'nowrap';
-            var overflows = headerTitle.scrollWidth > headerTitle.clientWidth;
-            headerTitle.style.whiteSpace = '';
-            if (overflows) headerTitle.textContent = 'Affiliate HQ';
+            if (isWrapped()) headerTitle.textContent = 'Affiliate HQ';
           }
           fitHeaderTitle();
           window.addEventListener('resize', fitHeaderTitle);
@@ -21883,16 +21887,20 @@ app.get('/team/hq', requireLogin, async (req, res) => {
 
         // Long team names make the header title wrap onto two lines —
         // fall back to plain "WF Team HQ" whenever the full title doesn't fit.
+        // (.header-center is absolutely positioned shrink-to-fit, so overflow
+        // never registers on scrollWidth — count rendered line boxes instead.)
         (function() {
           var headerTitle = document.querySelector('.header-center');
           if (!headerTitle) return;
           var fullTitle = headerTitle.textContent;
+          function isWrapped() {
+            var range = document.createRange();
+            range.selectNodeContents(headerTitle);
+            return range.getClientRects().length > 1;
+          }
           function fitHeaderTitle() {
             headerTitle.textContent = fullTitle;
-            headerTitle.style.whiteSpace = 'nowrap';
-            var overflows = headerTitle.scrollWidth > headerTitle.clientWidth;
-            headerTitle.style.whiteSpace = '';
-            if (overflows) headerTitle.textContent = 'WF Team HQ';
+            if (isWrapped()) headerTitle.textContent = 'WF Team HQ';
           }
           fitHeaderTitle();
           window.addEventListener('resize', fitHeaderTitle);
