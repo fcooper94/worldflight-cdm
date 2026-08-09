@@ -24375,8 +24375,8 @@ app.get('/teams', requirePageEnabled('who-we-are'), async (req, res) => {
     .wwa-modal-close:hover { color: var(--text); border-color: var(--accent); }
     .wwa-modal-head { display: flex; align-items: center; gap: 20px; margin-bottom: 20px; }
     .wwa-modal-photo {
-      width: 168px;
-      height: 168px;
+      width: 140px;
+      height: 140px;
       flex-shrink: 0;
       border-radius: 14px;
       overflow: hidden;
