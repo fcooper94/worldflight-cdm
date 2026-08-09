@@ -5613,6 +5613,321 @@ app.get('/data-handling', (req, res) => {
   });
 });
 
+// ── FAQ page ───────────────────────────────────────────────────────────
+app.get('/faq', (req, res) => {
+  const user = req.session?.user?.data || null;
+  const isAdmin = user ? isAdminUser(user.cid) : false;
+
+  const faqs = [
+    {
+      q: 'What is WorldFlight?',
+      a: 'WorldFlight is a group flight that flies around the world in 7 days. The event started in 1999, and over the past 22 years, it has raised over $1,000,000 for charities around the world. Each team raises money for their own charities by flying their simulator along the route. In addition to the teams, which comprise around 15 people each, anyone can fly along and join the unique event at any time of the day for 7 days.'
+    },
+    {
+      q: 'Do you follow real-world procedures?',
+      a: '<p>Each team flies their simulator as realistically as possible, following their real-world airline procedures. Most of the teams are made up of real-world pilots and air traffic controllers who enjoy the different locations WorldFlight visits.</p>'
+        + '<p>As each team is operating on a roster for 7 days, avoiding delays for the WorldFlight teams is greatly appreciated, as radio, TV, or charity visits to the event are timed around departures and arrivals. Therefore, the teams are more than happy to take a visually separated departure or implement a bit of taxiing via the grass (taxiway Golf) to speed up movements at smaller airports.</p>'
+        + '<p>Bear in mind that Oshkosh in the real world applies special procedures for large amounts of traffic, so we have to do the same! In the real world, you would never have 70 people flying between two airports, so applying a 10-mile in-trail separation between multiple runway airports would result in hours and hours of delays.</p>'
+        + '<p>When WorldFlight visits for a few hours out of 365 days of the year, we really do appreciate any flexibility that can be provided by ATC.</p>'
+    },
+    {
+      q: 'Why should I fly or control during WorldFlight?',
+      a: 'After 22 years of WorldFlight, a real community has formed both online and in the real world. Many of those who fly during WorldFlight year in and year out have made lifelong friends all around the world. With teams flying around the clock, some of the funniest moments on VATSIM have come from tired radio calls at 3 am. There is a real camaraderie between VATSIM and WorldFlight controllers, pilots, and staff.'
+    },
+    {
+      q: 'Why is there a WorldFlight ATC team?',
+      a: 'In the first few years of WorldFlight, there was very little local ATC outside of the USA, Australia, and Europe. To fill the gaps, the WorldFlight ATC team was born. An agreement was made with VATSIM for them to be able to fill in the gaps where no local controllers were available. However, in recent years, the WorldFlight ATC team has barely been needed thanks to the willingness of local divisions to control WorldFlight. WorldFlight ATC is available at the request of divisions or in case of non-attendance of rostered ATC. Last year, this was the case when we were passing through airports at 3 am local time, for example.'
+    },
+    {
+      q: "Why aren't you visiting my airport, or why are you passing through at 4 am when local control won't be available?",
+      a: '<p>Over the past 22 years, we have visited nearly 990 airports. Each event only allows for approximately 45 flights, so we cannot visit every continent, airport, or country every year. We also cannot plan to arrive at sociable hours at every airport we fly to due to the 24-hour nature of the event.</p>'
+        + '<p>You can see all of the airports we have visited from 1999 to 2021 on the <a href="/previous-destinations" style="color:var(--accent);">Previous Destinations</a> page.</p>'
+    },
+    {
+      q: "Why do you visit small airports and not large multi-runway airports at every destination?",
+      a: 'The route is planned to provide a varied array of destinations and challenges for the crews of the simulators. This was fine in the earlier years of the event, but now, with 70 aircraft flying along on most legs, we are starting to have to think of cunning ways to provide interesting approaches. We try to fit the small airports in with longer turnaround times and flight times after or before some larger airports. In previous years, we have set 2 or 3 airports as our destination, for example, all 3 Channel Island airports. If your division has some plans to allow for fun flying, then please do suggest them!'
+    },
+    {
+      q: 'What VATSIM Code of Conduct Exemptions are made for Official WorldFlight Teams?',
+      a: '<p>Following motion was passed for Worldflight 2024:</p>'
+        + '<blockquote>The official participants of WorldFlight 2024 shall be exempt from Section A3 of the VATSIM Code of Conduct for the duration of the event. The owner of the account logged into the network shall remain responsible for the conduct of the users utilizing the account.</blockquote>'
+        + '<blockquote>The callsigns of the official participants of WorldFlight 2024 shall be reserved for their exclusive use for the duration of the event.</blockquote>'
+    },
+    {
+      q: 'What VATSIM Code of Conduct Exemptions are made for WorldFlight ATC?',
+      a: '<p>Following motion was passed for Worldflight 2024:</p>'
+        + '<blockquote>Only when requested by the specific VATSIM Division, the WorldFlight ATC team shall be allowed to staff ATC positions within the Division for the duration of the event\'s time in that airspace. The controllers must have the suitable rating to control the ATC position they are staffing. Local controllers have priority. If a local controller requests to staff a position currently occupied by a WorldFlight controller, and the local controller is able to commit to 2+ hours of time controlling, the WorldFlight controller shall cede the position to the local controller when traffic conditions allow an easy transfer of control.</blockquote>'
+        + '<blockquote>A list of official WorldFlight participants and WorldFlight ATC, to include name and CID, must be published on the WorldFlight website.</blockquote>'
+    }
+  ];
+
+  const faqHtml = faqs.map((f, i) => `
+    <div class="faq-item">
+      <button type="button" class="faq-question" aria-expanded="false" data-faq="${i}">
+        <span class="faq-q-text">${f.q}</span>
+        <svg class="faq-chevron" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
+      <div class="faq-answer" id="faqA${i}">${f.a}</div>
+    </div>
+  `).join('');
+
+  const content = `
+  <section class="card card-full" style="padding:28px 28px 24px;">
+    <h2 style="margin:0 0 6px;color:var(--accent);">Frequently Asked Questions</h2>
+    <p style="color:var(--muted);font-size:13px;margin:0 0 24px;">Everything you need to know about WorldFlight. Can't find your answer? <a href="/contact" style="color:var(--accent);">Contact us</a> or ask in our <a href="${WF_DISCORD_INVITE}" target="_blank" rel="noopener" style="color:var(--accent);">Discord community</a>.</p>
+
+    <div class="faq-list">
+      ${faqHtml}
+    </div>
+
+    <div style="border-top:1px solid var(--border);margin-top:28px;padding-top:20px;text-align:center;">
+      <p style="color:var(--muted);font-size:14px;margin:0 0 12px;">Still have questions?</p>
+      <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">
+        <a href="${WF_DISCORD_INVITE}" target="_blank" rel="noopener" class="action-btn" style="text-decoration:none;">Join the Discord</a>
+        <a href="/contact" class="action-btn primary" style="text-decoration:none;">Contact Us</a>
+      </div>
+    </div>
+  </section>
+
+  <style>
+    .faq-list { display:flex; flex-direction:column; gap:0; }
+    .faq-item { border-bottom:1px solid var(--border); }
+    .faq-item:first-child { border-top:1px solid var(--border); }
+    .faq-question {
+      display:flex; align-items:center; justify-content:space-between; gap:16px;
+      width:100%; padding:16px 4px; background:none; border:none; cursor:pointer;
+      color:var(--text); font-size:15px; font-weight:600; font-family:inherit;
+      text-align:left; transition:color 0.15s;
+    }
+    .faq-question:hover { color:var(--accent); }
+    .faq-chevron {
+      flex-shrink:0; transition:transform 0.2s ease; color:var(--muted);
+    }
+    .faq-question[aria-expanded="true"] .faq-chevron {
+      transform:rotate(180deg); color:var(--accent);
+    }
+    .faq-answer {
+      display:none; padding:0 4px 18px; color:var(--text); font-size:14px;
+      line-height:1.7; opacity:0.85;
+    }
+    .faq-answer.open { display:block; }
+    .faq-answer p { margin:0 0 10px; }
+    .faq-answer p:last-child { margin-bottom:0; }
+    .faq-answer blockquote {
+      margin:10px 0; padding:12px 16px; border-left:3px solid var(--accent);
+      background:var(--panel2,#0d1526); border-radius:0 6px 6px 0;
+      font-style:italic; color:var(--muted); line-height:1.6;
+    }
+  </style>
+
+  <script>
+    (function() {
+      document.querySelectorAll('.faq-question').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          var idx = btn.getAttribute('data-faq');
+          var ans = document.getElementById('faqA' + idx);
+          var expanded = btn.getAttribute('aria-expanded') === 'true';
+          btn.setAttribute('aria-expanded', String(!expanded));
+          ans.classList.toggle('open');
+        });
+      });
+    })();
+  </script>`;
+
+  res.send(renderLayout({ title: 'FAQ', user, isAdmin, content, layoutClass: 'dashboard-full' }));
+});
+
+// ── Contact page ───────────────────────────────────────────────────────
+app.get('/contact', (req, res) => {
+  const user = req.session?.user?.data || null;
+  const isAdmin = user ? isAdminUser(user.cid) : false;
+  const userEmail = user?.personal?.email || '';
+  const isLoggedIn = !!user;
+
+  // Generate a simple math captcha
+  const a = Math.floor(Math.random() * 12) + 2;
+  const b = Math.floor(Math.random() * 12) + 2;
+  const answer = a + b;
+
+  const content = `
+  <section class="card card-full" style="padding:28px 28px 24px;">
+    <h2 style="margin:0 0 6px;color:var(--accent);">Contact Us</h2>
+    <p style="color:var(--muted);font-size:13px;margin:0 0 20px;">Have a question about WorldFlight? Here are the best ways to get in touch.</p>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:24px;">
+      <a href="${WF_DISCORD_INVITE}" target="_blank" rel="noopener" class="contact-card-link">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 12a1 1 0 1 0 2 0 1 1 0 0 0-2 0m6 0a1 1 0 1 0 2 0 1 1 0 0 0-2 0"/><path d="M15.5 17c0 1 1.5 3 2 3 1.5 0 2.833-1.667 3.5-3 .667-1.667.5-5.833-1.5-11.5C18.167 4.167 16 3.5 16 3.5l-1 2m-5.5 11.5c0 1-1.5 3-2 3-1.5 0-2.833-1.667-3.5-3-.667-1.667-.5-5.833 1.5-11.5C6.833 4.167 9 3.5 9 3.5l1 2"/><path d="M7 16.5c2 1 4.5 1.5 6 1.5s4-.5 6-1.5M8.5 5.5c2-.5 3.5-.5 5 0 1.5.5 3 1 4.5.5"/></svg>
+        <span style="font-weight:600;font-size:14px;">Discord Community</span>
+        <span style="font-size:12px;color:var(--muted);">The fastest way to get help</span>
+      </a>
+      <a href="/faq" class="contact-card-link">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        <span style="font-weight:600;font-size:14px;">FAQs</span>
+        <span style="font-size:12px;color:var(--muted);">Frequently asked questions</span>
+      </a>
+    </div>
+
+    <div style="border-top:1px solid var(--border);padding-top:20px;">
+      <h3 style="margin:0 0 4px;font-size:16px;">Send us a message</h3>
+      <p style="color:var(--muted);font-size:13px;margin:0 0 16px;">For questions, suggestions or anything else — fill in the form below and we'll get back to you.</p>
+
+      <form id="contactForm" style="display:flex;flex-direction:column;gap:4px;position:relative;">
+        <label style="margin:0 0 4px;font-size:13px;font-weight:600;">Email *</label>
+        <input name="email" type="email" maxlength="120" required value="${isLoggedIn ? escapeHtml(userEmail) : ''}" ${isLoggedIn ? 'disabled' : ''} placeholder="you@example.com" style="text-transform:none;text-align:left;" />
+        ${isLoggedIn ? `<input type="hidden" name="email" value="${escapeHtml(userEmail)}" />` : ''}
+        ${isLoggedIn ? '<span style="font-size:11px;color:var(--muted);margin-top:1px;">Auto-filled from your VATSIM account.</span>' : ''}
+
+        <label style="margin:10px 0 4px;font-size:13px;font-weight:600;">Subject *</label>
+        <input name="subject" type="text" maxlength="120" required placeholder="What is this about?" style="text-transform:none;text-align:left;" />
+
+        <label style="margin:10px 0 4px;font-size:13px;font-weight:600;">Priority</label>
+        <select name="priority">
+          <option value="normal" selected>Normal</option>
+          <option value="high">High</option>
+        </select>
+
+        <label style="margin:10px 0 4px;font-size:13px;font-weight:600;">Message *</label>
+        <textarea name="message" rows="5" maxlength="3000" required placeholder="Tell us what's on your mind…" style="resize:vertical;width:100%;box-sizing:border-box;background:var(--panel2,#0d1526);color:var(--text,#e2e8f0);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-family:inherit;font-size:14px;"></textarea>
+
+        <label style="margin:14px 0 4px;font-size:13px;font-weight:600;">Are you human? *</label>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span style="font-size:15px;font-weight:600;color:var(--text);font-family:monospace;background:var(--panel2);padding:6px 14px;border-radius:6px;border:1px solid var(--border);">${a} + ${b} = ?</span>
+          <input name="captcha" type="number" required placeholder="?" style="width:80px;text-align:center;" />
+        </div>
+        <input type="hidden" name="captchaAnswer" value="${answer}" />
+
+        <div style="margin-top:16px;display:flex;align-items:center;gap:12px;">
+          <button type="submit" class="action-btn primary" id="contactSubmitBtn">Send message</button>
+          <span id="contactMsg" style="font-size:13px;display:none;"></span>
+        </div>
+
+        <div id="contactOverlay" class="hidden" style="position:absolute;inset:0;background:rgba(var(--panel-rgb,10,15,30),0.85);display:flex;align-items:center;justify-content:center;border-radius:var(--radius,12px);z-index:10;">
+          <div style="text-align:center;">
+            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="var(--accent,#38bdf8)" stroke-width="2" stroke-linecap="round" style="animation:contactSpin 1s linear infinite;"><path d="M21 12a9 9 0 1 1-6.22-8.56"/></svg>
+            <p style="margin:12px 0 0;color:var(--text,#e2e8f0);font-weight:600;font-size:15px;">Sending message&hellip;</p>
+          </div>
+        </div>
+      </form>
+    </div>
+  </section>
+
+  <style>
+    @keyframes contactSpin { to { transform: rotate(360deg); } }
+    .contact-card-link {
+      display:flex; flex-direction:column; align-items:center; gap:6px;
+      padding:18px 12px; border-radius:10px; text-decoration:none;
+      background:var(--panel2,#0d1526); border:1px solid var(--border);
+      color:var(--text); text-align:center; transition:border-color 0.15s, background 0.15s;
+    }
+    .contact-card-link:hover { border-color:var(--accent); background:color-mix(in srgb, var(--accent) 5%, var(--panel2,#0d1526)); }
+    #contactForm select, #contactForm input, #contactForm textarea {
+      background:var(--panel2,#0d1526); color:var(--text,#e2e8f0);
+      border:1px solid var(--border); border-radius:8px; padding:10px 12px;
+      font-family:inherit; font-size:14px;
+    }
+    #contactForm input:disabled { opacity:0.6; cursor:not-allowed; }
+  </style>
+
+  <script>
+    (function() {
+      var form = document.getElementById('contactForm');
+      var msg = document.getElementById('contactMsg');
+      var overlay = document.getElementById('contactOverlay');
+
+      form.addEventListener('submit', async function(e) {
+        e.preventDefault();
+        msg.style.display = 'none';
+        overlay.classList.remove('hidden');
+
+        var fd = new FormData(form);
+        var body = {
+          email: fd.get('email'),
+          subject: fd.get('subject'),
+          priority: fd.get('priority'),
+          message: fd.get('message'),
+          captcha: fd.get('captcha'),
+          captchaAnswer: fd.get('captchaAnswer')
+        };
+
+        try {
+          var r = await fetch('/api/contact', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify(body)
+          });
+          var d = await r.json();
+          if (r.ok) {
+            form.outerHTML = '<p style="color:#4ade80;font-weight:600;margin:8px 0;">Message sent — thanks! We\\'ll get back to you as soon as we can.</p>';
+          } else {
+            overlay.classList.add('hidden');
+            msg.textContent = d.error || 'Failed to send';
+            msg.style.color = '#f87171';
+            msg.style.display = '';
+          }
+        } catch (err) {
+          overlay.classList.add('hidden');
+          msg.textContent = 'Failed to send';
+          msg.style.color = '#f87171';
+          msg.style.display = '';
+        }
+      });
+    })();
+  </script>`;
+
+  res.send(renderLayout({ title: 'Contact Us', user, isAdmin, content, layoutClass: 'dashboard-full' }));
+});
+
+app.post('/api/contact', async (req, res) => {
+  const { email, subject, priority, message, captcha, captchaAnswer } = req.body || {};
+
+  if (!email || !subject || !message) return res.status(400).json({ error: 'Please fill in all required fields' });
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email).trim())) return res.status(400).json({ error: 'Enter a valid email address' });
+  if (String(captcha).trim() !== String(captchaAnswer).trim()) return res.status(400).json({ error: 'Incorrect answer \u2014 please try again' });
+
+  const user = req.session?.user?.data || null;
+  const cidStr = user ? ' (CID ' + user.cid + ')' : '';
+  const priorityLabel = priority === 'high' ? 'HIGH' : 'Normal';
+  const emailSafe = escapeHtml(String(email).trim());
+  const subjectSafe = escapeHtml(String(subject).trim().slice(0, 120));
+  const messageSafe = escapeHtml(String(message).trim().slice(0, 3000));
+  const prioColor = priority === 'high' ? '#f59e0b' : '#e5e7eb';
+
+  try {
+    const transporter = nodemailer.createTransport({
+      host: process.env.SMTP_HOST || 'smtp.gmail.com',
+      port: Number(process.env.SMTP_PORT) || 587,
+      secure: false,
+      auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
+    });
+
+    const mailSubject = '[Contact' + (priority === 'high' ? ' \u26a0\ufe0f HIGH' : '') + '] ' + String(subject).trim().slice(0, 120);
+    const mailHtml = '<div style="font-family:sans-serif;max-width:600px;">'
+      + '<h2 style="color:#38bdf8;margin:0 0 16px;">New Contact Form Submission</h2>'
+      + '<table style="border-collapse:collapse;width:100%;">'
+      + '<tr><td style="padding:6px 12px;color:#94a3b8;font-size:13px;width:100px;">From</td><td style="padding:6px 12px;color:#e5e7eb;font-size:14px;">' + emailSafe + escapeHtml(cidStr) + '</td></tr>'
+      + '<tr><td style="padding:6px 12px;color:#94a3b8;font-size:13px;">Subject</td><td style="padding:6px 12px;color:#e5e7eb;font-size:14px;">' + subjectSafe + '</td></tr>'
+      + '<tr><td style="padding:6px 12px;color:#94a3b8;font-size:13px;">Priority</td><td style="padding:6px 12px;color:' + prioColor + ';font-size:14px;font-weight:600;">' + priorityLabel + '</td></tr>'
+      + '</table>'
+      + '<div style="margin:16px 0;padding:16px;background:#0f172a;border:1px solid #1e293b;border-radius:8px;white-space:pre-wrap;color:#e5e7eb;font-size:14px;line-height:1.6;">' + messageSafe + '</div>'
+      + '</div>';
+
+    await transporter.sendMail({
+      from: process.env.SMTP_FROM || '"WorldFlight" <noreply@worldflight.center>',
+      to: 'contact@worldflight.center',
+      replyTo: String(email).trim(),
+      subject: mailSubject,
+      html: mailHtml
+    });
+
+    console.log('[CONTACT] Message from ' + String(email).trim() + cidStr + ': "' + String(subject).trim().slice(0, 60) + '"');
+    res.json({ success: true });
+  } catch (e) {
+    console.error('[CONTACT] Failed to send:', e.message);
+    res.status(500).json({ error: 'Failed to send message \u2014 please try again later' });
+  }
+});
+
 httpServer.listen(port, '0.0.0.0', () => {
   console.log('WorldFlight Planning starting on ' + port + ' (loading...)');
 });
@@ -19323,57 +19638,7 @@ app.get('/affiliates/hq', requireLogin, async (req, res) => {
           </div>
         </section>
 
-        ${isSolo && !readOnly ? `
-        <section class="card aff-stats-card">
-          <header class="aff-members-header">
-            <h3 class="section-title" style="margin:0;">My VATSIM Stats</h3>
-            <a href="https://stats.vatsim.net/stats/${cid}" target="_blank" rel="noopener" class="aff-stats-link">View on VATSIM →</a>
-          </header>
-          <div class="aff-stats-grid">
-            <div class="aff-stat">
-              <div class="aff-stat-label">CID</div>
-              <div class="aff-stat-value mono">${cid}</div>
-            </div>
-            <div class="aff-stat">
-              <div class="aff-stat-label">Name</div>
-              <div class="aff-stat-value">${escapeHtml(user?.personal?.name_full || '—')}</div>
-            </div>
-            <div class="aff-stat">
-              <div class="aff-stat-label">Controller Rating</div>
-              <div class="aff-stat-value">
-                <span class="aff-rating-pill">${escapeHtml(user?.vatsim?.rating?.short || '—')}</span>
-                <span class="aff-rating-long">${escapeHtml(user?.vatsim?.rating?.long || '')}</span>
-              </div>
-            </div>
-            <div class="aff-stat">
-              <div class="aff-stat-label">Pilot Rating</div>
-              <div class="aff-stat-value">
-                <span class="aff-rating-pill">${escapeHtml(user?.vatsim?.pilotrating?.short || '—')}</span>
-                <span class="aff-rating-long">${escapeHtml(user?.vatsim?.pilotrating?.long || '')}</span>
-              </div>
-            </div>
-            <div class="aff-stat">
-              <div class="aff-stat-label">Division</div>
-              <div class="aff-stat-value">${escapeHtml(user?.vatsim?.division?.name || user?.vatsim?.division?.id || '—')}</div>
-            </div>
-            <div class="aff-stat">
-              <div class="aff-stat-label">Region</div>
-              <div class="aff-stat-value">${escapeHtml(user?.vatsim?.region?.name || user?.vatsim?.region?.id || '—')}</div>
-            </div>
-            <div class="aff-stat">
-              <div class="aff-stat-label">Live Status</div>
-              <div class="aff-stat-value">
-                <span class="aff-status-dot aff-status-${livePresence.kind}"></span>
-                ${escapeHtml(livePresence.label)}
-              </div>
-            </div>
-            <div class="aff-stat">
-              <div class="aff-stat-label">${livePresence.kind === 'atc' ? 'Position' : 'Callsign'}</div>
-              <div class="aff-stat-value mono">${escapeHtml(livePresence.detail || '—')}</div>
-            </div>
-          </div>
-        </section>
-        ` : isMainHolder ? `
+        ${(isSolo && !readOnly) || isMainHolder ? `
         <section class="card aff-profile-card">
           <header class="aff-members-header">
             <h3 class="section-title" style="margin:0;">Public Profile</h3>
@@ -24559,7 +24824,7 @@ app.get('/affiliate-apply', async (req, res) => {
   `;
 
   const content = `
-  <section class="card" style="max-width:680px;margin:0 auto;padding:28px;">
+  <section class="card card-full" style="padding:28px;">
     <h2 style="margin:0 0 6px;">Apply as a WF Affiliate</h2>
     <p style="color:var(--muted);font-size:13px;margin:0 0 20px;">WF Affiliates are established sim setups and communities that fly the WorldFlight route alongside the official teams.</p>
     <div style="display:flex;flex-direction:column;">${inner}</div>

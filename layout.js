@@ -323,6 +323,10 @@ export default function renderLayout({
       <a href="/privacy">Privacy Policy</a>
       <span class="policy-sep" aria-hidden="true">·</span>
       <a href="/data-handling">Data Handling</a>
+      <span class="policy-sep" aria-hidden="true">·</span>
+      <a href="/faq">FAQ</a>
+      <span class="policy-sep" aria-hidden="true">·</span>
+      <a href="/contact">Contact Us</a>
     </div>
   </footer>
 
