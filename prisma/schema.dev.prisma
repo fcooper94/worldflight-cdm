@@ -459,6 +459,7 @@ model NavdataFile {
 
 model AffiliateApplication {
   id          Int       @id @default(autoincrement())
+  teamName    String?
   callsign    String
   simType     String
   cid         Int

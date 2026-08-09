@@ -22615,7 +22615,8 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
           <table class="ot-table">
             <thead>
               <tr>
-                <th>Name / Callsign</th>
+                <th>Team Name</th>
+                <th>Callsign</th>
                 <th>Sim Type</th>
                 <th>CID</th>
                 <th>Applied</th>
@@ -22627,11 +22628,12 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
               ${applications.map(a => `
                 <tr data-application-id="${a.id}" data-record='${appRecord(a)}' class="ot-app-row">
                   <td class="ot-cell-name">
-                    <span class="ot-cell-callsign">${escapeHtml(a.callsign)}</span>
+                    <span>${escapeHtml(a.teamName || a.callsign)}</span>
                     ${a.website ? `<a class="ot-open-link" href="${escapeHtml(a.website)}" target="_blank" rel="noopener" title="${escapeHtml(a.website)}" aria-label="Open website">
                       <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
                     </a>` : ''}
                   </td>
+                  <td><span class="ot-cell-callsign">${escapeHtml(a.callsign)}</span></td>
                   <td><span class="ot-simtype" data-sim="${escapeHtml((a.simType || '').toUpperCase())}">${escapeHtml(a.simType || '—')}</span></td>
                   <td class="ot-cell-cid">${a.cid}</td>
                   <td class="ot-muted">${new Date(a.createdAt).toISOString().slice(0, 10)}</td>
@@ -23711,7 +23713,7 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
     }
 
     function openAppDetailModal(a) {
-      document.getElementById('appDetailCallsign').textContent = a.callsign || '';
+      document.getElementById('appDetailCallsign').textContent = (a.teamName ? a.teamName + ' — ' : '') + (a.callsign || '');
       var statusEl = document.getElementById('appDetailStatus');
       statusEl.textContent = (a.status || '').charAt(0).toUpperCase() + (a.status || '').slice(1);
       statusEl.className = 'ot-app-status ot-app-status-' + a.status;
@@ -23720,6 +23722,8 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
         ' · ' + (a.createdAt ? new Date(a.createdAt).toISOString().slice(0, 10) : '');
 
       var rows = [
+        ['Team Name', esc(a.teamName || '—')],
+        ['Callsign', esc(a.callsign || '—')],
         ['Sim Type', esc(a.simType || '—')],
         ['CID', esc(a.cid)],
         ['Multiple users', a.hasMembers ? 'Yes' : 'No'],
@@ -24350,8 +24354,12 @@ app.get('/affiliate-apply', async (req, res) => {
   ` : `
       <p style="color:var(--muted);margin:0 0 16px;">Applying as <strong>${escapeHtml(user.personal?.name_full || '')} (${cid})</strong></p>
       <form id="affApplyForm" style="display:flex;flex-direction:column;gap:4px;max-width:480px;">
-        <label style="margin:6px 0 4px;">Name / Callsign *</label>
-        <input name="callsign" type="text" maxlength="40" required placeholder="Your group or setup name" style="text-transform:uppercase;" />
+        <label style="margin:6px 0 4px;">Team Name *</label>
+        <input name="teamName" type="text" maxlength="60" required placeholder="Your group or setup name" style="text-transform:none;text-align:left;" />
+
+        <label style="margin:10px 0 4px;">Callsign *</label>
+        <input name="callsign" type="text" maxlength="10" required placeholder="e.g. WFAUS" style="text-transform:uppercase;" />
+        <span style="font-size:12px;color:var(--muted);margin-top:2px;line-height:1.4;">You can change this again at a later stage via the Affiliate HQ.</span>
 
         <label style="margin:10px 0 4px;">Sim Type *</label>
         <select name="simType" required>
@@ -24508,6 +24516,7 @@ app.get('/affiliate-apply', async (req, res) => {
           form.addEventListener('submit', async function(e) {
             e.preventDefault();
             var fd = new FormData(form);
+            fd.set('teamName', (fd.get('teamName') || '').toString().trim());
             fd.set('callsign', (fd.get('callsign') || '').toString().trim().toUpperCase());
             tiles.forEach(function(tile) {
               var f = tile.querySelector('input[type=file]').files[0];
@@ -25148,7 +25157,7 @@ const affMailNote = (html) => `
               </div>`;
 
 /* Sent the moment an application form is submitted. */
-function buildAffiliateApplicationEmail({ applicantName, callsign, simType, cid, discordInvite }) {
+function buildAffiliateApplicationEmail({ applicantName, teamName, callsign, simType, cid, discordInvite }) {
   const row = (label, value) => `
         <tr>
           <td style="padding:8px 0;color:#94a3b8;font-size:13px;width:130px;">${label}</td>
@@ -25163,7 +25172,8 @@ function buildAffiliateApplicationEmail({ applicantName, callsign, simType, cid,
 
               <div style="background:#0f172a;border:1px solid #1e293b;border-radius:10px;padding:6px 18px;margin:0 0 20px;">
                 <table width="100%" cellpadding="0" cellspacing="0">
-                  ${row('Name / Callsign', callsign)}
+                  ${row('Team Name', teamName)}
+                  ${row('Callsign', callsign)}
                   ${row('Sim Type', simType)}
                   ${row('VATSIM CID', cid)}
                 </table>
@@ -25450,8 +25460,9 @@ app.post('/api/affiliate-applications', (req, res, next) => {
   const cid = Number(sessUser?.cid);
   if (!cid) return res.status(401).json({ error: 'You must be logged in to apply' });
 
-  const { callsign, simType, hasMembers, heardAbout, discord, email, website, notes } = req.body || {};
-  if (!callsign || !simType) return res.status(400).json({ error: 'Name/callsign and sim type are required' });
+  const { teamName, callsign, simType, hasMembers, heardAbout, discord, email, website, notes } = req.body || {};
+  if (!callsign || !simType) return res.status(400).json({ error: 'Callsign and sim type are required' });
+  if (!teamName || !String(teamName).trim()) return res.status(400).json({ error: 'Team name is required' });
 
   const discordName = String(discord || '').trim();
   const emailAddr = String(email || '').trim();
@@ -25474,7 +25485,8 @@ app.post('/api/affiliate-applications', (req, res, next) => {
 
     const created = await prisma.affiliateApplication.create({
       data: {
-        callsign: String(callsign).trim().toUpperCase().slice(0, 40),
+        teamName: String(teamName).trim().slice(0, 60),
+        callsign: String(callsign).trim().toUpperCase().slice(0, 10),
         simType: String(simType).trim().toUpperCase().slice(0, 30),
         cid,
         hasMembers: String(hasMembers) === 'true',
@@ -25518,6 +25530,7 @@ app.post('/api/affiliate-applications', (req, res, next) => {
         subject: 'WorldFlight — Affiliate Application Received',
         html: buildAffiliateApplicationEmail({
           applicantName: escapeHtml(String(sessUser?.personal?.name_first || '').trim() || 'there'),
+          teamName: escapeHtml(created.teamName || created.callsign),
           callsign: escapeHtml(created.callsign),
           simType: escapeHtml(created.simType),
           cid,
@@ -25597,6 +25610,7 @@ app.post('/admin/api/affiliate-applications/:id/approve', requireAdmin, async (r
 
     const created = await prisma.affiliate.create({
       data: {
+        name: appRow.teamName || null,
         callsign: appRow.callsign,
         simType: appRow.simType,
         cid: appRow.cid,
