@@ -327,6 +327,8 @@ export default function renderLayout({
       <a href="/faq">FAQ</a>
       <span class="policy-sep" aria-hidden="true">·</span>
       <a href="/contact">Contact Us</a>
+      <span class="policy-sep" aria-hidden="true">·</span>
+      <a href="https://discord.gg/FyWFMQyS2e" target="_blank" rel="noopener">Join Discord</a>
     </div>
   </footer>
 

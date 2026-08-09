@@ -5902,14 +5902,15 @@ app.post('/api/contact', async (req, res) => {
     });
 
     const mailSubject = '[Contact' + (priority === 'high' ? ' \u26a0\ufe0f HIGH' : '') + '] ' + String(subject).trim().slice(0, 120);
-    const mailHtml = '<div style="font-family:sans-serif;max-width:600px;">'
-      + '<h2 style="color:#38bdf8;margin:0 0 16px;">New Contact Form Submission</h2>'
-      + '<table style="border-collapse:collapse;width:100%;">'
-      + '<tr><td style="padding:6px 12px;color:#94a3b8;font-size:13px;width:100px;">From</td><td style="padding:6px 12px;color:#e5e7eb;font-size:14px;">' + emailSafe + escapeHtml(cidStr) + '</td></tr>'
-      + '<tr><td style="padding:6px 12px;color:#94a3b8;font-size:13px;">Subject</td><td style="padding:6px 12px;color:#e5e7eb;font-size:14px;">' + subjectSafe + '</td></tr>'
-      + '<tr><td style="padding:6px 12px;color:#94a3b8;font-size:13px;">Priority</td><td style="padding:6px 12px;color:' + prioColor + ';font-size:14px;font-weight:600;">' + priorityLabel + '</td></tr>'
+    const prioColorEmail = priority === 'high' ? '#dc2626' : '#374151';
+    const mailHtml = '<div style="font-family:sans-serif;max-width:600px;color:#1f2937;">'
+      + '<h2 style="color:#0369a1;margin:0 0 16px;font-size:20px;">New Contact Form Submission</h2>'
+      + '<table style="border-collapse:collapse;width:100%;border:1px solid #e5e7eb;border-radius:8px;">'
+      + '<tr style="border-bottom:1px solid #e5e7eb;"><td style="padding:10px 14px;color:#6b7280;font-size:13px;width:100px;font-weight:600;">From</td><td style="padding:10px 14px;color:#111827;font-size:14px;">' + emailSafe + escapeHtml(cidStr) + '</td></tr>'
+      + '<tr style="border-bottom:1px solid #e5e7eb;"><td style="padding:10px 14px;color:#6b7280;font-size:13px;font-weight:600;">Subject</td><td style="padding:10px 14px;color:#111827;font-size:14px;font-weight:600;">' + subjectSafe + '</td></tr>'
+      + '<tr><td style="padding:10px 14px;color:#6b7280;font-size:13px;font-weight:600;">Priority</td><td style="padding:10px 14px;color:' + prioColorEmail + ';font-size:14px;font-weight:600;">' + priorityLabel + '</td></tr>'
       + '</table>'
-      + '<div style="margin:16px 0;padding:16px;background:#0f172a;border:1px solid #1e293b;border-radius:8px;white-space:pre-wrap;color:#e5e7eb;font-size:14px;line-height:1.6;">' + messageSafe + '</div>'
+      + '<div style="margin:16px 0;padding:16px;background:#f3f4f6;border:1px solid #e5e7eb;border-radius:8px;white-space:pre-wrap;color:#1f2937;font-size:14px;line-height:1.6;">' + messageSafe + '</div>'
       + '</div>';
 
     await transporter.sendMail({
@@ -23721,6 +23722,31 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
     </div>
   </div>
 
+  <!-- ===== Approve Modal ===== -->
+  <div id="appApproveModal" class="modal hidden">
+    <div class="modal-backdrop"></div>
+    <div class="modal-card card" style="max-width:480px;text-align:left;">
+      <h3 style="text-align:left;margin-bottom:4px;">Approve Application</h3>
+      <p class="modal-help" style="text-align:left;margin-bottom:16px;">
+        Approve <strong id="appApproveCallsign" style="color:var(--text);"></strong>? They will be added to WF Affiliates and made active for the event.
+      </p>
+
+      <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:10px 12px;background:var(--panel2);border:1px solid var(--border);border-radius:8px;">
+        <input type="checkbox" id="appApproveMaskName" style="width:18px;height:18px;accent-color:var(--accent);cursor:pointer;" />
+        <div>
+          <div style="font-size:14px;font-weight:600;">Mask user name</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:2px;">Use CID only instead of real name on public pages</div>
+        </div>
+      </label>
+
+      <div class="modal-actions" style="margin-top:18px;">
+        <button type="button" class="action-btn" id="appApproveCancel">Cancel</button>
+        <button type="button" class="action-btn primary" id="appApproveConfirm"
+          style="background:rgba(34,197,94,0.15);color:#4ade80;border-color:#4ade80;">Approve &amp; notify</button>
+      </div>
+    </div>
+  </div>
+
   <script>
   document.addEventListener('DOMContentLoaded', () => {
     const modal = document.getElementById('adminEntryModal');
@@ -23968,6 +23994,38 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
       });
     }
 
+    // ===== Approve modal (with mask-name option) =====
+    function openApproveModal(callsign) {
+      return new Promise(resolve => {
+        const am = document.getElementById('appApproveModal');
+        const cb = document.getElementById('appApproveMaskName');
+        const okBtn = document.getElementById('appApproveConfirm');
+        const noBtn = document.getElementById('appApproveCancel');
+        const backdrop = am.querySelector('.modal-backdrop');
+
+        document.getElementById('appApproveCallsign').textContent = callsign;
+        cb.checked = false;
+        am.classList.remove('hidden');
+
+        function cleanup(result) {
+          am.classList.add('hidden');
+          okBtn.removeEventListener('click', onOk);
+          noBtn.removeEventListener('click', onCancel);
+          backdrop.removeEventListener('click', onCancel);
+          document.removeEventListener('keydown', onKey);
+          resolve(result);
+        }
+        function onOk() { cleanup({ maskName: cb.checked }); }
+        function onCancel() { cleanup(null); }
+        function onKey(e) { if (e.key === 'Escape') onCancel(); }
+
+        okBtn.addEventListener('click', onOk);
+        noBtn.addEventListener('click', onCancel);
+        backdrop.addEventListener('click', onCancel);
+        document.addEventListener('keydown', onKey);
+      });
+    }
+
     // ===== Application detail modal =====
     const appModal = document.getElementById('appDetailModal');
 
@@ -24194,13 +24252,13 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
       }
 
       if (action === 'approve-application') {
-        const ok = await openConfirmModal({
-          title: 'Approve Application',
-          message: 'Approve ' + (btn.dataset.callsign || 'this application') + '? They will be added to WF Affiliates and made active for the event.'
-        });
-        if (!ok) return;
+        const result = await openApproveModal(btn.dataset.callsign || 'this application');
+        if (!result) return;
         const res = await fetch('/admin/api/affiliate-applications/' + id + '/approve', {
-          method: 'POST', credentials: 'same-origin'
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify({ maskName: result.maskName })
         });
         if (!res.ok) {
           const d = await res.json().catch(() => ({}));
@@ -25025,7 +25083,7 @@ app.get('/teams', requirePageEnabled('who-we-are'), async (req, res) => {
               ['Callsign', pr.callsign],
               ['Aircraft', pr.aircraftType],
               ['Sim Type', pr.simType],
-              ['Main CID', pr.cid]
+              ...(pr.maskName ? [] : [['Main CID', pr.cid]])
             ];
           return card('affiliate', pr.id, pr.name || pr.callsign, facts, pr.description, pr.website, badgeFor(pr.sinceYear));
         }).join('');
@@ -25880,6 +25938,7 @@ app.get('/admin/api/affiliate-applications/pending-count', requireAdmin, async (
 app.post('/admin/api/affiliate-applications/:id/approve', requireAdmin, async (req, res) => {
   const id = Number(req.params.id);
   const adminCid = Number(req.session?.user?.data?.cid) || null;
+  const maskName = !!(req.body?.maskName);
   try {
     const appRow = await prisma.affiliateApplication.findUnique({ where: { id } });
     if (!appRow) return res.status(404).json({ error: 'Application not found' });
@@ -25891,6 +25950,7 @@ app.post('/admin/api/affiliate-applications/:id/approve', requireAdmin, async (r
         callsign: appRow.callsign,
         simType: appRow.simType,
         cid: appRow.cid,
+        maskName,
         // Public applicants don't pick a year — active since the year we approve
         sinceYear: appRow.sinceYear || new Date().getUTCFullYear(),
         hasMembers: appRow.hasMembers,

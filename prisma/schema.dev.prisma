@@ -32,6 +32,7 @@ model Affiliate {
   sinceYear         Int?
   hasMembers        Boolean  @default(false)
   multiAircraft     Boolean  @default(false)
+  maskName          Boolean  @default(false)
   aircraftType      String?
   description       String?
   website           String?
