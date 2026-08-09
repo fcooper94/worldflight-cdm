@@ -17975,6 +17975,17 @@ const HQ_STYLES = `    <style>
         height: 100%;
         min-height: 0;
       }
+      /* Side column must not drive the row height, or a long member list
+         stretches the row and nothing ever scrolls. height:0 keeps it out of
+         intrinsic row sizing while min-height:100% fills whatever height the
+         welcome/charter card sets. Two-column layout only — below the 1100px
+         breakpoint each card is its own row and must size to its content. */
+      @media (min-width: 1101px) {
+        .affiliate-hq-side {
+          height: 0;
+          min-height: 100%;
+        }
+      }
       .affiliate-hq-side > .affiliate-banner-card { flex: 0 0 auto; }
       .affiliate-hq-side > .aff-members-card,
       .affiliate-hq-side > .aff-stats-card {
@@ -17986,6 +17997,25 @@ const HQ_STYLES = `    <style>
       .aff-members-card .ot-table-wrap {
         flex: 1 1 auto;
         min-height: 0;
+        overflow-y: auto;
+        /* Global scrollbar is 6px at 8% white — invisible on this dark card */
+        scrollbar-width: thin;
+        scrollbar-color: rgba(148,163,184,0.5) rgba(255,255,255,0.05);
+      }
+      .aff-members-card .ot-table-wrap::-webkit-scrollbar { width: 10px; }
+      .aff-members-card .ot-table-wrap::-webkit-scrollbar-track {
+        background: rgba(255,255,255,0.05);
+        border-radius: 999px;
+      }
+      .aff-members-card .ot-table-wrap::-webkit-scrollbar-thumb {
+        background: rgba(148,163,184,0.5);
+        border-radius: 999px;
+        border: 2px solid transparent;
+        background-clip: padding-box;
+      }
+      .aff-members-card .ot-table-wrap::-webkit-scrollbar-thumb:hover {
+        background: rgba(148,163,184,0.75);
+        background-clip: padding-box;
       }
 
       .aff-members-card { padding: 22px; }
@@ -19126,8 +19156,7 @@ app.get('/affiliates/hq', requireLogin, async (req, res) => {
                   <th class="ot-th-center">Flying</th>
                   <th>Callsign</th>
                   <th>VATSIM Account <span class="tobt-help wft-info">i<span class="tobt-tooltip">This is the VATSIM account that will be connected on VATSIM for this sector.</span></span></th>
-                  <th>Flow Restrictions</th>
-                  <th>Status</th>
+                  ${showFlowInfo ? '<th>Flow Restrictions</th><th>Status</th>' : ''}
                   ${showAtcRoute ? '<th>ATC Route</th>' : ''}
                   <th>From</th><th>To</th><th>Date</th><th>Dep Window</th><th>Arr Window</th><th>Plan</th>
                 </tr>
@@ -19151,16 +19180,17 @@ app.get('/affiliates/hq', requireLogin, async (req, res) => {
                     <tr class="${first ? 'wft-group-start' : ''}${flying ? '' : ' mm-inactive-row'}">
                       <td>${first ? `<span class="ot-cell-callsign">${escapeHtml(r.number)}</span>` : ''}</td>
                       <td class="ot-cell-active">
-                        <input type="checkbox" class="wf-check aff-flying" data-restricted="${restricted ? '1' : '0'}" data-aff-id="${a.id}" data-sector="${escapeHtml(r.number)}" ${flying ? 'checked' : ''} ${readOnly ? 'disabled' : ''} title="${flying ? 'Flying this sector' : 'Not flying this sector'}" />
+                        <input type="checkbox" class="wf-check aff-flying" data-aff-id="${a.id}" data-sector="${escapeHtml(r.number)}" ${flying ? 'checked' : ''} ${readOnly ? 'disabled' : ''} title="${flying ? 'Flying this sector' : 'Not flying this sector'}" />
                       </td>
                       <td><span class="ot-cell-actype">${escapeHtml(cs)}</span></td>
                       <td><span class="${b ? '' : 'ot-muted'}">${escapeHtml(acctLabel)}</span></td>
+                      ${showFlowInfo ? `
                       <td>${first ? `<span class="flowtype-pill flowtype-${flow.cls}">${escapeHtml(flow.label)}</span>` : ''}</td>
                       <td class="aff-status-cell">${!flying
                         ? '<span class="ot-muted">Not flying</span>'
                         : (status && status.kind === 'tobt'
                           ? `<span class="aff-flow-status aff-flow-tobt"><span class="aff-tobt-label">${escapeHtml(status.label)}</span><span class="aff-tobt-time">${escapeHtml(status.time)}</span><span class="tobt-help">?<span class="tobt-tooltip">This is your TCT (Target Connection Time).<br>Connect to VATSIM at this time.</span></span></span>`
-                          : `<span class="aff-flow-status aff-flow-${status ? status.kind : 'empty'}">${escapeHtml(status ? status.text : (restricted ? 'Awaiting slot' : '—'))}</span>`)}</td>
+                          : `<span class="aff-flow-status aff-flow-${status ? status.kind : 'empty'}">${escapeHtml(status ? status.text : (restricted ? 'Awaiting slot' : '—'))}</span>`)}</td>` : ''}
                       ${showAtcRoute ? `<td>${first ? (r.atc_route && r.atc_route !== '-'
                         ? `<button type="button" class="aff-route-btn" data-route="${String(r.atc_route).replace(/&/g, '&amp;').replace(/"/g, '&quot;')}" data-route2="${r.atc_route2 && r.atc_route2 !== '-' ? String(r.atc_route2).replace(/&/g, '&amp;').replace(/"/g, '&quot;') : ''}" data-simbrief="${sbAttr}" data-from="${escapeHtml(r.from)}" data-to="${escapeHtml(r.to)}">ATC Route</button>`
                         : `<span class="ot-muted" style="font-style:italic;">Pending agreement</span>`) : ''}</td>` : ''}
@@ -19335,8 +19365,8 @@ app.get('/affiliates/hq', requireLogin, async (req, res) => {
             <input name="aircraftType" type="text" maxlength="10" placeholder="e.g. B744" value="${escapeHtml(affiliate.aircraftType || '')}" style="text-transform:none;text-align:left;" />
             `}
 
-            <label style="font-size:13px;margin:12px 0 4px;">Bio</label>
-            <textarea name="description" rows="4" maxlength="1000" placeholder="Who you are, what you fly, where you're based…" style="width:100%;box-sizing:border-box;resize:vertical;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-family:inherit;font-size:14px;">${escapeHtml(affiliate.description || '')}</textarea>
+            <label style="font-size:13px;margin:12px 0 4px;">Bio <span style="color:var(--muted);font-weight:400;">(max 360 characters)</span></label>
+            <textarea name="description" rows="4" maxlength="360" placeholder="Who you are, what you fly, where you're based…" style="width:100%;box-sizing:border-box;resize:vertical;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-family:inherit;font-size:14px;">${escapeHtml(affiliate.description || '')}</textarea>
 
             <label style="font-size:13px;margin:12px 0 4px;">Profile Picture</label>
             <div style="display:flex;gap:14px;align-items:center;">
@@ -19724,9 +19754,11 @@ app.get('/affiliates/hq', requireLogin, async (req, res) => {
         document.addEventListener('change', async function(e) {
           var cb = e.target.closest('.aff-flying');
           if (!cb) return;
-          var needsReload = cb.dataset.restricted === '1';
           cb.disabled = true;
-          if (needsReload) affShowBusy(cb.checked ? 'Allocating slot...' : 'Releasing slot...');
+          // Only the server knows whether this sector is flow-restricted (and
+          // so whether a slot moved and the page must reload) — telling the
+          // client up front leaked which sectors are restricted.
+          affShowBusy('Updating...');
           try {
             var r = await fetch('/api/affiliates/fleet/' + cb.dataset.affId + '/flying', {
               method: 'POST',
@@ -19736,7 +19768,8 @@ app.get('/affiliates/hq', requireLogin, async (req, res) => {
             });
             var d = await r.json().catch(function() { return {}; });
             if (!r.ok) throw new Error(d.error || 'Failed to save');
-            if (needsReload) { location.reload(); return; }
+            if (d.reload) { location.reload(); return; }
+            affHideBusy();
             var row = cb.closest('tr');
             if (row) {
               row.classList.toggle('mm-inactive-row', !cb.checked);
@@ -19943,7 +19976,7 @@ app.post('/api/affiliates/hq/profile', requireLogin, requireAffiliate, (req, res
         ...(affiliate.multiAircraft ? {} : {
           aircraftType: req.body?.aircraftType ? String(req.body.aircraftType).trim().toUpperCase().slice(0, 10) : null
         }),
-        description: req.body?.description ? String(req.body.description).trim().slice(0, 1000) : null
+        description: cleanBio(req.body?.description)
       }
     });
     await saveProfilePhoto('affiliate', affiliate.id, req.file);
@@ -20051,6 +20084,16 @@ app.patch('/api/affiliates/fleet/:id', requireLogin, requireAffiliate, async (re
         vatcanPushForSlotKey(bk.slotKey);
       }
     }
+
+    // ...and a changed VATSIM account keeps them too. Without this the
+    // bookings stay on the old cid, so the schedule table kept showing the
+    // previous account holder even though the fleet row had been updated.
+    if (data.cid !== undefined && Number(data.cid) !== Number(row.cid)) {
+      // Re-read so the (possibly renamed) callsign above is picked up.
+      const current = await prisma.affiliate.findUnique({ where: { id }, select: { id: true, callsign: true } }).catch(() => null);
+      await reassignAffiliateToNewMainCid(current, row.cid, data.cid);
+    }
+
     await loadAffiliateOwners();
     res.json({ success: true });
   } catch (e) {
@@ -20108,9 +20151,15 @@ app.post('/api/affiliates/fleet/:id/flying', requireLogin, requireAffiliate, asy
     const sched = (adminSheetCache || []).find(r => r.number === sectorNumber);
     if (!sched) return res.status(400).json({ error: 'Unknown sector' });
 
+    // Whether a slot was reallocated, and so whether the client needs a full
+    // reload. Decided here rather than exposed as a data-attribute — that told
+    // every viewer which sectors are flow-restricted, even when the flow
+    // columns are hidden from them.
+    const restricted = (sharedFlowTypes[`${sched.from}-${sched.to}`] || 'NONE') !== 'NONE';
+
     if (flying) {
       await prisma.affiliateSectorClaim.deleteMany({ where: { affiliateId: id, sectorNumber, cid: 0 } });
-      if ((sharedFlowTypes[`${sched.from}-${sched.to}`] || 'NONE') !== 'NONE') {
+      if (restricted) {
         await autoAssignTeamThenAffiliate({ reason: `${row.callsign} opted in to ${sectorNumber}` }).catch(() => {});
       }
     } else {
@@ -20121,7 +20170,7 @@ app.post('/api/affiliates/fleet/:id/flying', requireLogin, requireAffiliate, asy
       });
       const prefix = `${sched.from}-${sched.to}|${sched.date_utc}|${sched.dep_time_utc}`;
       const cs = String(row.callsign || '').toUpperCase();
-      const bookings = (sharedFlowTypes[`${sched.from}-${sched.to}`] || 'NONE') === 'NONE'
+      const bookings = !restricted
         ? []
         : await prisma.tobtBooking.findMany({ where: { callsign: cs, slotKey: { startsWith: prefix } } });
       for (const bk of bookings) {
@@ -20133,7 +20182,7 @@ app.post('/api/affiliates/fleet/:id/flying', requireLogin, requireAffiliate, asy
         vatcanPushForSlotKey(bk.slotKey);
       }
     }
-    res.json({ success: true });
+    res.json({ success: true, reload: restricted });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -20913,7 +20962,7 @@ app.get('/team/hq', requireLogin, async (req, res) => {
                     <tr class="${first ? 'wft-group-start' : ''}${flying ? '' : ' mm-inactive-row'}">
                       <td>${first ? `<span class="ot-cell-callsign">${escapeHtml(r.number)}</span>` : ''}</td>
                       <td class="ot-cell-active">
-                        <input type="checkbox" class="wf-check team-flying" data-restricted="${restricted ? '1' : '0'}" data-fleet-id="${t.id}" data-sector="${escapeHtml(r.number)}" ${flying ? 'checked' : ''} ${canEditBookings ? '' : 'disabled'} title="${flying ? 'Flying this sector' : 'Not flying this sector'}" />
+                        <input type="checkbox" class="wf-check team-flying" data-fleet-id="${t.id}" data-sector="${escapeHtml(r.number)}" ${flying ? 'checked' : ''} ${canEditBookings ? '' : 'disabled'} title="${flying ? 'Flying this sector' : 'Not flying this sector'}" />
                       </td>
                       <td><span class="ot-cell-actype">${escapeHtml(cs)}</span></td>
                       <td>
@@ -21005,8 +21054,8 @@ app.get('/team/hq', requireLogin, async (req, res) => {
               <label style="font-size:13px;margin:0 0 4px;">Website Link</label>
               <input name="website" type="text" maxlength="200" placeholder="https://..." value="${escapeHtml(primary?.website || '')}" style="text-transform:none;text-align:left;" />
 
-              <label style="font-size:13px;margin:12px 0 4px;">Bio</label>
-              <textarea name="description" rows="4" maxlength="1000" placeholder="Who you are, what you fly, where you're based…" style="width:100%;box-sizing:border-box;resize:vertical;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-family:inherit;font-size:14px;">${escapeHtml(primary?.description || '')}</textarea>
+              <label style="font-size:13px;margin:12px 0 4px;">Bio <span style="color:var(--muted);font-weight:400;">(max 360 characters)</span></label>
+              <textarea name="description" rows="4" maxlength="360" placeholder="Who you are, what you fly, where you're based…" style="width:100%;box-sizing:border-box;resize:vertical;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-family:inherit;font-size:14px;">${escapeHtml(primary?.description || '')}</textarea>
 
               <label style="font-size:13px;margin:12px 0 4px;">Profile Picture</label>
               <div style="display:flex;gap:14px;align-items:center;">
@@ -21275,10 +21324,11 @@ app.get('/team/hq', requireLogin, async (req, res) => {
           if (!cb) return;
           // Sectors with no flow restriction have no slot to move, so the row
           // can be updated in place - a full reload of a 43-sector table is by
-          // far the slowest part of this action.
-          var needsReload = cb.dataset.restricted === '1';
+          // far the slowest part of this action. Only the server knows which
+          // sectors are restricted; publishing that to the client leaked it to
+          // viewers who cannot see the flow columns.
           cb.disabled = true;
-          if (needsReload) showBusy(cb.checked ? 'Allocating slot...' : 'Releasing slot...');
+          showBusy('Updating...');
           try {
             var r = await fetch('/api/team/sectors/toggle', {
               method: 'POST',
@@ -21292,7 +21342,8 @@ app.get('/team/hq', requireLogin, async (req, res) => {
             });
             var d = await r.json().catch(function() { return {}; });
             if (!r.ok) throw new Error(d.error || 'Failed to save');
-            if (needsReload) { location.reload(); return; }
+            if (d.reload) { location.reload(); return; }
+            hideBusy();
             var row = cb.closest('tr');
             if (row) {
               row.classList.toggle('mm-inactive-row', !cb.checked);
@@ -21550,7 +21601,7 @@ app.post('/api/team/hq/profile', requireLogin, (req, res, next) => {
     }
     const data = {
       website: cleanWebsite(req.body?.website),
-      description: req.body?.description ? String(req.body.description).trim().slice(0, 1000) : null
+      description: cleanBio(req.body?.description)
     };
     for (const t of fleet) {
       await prisma.officialTeam.update({ where: { id: t.id }, data }).catch(() => {});
@@ -21823,11 +21874,16 @@ app.post('/api/team/sectors/toggle', requireLogin, async (req, res) => {
     const sched = (adminSheetCache || []).find(r => r.number === sectorNumber);
     if (!sched) return res.status(400).json({ error: 'Unknown sector' });
 
+    // Whether a slot moved, and so whether the client must reload. Decided
+    // here rather than exposed as a data-attribute — that told every viewer
+    // which sectors are flow-restricted even when the flow columns are hidden.
+    const restricted = (sharedFlowTypes[`${sched.from}-${sched.to}`] || 'NONE') !== 'NONE';
+
     if (flying) {
       await prisma.teamSectorOptOut.deleteMany({ where: { officialTeamId: fleetId, sectorNumber } });
       // Only restricted sectors have a slot to hand back, and the client waits
       // on this call before reloading, so await it there.
-      if ((sharedFlowTypes[`${sched.from}-${sched.to}`] || 'NONE') !== 'NONE') {
+      if (restricted) {
         await autoAssignTeamThenAffiliate({ reason: `${row.callsign} opted in to ${sectorNumber}` }).catch(() => {});
       }
     } else {
@@ -21838,10 +21894,9 @@ app.post('/api/team/sectors/toggle', requireLogin, async (req, res) => {
       });
       // Release whatever this aircraft holds on the sector. Unrestricted
       // sectors never hold slots, so skip the lookup entirely.
-      const flowType = sharedFlowTypes[`${sched.from}-${sched.to}`] || 'NONE';
       const prefix = `${sched.from}-${sched.to}|${sched.date_utc}|${sched.dep_time_utc}`;
       const cs = String(row.callsign || '').toUpperCase();
-      const bookings = flowType === 'NONE' ? [] : await prisma.tobtBooking.findMany({
+      const bookings = !restricted ? [] : await prisma.tobtBooking.findMany({
         where: { callsign: cs, slotKey: { startsWith: prefix } }
       });
       for (const bk of bookings) {
@@ -21854,7 +21909,7 @@ app.post('/api/team/sectors/toggle', requireLogin, async (req, res) => {
       }
       if (bookings.length) console.log(`[TEAM] ${cs} opted out of ${sectorNumber} — released ${bookings.length} slot(s)`);
     }
-    res.json({ success: true });
+    res.json({ success: true, reload: restricted });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -22736,7 +22791,7 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
     <input name="profileWebsite" type="text" maxlength="200" placeholder="https://..." style="text-transform:none;text-align:left;" />
 
     <label style="display:block; margin:10px 0 6px;">Short description <span style="color:var(--muted);font-weight:400;">(shown on the public Teams &amp; Affiliates page)</span></label>
-    <textarea name="profileDescription" rows="3" maxlength="1000" placeholder="Who they are, what they fly, where they're based…" style="width:100%;resize:vertical;"></textarea>
+    <textarea name="profileDescription" rows="3" maxlength="360" placeholder="Who they are, what they fly, where they're based…" style="width:100%;resize:vertical;"></textarea>
 
     <label style="display:block; margin:10px 0 6px;">Profile photo <span style="color:var(--muted);font-weight:400;">(replaces existing)</span></label>
     <input name="photo" type="file" accept="image/*" style="font-size:13px;" />
@@ -23399,6 +23454,14 @@ const cleanWebsite = (v) => {
   return (/^https?:\/\//i.test(s) ? s : 'https://' + s).slice(0, 200);
 };
 // Blank/absent display order on create appends to the end of the list.
+/* Public bio length. Kept short so the Teams & Affiliates cards stay a
+   consistent shape — enforced on every write path, not just in the markup. */
+const PUBLIC_BIO_MAX = 360;
+const cleanBio = (v) => {
+  const s = String(v ?? '').trim();
+  return s ? s.slice(0, PUBLIC_BIO_MAX) : null;
+};
+
 async function resolveSortOrder(raw, model) {
   if (raw !== undefined && raw !== null && String(raw).trim() !== '') {
     return Math.max(0, Number(raw) || 0);
@@ -23437,7 +23500,7 @@ app.post('/api/admin/official-teams', requireAdmin, profilePhotoUpload.single('p
       country: String(country).trim(),
       sinceYear: yr,
       multiSlot: asBool(req.body?.multiSlot),
-      description: description ? String(description).trim().slice(0, 1000) : null,
+      description: cleanBio(description),
       website: cleanWebsite(website),
       sortOrder: await resolveSortOrder(req.body?.sortOrder, prisma.officialTeam),
       participatingWf26: asBool(participatingWf26)
@@ -23474,7 +23537,7 @@ app.post('/api/admin/affiliates', requireAdmin, profilePhotoUpload.single('photo
       hasMembers: asBool(hasMembers),
       multiAircraft: asBool(req.body?.multiAircraft),
       aircraftType: req.body?.aircraftType ? String(req.body.aircraftType).trim().toUpperCase().slice(0, 10) : null,
-      description: description ? String(description).trim().slice(0, 1000) : null,
+      description: cleanBio(description),
       website: cleanWebsite(website),
       sortOrder: await resolveSortOrder(req.body?.sortOrder, prisma.affiliate),
       participatingWf26: asBool(participatingWf26)
@@ -23810,7 +23873,7 @@ app.get('/affiliate-apply', async (req, res) => {
               });
               var d = await r.json();
               if (r.ok) {
-                form.outerHTML = '<p style="color:#4ade80;font-weight:600;">Application submitted — thanks! We\\'ll review it and you\\'ll see your name under WF Affiliates once approved.</p>';
+                form.outerHTML = '<p style="color:#4ade80;font-weight:600;">Application submitted — thanks! We\\'ve sent a confirmation to your email address, and we\\'ll email you again as soon as a decision has been made.</p>';
               } else {
                 msg.textContent = d.error || 'Failed to submit';
                 msg.style.color = '#f87171';
@@ -23895,29 +23958,44 @@ app.get('/teams', requirePageEnabled('who-we-are'), async (req, res) => {
     }
   }
 
-  const card = (type, id, name, facts, description, website, badge) => `
-    <div class="wwa-card">
+  const globeSvg = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10Z"/></svg>`;
+
+  const card = (type, id, name, facts, description, website, badge) => {
+    const shownFacts = facts.filter(f => f[1] != null && f[1] !== '');
+    const factsHtml = shownFacts.map(f => `
+          <div class="wwa-fact">
+            <span class="wwa-fact-label">${escapeHtml(f[0])}</span>
+            <span class="wwa-fact-value">${f[1] && f[1].html ? f[1].html : escapeHtml(String(f[1]))}</span>
+          </div>`).join('');
+    const photoHtml = hasPhoto.has(`${type}:${id}`)
+      ? `<img src="/api/profile-photo/${type}/${id}" alt="${escapeHtml(name)}" loading="lazy" />`
+      : `<div class="wwa-photo-placeholder">${initials(name)}</div>`;
+    // The card shows a clamped bio; the modal gets the whole profile.
+    const profile = JSON.stringify({
+      type, name, badge: badge || '', photo: photoHtml, facts: factsHtml,
+      description: description || '', website: website || ''
+    }).replace(/'/g, '&#39;');
+
+    return `
+    <div class="wwa-card" role="button" tabindex="0" data-profile='${profile}'
+         aria-label="View the full profile for ${escapeHtml(name)}">
       <div class="wwa-photo">
-        ${hasPhoto.has(`${type}:${id}`)
-          ? `<img src="/api/profile-photo/${type}/${id}" alt="${escapeHtml(name)}" loading="lazy" />`
-          : `<div class="wwa-photo-placeholder">${initials(name)}</div>`}
+        ${photoHtml}
         ${badge ? `<span class="wwa-active-badge">${badge}</span>` : ''}
       </div>
       <div class="wwa-body">
         <div class="wwa-name">${escapeHtml(name)}</div>
-        <div class="wwa-facts">
-          ${facts.filter(f => f[1] != null && f[1] !== '').map(f => `
-          <div class="wwa-fact">
-            <span class="wwa-fact-label">${escapeHtml(f[0])}</span>
-            <span class="wwa-fact-value">${f[1] && f[1].html ? f[1].html : escapeHtml(String(f[1]))}</span>
-          </div>`).join('')}
-        </div>
+        <div class="wwa-facts">${factsHtml}</div>
         ${description ? `<p class="wwa-desc">${escapeHtml(description)}</p>` : ''}
-        ${website ? `<a class="wwa-site" href="${escapeHtml(website)}" target="_blank" rel="noopener">
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10Z"/></svg>
-          Visit website</a>` : ''}
+        <div class="wwa-card-foot">
+          ${website ? `<a class="wwa-site" href="${escapeHtml(website)}" target="_blank" rel="noopener">
+            ${globeSvg}
+            Visit website</a>` : '<span></span>'}
+          <span class="wwa-more">View profile →</span>
+        </div>
       </div>
     </div>`;
+  };
 
   const content = `
   <section class="card card-full" style="padding:28px;">
@@ -24020,6 +24098,86 @@ app.get('/teams', requirePageEnabled('who-we-are'), async (req, res) => {
       })()}
     </div>` : '<p style="color:var(--muted);font-size:13px;">No WF affiliates registered yet.</p>'}
   </section>
+
+  <div id="wwaModal" class="modal hidden">
+    <div class="modal-backdrop"></div>
+    <div class="modal-card card wwa-modal-card" role="dialog" aria-modal="true" aria-labelledby="wwaModalName">
+      <button type="button" class="wwa-modal-close" id="wwaModalClose" aria-label="Close">&times;</button>
+      <div class="wwa-modal-head">
+        <div class="wwa-modal-photo" id="wwaModalPhoto"></div>
+        <div>
+          <div class="wwa-modal-name" id="wwaModalName"></div>
+          <div id="wwaModalBadgeWrap"></div>
+        </div>
+      </div>
+      <div class="wwa-facts" id="wwaModalFacts"></div>
+      <p class="wwa-modal-desc" id="wwaModalDesc"></p>
+      <div id="wwaModalSite"></div>
+      <img id="wwaModalBanner" class="wwa-modal-banner" alt="" />
+    </div>
+  </div>
+
+  <script>
+    (function() {
+      var modal = document.getElementById('wwaModal');
+      var closeBtn = document.getElementById('wwaModalClose');
+      var lastFocused = null;
+
+      function open(card) {
+        var data;
+        try { data = JSON.parse(card.dataset.profile || '{}'); } catch (e) { return; }
+        lastFocused = card;
+        document.getElementById('wwaModalPhoto').innerHTML = data.photo || '';
+        document.getElementById('wwaModalName').textContent = data.name || '';
+        document.getElementById('wwaModalBadgeWrap').innerHTML =
+          data.badge ? '<span class="wwa-modal-badge">' + data.badge + '</span>' : '';
+        document.getElementById('wwaModalFacts').innerHTML = data.facts || '';
+        var desc = document.getElementById('wwaModalDesc');
+        desc.textContent = data.description || '';
+        desc.style.display = data.description ? '' : 'none';
+        // Build the link via the DOM rather than string concatenation, and
+        // only accept http(s) — a quote or a javascript: URL in the stored
+        // website must not be able to break out into markup.
+        var siteWrap = document.getElementById('wwaModalSite');
+        siteWrap.textContent = '';
+        var url = String(data.website || '').toLowerCase();
+        if (url.indexOf('http://') === 0 || url.indexOf('https://') === 0) {
+          var a = document.createElement('a');
+          a.className = 'wwa-site';
+          a.href = data.website;
+          a.target = '_blank';
+          a.rel = 'noopener';
+          a.textContent = 'Visit website';
+          siteWrap.appendChild(a);
+        }
+        var banner = document.getElementById('wwaModalBanner');
+        banner.src = data.type === 'team' ? '/team-banner.jpg' : '/affiliate-banner.jpg';
+        banner.alt = data.type === 'team' ? 'WorldFlight Official Team' : 'WorldFlight Affiliate';
+        modal.classList.remove('hidden');
+        closeBtn.focus();
+      }
+      function close() {
+        modal.classList.add('hidden');
+        if (lastFocused) { lastFocused.focus(); lastFocused = null; }
+      }
+
+      document.addEventListener('click', function(e) {
+        // the website link keeps its own behaviour
+        if (e.target.closest('.wwa-card a')) return;
+        var card = e.target.closest('.wwa-card');
+        if (card) { open(card); return; }
+        if (e.target.closest('#wwaModal .modal-backdrop') || e.target.closest('#wwaModalClose')) close();
+      });
+      document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && !modal.classList.contains('hidden')) { close(); return; }
+        if ((e.key === 'Enter' || e.key === ' ') && document.activeElement &&
+            document.activeElement.classList.contains('wwa-card')) {
+          e.preventDefault();
+          open(document.activeElement);
+        }
+      });
+    })();
+  </script>
 
   <style>
     .wwa-section-title {
@@ -24147,7 +24305,26 @@ app.get('/teams', requirePageEnabled('who-we-are'), async (req, res) => {
     }
     .wwa-multi:hover .wwa-multi-pop,
     .wwa-multi:focus .wwa-multi-pop { display: block; }
-    .wwa-desc { font-size: 12.5px; color: var(--muted); line-height: 1.55; margin: 0; }
+    /* Bios vary from one line to a dozen; clamp so every card is the same
+       shape and the full text lives in the profile modal. */
+    .wwa-desc {
+      font-size: 12.5px;
+      color: var(--muted);
+      line-height: 1.55;
+      margin: 0;
+      display: -webkit-box;
+      -webkit-line-clamp: 4;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .wwa-card-foot {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-top: auto;
+      padding-top: 10px;
+    }
     .wwa-site {
       display: inline-flex;
       align-items: center;
@@ -24156,9 +24333,95 @@ app.get('/teams', requirePageEnabled('who-we-are'), async (req, res) => {
       font-weight: 600;
       color: var(--accent);
       text-decoration: none;
-      margin-top: auto;
     }
     .wwa-site:hover { text-decoration: underline; }
+    .wwa-more {
+      font-size: 11.5px;
+      font-weight: 700;
+      color: var(--muted);
+      white-space: nowrap;
+      transition: color .15s;
+    }
+    .wwa-card { cursor: pointer; }
+    .wwa-card:hover .wwa-more,
+    .wwa-card:focus-visible .wwa-more { color: var(--accent); }
+    .wwa-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+    /* ----- Full profile modal ----- */
+    /* #id needed: the modal sits inside main.dashboard-full, whose
+       .dashboard-full .card rule (max-width none, width 100%) would
+       otherwise stretch it to the full page width. */
+    #wwaModal .wwa-modal-card {
+      max-width: 560px;
+      width: 100%;
+      text-align: left;
+      position: relative;
+    }
+    .wwa-modal-close {
+      position: absolute;
+      top: 14px;
+      right: 14px;
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      border: 1px solid var(--border);
+      background: var(--panel2);
+      color: var(--muted);
+      font-size: 17px;
+      line-height: 1;
+      cursor: pointer;
+      z-index: 1;
+    }
+    .wwa-modal-close:hover { color: var(--text); border-color: var(--accent); }
+    .wwa-modal-head { display: flex; align-items: center; gap: 20px; margin-bottom: 20px; }
+    .wwa-modal-photo {
+      width: 168px;
+      height: 168px;
+      flex-shrink: 0;
+      border-radius: 14px;
+      overflow: hidden;
+      background: var(--panel2);
+      border: 1px solid var(--border);
+    }
+    @media (max-width: 520px) {
+      .wwa-modal-head { flex-direction: column; align-items: flex-start; gap: 14px; }
+      .wwa-modal-photo { width: 100%; height: 200px; }
+    }
+    .wwa-modal-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .wwa-modal-photo .wwa-photo-placeholder { width: 100%; height: 100%; border-radius: 0; }
+    .wwa-modal-name { font-size: 21px; font-weight: 800; color: var(--text); line-height: 1.2; }
+    .wwa-modal-badge {
+      display: inline-block;
+      margin-top: 8px;
+      padding: 3px 10px;
+      border-radius: 999px;
+      font-size: 10.5px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      background: rgba(34,197,94,0.85);
+      color: #fff;
+    }
+    .wwa-modal-desc {
+      font-size: 13.5px;
+      color: var(--text);
+      line-height: 1.65;
+      margin: 16px 0 0;
+      white-space: pre-wrap;
+    }
+    .wwa-modal-card .wwa-site { margin-top: 18px; font-size: 13px; }
+    /* Bleeds past the card's 28px/32px padding so it sits flush with the
+       edges, squaring off into the card's rounded bottom corners. The team
+       art is 16:9 and the affiliate art ~2.09:1, so pin both to one aspect
+       and cover — otherwise the modal changes height per type. */
+    .wwa-modal-banner {
+      display: block;
+      width: calc(100% + 64px);
+      margin: 24px -32px -28px;
+      aspect-ratio: 1472 / 704;
+      object-fit: cover;
+      border-radius: 0 0 16px 16px;
+    }
   </style>`;
 
   res.send(renderLayout({ title: 'Official Teams / WF Affiliates', user, isAdmin, content, layoutClass: 'dashboard-full' }));
@@ -24523,8 +24786,13 @@ app.post('/admin/api/affiliate-applications/:id/approve', requireAdmin, async (r
         // Public applicants don't pick a year — active since the year we approve
         sinceYear: appRow.sinceYear || new Date().getUTCFullYear(),
         hasMembers: appRow.hasMembers,
-        description: appRow.notes || null,
+        // The application's free-text notes seed the public bio, so they get
+        // the same 360-char cap; the full notes stay on the application row.
+        description: cleanBio(appRow.notes),
         website: appRow.website || null,
+        // Without this the row defaults to 0 and jumps to the front of every
+        // ordered list — approved affiliates belong at the end.
+        sortOrder: await resolveSortOrder(null, prisma.affiliate),
         participatingWf26: true
       }
     });
@@ -24663,7 +24931,7 @@ app.patch('/api/admin/official-teams/:id', requireAdmin, profilePhotoUpload.sing
     data.sinceYear = yr;
   }
   if (body.multiSlot !== undefined) data.multiSlot = asBool(body.multiSlot);
-  if (body.description !== undefined) data.description = String(body.description).trim().slice(0, 1000) || null;
+  if (body.description !== undefined) data.description = cleanBio(body.description);
   if (body.website !== undefined) data.website = cleanWebsite(body.website);
   if (body.sortOrder !== undefined && String(body.sortOrder).trim() !== '') data.sortOrder = Math.max(0, Number(body.sortOrder) || 0);
   if (body.participatingWf26 !== undefined) data.participatingWf26 = asBool(body.participatingWf26);
@@ -24692,6 +24960,62 @@ app.patch('/api/admin/official-teams/:id', requireAdmin, profilePhotoUpload.sing
 });
 
 // Patch Affiliate (WF26 toggle or full edit)
+/* Transferring an affiliate's main CID has to carry its existing work across.
+   Bookings are keyed by cid, so without this the HQ keeps showing the previous
+   holder as the VATSIM account (and VATCAN keeps being pushed their cid) even
+   though the affiliate now belongs to someone else. */
+async function reassignAffiliateToNewMainCid(affiliateRow, oldCid, newCid) {
+  const result = { bookings: 0, claims: 0 };
+  if (!affiliateRow) return result;
+  oldCid = Number(oldCid);
+  newCid = Number(newCid);
+  if (!Number.isFinite(oldCid) || !Number.isFinite(newCid) || oldCid === newCid || !oldCid || !newCid) return result;
+
+  const cs = String(affiliateRow.callsign || '').toUpperCase();
+  if (cs) {
+    const bookings = await prisma.tobtBooking.findMany({ where: { callsign: cs, cid: oldCid } }).catch(() => []);
+    for (const bk of bookings) {
+      // Update by id so the cid can move without tripping the (cid, slotKey) unique
+      const moved = await prisma.tobtBooking.update({ where: { id: bk.id }, data: { cid: newCid } }).catch(() => null);
+      if (!moved) continue;
+
+      const oldKey = `${oldCid}:${bk.slotKey}`;
+      const newKey = `${newCid}:${bk.slotKey}`;
+      const existing = tobtBookingsByKey[oldKey];
+      deleteBookingByBookingKey(oldKey);
+      if (tobtBookingsByCid[oldCid]) tobtBookingsByCid[oldCid].delete(oldKey);
+      setBooking({
+        ...(existing || {}),
+        slotKey: bk.slotKey,
+        cid: newCid,
+        callsign: cs,
+        from: bk.from,
+        to: bk.to,
+        dateUtc: bk.dateUtc,
+        depTimeUtc: bk.depTimeUtc,
+        tobtTimeUtc: bk.tobtTimeUtc
+      });
+      if (!tobtBookingsByCid[newCid]) tobtBookingsByCid[newCid] = new Set();
+      tobtBookingsByCid[newCid].add(newKey);
+      vatcanPushForSlotKey(bk.slotKey);
+      result.bookings++;
+    }
+  }
+
+  // Sector claims naming the old main move too. cid 0 is the "not flying"
+  // sentinel and never matches a real cid, so it is left alone.
+  const claims = await prisma.affiliateSectorClaim.updateMany({
+    where: { affiliateId: affiliateRow.id, cid: oldCid },
+    data: { cid: newCid }
+  }).catch(() => null);
+  result.claims = claims?.count || 0;
+
+  if (result.bookings || result.claims) {
+    console.log(`[AFFILIATE] ${cs || affiliateRow.id}: main CID ${oldCid} -> ${newCid}, moved ${result.bookings} booking(s) and ${result.claims} claim(s)`);
+  }
+  return result;
+}
+
 app.patch('/api/admin/affiliates/:id', requireAdmin, profilePhotoUpload.single('photo'), async (req, res) => {
   const id = Number(req.params.id);
   if (!id) return res.status(400).json({ error: 'Invalid id' });
@@ -24711,19 +25035,27 @@ app.patch('/api/admin/affiliates/:id', requireAdmin, profilePhotoUpload.single('
   if (body.multiAircraft !== undefined) data.multiAircraft = asBool(body.multiAircraft);
   if (body.name !== undefined) data.name = String(body.name).trim().slice(0, 60) || null;
   if (body.aircraftType !== undefined) data.aircraftType = String(body.aircraftType).trim().toUpperCase().slice(0, 10) || null;
-  if (body.description !== undefined) data.description = String(body.description).trim().slice(0, 1000) || null;
+  if (body.description !== undefined) data.description = cleanBio(body.description);
   if (body.website !== undefined) data.website = cleanWebsite(body.website);
   if (body.sortOrder !== undefined && String(body.sortOrder).trim() !== '') data.sortOrder = Math.max(0, Number(body.sortOrder) || 0);
   if (body.participatingWf26 !== undefined) data.participatingWf26 = asBool(body.participatingWf26);
   if (!Object.keys(data).length && !req.file) return res.status(400).json({ error: 'No fields to update' });
 
-  // Remember the previous main CID so a transfer can revoke their role below
+  // Remember the previous main CID so a transfer can revoke their role, and
+  // move their bookings/claims onto the new holder, below
   const prevRow = data.cid !== undefined
-    ? await prisma.affiliate.findUnique({ where: { id }, select: { cid: true } }).catch(() => null)
+    ? await prisma.affiliate.findUnique({ where: { id }, select: { cid: true, callsign: true } }).catch(() => null)
     : null;
 
   if (Object.keys(data).length) await prisma.affiliate.update({ where: { id }, data });
   await saveProfilePhoto('affiliate', id, req.file);
+
+  // Carry existing bookings and sector claims over to the new main CID. Uses
+  // the post-update callsign so a simultaneous callsign change is respected.
+  if (prevRow && data.cid !== undefined && Number(prevRow.cid) !== Number(data.cid)) {
+    const current = await prisma.affiliate.findUnique({ where: { id }, select: { id: true, callsign: true } }).catch(() => null);
+    await reassignAffiliateToNewMainCid(current, prevRow.cid, data.cid);
+  }
 
   // If the main CID changed, grant WF_AFFILIATE to the new owner so they
   // get the Affiliate HQ sidebar entry. Skip admins (they shouldn't pick up
