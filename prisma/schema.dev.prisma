@@ -305,6 +305,19 @@ model UserAdditionalRole {
   @@index([cid])
 }
 
+/// Manual CID -> Discord account link, for members whose server nickname
+/// doesn't contain their CID so the automatic match can't find them.
+model DiscordLink {
+  id              Int      @id @default(autoincrement())
+  cid             Int      @unique
+  discordId       String   @unique
+  discordNickname String?
+  linkedBy        Int?
+  linkedAt        DateTime @default(now())
+
+  @@index([discordId])
+}
+
 model WfVisitedAirport {
   id        Int      @id @default(autoincrement())
   icao      String

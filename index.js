@@ -6423,7 +6423,7 @@ cron.schedule('0 0 * * *', refreshAdminSheet);
 // DISCORD_SYNC_REMOVALS is turned on — see lib/discord-roles.mjs.
 cron.schedule('0 * * * *', () => {
   if (!discordConfigured()) return;
-  runDiscordRoleSync({ buildRoster: buildDiscordRosterGroups, reason: 'hourly' }).catch(() => {});
+  runDiscordRoleSync({ buildRoster: buildDiscordRosterGroups, loadManualLinks: loadDiscordManualLinks, persistNames: persistDiscordNames, reason: 'hourly' }).catch(() => {});
 });
 
 
@@ -22358,15 +22358,25 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
   let discordByCid = null;
   let discordError = null;
   let discordFetchedAt = null;
+  const manuallyLinked = new Set();     // CIDs matched by hand rather than nickname
   if (discordConfigured()) {
     try {
-      const snap = await getGuildSnapshot();
+      const [snap, links] = await Promise.all([
+        getGuildSnapshot(),
+        prisma.discordLink?.findMany().catch(() => []) ?? []
+      ]);
       if (snap) {
         discordFetchedAt = snap.fetchedAt;
+        const manualByDiscordId = new Map((links || []).map(l => [String(l.discordId), Number(l.cid)]));
         discordByCid = new Map();
         for (const m of snap.members) {
-          const c = parseCidFromNickname(m.nickname);
-          if (c && !discordByCid.has(c)) discordByCid.set(c, m);
+          // A manual link beats the nickname — it exists because the nickname
+          // could not be matched automatically.
+          const manual = manualByDiscordId.get(m.id);
+          const c = manual || parseCidFromNickname(m.nickname);
+          if (!c || discordByCid.has(c)) continue;
+          discordByCid.set(c, m);
+          if (manual) manuallyLinked.add(c);
         }
       }
     } catch (e) {
@@ -22702,8 +22712,19 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
                       : (p.lead ? 'Affiliate Lead' : 'Affiliate');
                     return `
                     <tr${p.participating ? '' : ' class="mm-inactive-row"'}>
-                      <td class="ot-cell-name">${escapeHtml(rosterNames[p.cid] || '—')}${
-                        nameFromDiscord.has(p.cid) ? '<span class="dp-src" title="Name taken from their Discord nickname">discord</span>' : ''}</td>
+                      <td class="ot-cell-name">
+                        <span class="dp-name">${escapeHtml(rosterNames[p.cid] || '—')}</span>${
+                        nameFromDiscord.has(p.cid) ? '<span class="dp-src" title="Name taken from their Discord nickname">discord</span>' : ''}${
+                        manuallyLinked.has(p.cid) ? '<span class="dp-src dp-src-manual" title="Linked to a Discord account by hand">linked</span>' : ''}${
+                        // Only where the automatic match failed — plus anyone
+                        // linked by hand, so a wrong link can still be undone.
+                        discordByCid && (!discordByCid.has(p.cid) || manuallyLinked.has(p.cid)) ? `
+                        <button type="button" class="dp-find" title="Find this person in the Discord server"
+                          data-cid="${p.cid}" data-name="${escapeHtml(rosterNames[p.cid] || String(p.cid))}"
+                          aria-label="Find in Discord">
+                          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                        </button>` : ''}
+                      </td>
                       <td class="ot-cell-cid">${p.cid}</td>
                       <td>${!discordByCid
                         ? `<span class="dp-unknown" title="${escapeHtml(discordError || 'Discord is not configured')}">Unknown</span>`
@@ -22801,6 +22822,53 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
     .dp-empty { font-size: 12.5px; color: var(--muted); margin: 0 0 6px; }
     /* Fixed layout so every operator's table lines up with the others —
        otherwise each one sizes its own columns from its own content. */
+    .dp-name { vertical-align: middle; }
+    .dp-src-manual { color: #4ade80; }
+    .dp-find {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 20px;
+      height: 20px;
+      margin-left: 6px;
+      padding: 0;
+      border-radius: 5px;
+      border: 1px solid var(--border);
+      background: var(--panel2);
+      color: var(--muted);
+      cursor: pointer;
+      vertical-align: middle;
+      transition: color .15s, border-color .15s;
+    }
+    .dp-find:hover { color: var(--accent); border-color: var(--accent); }
+    /* Search results inside the link modal */
+    .dp-results {
+      max-height: 320px;
+      overflow-y: auto;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      margin-top: 10px;
+    }
+    .dp-result {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      width: 100%;
+      padding: 9px 12px;
+      background: transparent;
+      border: 0;
+      border-bottom: 1px solid var(--border);
+      color: var(--text);
+      font-size: 13px;
+      text-align: left;
+      cursor: pointer;
+    }
+    .dp-result:last-child { border-bottom: 0; }
+    .dp-result:hover { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+    .dp-result-sub { font-size: 11px; color: var(--muted); font-family: 'JetBrains Mono', ui-monospace, monospace; }
+    .dp-result-taken { color: #fbbf24; font-size: 11px; }
+
     .dp-toolbar {
       display: flex;
       align-items: center;
@@ -22999,6 +23067,105 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
       });
       // A #hash (e.g. the admin alert banner's link to pending applications)
       // beats the remembered tab; otherwise fall back to last used.
+      // ----- Link a CID to a Discord account by hand -----
+      (function() {
+        // This script runs before the modal markup further down the page, so
+        // everything is looked up lazily rather than cached up front.
+        var $ = function(id) { return document.getElementById(id); };
+        var currentCid = null;
+        var timer = null;
+
+        function close() {
+          var m = $('dpLinkModal');
+          if (m) m.classList.add('hidden');
+          currentCid = null;
+        }
+
+        function esc(s) {
+          var d = document.createElement('div');
+          d.textContent = s == null ? '' : s;
+          return d.innerHTML;
+        }
+
+        async function doSearch() {
+          var search = $('dpLinkSearch'), results = $('dpLinkResults');
+          if (!search || !results) return;
+          var q = search.value.trim();
+          results.innerHTML = '<div style="padding:12px;color:var(--muted);font-size:12px;">Searching...</div>';
+          try {
+            var r = await fetch('/admin/api/discord/members?q=' + encodeURIComponent(q), { credentials: 'same-origin' });
+            var d = await r.json();
+            if (!r.ok) throw new Error(d.error || 'Search failed');
+            if (!d.members.length) {
+              results.innerHTML = '<div style="padding:12px;color:var(--muted);font-size:12px;">No matches.</div>';
+              return;
+            }
+            results.innerHTML = d.members.map(function(m) {
+              return '<button type="button" class="dp-result" data-id="' + esc(m.id) + '">' +
+                '<span>' + esc(m.nickname) + '</span>' +
+                (m.linkedToCid
+                  ? '<span class="dp-result-taken">already linked to ' + esc(m.linkedToCid) + '</span>'
+                  : '<span class="dp-result-sub">' + esc(m.cid || 'no CID in nickname') + '</span>') +
+                '</button>';
+            }).join('');
+          } catch (e) {
+            results.innerHTML = '<div style="padding:12px;color:#f87171;font-size:12px;">' + esc(e.message) + '</div>';
+          }
+        }
+
+        document.addEventListener('click', function(e) {
+          var find = e.target.closest('.dp-find');
+          if (find) {
+            var modal = $('dpLinkModal'), search = $('dpLinkSearch');
+            if (!modal) return;
+            currentCid = find.dataset.cid;
+            $('dpLinkWho').textContent = find.dataset.name + ' (' + currentCid + ')';
+            if (search) search.value = '';
+            $('dpLinkResults').innerHTML = '';
+            $('dpLinkUnlink').hidden = !find.closest('tr').querySelector('.dp-src-manual');
+            modal.classList.remove('hidden');
+            setTimeout(function() { if (search) search.focus(); }, 0);
+            doSearch();
+            return;
+          }
+          if (e.target.closest('#dpLinkCancel') || e.target.closest('#dpLinkModal .modal-backdrop')) { close(); return; }
+
+          var pick = e.target.closest('.dp-result');
+          if (pick && currentCid) {
+            var discordId = pick.dataset.id;
+            pick.disabled = true;
+            fetch('/admin/api/discord/link', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'same-origin',
+              body: JSON.stringify({ cid: Number(currentCid), discordId: discordId })
+            }).then(function(r) { return r.json().then(function(d) { return { ok: r.ok, d: d }; }); })
+              .then(function(res) {
+                if (res.ok) location.reload();
+                else { alert(res.d.error || 'Could not link'); pick.disabled = false; }
+              })
+              .catch(function() { alert('Could not link'); pick.disabled = false; });
+          }
+        });
+
+        // Delegated so they work regardless of when the markup appears
+        document.addEventListener('click', function(e) {
+          if (!e.target.closest('#dpLinkUnlink') || !currentCid) return;
+          fetch('/admin/api/discord/link/' + currentCid, { method: 'DELETE', credentials: 'same-origin' })
+            .then(function(r) { if (r.ok) location.reload(); else alert('Could not remove the link'); });
+        });
+
+        document.addEventListener('input', function(e) {
+          if (!e.target.closest('#dpLinkSearch')) return;
+          clearTimeout(timer);
+          timer = setTimeout(doSearch, 250);
+        });
+        document.addEventListener('keydown', function(e) {
+          var m = $('dpLinkModal');
+          if (e.key === 'Escape' && m && !m.classList.contains('hidden')) close();
+        });
+      })();
+
       // ----- Run the role sync on demand (header button and panel button) -----
       async function runDiscordSync(btn) {
         var label = btn.textContent;
@@ -23241,6 +23408,25 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
       </div>
       <div id="appDetailPhotos" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;"></div>
       <div class="modal-actions" id="appDetailActions" style="margin-top:18px;"></div>
+    </div>
+  </div>
+
+  <!-- ===== Link a CID to a Discord account ===== -->
+  <div id="dpLinkModal" class="modal hidden">
+    <div class="modal-backdrop"></div>
+    <div class="modal-card card" style="max-width:520px;text-align:left;">
+      <h3 style="text-align:left;margin-bottom:4px;">Find in Discord</h3>
+      <p class="modal-help" style="text-align:left;margin-bottom:14px;">
+        Linking <strong id="dpLinkWho" style="color:var(--text);"></strong> to a member of the server.
+        Use this when their nickname doesn&rsquo;t contain their CID.
+      </p>
+      <input type="text" id="dpLinkSearch" placeholder="Search by nickname..." autocomplete="off"
+        style="width:100%;box-sizing:border-box;text-transform:none;text-align:left;" />
+      <div class="dp-results" id="dpLinkResults"></div>
+      <div class="modal-actions" style="margin-top:16px;">
+        <button type="button" class="action-btn" id="dpLinkUnlink" hidden>Remove link</button>
+        <button type="button" class="action-btn" id="dpLinkCancel">Cancel</button>
+      </div>
     </div>
   </div>
 
@@ -25096,11 +25282,106 @@ function buildDiscordInviteEmail({ memberName, operatorName, isTeam, inviteUrl }
   });
 }
 
+/* Store names read from Discord nicknames against their CID, so every page
+   that resolves CID -> name (Manage Members, Our Members, pilot dropdowns)
+   stops showing "—" for people who have never logged into the portal.
+   Only fills gaps: a name from VATSIM login is authoritative and is never
+   overwritten. Returns how many rows were created. */
+async function persistDiscordNames(namesByCid) {
+  if (!namesByCid || !namesByCid.size) return 0;
+  const cids = [...namesByCid.keys()];
+  const existing = await prisma.user.findMany({
+    where: { cid: { in: cids } },
+    select: { cid: true }
+  }).catch(() => []);
+  const known = new Set(existing.map(u => Number(u.cid)));
+
+  let created = 0;
+  for (const [cid, name] of namesByCid) {
+    if (known.has(cid)) continue;                 // already named — leave alone
+    const clean = String(name).trim().slice(0, 80);
+    if (!clean) continue;
+    try {
+      await prisma.user.create({ data: { cid, name: clean } });
+      created++;
+    } catch { /* raced with a login; harmless */ }
+  }
+  if (created) console.log(`[DISCORD] stored ${created} name(s) from server nicknames`);
+  return created;
+}
+
+/* Manual CID -> Discord links, for members whose nickname has no CID. */
+async function loadDiscordManualLinks() {
+  const rows = await prisma.discordLink?.findMany().catch(() => []) ?? [];
+  return new Map(rows.map(l => [String(l.discordId), Number(l.cid)]));
+}
+
+// Search the guild's members so an admin can pick the right person.
+app.get('/admin/api/discord/members', requireAdmin, async (req, res) => {
+  if (!discordConfigured()) return res.status(503).json({ error: 'Discord is not configured' });
+  const q = String(req.query.q || '').trim().toLowerCase();
+  try {
+    const [snap, links] = await Promise.all([
+      getGuildSnapshot(),
+      prisma.discordLink?.findMany().catch(() => []) ?? []
+    ]);
+    const linkedByDiscordId = new Map((links || []).map(l => [String(l.discordId), Number(l.cid)]));
+    const members = snap.members
+      .filter(m => !q || String(m.nickname || '').toLowerCase().includes(q))
+      .sort((a, b) => String(a.nickname).localeCompare(String(b.nickname)))
+      .slice(0, 50)
+      .map(m => ({
+        id: m.id,
+        nickname: m.nickname,
+        cid: parseCidFromNickname(m.nickname),
+        linkedToCid: linkedByDiscordId.get(m.id) || null
+      }));
+    res.json({ members, total: snap.members.length });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/admin/api/discord/link', requireAdmin, express.json(), async (req, res) => {
+  const cid = Number(req.body?.cid);
+  const discordId = String(req.body?.discordId || '').trim();
+  if (!cid || !discordId) return res.status(400).json({ error: 'cid and discordId are required' });
+  try {
+    // One Discord account per CID and vice versa, so a re-link replaces both sides
+    await prisma.discordLink.deleteMany({ where: { OR: [{ cid }, { discordId }] } });
+    await prisma.discordLink.create({
+      data: {
+        cid,
+        discordId,
+        discordNickname: String(req.body?.nickname || '').slice(0, 120) || null,
+        linkedBy: Number(req.session?.user?.data?.cid) || null
+      }
+    });
+    invalidateGuildCache();
+    console.log(`[DISCORD] linked CID ${cid} to Discord ${discordId}`);
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.delete('/admin/api/discord/link/:cid', requireAdmin, async (req, res) => {
+  const cid = Number(req.params.cid);
+  if (!cid) return res.status(400).json({ error: 'Invalid CID' });
+  try {
+    await prisma.discordLink.deleteMany({ where: { cid } });
+    invalidateGuildCache();
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // Run the role reconcile on demand. Same code path as the hourly cron.
 app.post('/admin/api/discord/sync', requireAdmin, async (req, res) => {
   if (!discordConfigured()) return res.status(503).json({ error: 'Discord sync is not configured' });
   try {
-    const state = await runDiscordRoleSync({ buildRoster: buildDiscordRosterGroups, reason: 'manual' });
+    const state = await runDiscordRoleSync({ buildRoster: buildDiscordRosterGroups, loadManualLinks: loadDiscordManualLinks, persistNames: persistDiscordNames, reason: 'manual' });
     if (state.result === 'blocked') return res.status(409).json({ error: 'Blocked: ' + state.message });
     if (state.result === 'error') return res.status(500).json({ error: state.message });
     res.json({ success: true, added: state.added, removed: state.removed, failed: state.failed });
