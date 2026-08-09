@@ -460,6 +460,9 @@ model AffiliateApplication {
   status      String    @default("pending")
   decidedBy   Int?
   decidedAt   DateTime?
+  // Admin-written reason for a decline; emailed to the applicant and shown
+  // on hover over the Declined chip in the admin queue.
+  declineReason String?
   affiliateId Int?
   createdAt   DateTime  @default(now())
 

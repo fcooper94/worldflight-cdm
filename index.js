@@ -22262,6 +22262,7 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
     id: a.id, callsign: a.callsign, simType: a.simType, cid: a.cid, hasMembers: a.hasMembers, multiAircraft: a.multiAircraft,
     contact: a.contact, discord: a.discord, email: a.email,
     heardAbout: a.heardAbout, website: a.website, notes: a.notes,
+    declineReason: a.declineReason,
     source: a.source, status: a.status, createdAt: a.createdAt,
     photoIds: (photosByApp[a.id] || [])
   }).replace(/'/g, '&#39;');
@@ -22457,7 +22458,9 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
                     </a>`).join('') || '<span class="ot-muted">—</span>'}</td>
                   <td><span class="ot-app-source ot-app-source-${a.source}">${a.source === 'public' ? 'Applied online' : 'Added by admin'}</span></td>
                   <td class="ot-muted">${new Date(a.createdAt).toISOString().slice(0, 10)}</td>
-                  <td><span class="ot-app-status ot-app-status-${a.status}">${a.status.charAt(0).toUpperCase() + a.status.slice(1)}</span></td>
+                  <td>${a.status === 'declined' && a.declineReason
+                    ? `<span class="ot-app-status ot-app-status-declined ot-app-status-why" data-reason="${escapeHtml(a.declineReason)}">Declined<span class="tobt-tooltip ot-reason-tip"><span class="ot-reason-tip-label">Reason for declining</span>${escapeHtml(a.declineReason)}</span></span>`
+                    : `<span class="ot-app-status ot-app-status-${a.status}">${a.status.charAt(0).toUpperCase() + a.status.slice(1)}</span>`}</td>
                   <td class="ot-cell-actions">
                     ${a.status === 'pending' ? `
                       <button class="ot-btn ot-btn-approve" data-action="approve-application" data-id="${a.id}" data-callsign="${escapeHtml(a.callsign)}">Approve</button>
@@ -22547,6 +22550,30 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
     .ot-app-status-pending { background: rgba(245,158,11,0.15); color: #fbbf24; }
     .ot-app-status-approved { background: rgba(34,197,94,0.15); color: #4ade80; }
     .ot-app-status-declined { background: rgba(239,68,68,0.15); color: #f87171; }
+    /* Declined chips carry the admin's reason — dotted underline hints at it.
+       The bubble is position:fixed (see .tobt-tooltip) so the table's own
+       overflow:auto can't clip it; a JS positioner places it on hover. */
+    .ot-app-status-why {
+      cursor: help;
+      text-decoration: underline dotted rgba(248,113,113,0.65);
+      text-underline-offset: 3px;
+    }
+    .ot-reason-tip {
+      white-space: normal;
+      width: 280px;
+      text-align: left;
+      font-weight: 400;
+      line-height: 1.55;
+    }
+    .ot-reason-tip-label {
+      display: block;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 5px;
+    }
     .ot-app-source { font-size: 11px; color: var(--muted); }
     .ot-app-notes { font-size: 12px; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     /* Two stacked lines (Discord + email) — clip each rather than the cell */
@@ -22766,8 +22793,36 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
         <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px;">Notes</div>
         <div id="appDetailNotes" style="font-size:13px;line-height:1.6;white-space:pre-wrap;background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;"></div>
       </div>
+      <div id="appDetailReasonWrap" style="margin-top:14px;display:none;">
+        <div style="font-size:11px;font-weight:700;color:#f87171;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px;">Reason for declining</div>
+        <div id="appDetailReason" style="font-size:13px;line-height:1.6;white-space:pre-wrap;background:rgba(239,68,68,0.07);border:1px solid rgba(239,68,68,0.3);border-radius:8px;padding:10px 12px;"></div>
+      </div>
       <div id="appDetailPhotos" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;"></div>
       <div class="modal-actions" id="appDetailActions" style="margin-top:18px;"></div>
+    </div>
+  </div>
+
+  <!-- ===== Decline Reason Modal ===== -->
+  <div id="appDeclineModal" class="modal hidden">
+    <div class="modal-backdrop"></div>
+    <div class="modal-card card" style="max-width:520px;text-align:left;">
+      <h3 style="text-align:left;margin-bottom:4px;">Decline Application</h3>
+      <p class="modal-help" style="text-align:left;margin-bottom:16px;">
+        Declining <strong id="appDeclineCallsign" style="color:var(--text);"></strong>. The reason below is
+        emailed to the applicant, so keep it clear and courteous.
+      </p>
+
+      <label style="display:block;font-size:13px;margin:0 0 6px;">Reason for declining *</label>
+      <textarea id="appDeclineReason" rows="5" maxlength="1000"
+        placeholder="e.g. We're unable to accept applications without an established setup this year — you're very welcome to apply again next year."
+        style="width:100%;box-sizing:border-box;resize:vertical;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-family:inherit;font-size:14px;text-transform:none;text-align:left;"></textarea>
+      <div id="appDeclineError" class="modal-error hidden" style="margin-top:8px;">Please give a reason.</div>
+
+      <div class="modal-actions" style="margin-top:18px;">
+        <button type="button" class="action-btn" id="appDeclineCancel">Cancel</button>
+        <button type="button" class="action-btn" id="appDeclineConfirm"
+          style="background:rgba(239,68,68,0.15);color:#f87171;border-color:#f87171;">Decline &amp; notify</button>
+      </div>
     </div>
   </div>
 
@@ -22952,6 +23007,72 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
       openEntryModal(teamEdit ? 'team' : 'affiliate', record);
     });
 
+    // ===== Declined-chip reason tooltip =====
+    // .tobt-tooltip is position:fixed, so it needs placing by hand; that is
+    // also what stops the table's overflow:auto from clipping it.
+    document.addEventListener('mouseover', function(e) {
+      const host = e.target.closest && e.target.closest('.ot-app-status-why');
+      if (!host || (e.relatedTarget && host.contains(e.relatedTarget))) return;
+      const tip = host.querySelector('.tobt-tooltip');
+      if (!tip) return;
+      tip.style.display = 'block';
+      const r = host.getBoundingClientRect();
+      const tw = tip.offsetWidth, th = tip.offsetHeight;
+      let left = r.left + r.width / 2 - tw / 2;
+      let top = r.bottom + 8;
+      if (top + th > window.innerHeight - 4) top = r.top - th - 8;
+      if (left < 4) left = 4;
+      if (left + tw > window.innerWidth - 4) left = window.innerWidth - tw - 4;
+      tip.style.left = left + 'px';
+      tip.style.top = top + 'px';
+    });
+    document.addEventListener('mouseout', function(e) {
+      const host = e.target.closest && e.target.closest('.ot-app-status-why');
+      if (!host || (e.relatedTarget && host.contains(e.relatedTarget))) return;
+      const tip = host.querySelector('.tobt-tooltip');
+      if (tip) tip.style.display = 'none';
+    });
+
+    // ===== Decline reason modal =====
+    // Resolves with the reason text, or null if the admin backed out.
+    function openDeclineModal(callsign) {
+      return new Promise(resolve => {
+        const dm = document.getElementById('appDeclineModal');
+        const ta = document.getElementById('appDeclineReason');
+        const err = document.getElementById('appDeclineError');
+        const okBtn = document.getElementById('appDeclineConfirm');
+        const noBtn = document.getElementById('appDeclineCancel');
+        const backdrop = dm.querySelector('.modal-backdrop');
+
+        document.getElementById('appDeclineCallsign').textContent = callsign;
+        ta.value = '';
+        err.classList.add('hidden');
+        dm.classList.remove('hidden');
+        setTimeout(() => ta.focus(), 0);
+
+        function cleanup(result) {
+          dm.classList.add('hidden');
+          okBtn.removeEventListener('click', onOk);
+          noBtn.removeEventListener('click', onCancel);
+          backdrop.removeEventListener('click', onCancel);
+          document.removeEventListener('keydown', onKey);
+          resolve(result);
+        }
+        function onOk() {
+          const v = ta.value.trim();
+          if (!v) { err.classList.remove('hidden'); ta.focus(); return; }
+          cleanup(v);
+        }
+        function onCancel() { cleanup(null); }
+        function onKey(e) { if (e.key === 'Escape') onCancel(); }
+
+        okBtn.addEventListener('click', onOk);
+        noBtn.addEventListener('click', onCancel);
+        backdrop.addEventListener('click', onCancel);
+        document.addEventListener('keydown', onKey);
+      });
+    }
+
     // ===== Application detail modal =====
     const appModal = document.getElementById('appDetailModal');
 
@@ -22995,6 +23116,14 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
         document.getElementById('appDetailNotes').textContent = a.notes;
       } else {
         notesWrap.style.display = 'none';
+      }
+
+      var reasonWrap = document.getElementById('appDetailReasonWrap');
+      if (a.declineReason) {
+        reasonWrap.style.display = '';
+        document.getElementById('appDetailReason').textContent = a.declineReason;
+      } else {
+        reasonWrap.style.display = 'none';
       }
 
       var photosEl = document.getElementById('appDetailPhotos');
@@ -23183,16 +23312,18 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
       }
 
       if (action === 'decline-application') {
-        const ok = await openConfirmModal({
-          title: 'Decline Application',
-          message: 'Decline ' + (btn.dataset.callsign || 'this application') + '? The row is kept for reference.'
-        });
-        if (!ok) return;
+        const reason = await openDeclineModal(btn.dataset.callsign || 'this application');
+        if (reason === null) return;
         const res = await fetch('/admin/api/affiliate-applications/' + id + '/decline', {
-          method: 'POST', credentials: 'same-origin'
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify({ reason: reason })
         });
-        if (!res.ok) alert('Failed to decline');
-        else location.reload();
+        if (!res.ok) {
+          const d = await res.json().catch(() => ({}));
+          alert(d.error || 'Failed to decline');
+        } else location.reload();
       }
 
       if (action === 'delete-application') {
@@ -24043,6 +24174,186 @@ app.get('/teams', requirePageEnabled('who-we-are'), async (req, res) => {
   res.send(renderLayout({ title: 'Official Teams / WF Affiliates', user, isAdmin, content, layoutClass: 'dashboard-full' }));
 });
 
+const WF_SITE_URL = 'https://planning.worldflight.center';
+
+/* Shared shell for the three affiliate application emails (received,
+   approved, declined) so they read as one system — same frame as
+   buildAccessEmail above. */
+function affiliateEmailShell({ subtitle, bodyHtml }) {
+  return `<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width,initial-scale=1" /></head>
+<body style="margin:0;padding:0;background:#020617;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#020617;padding:40px 20px;">
+    <tr>
+      <td align="center">
+        <table cellpadding="0" cellspacing="0" style="max-width:520px;width:100%;background:#0b1220;border:1px solid #1e293b;border-radius:16px;overflow:hidden;">
+
+          <!-- HEADER -->
+          <tr>
+            <td style="background:linear-gradient(135deg,#0f172a,#1e293b);padding:32px;text-align:center;">
+              <img src="${WF_SITE_URL}/logo.png" width="64" height="64" style="border-radius:50%;" alt="WorldFlight" />
+              <h1 style="color:#38bdf8;font-size:22px;margin:16px 0 0;">WorldFlight</h1>
+              <p style="color:#94a3b8;font-size:13px;margin:4px 0 0;">${subtitle}</p>
+            </td>
+          </tr>
+
+          <!-- BODY -->
+          <tr>
+            <td style="padding:32px;">
+              ${bodyHtml}
+
+              <hr style="border:none;border-top:1px solid #1e293b;margin:24px 0;" />
+
+              <p style="color:#94a3b8;font-size:13px;margin:0;">
+                Kind Regards,
+              </p>
+              <p style="color:#e5e7eb;font-size:14px;font-weight:600;margin:4px 0 0;">
+                WorldFlight Organizers
+              </p>
+            </td>
+          </tr>
+
+          <!-- FOOTER -->
+          <tr>
+            <td style="background:#080d17;padding:16px 32px;text-align:center;">
+              <p style="color:#475569;font-size:11px;margin:0;">
+                This is an automated message from the WorldFlight Planning system.
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+}
+
+const affMailP = (text, extra) =>
+  `<p style="color:#e5e7eb;font-size:15px;line-height:1.6;margin:0 0 16px;${extra || ''}">${text}</p>`;
+
+const affMailButton = (href, label) => `
+              <div style="text-align:center;margin:24px 0 8px;">
+                <a href="${href}" style="display:inline-block;padding:12px 32px;background:#38bdf8;color:#020617;font-weight:600;font-size:14px;text-decoration:none;border-radius:8px;">
+                  ${label}
+                </a>
+              </div>`;
+
+const affMailNote = (html) => `
+              <div style="background:#0f172a;border-left:3px solid #38bdf8;padding:14px 16px;margin:0 0 16px;border-radius:0 6px 6px 0;">
+                <p style="color:#cbd5e1;font-size:14px;line-height:1.6;margin:0;">${html}</p>
+              </div>`;
+
+/* Sent the moment an application form is submitted. */
+function buildAffiliateApplicationEmail({ applicantName, callsign, simType, cid, discordInvite }) {
+  const row = (label, value) => `
+        <tr>
+          <td style="padding:8px 0;color:#94a3b8;font-size:13px;width:130px;">${label}</td>
+          <td style="padding:8px 0;color:#e5e7eb;font-size:14px;font-weight:600;">${value}</td>
+        </tr>`;
+
+  return affiliateEmailShell({
+    subtitle: 'WF Affiliate Application',
+    bodyHtml: `
+              ${affMailP('Hello ' + applicantName + ',')}
+              ${affMailP('Thanks for applying to become a <strong style="color:#38bdf8;">WorldFlight Affiliate</strong>. Your application is under review and we will notify you as soon as a decision has been made.')}
+
+              <div style="background:#0f172a;border:1px solid #1e293b;border-radius:10px;padding:6px 18px;margin:0 0 20px;">
+                <table width="100%" cellpadding="0" cellspacing="0">
+                  ${row('Name / Callsign', callsign)}
+                  ${row('Sim Type', simType)}
+                  ${row('VATSIM CID', cid)}
+                </table>
+              </div>
+
+              ${affMailNote('In the meantime, please make sure you have joined our community Discord &mdash; that is where we coordinate in the run-up to and during the event.')}
+              ${affMailButton(discordInvite, 'Join the WorldFlight Discord')}`
+  });
+}
+
+/* Best-effort first name for an applicant — falls back to a neutral greeting
+   so the email never reads "Hello undefined". */
+async function applicantFirstName(cid) {
+  try {
+    const u = await prisma.user.findUnique({ where: { cid: Number(cid) }, select: { name: true } });
+    const first = String(u?.name || '').trim().split(/\s+/)[0];
+    if (first) return escapeHtml(first);
+  } catch {}
+  return 'there';
+}
+
+/* Deliver an approve/decline email. Applications taken before the form split
+   have no email column, so there is nothing to send to — that is logged, not
+   an error, and never fails the decision itself. */
+async function sendAffiliateDecisionEmail(appRow, kind, { html, subject }) {
+  const to = String(appRow?.email || '').trim();
+  if (!to) {
+    console.warn(`[AFF-APP] #${appRow?.id} ${kind}: no email on the application, nothing sent`);
+    return;
+  }
+  try {
+    const transporter = nodemailer.createTransport({
+      host: process.env.SMTP_HOST || 'smtp.gmail.com',
+      port: Number(process.env.SMTP_PORT) || 587,
+      secure: false,
+      auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
+    });
+    await transporter.sendMail({
+      from: process.env.SMTP_FROM || '"WorldFlight" <noreply@worldflight.center>',
+      to,
+      subject,
+      html
+    });
+    console.log(`[AFF-APP] #${appRow.id} ${kind} email sent to ${to}`);
+  } catch (e) {
+    console.error(`[AFF-APP] #${appRow.id} ${kind} email failed:`, e.message);
+  }
+}
+
+/* Sent when an admin approves an application. */
+function buildAffiliateApprovedEmail({ applicantName, callsign, hasMembers }) {
+  const membersBlock = hasMembers ? `
+              ${affMailP('Because you told us your setup has multiple pilots, your <strong style="color:#38bdf8;">My Members</strong> page is enabled. Add your pilots’ CIDs there and they will get access to your Affiliate HQ, so anyone in your group can see the schedule and manage your sectors.')}
+              ${affMailButton(WF_SITE_URL + '/affiliates/my-members', 'Manage your members')}` : '';
+
+  return affiliateEmailShell({
+    subtitle: 'WF Affiliate Application Approved',
+    bodyHtml: `
+              ${affMailP('Hello ' + applicantName + ',')}
+              ${affMailP('<strong style="color:#4ade80;">Congratulations on becoming the latest WorldFlight Affiliate!</strong> Your application for <strong style="color:#38bdf8;">' + callsign + '</strong> has been approved and you now appear on our public Teams &amp; Affiliates page.')}
+              ${affMailP('Your Affiliate HQ is your home for the event &mdash; it shows every sector of this year’s route, your bookings and slots, and lets you edit your public profile.')}
+              ${affMailButton(WF_SITE_URL + '/affiliates/hq', 'Open your Affiliate HQ')}
+
+              ${affMailP('<strong style="color:#e5e7eb;">The route and your slots</strong>', 'margin-top:24px;margin-bottom:8px;')}
+              ${affMailP('The full route is published on the Schedule page and mirrored in your HQ. Where a sector is slotted or requires a booking, you are allocated one automatically as an affiliate &mdash; there is nothing to claim by hand. If you are not flying a particular sector, please release it in your HQ so the slot goes back to the pool.')}
+
+              ${affMailP('<strong style="color:#e5e7eb;">The Affiliate Charter</strong>', 'margin-top:24px;margin-bottom:8px;')}
+              ${affMailP('As a WF Affiliate you are asked to sign up to our charter &mdash; professionalism and skill, respect for VATSIM and ATC, no preferential treatment, positive public conduct when streaming, community spirit, and above all having fun. You will find the charter in full on your Affiliate HQ; please give it a read.')}
+              ${membersBlock}`
+  });
+}
+
+/* Sent when an admin declines an application. The reason is written by the
+   admin in the decline modal and is required. */
+function buildAffiliateDeclinedEmail({ applicantName, callsign, reason }) {
+  return affiliateEmailShell({
+    subtitle: 'WF Affiliate Application Update',
+    bodyHtml: `
+              ${affMailP('Hello ' + applicantName + ',')}
+              ${affMailP('Thank you for your interest in becoming a WorldFlight Affiliate. Unfortunately we are not able to accept your application for <strong style="color:#e5e7eb;">' + callsign + '</strong> on this occasion.')}
+
+              <div style="background:#0f172a;border-left:3px solid #f87171;padding:14px 16px;margin:0 0 16px;border-radius:0 6px 6px 0;">
+                <p style="color:#94a3b8;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;margin:0 0 6px;">Reason</p>
+                <p style="color:#cbd5e1;font-size:14px;line-height:1.6;margin:0;">${String(reason || '').replace(/\n/g, '<br>')}</p>
+              </div>
+
+              ${affMailP('This does not stop you taking part &mdash; everyone is welcome to fly the WorldFlight route and join us on the network. You are also welcome to apply again in future if your setup or circumstances change.')}
+              ${affMailButton(WF_SITE_URL + '/schedule', 'View the WorldFlight schedule')}`
+  });
+}
+
 // Public submission — logged-in users only; CID comes from the session.
 // Multipart: text fields + up to 5 setup photos (stored in the DB so they
 // survive redeploys on Railway's ephemeral filesystem).
@@ -24112,6 +24423,33 @@ app.post('/api/affiliate-applications', (req, res, next) => {
     }
 
     console.log(`[AFF-APP] New public application #${created.id} from CID ${cid} (${created.callsign}, ${photos.length} photos)`);
+
+    // Confirmation email. Never fail the application over a mail problem —
+    // the row is already saved and the admin queue is the source of truth.
+    try {
+      const transporter = nodemailer.createTransport({
+        host: process.env.SMTP_HOST || 'smtp.gmail.com',
+        port: Number(process.env.SMTP_PORT) || 587,
+        secure: false,
+        auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
+      });
+      await transporter.sendMail({
+        from: process.env.SMTP_FROM || '"WorldFlight" <noreply@worldflight.center>',
+        to: emailAddr,
+        subject: 'WorldFlight — Affiliate Application Received',
+        html: buildAffiliateApplicationEmail({
+          applicantName: escapeHtml(String(sessUser?.personal?.name_first || '').trim() || 'there'),
+          callsign: escapeHtml(created.callsign),
+          simType: escapeHtml(created.simType),
+          cid,
+          discordInvite: WF_DISCORD_INVITE
+        })
+      });
+      console.log(`[AFF-APP] Confirmation email sent for #${created.id}`);
+    } catch (emailErr) {
+      console.error('[AFF-APP] Confirmation email failed:', emailErr.message);
+    }
+
     res.json({ success: true, id: created.id });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -24213,6 +24551,16 @@ app.post('/admin/api/affiliate-applications/:id/approve', requireAdmin, async (r
 
     autoAssignTeamThenAffiliate({ reason: `affiliate application ${id} approved` }).catch(() => {});
     console.log(`[AFF-APP] Application #${id} (${appRow.callsign}) approved by ${adminCid} — affiliate ${created.id} created`);
+
+    await sendAffiliateDecisionEmail(appRow, 'approved', {
+      html: buildAffiliateApprovedEmail({
+        applicantName: await applicantFirstName(appRow.cid),
+        callsign: escapeHtml(appRow.callsign),
+        hasMembers: !!appRow.hasMembers
+      }),
+      subject: 'WorldFlight — Affiliate Application Approved'
+    });
+
     res.json({ success: true, affiliateId: created.id });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -24222,14 +24570,34 @@ app.post('/admin/api/affiliate-applications/:id/approve', requireAdmin, async (r
 app.post('/admin/api/affiliate-applications/:id/decline', requireAdmin, async (req, res) => {
   const id = Number(req.params.id);
   const adminCid = Number(req.session?.user?.data?.cid) || null;
+  // The reason is written by the admin in the decline modal and goes out in
+  // the rejection email, so it isn't optional.
+  const reason = String(req.body?.reason || '').trim();
+  if (!reason) return res.status(400).json({ error: 'A reason is required — it is sent to the applicant' });
   try {
     const appRow = await prisma.affiliateApplication.findUnique({ where: { id } });
     if (!appRow) return res.status(404).json({ error: 'Application not found' });
     if (appRow.status !== 'pending') return res.status(400).json({ error: 'Application already ' + appRow.status });
     await prisma.affiliateApplication.update({
       where: { id },
-      data: { status: 'declined', decidedBy: adminCid, decidedAt: new Date() }
+      data: {
+        status: 'declined',
+        decidedBy: adminCid,
+        decidedAt: new Date(),
+        declineReason: reason.slice(0, 1000)
+      }
     });
+    console.log(`[AFF-APP] Application #${id} (${appRow.callsign}) declined by ${adminCid}`);
+
+    await sendAffiliateDecisionEmail(appRow, 'declined', {
+      html: buildAffiliateDeclinedEmail({
+        applicantName: await applicantFirstName(appRow.cid),
+        callsign: escapeHtml(appRow.callsign),
+        reason: escapeHtml(reason.slice(0, 1000))
+      }),
+      subject: 'WorldFlight — Affiliate Application Update'
+    });
+
     res.json({ success: true });
   } catch (e) {
     res.status(500).json({ error: e.message });
