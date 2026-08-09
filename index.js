@@ -18685,6 +18685,186 @@ const HQ_STYLES = `    <style>
       @keyframes wft-spin { to { transform: rotate(360deg); } }
     </style>`;
 
+/* Shared members-page stylesheet — used by both /affiliates/my-members and
+   /team/manage-members so the two surfaces stay identical. Pure CSS. */
+const MM_STYLES = `    <style>
+      .mm-wrap { width: 100%; max-width: 4400px; margin: 0 auto; }
+      .mm-card { width: 100%; }
+
+      .mm-page-header {
+        display: flex;
+        align-items: flex-start;
+        gap: 14px;
+        margin-bottom: 18px;
+      }
+      .mm-page-icon {
+        width: 44px;
+        height: 44px;
+        flex-shrink: 0;
+        border-radius: 10px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: color-mix(in srgb, var(--accent) 14%, transparent);
+        color: var(--accent);
+        border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+      }
+      .mm-page-title { margin: 0; font-size: 20px; font-weight: 700; color: var(--text); }
+      .mm-page-subtitle { margin: 4px 0 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
+
+      .mm-card { padding: 22px; }
+      .mm-card + .mm-card { margin-top: 16px; }
+
+      .mm-card-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        flex-wrap: wrap;
+        padding-bottom: 16px;
+        border-bottom: 1px solid var(--border);
+        margin-bottom: 16px;
+      }
+      .mm-card-title {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+      .mm-callsign { font-size: 16px; }
+
+      /* Main CID row — non-removable */
+      .mm-main-row td { background: color-mix(in srgb, var(--accent) 5%, transparent); }
+      .aff-main-badge {
+        display: inline-flex;
+        padding: 2px 10px;
+        border-radius: 999px;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        background: color-mix(in srgb, var(--accent) 15%, transparent);
+        color: var(--accent);
+        border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+      }
+      .mm-count {
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        padding: 3px 10px;
+        border-radius: 999px;
+        background: var(--panel2);
+        color: var(--muted);
+      }
+
+      /* Add-member control: one bordered group holding icon + field + action */
+      .mm-add-row {
+        display: inline-flex;
+        align-items: stretch;
+        gap: 0;
+        background: var(--panel2);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        overflow: hidden;
+        transition: border-color .15s, box-shadow .15s;
+      }
+      .mm-add-row:focus-within {
+        border-color: var(--accent);
+        box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+      }
+      .mm-add-prefix {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0 12px;
+        color: var(--muted);
+        border-right: 1px solid var(--border);
+        transition: color .15s;
+      }
+      .mm-add-prefix svg {
+        display: block;
+        width: 17px;
+        height: 17px;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.8;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      .mm-add-row:focus-within .mm-add-prefix { color: var(--accent); }
+      .mm-cid-input {
+        padding: 9px 14px;
+        background: transparent;
+        border: 0;
+        color: var(--text);
+        font-size: 13px;
+        letter-spacing: 0.06em;
+        width: 160px;
+        font-family: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+        font-variant-numeric: tabular-nums;
+        text-align: left;
+        text-transform: none;
+        outline: none;
+      }
+      .mm-cid-input::placeholder {
+        color: var(--muted);
+        letter-spacing: 0.02em;
+        font-family: inherit;
+      }
+      /* No spinner arrows — a CID is an identifier, not a quantity to step */
+      .mm-cid-input::-webkit-outer-spin-button,
+      .mm-cid-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+      .mm-cid-input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
+      .mm-add-btn {
+        display: inline-flex;
+        align-items: center;
+        border: 0;
+        border-left: 1px solid var(--border);
+        border-radius: 0;
+        padding: 0 16px;
+        font-size: 13px;
+        font-weight: 600;
+        white-space: nowrap;
+        background: color-mix(in srgb, var(--accent) 18%, transparent);
+        color: var(--accent);
+        transition: background .15s, color .15s;
+      }
+      .mm-add-btn:hover:not(:disabled) {
+        background: color-mix(in srgb, var(--accent) 30%, transparent);
+        color: var(--accent);
+      }
+      .mm-add-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+      .mm-msg {
+        display: none;
+        margin-bottom: 12px;
+        padding: 8px 12px;
+        border-radius: 8px;
+        font-size: 12px;
+      }
+      .mm-msg.show { display: block; }
+      .mm-msg.ok  { background: rgba(74,222,128,0.10); color: #4ade80; border: 1px solid rgba(74,222,128,0.30); }
+      .mm-msg.err { background: rgba(239,68,68,0.10); color: #fda4af; border: 1px solid rgba(239,68,68,0.30); }
+
+      @media (max-width: 720px) {
+        .mm-card-header { flex-direction: column; align-items: stretch; }
+        .mm-add-row { display: flex; width: 100%; }
+        .mm-cid-input { flex: 1; min-width: 0; width: auto; }
+      }
+    </style>`;
+
+/* Add-member control markup, shared by both member pages. `attrs` carries the
+   page-specific hooks (data-aff-id for affiliates, ids for the team page). */
+const mmAddRow = (inputAttrs, buttonAttrs) => `
+            <div class="mm-add-row">
+              <span class="mm-add-prefix" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
+              </span>
+              <input type="text" class="mm-cid-input" inputmode="numeric" pattern="[0-9]*" maxlength="9" autocomplete="off" placeholder="Enter CID" aria-label="VATSIM CID to add"${inputAttrs || ''} />
+              <button class="ot-btn mm-add-btn"${buttonAttrs || ''}>Add Member</button>
+            </div>`;
+
 app.get('/affiliates/hq', requireLogin, async (req, res) => {
   const user = req.session.user.data;
   const cid = Number(user.cid);
@@ -20156,11 +20336,7 @@ app.get('/affiliates/my-members', requireLogin, requireAffiliateOwner, async (re
               <span class="ot-simtype" data-sim="${escapeHtml((a.simType || '').toUpperCase())}">${escapeHtml(a.simType || '—')}</span>
               <span class="mm-count">${list.length} member${list.length === 1 ? '' : 's'}</span>
             </div>
-            <div class="mm-add-row">
-              <span class="mm-add-prefix">+</span>
-              <input type="number" class="mm-cid-input" placeholder="Enter CID" inputmode="numeric" />
-              <button class="ot-btn mm-add-btn" data-aff-id="${a.id}">Add Member</button>
-            </div>
+            ${mmAddRow('', ` data-aff-id="${a.id}"`)}
           </div>
 
           <div class="mm-msg" role="status"></div>
@@ -20221,142 +20397,7 @@ app.get('/affiliates/my-members', requireLogin, requireAffiliateOwner, async (re
       }).join('')}
     </div>
 
-    <style>
-      .mm-wrap { width: 100%; max-width: 4400px; margin: 0 auto; }
-      .mm-card { width: 100%; }
-
-      .mm-page-header {
-        display: flex;
-        align-items: flex-start;
-        gap: 14px;
-        margin-bottom: 18px;
-      }
-      .mm-page-icon {
-        width: 44px;
-        height: 44px;
-        flex-shrink: 0;
-        border-radius: 10px;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        background: color-mix(in srgb, var(--accent) 14%, transparent);
-        color: var(--accent);
-        border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
-      }
-      .mm-page-title { margin: 0; font-size: 20px; font-weight: 700; color: var(--text); }
-      .mm-page-subtitle { margin: 4px 0 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
-
-      .mm-card { padding: 22px; }
-      .mm-card + .mm-card { margin-top: 16px; }
-
-      .mm-card-header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 12px;
-        flex-wrap: wrap;
-        padding-bottom: 16px;
-        border-bottom: 1px solid var(--border);
-        margin-bottom: 16px;
-      }
-      .mm-card-title {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        flex-wrap: wrap;
-      }
-      .mm-callsign { font-size: 16px; }
-
-      /* Main CID row — non-removable */
-      .mm-main-row td { background: color-mix(in srgb, var(--accent) 5%, transparent); }
-      .aff-main-badge {
-        display: inline-flex;
-        padding: 2px 10px;
-        border-radius: 999px;
-        font-size: 11px;
-        font-weight: 700;
-        letter-spacing: 0.04em;
-        text-transform: uppercase;
-        background: color-mix(in srgb, var(--accent) 15%, transparent);
-        color: var(--accent);
-        border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
-      }
-      .mm-count {
-        font-size: 11px;
-        font-weight: 700;
-        letter-spacing: 0.04em;
-        text-transform: uppercase;
-        padding: 3px 10px;
-        border-radius: 999px;
-        background: var(--panel2);
-        color: var(--muted);
-      }
-
-      .mm-add-row {
-        display: flex;
-        gap: 0;
-        align-items: stretch;
-        background: var(--panel2);
-        border: 1px solid var(--border);
-        border-radius: 8px;
-        overflow: hidden;
-        transition: border-color .15s, box-shadow .15s;
-      }
-      .mm-add-row:focus-within {
-        border-color: var(--accent);
-        box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
-      }
-      .mm-add-prefix {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        padding: 0 10px;
-        font-weight: 700;
-        font-size: 16px;
-        color: var(--muted);
-        border-right: 1px solid var(--border);
-      }
-      .mm-cid-input {
-        padding: 8px 12px;
-        background: transparent;
-        border: 0;
-        color: var(--text);
-        font-size: 13px;
-        width: 150px;
-        font-family: 'JetBrains Mono', ui-monospace, monospace;
-        outline: none;
-      }
-      .mm-add-btn {
-        border: 0;
-        border-left: 1px solid var(--border);
-        border-radius: 0;
-        padding: 0 14px;
-        background: color-mix(in srgb, var(--accent) 18%, transparent);
-        color: var(--accent);
-      }
-      .mm-add-btn:hover {
-        background: color-mix(in srgb, var(--accent) 28%, transparent);
-        color: var(--accent);
-      }
-      .mm-add-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-
-      .mm-msg {
-        display: none;
-        margin-bottom: 12px;
-        padding: 8px 12px;
-        border-radius: 8px;
-        font-size: 12px;
-      }
-      .mm-msg.show { display: block; }
-      .mm-msg.ok  { background: rgba(74,222,128,0.10); color: #4ade80; border: 1px solid rgba(74,222,128,0.30); }
-      .mm-msg.err { background: rgba(239,68,68,0.10); color: #fda4af; border: 1px solid rgba(239,68,68,0.30); }
-
-      @media (max-width: 720px) {
-        .mm-card-header { flex-direction: column; align-items: stretch; }
-        .mm-add-row { width: 100%; }
-        .mm-cid-input { flex: 1; min-width: 0; }
-      }
-    </style>
+${MM_STYLES}
 
     <script>
       (function() {
@@ -20367,6 +20408,20 @@ app.get('/affiliates/my-members', requireLogin, requireAffiliateOwner, async (re
           el.className = 'mm-msg show ' + kind;
           setTimeout(function() { el.classList.remove('show'); }, 3500);
         }
+
+        // Digits only — the field is type=text so it renders without spinners
+        document.addEventListener('input', function(e) {
+          var f = e.target.closest && e.target.closest('.mm-cid-input');
+          if (f) f.value = f.value.replace(/[^0-9]/g, '');
+        });
+        document.addEventListener('keydown', function(e) {
+          var f = e.target.closest && e.target.closest('.mm-cid-input');
+          if (!f || e.key !== 'Enter') return;
+          e.preventDefault();
+          var card = f.closest('.mm-card');
+          var btn = card && card.querySelector('.mm-add-btn');
+          if (btn) btn.click();
+        });
 
         document.addEventListener('click', async function(e) {
           var addBtn = e.target.closest('.mm-add-btn');
@@ -21838,11 +21893,7 @@ app.get('/team/manage-members', requireLogin, async (req, res) => {
             ${activeCallsigns.map(c => `<span class="ot-cell-actype">${escapeHtml(c)}</span>`).join('')}
             <span class="mm-count">${members.length} member${members.length === 1 ? '' : 's'}</span>
           </div>
-          <div class="mm-add-row">
-            <span class="mm-add-prefix">+</span>
-            <input type="number" class="mm-cid-input" id="teamAddCid" placeholder="Enter CID" inputmode="numeric" />
-            <button class="ot-btn mm-add-btn" id="teamAddBtn">Add Member</button>
-          </div>
+          ${mmAddRow(' id="teamAddCid"', ' id="teamAddBtn"')}
         </div>
         <div id="teamMemberMsg" style="display:none;font-size:12px;margin:0 0 10px;"></div>
 
@@ -21884,6 +21935,7 @@ app.get('/team/manage-members', requireLogin, async (req, res) => {
     </div>
 
     ${HQ_STYLES}
+    ${MM_STYLES}
 
     <script>
       (function() {
@@ -21893,6 +21945,18 @@ app.get('/team/manage-members', requireLogin, async (req, res) => {
           msg.style.color = ok ? '#4ade80' : '#f87171';
           msg.style.display = '';
         }
+
+        // Digits only — the field is type=text so it renders without spinners
+        document.addEventListener('input', function(e) {
+          var f = e.target.closest && e.target.closest('.mm-cid-input');
+          if (f) f.value = f.value.replace(/[^0-9]/g, '');
+        });
+        document.addEventListener('keydown', function(e) {
+          if (e.key === 'Enter' && e.target.closest && e.target.closest('.mm-cid-input')) {
+            e.preventDefault();
+            document.getElementById('teamAddBtn').click();
+          }
+        });
 
         document.getElementById('teamAddBtn').addEventListener('click', async function() {
           var input = document.getElementById('teamAddCid');
