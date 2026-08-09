@@ -20230,6 +20230,23 @@ app.get('/affiliates/hq', requireLogin, async (req, res) => {
             setTimeout(function() { routeCopy.textContent = prev2; }, 1400);
           }
         });
+
+        // Long affiliate names make the header title wrap onto two lines —
+        // fall back to plain "Affiliate HQ" whenever the full title doesn't fit.
+        (function() {
+          var headerTitle = document.querySelector('.header-center');
+          if (!headerTitle) return;
+          var fullTitle = headerTitle.textContent;
+          function fitHeaderTitle() {
+            headerTitle.textContent = fullTitle;
+            headerTitle.style.whiteSpace = 'nowrap';
+            var overflows = headerTitle.scrollWidth > headerTitle.clientWidth;
+            headerTitle.style.whiteSpace = '';
+            if (overflows) headerTitle.textContent = 'Affiliate HQ';
+          }
+          fitHeaderTitle();
+          window.addEventListener('resize', fitHeaderTitle);
+        })();
       })();
     </script>
   `;
@@ -21863,6 +21880,23 @@ app.get('/team/hq', requireLogin, async (req, res) => {
         document.addEventListener('keydown', function(e) {
           if (e.key === 'Escape' && !modal.hidden) closeModal();
         });
+
+        // Long team names make the header title wrap onto two lines —
+        // fall back to plain "WF Team HQ" whenever the full title doesn't fit.
+        (function() {
+          var headerTitle = document.querySelector('.header-center');
+          if (!headerTitle) return;
+          var fullTitle = headerTitle.textContent;
+          function fitHeaderTitle() {
+            headerTitle.textContent = fullTitle;
+            headerTitle.style.whiteSpace = 'nowrap';
+            var overflows = headerTitle.scrollWidth > headerTitle.clientWidth;
+            headerTitle.style.whiteSpace = '';
+            if (overflows) headerTitle.textContent = 'WF Team HQ';
+          }
+          fitHeaderTitle();
+          window.addEventListener('resize', fitHeaderTitle);
+        })();
       })();
     </script>
   `;
