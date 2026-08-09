@@ -1101,11 +1101,12 @@ document.addEventListener('click', (e) => {
 
     let total = 0;
 
-    const [sceneryRes, docRes, airacRes, staffRes] = await Promise.all([
+    const [sceneryRes, docRes, airacRes, staffRes, affAppRes] = await Promise.all([
       fetch('/api/admin/scenery/pending-count').catch(() => null),
       fetch('/admin/api/documentation-access-requests/pending-count').catch(() => null),
       fetch('/api/admin/airac/status').catch(() => null),
-      fetch('/admin/api/staff-access-requests/pending-count').catch(() => null)
+      fetch('/admin/api/staff-access-requests/pending-count').catch(() => null),
+      fetch('/admin/api/affiliate-applications/pending-count').catch(() => null)
     ]);
 
     if (sceneryRes && sceneryRes.ok) {
@@ -1126,6 +1127,12 @@ document.addEventListener('click', (e) => {
       staffCount = count;
       total += count;
     }
+    let affAppCount = 0;
+    if (affAppRes && affAppRes.ok) {
+      const { count } = await affAppRes.json();
+      affAppCount = count;
+      total += count;
+    }
 
     if (total > 0) {
       badge.textContent = total;
@@ -1137,9 +1144,16 @@ document.addEventListener('click', (e) => {
     // Show admin alert banner for pending notifications
     if (alertBanner) {
       const alerts = [];
-      if (staffCount > 0) alerts.push('🔑 ' + staffCount + ' pending staff access request' + (staffCount > 1 ? 's' : ''));
+      if (staffCount > 0) {
+        alerts.push('<a href="/admin/access-management" class="admin-alert-link">🔑 ' + staffCount +
+          ' pending staff access request' + (staffCount > 1 ? 's' : '') + ' — View Access Management →</a>');
+      }
+      if (affAppCount > 0) {
+        alerts.push('<a href="/official-teams#applications" class="admin-alert-link">📨 ' + affAppCount +
+          ' affiliate application' + (affAppCount > 1 ? 's' : '') + ' awaiting review — View Applications →</a>');
+      }
       if (alerts.length) {
-        alertBanner.innerHTML = '<a href="/admin/access-management" class="admin-alert-link">' + alerts.join(' &nbsp;&bull;&nbsp; ') + ' — View Access Management →</a>';
+        alertBanner.innerHTML = alerts.join(' &nbsp;&bull;&nbsp; ');
       }
     }
   } catch (err) {

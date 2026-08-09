@@ -2653,14 +2653,37 @@ button.login-btn { border: 0; cursor: pointer; font-family: inherit; }
   padding: 28px 32px;
   width: auto;
   max-width: 90%;
-  /* Tall forms (e.g. Add Application) must never run off-screen — cap to the
-     viewport and scroll inside the card instead. .modal supplies the gutter. */
-  max-height: 100%;
-  overflow-y: auto;
-  overscroll-behavior: contain;
   box-shadow:
     0 0 0 1px rgba(255,255,255,0.08),
     0 20px 60px rgba(0,0,0,0.6);
+  /* The global scrollbar (6px, 8% white) is invisible against this near-black
+     card, so a scrollable modal looked stuck. Give the card a visible one. */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148,163,184,0.55) rgba(255,255,255,0.06);
+}
+/* Tall forms (e.g. Add Application) must never run off-screen — cap to the
+   viewport and scroll inside the card instead; .modal supplies the gutter.
+   Scoped via .modal so it outranks the later `.card { overflow: visible }`,
+   which these cards also match (class="modal-card card"). */
+.modal .modal-card {
+  max-height: 100%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.modal-card::-webkit-scrollbar { width: 10px; }
+.modal-card::-webkit-scrollbar-track {
+  background: rgba(255,255,255,0.06);
+  border-radius: 999px;
+}
+.modal-card::-webkit-scrollbar-thumb {
+  background: rgba(148,163,184,0.55);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+.modal-card::-webkit-scrollbar-thumb:hover {
+  background: rgba(148,163,184,0.8);
+  background-clip: padding-box;
 }
 .modal-actions {
   display: flex;

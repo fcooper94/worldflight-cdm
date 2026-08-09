@@ -22416,6 +22416,7 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
           <div class="ot-empty-sub">Public applications from /affiliate-apply land here — or click "+ Add Application" for people who reached out directly.</div>
         </div>
       ` : `
+        <p class="ot-app-hint">Click any application to see the full details, contact and photos.</p>
         <div class="ot-table-wrap">
           <table class="ot-table">
             <thead>
@@ -22423,11 +22424,6 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
                 <th>Name / Callsign</th>
                 <th>Sim Type</th>
                 <th>CID</th>
-                <th>Contact</th>
-                <th>Heard via</th>
-                <th>Notes</th>
-                <th>Photos</th>
-                <th>Source</th>
                 <th>Applied</th>
                 <th>Status</th>
                 <th class="ot-th-actions"></th>
@@ -22444,19 +22440,6 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
                   </td>
                   <td><span class="ot-simtype" data-sim="${escapeHtml((a.simType || '').toUpperCase())}">${escapeHtml(a.simType || '—')}</span></td>
                   <td class="ot-cell-cid">${a.cid}</td>
-                  <td class="ot-app-contact">${(() => {
-                    // New rows carry discord + email; older ones a single contact string.
-                    const bits = [a.discord, a.email].filter(Boolean).map(escapeHtml);
-                    if (bits.length) return bits.join('<br>');
-                    return a.contact ? escapeHtml(a.contact) : '<span class="ot-muted">—</span>';
-                  })()}</td>
-                  <td class="ot-app-heard">${a.heardAbout ? escapeHtml(a.heardAbout) : '<span class="ot-muted">—</span>'}</td>
-                  <td class="ot-app-notes" title="${a.notes ? escapeHtml(a.notes) : ''}">${a.notes ? escapeHtml(a.notes.length > 60 ? a.notes.slice(0, 60) + '…' : a.notes) : '<span class="ot-muted">—</span>'}</td>
-                  <td class="ot-app-photos">${(photosByApp[a.id] || []).map(pid => `
-                    <a href="/admin/api/affiliate-applications/${a.id}/photos/${pid}" target="_blank" rel="noopener" title="Open photo">
-                      <img src="/admin/api/affiliate-applications/${a.id}/photos/${pid}" alt="Setup photo" loading="lazy" />
-                    </a>`).join('') || '<span class="ot-muted">—</span>'}</td>
-                  <td><span class="ot-app-source ot-app-source-${a.source}">${a.source === 'public' ? 'Applied online' : 'Added by admin'}</span></td>
                   <td class="ot-muted">${new Date(a.createdAt).toISOString().slice(0, 10)}</td>
                   <td>${a.status === 'declined' && a.declineReason
                     ? `<span class="ot-app-status ot-app-status-declined ot-app-status-why" data-reason="${escapeHtml(a.declineReason)}">Declined<span class="tobt-tooltip ot-reason-tip"><span class="ot-reason-tip-label">Reason for declining</span>${escapeHtml(a.declineReason)}</span></span>`
@@ -22574,6 +22557,9 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
       color: var(--muted);
       margin-bottom: 5px;
     }
+    .ot-app-hint { font-size: 12px; color: var(--muted); margin: 0 0 12px; }
+    /* NOTE: the .ot-app-source / -contact / -heard / -notes / -photos rules
+       below are unused since those columns moved into the detail modal. */
     .ot-app-source { font-size: 11px; color: var(--muted); }
     .ot-app-notes { font-size: 12px; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     /* Two stacked lines (Discord + email) — clip each rather than the cell */
@@ -22618,9 +22604,13 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
       tabs.forEach(function(t) {
         t.addEventListener('click', function() { activate(t.dataset.tab); });
       });
+      // A #hash (e.g. the admin alert banner's link to pending applications)
+      // beats the remembered tab; otherwise fall back to last used.
+      var hash = (location.hash || '').replace('#', '');
       var saved = 'teams';
       try { saved = localStorage.getItem('ot-active-tab') || 'teams'; } catch (e) {}
-      if (saved === 'affiliates' || saved === 'applications') activate(saved);
+      var initial = (hash === 'teams' || hash === 'affiliates' || hash === 'applications') ? hash : saved;
+      if (initial === 'affiliates' || initial === 'applications') activate(initial);
     })();
   </script>
 
@@ -24313,7 +24303,13 @@ async function sendAffiliateDecisionEmail(appRow, kind, { html, subject }) {
 }
 
 /* Sent when an admin approves an application. */
-function buildAffiliateApprovedEmail({ applicantName, callsign, hasMembers }) {
+function buildAffiliateApprovedEmail({ applicantName, callsign, hasMembers, hasProfilePhoto }) {
+  // Approval copies the first application photo across as the profile picture,
+  // so the ask differs depending on whether they already have one.
+  const photoLine = hasProfilePhoto
+    ? 'We have used the first photo from your application as your profile picture &mdash; do check it is the one you want and swap it for a better screenshot if not.'
+    : 'Please also add a profile picture &mdash; a good screenshot of your setup or your group&rsquo;s logo works best.';
+
   const membersBlock = hasMembers ? `
               ${affMailP('Because you told us your setup has multiple pilots, your <strong style="color:#38bdf8;">My Members</strong> page is enabled. Add your pilots’ CIDs there and they will get access to your Affiliate HQ, so anyone in your group can see the schedule and manage your sectors.')}
               ${affMailButton(WF_SITE_URL + '/affiliates/my-members', 'Manage your members')}` : '';
@@ -24325,6 +24321,9 @@ function buildAffiliateApprovedEmail({ applicantName, callsign, hasMembers }) {
               ${affMailP('<strong style="color:#4ade80;">Congratulations on becoming the latest WorldFlight Affiliate!</strong> Your application for <strong style="color:#38bdf8;">' + callsign + '</strong> has been approved and you now appear on our public Teams &amp; Affiliates page.')}
               ${affMailP('Your Affiliate HQ is your home for the event &mdash; it shows every sector of this year’s route, your bookings and slots, and lets you edit your public profile.')}
               ${affMailButton(WF_SITE_URL + '/affiliates/hq', 'Open your Affiliate HQ')}
+
+              ${affMailP('<strong style="color:#e5e7eb;">Set up your public profile</strong>', 'margin-top:24px;margin-bottom:8px;')}
+              ${affMailP('Your first job is the <strong style="color:#38bdf8;">Public Profile</strong> panel on your HQ. Add a short bio, your website and the aircraft you fly &mdash; this is what everyone sees on the Teams &amp; Affiliates page. ' + photoLine)}
 
               ${affMailP('<strong style="color:#e5e7eb;">The route and your slots</strong>', 'margin-top:24px;margin-bottom:8px;')}
               ${affMailP('The full route is published on the Schedule page and mirrored in your HQ. Where a sector is slotted or requires a booking, you are allocated one automatically as an affiliate &mdash; there is nothing to claim by hand. If you are not flying a particular sector, please release it in your HQ so the slot goes back to the pool.')}
@@ -24498,6 +24497,16 @@ app.post('/admin/api/affiliate-applications', requireAdmin, async (req, res) => 
 
 // Approve — creates the Affiliate as participating/active (mirrors the
 // manual affiliate-create endpoint: role grant + owner reload + auto-assign).
+// Feeds the admin sidebar badge / alert banner
+app.get('/admin/api/affiliate-applications/pending-count', requireAdmin, async (req, res) => {
+  try {
+    const count = await prisma.affiliateApplication.count({ where: { status: 'pending' } });
+    res.json({ count });
+  } catch {
+    res.json({ count: 0 });
+  }
+});
+
 app.post('/admin/api/affiliate-applications/:id/approve', requireAdmin, async (req, res) => {
   const id = Number(req.params.id);
   const adminCid = Number(req.session?.user?.data?.cid) || null;
@@ -24556,7 +24565,8 @@ app.post('/admin/api/affiliate-applications/:id/approve', requireAdmin, async (r
       html: buildAffiliateApprovedEmail({
         applicantName: await applicantFirstName(appRow.cid),
         callsign: escapeHtml(appRow.callsign),
-        hasMembers: !!appRow.hasMembers
+        hasMembers: !!appRow.hasMembers,
+        hasProfilePhoto: !!firstPhoto
       }),
       subject: 'WorldFlight — Affiliate Application Approved'
     });
