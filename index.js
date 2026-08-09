@@ -7128,7 +7128,14 @@ app.use((req, res, next) => {
     }
     .loader-card img { width:72px; height:72px; border-radius:50%; margin-bottom:16px; }
     .loader-card h1 { font-size:22px; color:#38bdf8; margin-bottom:4px; }
-    .loader-card .subtitle { font-size:13px; color:#64748b; margin-bottom:24px; }
+    .loader-card .subtitle { font-size:14px; color:#e2e8f0; font-weight:600; margin-bottom:10px; }
+    /* Without this people read the progress bar as "the site is slow" rather
+       than "an update is being deployed, it will come back on its own". */
+    .loader-card .explain {
+      font-size:12.5px; color:#94a3b8; line-height:1.6;
+      margin:0 auto 22px; max-width:340px;
+    }
+    .loader-card .explain strong { color:#cbd5e1; font-weight:600; }
 
     /* Plane animation */
     .plane-track {
@@ -7195,7 +7202,13 @@ app.use((req, res, next) => {
   <div class="loader-card">
     <img src="/logo.png" alt="WorldFlight" />
     <h1>WorldFlight Planning</h1>
-    <div class="subtitle">Preparing your experience</div>
+    <div class="subtitle">An update is being deployed</div>
+    <p class="explain">
+      The portal is restarting, so it&rsquo;s briefly unavailable. This normally takes
+      <strong>a minute or two</strong> &mdash; the page refreshes itself the moment
+      it&rsquo;s ready, so there&rsquo;s nothing you need to do. Any bookings you have
+      already made are safe.
+    </p>
 
     <div class="plane-track">
       <div class="plane-trail"></div>
@@ -7247,7 +7260,7 @@ app.use((req, res, next) => {
       fetch('/api/health').then(function(r) { return r.json(); }).then(function(d) {
         if (d.ready) {
           document.getElementById('progressBar').style.width = '100%';
-          document.getElementById('stepLabel').textContent = 'Ready!';
+          document.getElementById('stepLabel').textContent = 'Update complete — reloading';
           document.getElementById('stepLabel').style.color = '#4ade80';
           document.getElementById('stepCount').textContent = '';
           document.querySelectorAll('.step-item').forEach(function(el) {
