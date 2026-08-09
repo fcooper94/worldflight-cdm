@@ -24353,7 +24353,7 @@ app.get('/affiliate-apply', async (req, res) => {
       <p style="color:#fbbf24;font-weight:600;margin:0;">You already have a pending application. We'll be in touch once it's been reviewed.</p>
   ` : `
       <p style="color:var(--muted);margin:0 0 16px;">Applying as <strong>${escapeHtml(user.personal?.name_full || '')} (${cid})</strong></p>
-      <form id="affApplyForm" style="display:flex;flex-direction:column;gap:4px;max-width:480px;">
+      <form id="affApplyForm" style="display:flex;flex-direction:column;gap:4px;max-width:480px;position:relative;">
         <label style="margin:6px 0 4px;">Team Name *</label>
         <input name="teamName" type="text" maxlength="60" required placeholder="Your group or setup name" style="text-transform:none;text-align:left;" />
 
@@ -24453,9 +24453,16 @@ app.get('/affiliate-apply', async (req, res) => {
         </style>
 
         <div style="margin-top:16px;display:flex;align-items:center;gap:12px;">
-          <button type="submit" class="action-btn primary">Submit application</button>
+          <button type="submit" class="action-btn primary" id="affSubmitBtn">Submit application</button>
           <span id="affApplyMsg" style="font-size:13px;display:none;"></span>
         </div>
+        <div id="affSubmitOverlay" class="hidden" style="position:absolute;inset:0;background:rgba(var(--panel-rgb,10,15,30),0.85);display:flex;align-items:center;justify-content:center;border-radius:var(--radius,12px);z-index:10;">
+          <div style="text-align:center;">
+            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="var(--accent,#38bdf8)" stroke-width="2" stroke-linecap="round" style="animation:affSpin 1s linear infinite;"><path d="M21 12a9 9 0 1 1-6.22-8.56"/></svg>
+            <p style="margin:12px 0 0;color:var(--text,#e2e8f0);font-weight:600;font-size:15px;">Sending application&hellip;</p>
+          </div>
+        </div>
+        <style>@keyframes affSpin { to { transform: rotate(360deg); } }</style>
       </form>
       <script>
         (function() {
@@ -24513,6 +24520,7 @@ app.get('/affiliate-apply', async (req, res) => {
             });
           });
 
+          var overlay = document.getElementById('affSubmitOverlay');
           form.addEventListener('submit', async function(e) {
             e.preventDefault();
             var fd = new FormData(form);
@@ -24522,6 +24530,8 @@ app.get('/affiliate-apply', async (req, res) => {
               var f = tile.querySelector('input[type=file]').files[0];
               if (f) fd.append('photos', f);
             });
+            overlay.classList.remove('hidden');
+            msg.style.display = 'none';
             try {
               var r = await fetch('/api/affiliate-applications', {
                 method: 'POST',
@@ -24532,11 +24542,13 @@ app.get('/affiliate-apply', async (req, res) => {
               if (r.ok) {
                 form.outerHTML = '<p style="color:#4ade80;font-weight:600;">Application submitted — thanks! We\\'ve sent a confirmation to your email address, and we\\'ll email you again as soon as a decision has been made.</p>';
               } else {
+                overlay.classList.add('hidden');
                 msg.textContent = d.error || 'Failed to submit';
                 msg.style.color = '#f87171';
                 msg.style.display = '';
               }
             } catch (err) {
+              overlay.classList.add('hidden');
               msg.textContent = 'Failed to submit';
               msg.style.color = '#f87171';
               msg.style.display = '';
