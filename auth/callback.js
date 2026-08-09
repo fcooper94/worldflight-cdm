@@ -62,15 +62,24 @@ export default async function vatsimCallback(req, res) {
     // Persist the logged-in user's name so other pages (e.g. Team Bookings
     // pilot dropdown) can resolve CID → Name without an authenticated VATSIM
     // lookup, which is only available via the user's own OAuth session.
+    //
+    // The email is stored for the same reason: VATSIM only hands it over
+    // during this user's own login, so without capturing it here we have no
+    // way to contact a team/affiliate member later (e.g. a Discord invite).
+    // Kept nullable — a user who declines the email scope still logs in fine.
     try {
       const u = userResponse.data?.data || {};
       const cidNum = Number(u.cid);
       const name = (u.personal?.name_full || [u.personal?.name_first, u.personal?.name_last].filter(Boolean).join(' ')).trim();
+      const rawEmail = String(u.personal?.email || '').trim().toLowerCase();
+      const email = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(rawEmail) ? rawEmail.slice(0, 200) : null;
       if (cidNum && name) {
         await prisma.user.upsert({
           where: { cid: cidNum },
-          update: { name },
-          create: { cid: cidNum, name }
+          // Never overwrite a stored address with null - if VATSIM omits the
+          // email on one login, the one we already have stays put.
+          update: email ? { name, email } : { name },
+          create: email ? { cid: cidNum, name, email } : { cid: cidNum, name }
         });
       }
     } catch (e) {

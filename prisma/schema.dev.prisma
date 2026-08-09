@@ -94,8 +94,11 @@ model TobtBooking {
 }
 
 model User {
-  cid  Int    @id
-  name String
+  cid   Int     @id
+  name  String
+  // Captured at VATSIM login — the only moment we are given it. Nullable: a
+  // user may decline the email scope, and existing rows predate this.
+  email String?
 }
 
 model Airport {

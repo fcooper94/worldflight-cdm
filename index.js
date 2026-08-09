@@ -413,6 +413,9 @@ import _renderLayout from './layout.js';
 import { getAirportGround, detectStandOccupancy } from './lib/osm-ground.mjs';
 import { fetchAndParseFirManagement } from './lib/fir-management.mjs';
 import { vatcanIsEnabled, vatcanCreateEvent, vatcanQueueSectorPush, vatcanPushSectorNow, vatcanGetLastResult, vatcanAllLastResults } from './lib/vatcan-bookings.mjs';
+import { discordConfigured, getGuildSnapshot, invalidateGuildCache } from './lib/discord-api.mjs';
+import { parseCidFromNickname, parseNameFromNickname, desiredRolesByCid } from './lib/discord-roles.mjs';
+import { runDiscordRoleSync, discordSyncState, discordSyncStatusText } from './lib/discord-sync.mjs';
 function renderLayout(opts) {
   const cid = Number(opts.user?.cid);
   const active = wfEvents.find(e => e.id === activeEventId) || null;
@@ -6415,6 +6418,13 @@ async function refreshAdminSheet() {
 }
 
 cron.schedule('0 0 * * *', refreshAdminSheet);
+
+// Reconcile Discord roles against the roster on the hour. Additive-only until
+// DISCORD_SYNC_REMOVALS is turned on — see lib/discord-roles.mjs.
+cron.schedule('0 * * * *', () => {
+  if (!discordConfigured()) return;
+  runDiscordRoleSync({ buildRoster: buildDiscordRosterGroups, reason: 'hourly' }).catch(() => {});
+});
 
 
 
@@ -22324,6 +22334,101 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
     }
   }
 
+  /* ----- Discord Permissions roster -------------------------------------
+     A flat, read-only view of who belongs to which team/affiliate and what
+     Discord role they should hold. The bot doesn't exist yet, so the
+     "Member of our Discord" column has no source and is shown as unknown
+     rather than guessed at. */
+  const [teamRoleRows, affMemberRows] = await Promise.all([
+    prisma.userAdditionalRole.findMany({ where: { role: 'WF_TEAM' } }).catch(() => []),
+    prisma.affiliateMember.findMany().catch(() => [])
+  ]);
+
+  // Resolve display names for every CID we're about to list
+  const rosterCids = new Set();
+  teams.forEach(t => rosterCids.add(Number(t.mainCid)));
+  affiliates.forEach(a => rosterCids.add(Number(a.cid)));
+  teamRoleRows.forEach(r => rosterCids.add(Number(r.cid)));
+  affMemberRows.forEach(m => rosterCids.add(Number(m.cid)));
+  rosterCids.delete(0);
+  rosterCids.delete(NaN);
+
+  /* Live Discord membership, keyed by CID from the nickname. Failure here must
+     not take the admin page down — the pill just falls back to "Unknown". */
+  let discordByCid = null;
+  let discordError = null;
+  let discordFetchedAt = null;
+  if (discordConfigured()) {
+    try {
+      const snap = await getGuildSnapshot();
+      if (snap) {
+        discordFetchedAt = snap.fetchedAt;
+        discordByCid = new Map();
+        for (const m of snap.members) {
+          const c = parseCidFromNickname(m.nickname);
+          if (c && !discordByCid.has(c)) discordByCid.set(c, m);
+        }
+      }
+    } catch (e) {
+      discordError = e.message;
+      console.warn('[DISCORD] guild snapshot failed:', e.message);
+    }
+  }
+
+  const rosterNames = {};
+  if (rosterCids.size) {
+    const ids = [...rosterCids];
+    const [us, subs] = await Promise.all([
+      prisma.user.findMany({ where: { cid: { in: ids } }, select: { cid: true, name: true } }).catch(() => []),
+      prisma.mailingListSubscriber.findMany({ where: { cid: { in: ids } }, select: { cid: true, firstName: true, lastName: true } }).catch(() => [])
+    ]);
+    us.forEach(u => { if (u.name) rosterNames[Number(u.cid)] = u.name; });
+    subs.forEach(s => {
+      const c = Number(s.cid);
+      if (rosterNames[c]) return;
+      const nm = [s.firstName, s.lastName].filter(Boolean).join(' ').trim();
+      if (nm) rosterNames[c] = nm;
+    });
+  }
+
+  /* Last resort for a name: the Discord nickname. Most of these CIDs have
+     never logged into the portal, so the nickname another bot maintains is the
+     only place their name exists. Portal data still wins where we have it. */
+  const nameFromDiscord = new Set();
+  if (discordByCid) {
+    for (const [cid, m] of discordByCid) {
+      if (rosterNames[cid]) continue;
+      const nm = parseNameFromNickname(m.nickname);
+      if (nm) { rosterNames[cid] = nm; nameFromDiscord.add(cid); }
+    }
+  }
+
+  // Same builder the hourly sync uses, so the page can never show a different
+  // roster from the one being applied. Sorted here for display only.
+  const rosterGroups = (await buildDiscordRosterGroups())
+    .map(g => ({ ...g, people: sortRoster(g.people, rosterNames) }));
+
+  const rosterTotal = rosterGroups.reduce((n, g) => n + g.people.length, 0);
+  const rosterInDiscord = discordByCid
+    ? rosterGroups.reduce((n, g) => n + g.people.filter(p => discordByCid.has(p.cid)).length, 0)
+    : 0;
+
+  /* Per-person sync state, so a row can say at a glance whether Discord
+     already matches what the portal says they should hold. */
+  const wantByCid = desiredRolesByCid(rosterGroups);
+  const syncStateFor = (cid) => {
+    if (!discordByCid) return { kind: 'unknown', label: '—', title: 'Discord could not be read' };
+    const m = discordByCid.get(cid);
+    if (!m) return { kind: 'absent', label: '—', title: 'Not in the server, so there is nothing to sync' };
+    const has = new Set(m.roleNames || []);
+    const missing = [...(wantByCid.get(cid) || [])].filter(r => !has.has(r));
+    return missing.length
+      ? { kind: 'pending', label: '!', title: 'Missing: ' + missing.join(', ') }
+      : { kind: 'ok', label: '✓', title: 'All roles correct' };
+  };
+  const syncedCount = rosterGroups.reduce((n, g) =>
+    n + g.people.filter(p => syncStateFor(p.cid).kind === 'ok').length, 0);
+
   const teamRecord = (t) => JSON.stringify({ teamName: t.teamName, callsign: t.callsign, mainCid: t.mainCid, aircraftType: t.aircraftType, country: t.country, sinceYear: t.sinceYear, multiSlot: t.multiSlot, description: t.description, website: t.website, sortOrder: t.sortOrder, participatingWf26: t.participatingWf26 }).replace(/'/g, '&#39;');
   const affRecord = (a) => JSON.stringify({ name: a.name, callsign: a.callsign, simType: a.simType, cid: a.cid, sinceYear: a.sinceYear, hasMembers: a.hasMembers, multiAircraft: a.multiAircraft, aircraftType: a.aircraftType, description: a.description, website: a.website, sortOrder: a.sortOrder, participatingWf26: a.participatingWf26 }).replace(/'/g, '&#39;');
   const appRecord = (a) => JSON.stringify({
@@ -22341,6 +22446,12 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
       <div class="ot-title-row">
         <h2 class="ot-title">Official Teams &amp; WF Affiliates</h2>
         <div class="ot-add-actions">
+          <span class="ot-sync-status ot-sync-${discordSyncState.result || 'idle'}"
+                title="Discord roles are reconciled against this roster every hour${
+                  discordSyncState.message ? ' — ' + escapeHtml(discordSyncState.message) : ''}">
+            <span class="ot-sync-dot"></span>${escapeHtml(discordSyncStatusText())}
+          </span>
+          <button class="action-btn ot-add-btn" id="discordSyncNowBtn" type="button" hidden>Sync now</button>
           <button class="action-btn primary ot-add-btn" id="addTeamBtn" data-add-for="teams">+ Add Official Team</button>
           <button class="action-btn primary ot-add-btn" id="addAffiliateBtn" data-add-for="affiliates" hidden>+ Add WF Affiliate</button>
           <button class="action-btn primary ot-add-btn" id="addApplicationBtn" data-add-for="applications" hidden>+ Add Application</button>
@@ -22362,6 +22473,11 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
           <svg class="ot-tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="15" x2="15" y2="15"/><line x1="9" y1="11" x2="12" y2="11"/></svg>
           <span>Applications</span>
           <span class="ot-tab-count${pendingApps.length ? ' ot-tab-count-alert' : ''}">${pendingApps.length}</span>
+        </button>
+        <button class="ot-tab" data-tab="discord" role="tab" type="button">
+          <svg class="ot-tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18a5 5 0 0 1-5-5V8a5 5 0 0 1 5-5h6a5 5 0 0 1 5 5v5a5 5 0 0 1-5 5"/><path d="M8.5 11.5h.01"/><path d="M15.5 11.5h.01"/><path d="M9 18l-2 3"/><path d="M15 18l2 3"/></svg>
+          <span>Discord Permissions</span>
+          <span class="ot-tab-count">${rosterTotal}</span>
         </button>
       </div>
     </header>
@@ -22527,9 +22643,202 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
         </div>
       `}
     </div>
+
+    <div class="ot-panel" data-panel="discord">
+      <p class="ot-app-hint">
+        Every WF Team and Affiliate with their people, and the Discord role each should hold.
+        ${!discordByCid
+          ? `<strong>Discord could not be read</strong> &mdash; ${escapeHtml(discordError || 'the bot is not configured')}.`
+          : `Matched against the server by the CID in each member&rsquo;s nickname
+             (${rosterInDiscord} of ${rosterTotal} roster people are in the server).
+             Names marked <span class="dp-src">discord</span> came from that nickname rather than the portal.
+             Read ${escapeHtml(new Date(discordFetchedAt).toISOString().slice(11, 16))}z, cached for 5 minutes.`}
+        Roles are never removed automatically.
+      </p>
+      <div class="dp-toolbar">
+        <span class="dp-summary">
+          <span class="dp-sync dp-sync-ok">✓</span> ${syncedCount} of ${rosterTotal} fully synced
+          ${rosterTotal - syncedCount ? `&nbsp;·&nbsp; <span class="dp-sync dp-sync-pending">!</span> ${rosterTotal - syncedCount} outstanding` : ''}
+        </span>
+        <button type="button" class="action-btn primary" id="dpSyncBtn">Sync roles now</button>
+      </div>
+      ${rosterGroups.length === 0 ? `
+        <div class="ot-empty">
+          <div class="ot-empty-title">Nobody to show yet</div>
+          <div class="ot-empty-sub">Teams and affiliates and their members will appear here.</div>
+        </div>
+      ` : rosterGroups.map(g => `
+        <section class="dp-group">
+          <header class="dp-group-head">
+            <span class="dp-kind dp-kind-${g.kind}">${g.kind === 'team' ? 'Official Team' : 'WF Affiliate'}</span>
+            <h4 class="dp-group-name">${escapeHtml(g.label || '—')}</h4>
+            <span class="aff-member-count">${g.people.length} ${g.people.length === 1 ? 'person' : 'people'}</span>
+          </header>
+          ${g.people.length === 0 ? `
+            <p class="dp-empty">No members recorded.</p>
+          ` : `
+            <div class="ot-table-wrap">
+              <table class="ot-table dp-table">
+                <colgroup>
+                  <col style="width:23%" /><col style="width:10%" /><col style="width:16%" />
+                  <col style="width:13%" /><col style="width:18%" /><col style="width:7%" />
+                  <col style="width:13%" />
+                </colgroup>
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>CID</th>
+                    <th>Member of our Discord</th>
+                    <th>Role</th>
+                    <th>Sub-role</th>
+                    <th class="ot-th-center">Synced</th>
+                    <th class="ot-th-actions"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${g.people.map(p => {
+                    const role = g.kind === 'team'
+                      ? (p.lead ? 'Team Lead' : 'Team Member')
+                      : (p.lead ? 'Affiliate Lead' : 'Affiliate');
+                    return `
+                    <tr${p.participating ? '' : ' class="mm-inactive-row"'}>
+                      <td class="ot-cell-name">${escapeHtml(rosterNames[p.cid] || '—')}${
+                        nameFromDiscord.has(p.cid) ? '<span class="dp-src" title="Name taken from their Discord nickname">discord</span>' : ''}</td>
+                      <td class="ot-cell-cid">${p.cid}</td>
+                      <td>${!discordByCid
+                        ? `<span class="dp-unknown" title="${escapeHtml(discordError || 'Discord is not configured')}">Unknown</span>`
+                        : discordByCid.has(p.cid)
+                          ? `<span class="dp-in" title="${escapeHtml(discordByCid.get(p.cid).nickname)}">In server</span>`
+                          : '<span class="dp-out" title="No server nickname contains this CID">Not in server</span>'}</td>
+                      <td><span class="dp-role${p.lead ? ' dp-role-lead' : ''}">${role}</span></td>
+                      <td><span class="dp-subrole">${escapeHtml(g.label || '—')}</span></td>
+                      <td class="ot-cell-active">${(() => {
+                        const s = syncStateFor(p.cid);
+                        return `<span class="dp-sync dp-sync-${s.kind}" title="${escapeHtml(s.title)}">${s.label}</span>`;
+                      })()}</td>
+                      <td class="ot-cell-actions">${
+                        // Only worth offering to someone who isn't in the server.
+                        // When Discord can't be read we don't know, so no button.
+                        discordByCid && !discordByCid.has(p.cid) ? `
+                        <button type="button" class="ot-btn dp-invite-btn"
+                          data-cid="${p.cid}"
+                          data-kind="${g.kind}"
+                          data-operator="${escapeHtml(g.label || '')}">Invite via Email</button>` : ''}
+                      </td>
+                    </tr>`;
+                  }).join('')}
+                </tbody>
+              </table>
+            </div>
+          `}
+        </section>
+      `).join('')}
+    </div>
   </section>
 
   <style>
+    .dp-group { margin-bottom: 22px; }
+    .dp-group-head {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 10px;
+    }
+    .dp-group-name { margin: 0; font-size: 15px; font-weight: 700; color: var(--text); }
+    .dp-kind {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      padding: 3px 9px;
+      border-radius: 999px;
+      white-space: nowrap;
+    }
+    .dp-kind-team { background: rgba(56,189,248,0.15); color: #38bdf8; border: 1px solid rgba(56,189,248,0.35); }
+    .dp-kind-affiliate { background: rgba(167,139,250,0.15); color: #a78bfa; border: 1px solid rgba(167,139,250,0.35); }
+    .dp-role {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text);
+      white-space: nowrap;
+    }
+    .dp-role-lead { color: #4ade80; }
+    .dp-subrole {
+      font-size: 12px;
+      color: var(--muted);
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+    }
+    .dp-in, .dp-out {
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 9px;
+      border-radius: 999px;
+      white-space: nowrap;
+    }
+    .dp-in  { background: rgba(34,197,94,0.15);  color: #4ade80; border: 1px solid rgba(34,197,94,0.35); }
+    .dp-out { background: rgba(239,68,68,0.15);  color: #f87171; border: 1px solid rgba(239,68,68,0.35); }
+    .dp-src {
+      margin-left: 6px;
+      font-size: 9.5px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: #818cf8;
+      vertical-align: middle;
+    }
+    /* Shown only when Discord could not be read at all */
+    .dp-unknown {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--muted);
+      padding: 2px 9px;
+      border-radius: 999px;
+      background: rgba(148,163,184,0.12);
+      border: 1px dashed rgba(148,163,184,0.35);
+      cursor: help;
+    }
+    .dp-empty { font-size: 12.5px; color: var(--muted); margin: 0 0 6px; }
+    /* Fixed layout so every operator's table lines up with the others —
+       otherwise each one sizes its own columns from its own content. */
+    .dp-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      flex-wrap: wrap;
+      padding: 12px 14px;
+      margin: 0 0 18px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--panel2);
+    }
+    .dp-summary { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--muted); }
+    .dp-table { table-layout: fixed; }
+    .dp-table td, .dp-table th { overflow: hidden; text-overflow: ellipsis; }
+    .dp-table .ot-cell-name, .dp-table .dp-subrole { white-space: nowrap; }
+    .dp-sync {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      font-size: 12px;
+      font-weight: 800;
+      cursor: help;
+    }
+    .dp-sync-ok      { background: rgba(34,197,94,0.15);  color: #4ade80; border: 1px solid rgba(34,197,94,0.4); }
+    .dp-sync-pending { background: rgba(245,158,11,0.15); color: #fbbf24; border: 1px solid rgba(245,158,11,0.45); }
+    .dp-sync-absent,
+    .dp-sync-unknown { background: transparent; color: var(--muted); border: 1px dashed rgba(148,163,184,0.3); }
+    .dp-invite-btn { white-space: nowrap; }
+    .dp-invite-btn[disabled] { opacity: 0.55; cursor: default; }
+    /* Result of the last click, shown in place of a toast */
+    .dp-invite-msg { font-size: 11.5px; margin-left: 8px; white-space: nowrap; }
+    .dp-invite-msg.ok { color: #4ade80; }
+    .dp-invite-msg.err { color: #f87171; }
+
     .ot-card { padding: 24px; }
     .ot-title-row {
       display: flex;
@@ -22540,6 +22849,20 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
       margin-bottom: 16px;
     }
     .ot-title { margin: 0; font-size: 18px; font-weight: 700; color: var(--text); }
+    .ot-sync-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 11.5px;
+      color: var(--muted);
+      padding: 0 4px;
+      cursor: help;
+      white-space: nowrap;
+    }
+    .ot-sync-dot { width: 7px; height: 7px; border-radius: 50%; background: rgba(148,163,184,0.5); flex-shrink: 0; }
+    .ot-sync-ok      .ot-sync-dot { background: #4ade80; }
+    .ot-sync-blocked .ot-sync-dot { background: #fbbf24; }
+    .ot-sync-error   .ot-sync-dot { background: #f87171; }
     .ot-add-actions { display: flex; gap: 8px; flex-wrap: wrap; }
     .ot-add-btn { font-size: 13px; }
 
@@ -22667,6 +22990,8 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
         if (addTeam) addTeam.hidden = name !== 'teams';
         if (addAff)  addAff.hidden  = name !== 'affiliates';
         if (addApp)  addApp.hidden  = name !== 'applications';
+        var syncBtn = document.getElementById('discordSyncNowBtn');
+        if (syncBtn) syncBtn.hidden = name !== 'discord';
         try { localStorage.setItem('ot-active-tab', name); } catch (e) {}
       }
       tabs.forEach(function(t) {
@@ -22674,11 +22999,70 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
       });
       // A #hash (e.g. the admin alert banner's link to pending applications)
       // beats the remembered tab; otherwise fall back to last used.
+      // ----- Run the role sync on demand (header button and panel button) -----
+      async function runDiscordSync(btn) {
+        var label = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = 'Syncing...';
+        try {
+          var r = await fetch('/admin/api/discord/sync', { method: 'POST', credentials: 'same-origin' });
+          var d = await r.json().catch(function() { return {}; });
+          if (r.ok) { location.reload(); return; }
+          alert(d.error || 'Sync failed');
+        } catch (e) {
+          alert('Sync failed');
+        }
+        btn.disabled = false;
+        btn.textContent = label;
+      }
+      ['discordSyncNowBtn', 'dpSyncBtn'].forEach(function(id) {
+        var b = document.getElementById(id);
+        if (b) b.addEventListener('click', function() { runDiscordSync(b); });
+      });
+
+      // ----- Discord invite emails -----
+      document.addEventListener('click', async function(e) {
+        var btn = e.target.closest('.dp-invite-btn');
+        if (!btn) return;
+        var cell = btn.parentElement;
+        var msg = cell.querySelector('.dp-invite-msg');
+        if (!msg) {
+          msg = document.createElement('span');
+          msg.className = 'dp-invite-msg';
+          cell.appendChild(msg);
+        }
+        btn.disabled = true;
+        msg.className = 'dp-invite-msg';
+        msg.textContent = 'Sending...';
+        try {
+          var r = await fetch('/admin/api/discord/invite/' + btn.dataset.cid, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify({ operatorName: btn.dataset.operator, kind: btn.dataset.kind })
+          });
+          var d = await r.json().catch(function() { return {}; });
+          if (r.ok) {
+            msg.className = 'dp-invite-msg ok';
+            msg.textContent = 'Sent to ' + (d.email || 'their address');
+          } else {
+            msg.className = 'dp-invite-msg err';
+            msg.textContent = d.error || 'Failed to send';
+            btn.disabled = false;
+          }
+        } catch (err) {
+          msg.className = 'dp-invite-msg err';
+          msg.textContent = 'Failed to send';
+          btn.disabled = false;
+        }
+      });
+
+      var TABS = ['teams', 'affiliates', 'applications', 'discord'];
       var hash = (location.hash || '').replace('#', '');
       var saved = 'teams';
       try { saved = localStorage.getItem('ot-active-tab') || 'teams'; } catch (e) {}
-      var initial = (hash === 'teams' || hash === 'affiliates' || hash === 'applications') ? hash : saved;
-      if (initial === 'affiliates' || initial === 'applications') activate(initial);
+      var initial = TABS.indexOf(hash) >= 0 ? hash : saved;
+      if (TABS.indexOf(initial) > 0) activate(initial);
     })();
   </script>
 
@@ -23475,6 +23859,70 @@ const cleanBio = (v) => {
   return s ? s.slice(0, PUBLIC_BIO_MAX) : null;
 };
 
+/* The Discord Permissions roster: one entry per operator with its people and
+   who leads it. Shared by the admin page and the hourly sync so the two can
+   never disagree about who should hold what. */
+async function buildDiscordRosterGroups() {
+  const [teams, affiliates, teamRoleRows, affMemberRows] = await Promise.all([
+    prisma.officialTeam.findMany({ orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }] }).catch(() => []),
+    prisma.affiliate.findMany({ orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }] }).catch(() => []),
+    prisma.userAdditionalRole.findMany({ where: { role: 'WF_TEAM' } }).catch(() => []),
+    prisma.affiliateMember.findMany().catch(() => [])
+  ]);
+
+  const groups = [];
+  const seenT = new Set();
+  for (const t of teams) {
+    const key = String(t.teamName || '').trim().toUpperCase();
+    const sibs = teams.filter(x => String(x.teamName || '').trim().toUpperCase() === key);
+    if (sibs.length > 1) { if (seenT.has(key)) continue; seenT.add(key); }
+    const label = String(t.teamName || t.callsign || '').trim();
+    const leadCids = new Set(sibs.map(r => Number(r.mainCid)).filter(Boolean));
+    const people = [...leadCids].map(cid => ({ cid, lead: true, participating: true }));
+    teamRoleRows
+      .filter(r => String(r.teamName || '').trim().toUpperCase() === key && !leadCids.has(Number(r.cid)))
+      .forEach(r => people.push({ cid: Number(r.cid), lead: false, participating: r.participating !== false }));
+    groups.push({ kind: 'team', label, people });
+  }
+
+  const seenA = new Set();
+  for (const a of affiliates) {
+    const key = String(a.name || a.callsign || '').trim().toUpperCase();
+    if (seenA.has(key)) continue;
+    seenA.add(key);
+    const sibs = affiliates.filter(x => String(x.name || x.callsign || '').trim().toUpperCase() === key);
+    const rows = (a.multiAircraft && sibs.length > 1) ? sibs : [a];
+    const label = String(a.name || a.callsign || '').trim();
+    // Exactly one Affiliate Lead: the first aircraft row.
+    const leadCid = Number(rows[0].cid) || 0;
+    const seenCids = new Set();
+    const people = [];
+    rows.map(r => Number(r.cid)).filter(Boolean).forEach(cid => {
+      if (seenCids.has(cid)) return;
+      seenCids.add(cid);
+      people.push({ cid, lead: cid === leadCid, participating: true });
+    });
+    affMemberRows
+      .filter(m => rows.some(r => r.id === m.affiliateId) && !seenCids.has(Number(m.cid)))
+      .forEach(m => people.push({ cid: Number(m.cid), lead: false, participating: m.active !== false }));
+    groups.push({ kind: 'affiliate', label, people });
+  }
+
+  return groups;
+}
+
+// Leads first, then named people alphabetically, then CIDs we have no name for
+// (they have never logged in) numerically at the end.
+function sortRoster(people, names) {
+  return people.sort((a, b) => {
+    if (a.lead !== b.lead) return b.lead - a.lead;
+    const na = names[a.cid] || '';
+    const nb = names[b.cid] || '';
+    if (!!na !== !!nb) return na ? -1 : 1;
+    return na ? na.localeCompare(nb) : a.cid - b.cid;
+  });
+}
+
 async function resolveSortOrder(raw, model) {
   if (raw !== undefined && raw !== null && String(raw).trim() !== '') {
     return Math.max(0, Number(raw) || 0);
@@ -23682,9 +24130,10 @@ app.delete('/api/admin/official-teams/:id', requireAdmin, async (req, res) => {
    creates the Affiliate (participating/active) exactly like the manual
    affiliate-create endpoint; the application row is kept as history. */
 
-// Community Discord — affiliates are expected to be members, so the apply
-// form and the admin queue both link to it.
-const WF_DISCORD_INVITE = 'https://discord.gg/FyWFMQyS2e';
+// Community Discord — the apply form, the affiliate emails and the admin
+// invite button all use this one link. Overridable so a new invite only means
+// an env change, not a deploy.
+const WF_DISCORD_INVITE = String(process.env.DISCORD_INVITE_URL || '').trim() || 'https://discord.gg/FyWFMQyS2e';
 
 // Public application form. Logged-in users apply; the CID is taken from the
 // session. Not linked from the nav — share the URL directly.
@@ -24628,6 +25077,80 @@ function buildAffiliateDeclinedEmail({ applicantName, callsign, reason }) {
               ${affMailButton(WF_SITE_URL + '/schedule', 'View the WorldFlight schedule')}`
   });
 }
+
+/* Sent from the Discord Permissions tab to a team/affiliate member who isn't
+   in the community Discord yet. */
+function buildDiscordInviteEmail({ memberName, operatorName, isTeam, inviteUrl }) {
+  const roleLine = isTeam
+    ? 'a member of the WorldFlight team <strong style="color:#38bdf8;">' + operatorName + '</strong>'
+    : 'a member of the WorldFlight affiliate <strong style="color:#38bdf8;">' + operatorName + '</strong>';
+
+  return affiliateEmailShell({
+    subtitle: 'Join the WorldFlight Discord',
+    bodyHtml: `
+              ${affMailP('Hello ' + memberName + ',')}
+              ${affMailP('You are registered on the WorldFlight portal as ' + roleLine + '.')}
+              ${affMailP('Please join our community Discord &mdash; it is where route discussion, sector coordination and everything else during the event happens. Once you are in, you will be given your team roles automatically.')}
+              ${affMailButton(inviteUrl, 'Join the WorldFlight Discord')}
+              ${affMailP('So we can match you up, please set your server nickname to your VATSIM name and CID, for example <strong style="color:#e5e7eb;">Jane Smith - 1234567</strong>.', 'margin-top:20px;font-size:13.5px;')}`
+  });
+}
+
+// Run the role reconcile on demand. Same code path as the hourly cron.
+app.post('/admin/api/discord/sync', requireAdmin, async (req, res) => {
+  if (!discordConfigured()) return res.status(503).json({ error: 'Discord sync is not configured' });
+  try {
+    const state = await runDiscordRoleSync({ buildRoster: buildDiscordRosterGroups, reason: 'manual' });
+    if (state.result === 'blocked') return res.status(409).json({ error: 'Blocked: ' + state.message });
+    if (state.result === 'error') return res.status(500).json({ error: state.message });
+    res.json({ success: true, added: state.added, removed: state.removed, failed: state.failed });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Email a member an invite to the community Discord. Admin-only.
+app.post('/admin/api/discord/invite/:cid', requireAdmin, express.json(), async (req, res) => {
+  const cid = Number(req.params.cid);
+  if (!cid) return res.status(400).json({ error: 'Invalid CID' });
+
+  const inviteUrl = WF_DISCORD_INVITE;
+  if (!/^https?:\/\//i.test(inviteUrl)) {
+    return res.status(503).json({ error: 'No Discord invite link configured (set DISCORD_INVITE_URL)' });
+  }
+
+  try {
+    const u = await prisma.user.findUnique({ where: { cid }, select: { name: true, email: true } });
+    // The whole point of the button: say plainly when there is nobody to mail.
+    if (!u || !u.email) return res.status(404).json({ error: 'No email address on file' });
+
+    const operatorName = String(req.body?.operatorName || '').trim() || 'WorldFlight';
+    const isTeam = req.body?.kind !== 'affiliate';
+
+    const transporter = nodemailer.createTransport({
+      host: process.env.SMTP_HOST || 'smtp.gmail.com',
+      port: Number(process.env.SMTP_PORT) || 587,
+      secure: false,
+      auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
+    });
+    await transporter.sendMail({
+      from: process.env.SMTP_FROM || '"WorldFlight" <noreply@worldflight.center>',
+      to: u.email,
+      subject: 'WorldFlight — Join our Discord',
+      html: buildDiscordInviteEmail({
+        memberName: escapeHtml(String(u.name || '').trim().split(/\s+/)[0] || 'there'),
+        operatorName: escapeHtml(operatorName),
+        isTeam,
+        inviteUrl
+      })
+    });
+    console.log(`[DISCORD] Invite emailed to CID ${cid} (${u.email})`);
+    res.json({ success: true, email: u.email });
+  } catch (e) {
+    console.error('[DISCORD] Invite email failed:', e.message);
+    res.status(500).json({ error: 'Failed to send: ' + e.message });
+  }
+});
 
 // Public submission — logged-in users only; CID comes from the session.
 // Multipart: text fields + up to 5 setup photos (stored in the DB so they
