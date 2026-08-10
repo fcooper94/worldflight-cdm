@@ -414,7 +414,7 @@ import { getAirportGround, detectStandOccupancy } from './lib/osm-ground.mjs';
 import { fetchAndParseFirManagement } from './lib/fir-management.mjs';
 import { vatcanIsEnabled, vatcanCreateEvent, vatcanQueueSectorPush, vatcanPushSectorNow, vatcanGetLastResult, vatcanAllLastResults } from './lib/vatcan-bookings.mjs';
 import { discordConfigured, getGuildSnapshot, invalidateGuildCache } from './lib/discord-api.mjs';
-import { parseCidFromNickname, parseNameFromNickname, desiredRolesByCid } from './lib/discord-roles.mjs';
+import { parseCidFromNickname, parseNameFromNickname, desiredRolesByCid, computeRoleDiff, buildApplyPlan, isDiffSafeToApply, removalsEnabled } from './lib/discord-roles.mjs';
 import { runDiscordRoleSync, discordSyncState, discordSyncStatusText } from './lib/discord-sync.mjs';
 function renderLayout(opts) {
   const cid = Number(opts.user?.cid);
@@ -23792,11 +23792,53 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
       })();
 
       // ----- Run the role sync on demand (header button and panel button) -----
+      // Previews first: if the sync would REMOVE roles, the admin confirms the
+      // exact list before anything is applied. The hourly cron has no gate.
+      function confirmRemovals(p) {
+        return new Promise(function(resolve) {
+          var wrap = document.createElement('div');
+          wrap.className = 'modal';
+          wrap.innerHTML = '<div class="modal-backdrop"></div>' +
+            '<div class="modal-card card" style="max-width:540px;text-align:left;">' +
+            '<h3 style="margin:0 0 6px;">Confirm role removals</h3>' +
+            '<p style="font-size:13px;color:var(--muted);margin:0 0 12px;">This sync will remove <strong style="color:#f87171;">' + p.totalRemovals + ' role(s)</strong> from ' + p.removals.length + ' member(s)' + (p.totalAdds ? ' and add ' + p.totalAdds + ' role(s)' : '') + ':</p>' +
+            '<div id="syncRemovalList" style="max-height:300px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-size:12.5px;line-height:1.8;"></div>' +
+            '<div class="modal-actions" style="margin-top:14px;">' +
+            '<button type="button" class="action-btn" data-act="cancel">Cancel</button>' +
+            '<button type="button" class="action-btn primary" data-act="ok" style="background:#b91c1c;">Remove &amp; Sync</button>' +
+            '</div></div>';
+          var list = wrap.querySelector('#syncRemovalList');
+          p.removals.forEach(function(o) {
+            var row = document.createElement('div');
+            var who = document.createElement('strong');
+            who.textContent = o.nickname || ('CID ' + o.cid);
+            row.appendChild(who);
+            row.appendChild(document.createTextNode(' — ' + o.roles.join(', ')));
+            list.appendChild(row);
+          });
+          function done(v) { document.body.removeChild(wrap); resolve(v); }
+          wrap.addEventListener('click', function(e) {
+            if (e.target.closest('[data-act="ok"]')) done(true);
+            else if (e.target.closest('[data-act="cancel"]') || e.target.classList.contains('modal-backdrop')) done(false);
+          });
+          document.body.appendChild(wrap);
+        });
+      }
+
       async function runDiscordSync(btn) {
         var label = btn.textContent;
         btn.disabled = true;
-        btn.textContent = 'Syncing...';
+        btn.textContent = 'Checking...';
         try {
+          var pr = await fetch('/admin/api/discord/sync-preview', { credentials: 'same-origin' });
+          var p = await pr.json().catch(function() { return {}; });
+          if (!pr.ok) { alert(p.error || 'Could not preview the sync'); btn.disabled = false; btn.textContent = label; return; }
+          if (!p.safe) { alert('Sync is blocked: ' + (p.reasons || []).join('; ')); btn.disabled = false; btn.textContent = label; return; }
+          if (p.totalRemovals > 0) {
+            var ok = await confirmRemovals(p);
+            if (!ok) { btn.disabled = false; btn.textContent = label; return; }
+          }
+          btn.textContent = 'Syncing...';
           var r = await fetch('/admin/api/discord/sync', { method: 'POST', credentials: 'same-origin' });
           var d = await r.json().catch(function() { return {}; });
           if (r.ok) { location.reload(); return; }
@@ -26113,6 +26155,32 @@ app.delete('/admin/api/discord/link/:cid', requireAdmin, async (req, res) => {
     await prisma.discordLink.deleteMany({ where: { cid } });
     invalidateGuildCache();
     res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Read-only preview of what a sync would do. The Sync Now button calls this
+// first so the admin confirms role REMOVALS before they are applied — the
+// hourly cron intentionally has no such gate. Never writes to Discord.
+app.get('/admin/api/discord/sync-preview', requireAdmin, async (req, res) => {
+  if (!discordConfigured()) return res.status(503).json({ error: 'Discord sync is not configured' });
+  try {
+    const rosterGroups = await buildDiscordRosterGroups();
+    const snap = await getGuildSnapshot();
+    if (!snap) return res.status(503).json({ error: 'Could not read the Discord server' });
+    const manualCidByDiscordId = await loadDiscordManualLinks();
+    const diff = computeRoleDiff({ rosterGroups, members: snap.members, guildRoleNames: snap.roleNames, manualCidByDiscordId });
+    const plan = buildApplyPlan(diff);
+    const safety = isDiffSafeToApply(diff);
+    res.json({
+      removalsEnabled: removalsEnabled(),
+      safe: safety.safe,
+      reasons: safety.reasons,
+      totalAdds: plan.totalAdds,
+      totalRemovals: plan.totalRemovals,
+      removals: plan.ops.filter(o => o.remove.length).map(o => ({ nickname: o.nickname, cid: o.cid, roles: o.remove }))
+    });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
