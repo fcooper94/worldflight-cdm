@@ -22407,6 +22407,21 @@ app.patch('/api/team/fleet/:id', requireLogin, requireFleetManager, async (req, 
 
     await prisma.officialTeam.update({ where: { id }, data });
 
+    // When mainCid changes, ensure the new CID has a WF_TEAM role row so they
+    // can access Team HQ and appear in the members list. The old mainCid keeps
+    // their role row (they stay as a normal member).
+    if (data.mainCid && data.mainCid !== Number(row.mainCid)) {
+      const teamName = String(row.teamName || '').trim();
+      await prisma.userAdditionalRole.upsert({
+        where: { cid_role: { cid: data.mainCid, role: 'WF_TEAM' } },
+        update: { teamName },
+        create: { cid: data.mainCid, role: 'WF_TEAM', teamName }
+      }).catch(() => {});
+      teamOwnerCids.add(data.mainCid);
+      await loadTeamMembers();
+      console.log('[TEAM] ' + req._fleetTeam + ': mainCid changed from ' + row.mainCid + ' to ' + data.mainCid);
+    }
+
     // A renamed callsign must carry its bookings with it, or they'd be orphaned
     // (the team's booking list is matched by callsign).
     if (data.callsign && data.callsign !== String(row.callsign || '').toUpperCase()) {
