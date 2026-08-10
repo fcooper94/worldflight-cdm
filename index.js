@@ -1676,6 +1676,109 @@ function rebuildAllTobtSlots() {
   console.log(
     `[TOBT] Rebuilt allTobtSlots: ${Object.keys(allTobtSlots).length} slots`
   );
+
+  // Re-seat bookings whose slotKey no longer exists on the rebuilt grid —
+  // queued, so it can never interleave with an auto-assign run (that exact
+  // race created duplicate bookings on 2026-08-10).
+  queueBookingMaintenance('snap-to-grid', () => snapBookingsToSlotGrid({ reason: 'grid rebuilt' }));
+}
+
+/* All jobs that MOVE or CREATE bookings in bulk (snap-to-grid, the two
+   auto-assign passes, the slotted rebalance) run through this queue, one at
+   a time, in submission order. Any of them interleaving reads half-migrated
+   state: the 2026-08-10 incident was snap re-seating bookings while the
+   rebalance's DB-id lookups ran against the old keys — deletes missed,
+   creates landed anyway, and the sector gained duplicate bookings. */
+let bookingMaintenanceChain = Promise.resolve();
+function queueBookingMaintenance(label, fn) {
+  const run = bookingMaintenanceChain.then(fn);
+  bookingMaintenanceChain = run.catch(e => console.error(`[MAINT] ${label} failed:`, e?.message || e));
+  return run;
+}
+
+/* When the slot grid is rebuilt (a flow-rate change, or the 5-minute TCT
+   rounding shifting the times), existing bookings can reference slotKeys
+   that no longer exist. Such a booking keeps its odd time but no longer
+   marks any grid slot as taken, so the sector quietly overbooks. Snap each
+   orphaned SLOTTED booking to the nearest free slot on the new grid,
+   keeping DB, memory and VATCAN in step. Grid-valid bookings are never
+   touched. */
+async function snapBookingsToSlotGrid({ reason = '' } = {}) {
+  try {
+    const candidates = [];
+    for (const [key, b] of Object.entries(tobtBookingsByKey)) {
+      if (!b || key === b.slotKey) continue;                   // raw-slotKey alias
+      if (sharedFlowTypes[`${b.from}-${b.to}`] !== 'SLOTTED') continue;
+      if (allTobtSlots[b.slotKey]) continue;                   // still on the grid
+      const tm = /^(\d{2}):(\d{2})$/.exec(b.tobtTimeUtc || '');
+      if (!tm) continue;
+      candidates.push({ bookingKey: key, b, min: Number(tm[1]) * 60 + Number(tm[2]) });
+    }
+    if (!candidates.length) return 0;
+    // Earliest old times seat first so neighbours land in their own buckets
+    candidates.sort((a, b) => a.min - b.min || a.bookingKey.localeCompare(b.bookingKey));
+
+    let movedCount = 0;
+    const pushKeys = new Set();
+    for (const cand of candidates) {
+      const b = cand.b;
+      const sectorPrefix = `${b.from}-${b.to}|${b.dateUtc}|${b.depTimeUtc}|`;
+      let bestKey = null, bestTobt = null, bestDiff = Infinity;
+      for (const [k, s] of Object.entries(allTobtSlots)) {
+        if (!k.startsWith(sectorPrefix)) continue;
+        if (isSlotTaken(k)) continue;
+        const sm = /^(\d{2}):(\d{2})$/.exec(s.tobt || '');
+        if (!sm) continue;
+        const diff = Math.abs(Number(sm[1]) * 60 + Number(sm[2]) - cand.min);
+        if (diff < bestDiff) { bestKey = k; bestTobt = s.tobt; bestDiff = diff; }
+      }
+      if (!bestKey) {
+        console.warn(`[TOBT SNAP] No free slot for ${b.callsign || b.cid} on ${sectorPrefix} — booking left off-grid`);
+        continue;
+      }
+
+      const cidNum = Number(b.cid);
+      const row = await prisma.tobtBooking.findFirst({
+        where: { cid: cidNum, slotKey: b.slotKey }, select: { id: true }
+      }).catch(() => null);
+      if (!row) {
+        // Memory/DB drift — moving memory without the DB row would recreate
+        // the very inconsistency this pass exists to prevent. Leave it.
+        console.warn(`[TOBT SNAP] No DB row for ${cidNum}:${b.slotKey} — skipped (memory/DB drift)`);
+        continue;
+      }
+      const ok = await prisma.tobtBooking.update({
+        where: { id: row.id }, data: { slotKey: bestKey, tobtTimeUtc: bestTobt }
+      }).catch(() => null);
+      if (!ok) continue;
+
+      deleteBookingByBookingKey(cand.bookingKey);
+      if (tobtBookingsByCid[cidNum]) tobtBookingsByCid[cidNum].delete(cand.bookingKey);
+      const nb = { ...b, slotKey: bestKey, tobtTimeUtc: bestTobt, bookingKey: `${cidNum}:${bestKey}` };
+      const nk = setBooking(nb);
+      if (!tobtBookingsByCid[cidNum]) tobtBookingsByCid[cidNum] = new Set();
+      tobtBookingsByCid[cidNum].add(nk);
+      movedCount++;
+      pushKeys.add(bestKey);
+    }
+
+    if (movedCount) {
+      // One VATCAN push per affected sector
+      const pushedSectors = new Set();
+      for (const k of pushKeys) {
+        const prefix = k.split('|').slice(0, 3).join('|');
+        if (pushedSectors.has(prefix)) continue;
+        pushedSectors.add(prefix);
+        vatcanPushForSlotKey(k);
+      }
+      console.log(`[TOBT SNAP] Re-seated ${movedCount} booking(s) onto the rebuilt slot grid${reason ? ' (' + reason + ')' : ''}`);
+      try { io.emit('bookingCreated', { snapped: movedCount }); } catch {}
+    }
+    return movedCount;
+  } catch (e) {
+    console.error('[TOBT SNAP] Failed:', e);
+    return 0;
+  }
 }
 
 
@@ -2130,6 +2233,13 @@ async function fetchVatsimName(cid) {
 // Teams flagged `multiSlot` are the exception: each of their aircraft gets its
 // OWN slot, booked under that aircraft's own mainCid, because they fly several
 // airframes simultaneously rather than sharing one.
+/* Where teams gather on a slotted sector. TCT slots span dep−60 → dep+30,
+   so the centre of the span is dep−15 (WF2601: 20:45 for a 21:00 dep) — the
+   published departure time sits two-thirds through the span, not in the
+   middle. Teams centre on this anchor and affiliates fan either side of
+   them. The departure window itself is untouched by this. */
+const SLOT_ANCHOR_OFFSET_MIN = 15;
+
 async function autoAssignTeamBookings({ reason = '' } = {}) {
   try {
     const teamRows = await prisma.officialTeam.findMany({
@@ -2230,13 +2340,16 @@ async function autoAssignTeamBookings({ reason = '' } = {}) {
           if (cap.total > 0 && cap.remaining <= 0) continue;
           slotKey = `${sectorPrefix}|BOOKING_ONLY`;
         } else if (flow === 'SLOTTED') {
-          // Spare slots whose tobt is closest to dep_time_utc. Book the slot's
-          // OWN key — above ~45/hr several slots share a minute and carry a
-          // #2/#3 suffix; rebuilding the key from `tobt` drops that suffix and
-          // stacks every pilot onto the same unsuffixed key.
+          // Spare slots whose tobt is closest to the slot-span midpoint.
+          // Slots run dep−60 → dep+30, so the neutral centre teams gather
+          // around is dep−15 (e.g. 20:45 for a 21:00 departure) — NOT the
+          // departure time, which sits two-thirds through the span.
+          // Book the slot's OWN key — above ~45/hr several slots share a
+          // minute and carry a #2/#3 suffix; rebuilding the key from `tobt`
+          // drops that suffix and stacks every pilot onto the same key.
           const sectorSlotPrefix = `${sectorPrefix}|`;
           const [dh, dm] = row.dep_time_utc.split(':').map(Number);
-          const depMin = dh * 60 + dm;
+          const anchorMin = dh * 60 + dm - SLOT_ANCHOR_OFFSET_MIN;
           let best = null;
           let bestKey = null;
           let bestDiff = Infinity;
@@ -2244,7 +2357,7 @@ async function autoAssignTeamBookings({ reason = '' } = {}) {
             if (!k.startsWith(sectorSlotPrefix)) continue;
             if (isSlotTaken(k)) continue; // taken
             const [th, tm] = s.tobt.split(':').map(Number);
-            const diff = Math.abs((th * 60 + tm) - depMin);
+            const diff = Math.abs((th * 60 + tm) - anchorMin);
             if (diff < bestDiff) { best = s; bestKey = k; bestDiff = diff; }
           }
           if (!best) continue;
@@ -2360,10 +2473,10 @@ async function autoAssignAffiliateBookings({ reason = '' } = {}) {
           slotKey = `${sectorPrefix}|BOOKING_ONLY`;
         } else if (flow === 'SLOTTED') {
           // Book the slot's own key (may carry a #2/#3 suffix) — see the note
-          // in autoAssignTeamBookings.
+          // in autoAssignTeamBookings. Same dep−15 span-midpoint anchor.
           const sectorSlotPrefix = `${sectorPrefix}|`;
           const [dh, dm] = row.dep_time_utc.split(':').map(Number);
-          const depMin = dh * 60 + dm;
+          const anchorMin = dh * 60 + dm - SLOT_ANCHOR_OFFSET_MIN;
           let best = null;
           let bestKey = null;
           let bestDiff = Infinity;
@@ -2371,7 +2484,7 @@ async function autoAssignAffiliateBookings({ reason = '' } = {}) {
             if (!k.startsWith(sectorSlotPrefix)) continue;
             if (isSlotTaken(k)) continue; // taken
             const [th, tm] = s.tobt.split(':').map(Number);
-            const diff = Math.abs((th * 60 + tm) - depMin);
+            const diff = Math.abs((th * 60 + tm) - anchorMin);
             if (diff < bestDiff) { best = s; bestKey = k; bestDiff = diff; }
           }
           if (!best) continue;
@@ -2428,10 +2541,157 @@ async function autoAssignAffiliateBookings({ reason = '' } = {}) {
   }
 }
 
-// Helper: run team assignment first, then affiliate (teams have priority)
+/* ===== SLOTTED SECTOR REBALANCE =====
+   The greedy passes book "nearest free slot at run time", so whoever joined
+   first owns the middle of the departure window forever. This pass arranges
+   the auto-managed bookings on each SLOTTED sector so Official Teams hold
+   the slots closest to the scheduled departure (the middle of the ±60min
+   window) and affiliates fan outward on either side of them.
+
+   Only rows whose callsign belongs to an OfficialTeam or Affiliate are
+   touched — pilots' personal bookings never move. Holders are permuted
+   within the set of slots those rows already occupy, so nobody gains or
+   loses a slot, only positions swap. Deterministic and idempotent: once
+   teams are innermost the recomputed assignment equals the current one and
+   nothing is written. */
+async function rebalanceSlottedSectors({ reason = '' } = {}) {
+  try {
+    const [teamRows, affRows] = await Promise.all([
+      prisma.officialTeam.findMany({ select: { callsign: true } }),
+      prisma.affiliate.findMany({ select: { callsign: true } })
+    ]);
+    const teamCs = new Set(teamRows.map(t => String(t.callsign || '').toUpperCase()).filter(Boolean));
+    const affCs = new Set(affRows.map(a => String(a.callsign || '').toUpperCase()).filter(Boolean));
+    let totalMoved = 0;
+
+    for (const row of (adminSheetCache || [])) {
+      const flow = sharedFlowTypes[`${row.from}-${row.to}`] || 'NONE';
+      if (flow !== 'SLOTTED') continue;
+      const dm = /^(\d{2}):(\d{2})$/.exec(row.dep_time_utc || '');
+      if (!dm) continue;
+      // Centre on the slot-span midpoint (dep−15), not the departure time.
+      const anchorMin = Number(dm[1]) * 60 + Number(dm[2]) - SLOT_ANCHOR_OFFSET_MIN;
+      const sectorPrefix = `${row.from}-${row.to}|${row.date_utc}|${row.dep_time_utc}|`;
+
+      // Auto-managed bookings on this sector (skip raw-slotKey aliases)
+      const units = [];
+      for (const [key, b] of Object.entries(tobtBookingsByKey)) {
+        if (key === b.slotKey) continue;
+        if (!b.slotKey || !b.slotKey.startsWith(sectorPrefix)) continue;
+        const cs = String(b.callsign || '').toUpperCase();
+        const kind = teamCs.has(cs) ? 'team' : (affCs.has(cs) ? 'affiliate' : null);
+        if (!kind) continue;
+        const tm = /^(\d{2}):(\d{2})$/.exec(b.tobtTimeUtc || '');
+        if (!tm) continue;
+        units.push({ bookingKey: key, b, kind, dist: Math.abs(Number(tm[1]) * 60 + Number(tm[2]) - anchorMin) });
+      }
+      if (units.length < 2) continue;
+
+      // The slots this group occupies, innermost (closest to dep) first
+      const pool = units
+        .map(u => ({ slotKey: u.b.slotKey, tobt: u.b.tobtTimeUtc, dist: u.dist }))
+        .sort((a, b) => a.dist - b.dist || a.tobt.localeCompare(b.tobt) || a.slotKey.localeCompare(b.slotKey));
+
+      // Teams first, then affiliates. Within a kind the order must NOT depend
+      // on the slot currently held (dist changes with every move — sorting by
+      // it makes equidistant pairs swap on every run, forever). Callsign+cid
+      // is fixed identity; only genuinely identical units (a multi-slot
+      // fleet's twin bookings, same callsign AND cid) tie-break by current
+      // pool rank so whichever twin is already innermost stays there.
+      units.sort((a, b) =>
+        a.kind !== b.kind
+          ? (a.kind === 'team' ? -1 : 1)
+          : (String(a.b.callsign).localeCompare(String(b.b.callsign))
+             || Number(a.b.cid) - Number(b.b.cid)
+             || a.dist - b.dist
+             || String(a.b.tobtTimeUtc).localeCompare(String(b.b.tobtTimeUtc))
+             || String(a.b.slotKey).localeCompare(String(b.b.slotKey))));
+
+      const moves = [];
+      for (let i = 0; i < units.length; i++) {
+        if (units[i].b.slotKey !== pool[i].slotKey) moves.push({ u: units[i], to: pool[i] });
+      }
+      if (!moves.length) continue;
+
+      // DB: delete every moved row, then recreate at its new slot — all in
+      // one transaction so a same-cid slot swap can't trip the (cid, slotKey)
+      // unique constraint mid-flight.
+      const dbRows = await prisma.tobtBooking.findMany({
+        where: { slotKey: { startsWith: sectorPrefix } },
+        select: { id: true, cid: true, slotKey: true }
+      }).catch(() => []);
+      const idByCidSlot = new Map(dbRows.map(r => [`${r.cid}|${r.slotKey}`, r.id]));
+      const delIds = moves.map(mv => idByCidSlot.get(`${mv.u.b.cid}|${mv.u.b.slotKey}`)).filter(id => id != null);
+
+      // Every move MUST delete exactly one DB row. A missing id means memory
+      // and DB disagree — creating rows on top of that duplicates bookings
+      // (the 2026-08-10 incident). Skip the whole sector and let the next
+      // run retry from consistent state.
+      if (delIds.length !== moves.length) {
+        console.warn(`[REBALANCE] ${row.number || sectorPrefix}: memory/DB drift (${delIds.length}/${moves.length} rows found) — sector skipped`);
+        continue;
+      }
+
+      try {
+        await prisma.$transaction([
+          prisma.tobtBooking.deleteMany({ where: { id: { in: delIds } } }),
+          ...moves.map(mv => prisma.tobtBooking.create({
+            data: {
+              slotKey: mv.to.slotKey,
+              cid: Number(mv.u.b.cid),
+              callsign: mv.u.b.callsign,
+              from: row.from,
+              to: row.to,
+              dateUtc: row.date_utc,
+              depTimeUtc: row.dep_time_utc,
+              tobtTimeUtc: mv.to.tobt
+            }
+          }))
+        ]);
+      } catch (e) {
+        console.error(`[REBALANCE] ${row.number || sectorPrefix}: DB update failed — sector left as-is:`, e.message);
+        continue;
+      }
+
+      // Mirror in memory in two phases (all deletes, then all writes) — a
+      // same-cid swap would otherwise overwrite the booking it is about to
+      // read back.
+      for (const mv of moves) {
+        deleteBookingByBookingKey(mv.u.bookingKey);
+        const cidNum = Number(mv.u.b.cid);
+        if (tobtBookingsByCid[cidNum]) tobtBookingsByCid[cidNum].delete(mv.u.bookingKey);
+      }
+      for (const mv of moves) {
+        const cidNum = Number(mv.u.b.cid);
+        const nb = { ...mv.u.b, slotKey: mv.to.slotKey, tobtTimeUtc: mv.to.tobt, bookingKey: `${cidNum}:${mv.to.slotKey}` };
+        const nk = setBooking(nb);
+        if (!tobtBookingsByCid[cidNum]) tobtBookingsByCid[cidNum] = new Set();
+        tobtBookingsByCid[cidNum].add(nk);
+      }
+
+      totalMoved += moves.length;
+      vatcanPushForSlotKey(pool[0].slotKey);
+      console.log(`[REBALANCE] ${row.number || (row.from + '-' + row.to)}: moved ${moves.length} booking(s) — teams centered, affiliates fanned${reason ? ' (' + reason + ')' : ''}`);
+    }
+
+    if (totalMoved > 0) {
+      try { io.emit('bookingCreated', { rebalanced: totalMoved }); } catch {}
+    }
+    return totalMoved;
+  } catch (e) {
+    console.error('[REBALANCE] Failed:', e);
+    return 0;
+  }
+}
+
+// Helper: run team assignment first, then affiliate (teams have priority),
+// then re-centre SLOTTED sectors so teams sit in the middle of the window.
 async function autoAssignTeamThenAffiliate(opts = {}) {
-  try { await autoAssignTeamBookings(opts); } catch (e) { /* logged inside */ }
-  try { await autoAssignAffiliateBookings(opts); } catch (e) { /* logged inside */ }
+  return queueBookingMaintenance('auto-assign', async () => {
+    try { await autoAssignTeamBookings(opts); } catch (e) { /* logged inside */ }
+    try { await autoAssignAffiliateBookings(opts); } catch (e) { /* logged inside */ }
+    try { await rebalanceSlottedSectors(opts); } catch (e) { /* logged inside */ }
+  });
 }
 
 // Flow type for the sector — same labels as the main /schedule page.
@@ -2577,10 +2837,10 @@ async function assignAffiliatePilotToSector(affiliate, scheduleRow, claimCid) {
     slotKey = `${sectorPrefix}|BOOKING_ONLY`;
   } else if (flow === 'SLOTTED') {
     // Book the slot's own key (may carry a #2/#3 suffix) — see the note in
-    // autoAssignTeamBookings.
+    // autoAssignTeamBookings. Same dep−15 span-midpoint anchor.
     const sectorSlotPrefix = `${sectorPrefix}|`;
     const [dh, dm] = scheduleRow.dep_time_utc.split(':').map(Number);
-    const depMin = dh * 60 + dm;
+    const anchorMin = dh * 60 + dm - SLOT_ANCHOR_OFFSET_MIN;
     let best = null;
     let bestKey = null;
     let bestDiff = Infinity;
@@ -2588,7 +2848,7 @@ async function assignAffiliatePilotToSector(affiliate, scheduleRow, claimCid) {
       if (!k.startsWith(sectorSlotPrefix)) continue;
       if (isSlotTaken(k)) continue; // taken
       const [th, tm] = s.tobt.split(':').map(Number);
-      const diff = Math.abs((th * 60 + tm) - depMin);
+      const diff = Math.abs((th * 60 + tm) - anchorMin);
       if (diff < bestDiff) { best = s; bestKey = k; bestDiff = diff; }
     }
     if (!best) return;
@@ -7758,7 +8018,12 @@ function generateTobtSlots({ from, to, dateUtc, depTimeUtc }) {
   const seen = new Map(); // hhmm -> how many times we've already emitted it
   for (let i = 0; i < targetCount; i++) {
     const t = new Date(windowStart.getTime() + Math.round(i * stepSec) * 1000);
-    const hhmm = formatUtcHHMM(t);
+    // Round each connection time to the nearest 5 minutes — a TCT of 21:57
+    // is needlessly precise for pilots; 21:55 / 22:00 reads easier. The
+    // same-minute collisions this creates are exactly what the #2/#3
+    // slotKey suffixes below already handle.
+    const rounded = new Date(Math.round(t.getTime() / 300000) * 300000);
+    const hhmm = formatUtcHHMM(rounded);
     const seq = (seen.get(hhmm) || 0) + 1;
     seen.set(hhmm, seq);
     const slotKey = makeTobtSlotKey({ from, to, dateUtc, depTimeUtc, tobtTimeUtc: hhmm });
@@ -17967,6 +18232,7 @@ app.post('/api/team/members', requireLogin, requireTeamManager, async (req, res)
   };
   await prisma.userAdditionalRole.create({ data });
   teamMemberCids.add(targetCid);
+  if (data.canManageMembers) teamManagerCids.add(targetCid);
   return res.json({ success: true });
 });
 
@@ -18000,6 +18266,15 @@ app.post('/api/team/members/:cid/perms', requireLogin, requireTeamManager, async
   if (!Object.keys(data).length) return res.status(400).json({ error: 'No fields to update' });
 
   await prisma.userAdditionalRole.update({ where: { id: target.id }, data });
+
+  // Keep the in-memory manager cache in step — the sidebar's Manage Members
+  // link and the page gate read teamManagerCids, which was otherwise only
+  // rebuilt at boot (a fresh grant stayed invisible until a redeploy).
+  if (data.canManageMembers === true) {
+    teamManagerCids.add(targetCid);
+  } else if (data.canManageMembers === false && !teamOwnerCids.has(targetCid)) {
+    teamManagerCids.delete(targetCid);
+  }
   return res.json({ success: true });
 });
 
@@ -18030,6 +18305,7 @@ app.delete('/api/team/members/:cid', requireLogin, requireTeamManager, async (re
 
   await prisma.userAdditionalRole.delete({ where: { id: target.id } });
   teamMemberCids.delete(targetCid);
+  if (!teamOwnerCids.has(targetCid)) teamManagerCids.delete(targetCid);
   return res.json({ success: true });
 });
 
@@ -34905,6 +35181,145 @@ function compareRoutes(depRoute, arrRoute) {
   return { status, matchPct, depOnly, arrOnly, shared };
 }
 
+/* Richer slot data for the Sector Planning slots popup. The public
+   /api/slots/<wf>.json stays [{cid, slot}] (the VATCAN payload shape) — this
+   internal variant adds callsign + portal name and is gated like the
+   sector detail page. */
+app.get('/sector-planning/:wf/slots.json', requirePageEnabled('sector-planning'), async (req, res) => {
+  const cid = Number(req.session?.user?.data?.cid) || null;
+  if (!isAdminUser(cid) && !userHasFirAccess(cid)) {
+    return res.status(403).json({ error: 'FIR Events Access required' });
+  }
+  const wf = String(req.params.wf || '').toUpperCase();
+  const sched = (adminSheetCache || []).find(r => r?.number === wf);
+  if (!sched) return res.status(404).json({ error: 'Sector not found' });
+
+  const sectorPrefix = sched.from + '-' + sched.to + '|';
+  const rows = [];
+  for (const [key, b] of Object.entries(tobtBookingsByKey)) {
+    if (key === b.slotKey) continue;                                      // skip raw-slotKey alias
+    if (!b.slotKey || !b.slotKey.startsWith(sectorPrefix)) continue;
+    rows.push({
+      cid: b.cid,
+      callsign: b.callsign || '',
+      slot: (b.tobtTimeUtc && b.tobtTimeUtc !== 'BOOKING_ONLY' && b.tobtTimeUtc !== 'null')
+        ? displayTobt(b.tobtTimeUtc)
+        : ''
+    });
+  }
+  rows.sort((a, b) => (a.slot || 'zz:zz').localeCompare(b.slot || 'zz:zz'));
+  const users = await prisma.user.findMany({
+    where: { cid: { in: rows.map(r => Number(r.cid)).filter(Boolean) } },
+    select: { cid: true, name: true }
+  }).catch(() => []);
+  const nameByCid = Object.fromEntries(users.map(u => [u.cid, u.name || '']));
+  rows.forEach(r => { r.name = nameByCid[r.cid] || ''; });
+
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.json({ wf, from: sched.from, to: sched.to, count: rows.length, rows });
+});
+
+/* Compact standalone page for the small popup window opened from the sector
+   detail header. Slotted sectors get the full slot/CID table; booking-only
+   sectors get a CID search box instead. Refreshes itself every 30s. */
+app.get('/sector-planning/:wf/slots', requirePageEnabled('sector-planning'), async (req, res) => {
+  const cid = Number(req.session?.user?.data?.cid) || null;
+  if (!isAdminUser(cid) && !userHasFirAccess(cid)) {
+    return renderForbidden(req, res, 'Sector Planning is only available to users with FIR Events Access.');
+  }
+  const wf = String(req.params.wf || '').toUpperCase();
+  const sched = (adminSheetCache || []).find(r => r?.number === wf);
+  if (!sched) return res.status(404).send('Sector not found');
+
+  const planRow = await prisma.sectorPlan.findFirst({
+    where: { wf, eventId: activeEventId || undefined },
+    select: { depFlowType: true }
+  }).catch(() => null);
+  const slotted = planRow?.depFlowType === 'TIME_SLOT_REQUIRED';
+
+  res.send(`<!doctype html><html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${wf} ${slotted ? 'Slots' : 'Bookings'} — ${sched.from} → ${sched.to}</title>
+<style>
+  html,body{margin:0;padding:0;background:#0b1220;color:#e2e8f0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;font-size:14px;}
+  .head{position:sticky;top:0;background:#0f172a;border-bottom:1px solid #1e293b;padding:12px 16px;}
+  .head h1{margin:0;font-size:15px;color:#93c5fd;}
+  .head .sub{font-size:11px;color:#94a3b8;margin-top:2px;}
+  .wrap{padding:12px 16px;}
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  th{font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:#94a3b8;text-align:left;padding:6px 8px;border-bottom:1px solid #1e293b;}
+  td{padding:6px 8px;border-bottom:1px solid rgba(30,41,59,0.6);}
+  td.slot{font-family:ui-monospace,Consolas,monospace;font-weight:700;color:#38bdf8;white-space:nowrap;}
+  td.cs{font-family:ui-monospace,Consolas,monospace;}
+  input{width:100%;box-sizing:border-box;padding:9px 12px;background:#0f172a;border:1px solid #1e293b;border-radius:8px;color:#e2e8f0;font-size:14px;}
+  input:focus{outline:none;border-color:#38bdf8;}
+  .result{margin-top:12px;padding:12px 14px;border-radius:8px;font-size:13px;line-height:1.5;display:none;}
+  .result.ok{display:block;background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.35);color:#4ade80;}
+  .result.no{display:block;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.3);color:#f87171;}
+  .muted{color:#94a3b8;font-size:12px;}
+  .count{font-size:11px;color:#94a3b8;margin:10px 0 6px;}
+</style></head><body>
+<div class="head">
+  <h1>${wf} — ${sched.from} → ${sched.to}</h1>
+  <div class="sub">${slotted ? 'Departure slots (TCT) and booked CIDs' : 'Booking Required — search a CID to check for a booking'} · auto-refreshes every 30s</div>
+</div>
+<div class="wrap">
+  ${slotted ? '' : '<input id="cidSearch" type="text" inputmode="numeric" placeholder="Search CID for booking…" autofocus /><div id="searchResult" class="result"></div>'}
+  <div class="count" id="count">Loading…</div>
+  <div id="tableWrap"></div>
+</div>
+<script>
+  var SLOTTED = ${slotted ? 'true' : 'false'};
+  var DATA = { rows: [] };
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function(c) { return '&#' + c.charCodeAt(0) + ';'; }); }
+  function render() {
+    document.getElementById('count').textContent = DATA.rows.length + ' booking' + (DATA.rows.length === 1 ? '' : 's');
+    if (SLOTTED) {
+      var html = '<table><thead><tr><th>Slot (TCT)</th><th>CID</th><th>Callsign</th><th>Name</th></tr></thead><tbody>';
+      DATA.rows.forEach(function(r) {
+        html += '<tr><td class="slot">' + esc(r.slot || '—') + '</td><td>' + esc(r.cid) + '</td><td class="cs">' + esc(r.callsign || '—') + '</td><td>' + esc(r.name || '—') + '</td></tr>';
+      });
+      html += '</tbody></table>';
+      if (!DATA.rows.length) html = '<div class="muted">No slots booked yet.</div>';
+      document.getElementById('tableWrap').innerHTML = html;
+    } else {
+      runSearch();
+    }
+  }
+  function runSearch() {
+    var box = document.getElementById('cidSearch');
+    var out = document.getElementById('searchResult');
+    if (!box || !out) return;
+    var q = box.value.trim();
+    if (!q) { out.className = 'result'; out.textContent = ''; document.getElementById('tableWrap').innerHTML = ''; return; }
+    var hits = DATA.rows.filter(function(r) { return String(r.cid).indexOf(q) === 0; });
+    var exact = DATA.rows.filter(function(r) { return String(r.cid) === q; });
+    if (exact.length) {
+      var e = exact[0];
+      out.className = 'result ok';
+      out.textContent = '✓ CID ' + e.cid + ' has a booking' + (e.name ? ' — ' + e.name : '') + (e.callsign ? ' (' + e.callsign + ')' : '');
+    } else if (hits.length) {
+      out.className = 'result no';
+      out.textContent = 'No exact match — ' + hits.length + ' CID(s) starting with "' + q + '": ' + hits.slice(0, 5).map(function(r) { return r.cid; }).join(', ') + (hits.length > 5 ? '…' : '');
+    } else {
+      out.className = 'result no';
+      out.textContent = '✗ No booking found for CID "' + q + '"';
+    }
+  }
+  function refresh() {
+    fetch('/sector-planning/${wf}/slots.json', { credentials: 'same-origin' })
+      .then(function(r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+      .then(function(d) { DATA = d; render(); })
+      .catch(function() { document.getElementById('count').textContent = 'Failed to load — retrying…'; });
+  }
+  var sb = document.getElementById('cidSearch');
+  if (sb) sb.addEventListener('input', runSearch);
+  refresh();
+  setInterval(refresh, 30000);
+</script>
+</body></html>`);
+});
+
 app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (req, res) => {
   const user = req.session?.user?.data || null;
   const cid = Number(user?.cid) || null;
@@ -35073,6 +35488,12 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
     scheduleRoute2: sched.atc_route_raw2 || '',
     issues: issuesWithNames
   };
+
+  // Header quick-links for flow-restricted sectors: the slots/bookings popup,
+  // the live public JSON feed, and the VATCAN bookings event id.
+  const headerFlowMode = plan.depFlowType === 'TIME_SLOT_REQUIRED' ? 'SLOTTED'
+    : (plan.depFlowType === 'BOOKING_REQUIRED' ? 'BOOKING' : null);
+  const headerVatcanEventId = headerFlowMode ? await vatcanResolveEventIdForWf(wf) : null;
 
   const FLOW_LABELS = { 'NONE': 'No Restrictions', 'BOOKING_REQUIRED': 'Booking Required', 'TIME_SLOT_REQUIRED': 'Time Slot Required' };
   const FLOW_TOOLTIPS = {
@@ -35511,6 +35932,33 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
         <h2 style="margin:0;font-size:17px;">${wf} — ${fromIcao} → ${toIcao}</h2>
       </div>
     </section>
+
+    ${headerFlowMode ? (() => {
+      const slotted = headerFlowMode === 'SLOTTED';
+      const c = slotted
+        ? { bg: 'rgba(56,189,248,0.08)', border: 'rgba(56,189,248,0.35)', edge: '#38bdf8', title: '#7dd3fc' }
+        : { bg: 'rgba(245,158,11,0.08)', border: 'rgba(245,158,11,0.35)', edge: '#f59e0b', title: '#fcd34d' };
+      return `
+    <section class="card card-full" style="background:${c.bg};border:1px solid ${c.border};border-left:3px solid ${c.edge};padding:12px 16px !important;">
+      <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="${c.edge}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+        <div style="min-width:200px;">
+          <div style="font-size:13.5px;font-weight:700;color:${c.title};">${slotted ? 'Slotted — TCT slots required to depart' : 'Booking Required to depart'}</div>
+          <div style="font-size:11.5px;color:var(--muted);margin-top:1px;">${slotted ? 'Pilots must hold a departure slot (TCT) for this sector.' : 'Pilots must have a booking to depart within the window — no fixed slot times.'}</div>
+        </div>
+        <div style="margin-left:auto;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          <button type="button" id="spSlotsPopupBtn" class="action-btn" style="font-size:11px;padding:5px 12px;">${slotted ? 'View Slots &amp; CIDs' : 'Search CID Bookings'}</button>
+          <a href="/api/slots/${wf.toLowerCase()}.json" target="_blank" rel="noopener" class="action-btn" style="font-size:11px;padding:5px 12px;text-decoration:none;" title="Public live JSON of this sector's bookings — [{cid, slot}]">Live JSON</a>
+          <span style="font-size:11px;color:var(--muted);padding:4px 10px;border:1px solid ${c.border};border-radius:999px;" title="VATCAN bookings event id for this sector">VATCAN Event: <strong style="color:var(--text);">${headerVatcanEventId != null ? headerVatcanEventId : 'not linked'}</strong></span>
+        </div>
+      </div>
+    </section>
+    <script>
+      document.getElementById('spSlotsPopupBtn').addEventListener('click', function() {
+        window.open('/sector-planning/${wf}/slots', 'wfSlots_${wf}', 'width=460,height=680,resizable=yes,scrollbars=yes');
+      });
+    </script>`;
+    })() : ''}
 
     <div class="sp-top-grid">
       <section class="card sp-map-card sp-top-map">
