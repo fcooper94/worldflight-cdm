@@ -10537,7 +10537,7 @@ app.get('/schedule', requirePageEnabled('schedule'), async (req, res) => {
 
             return `
             <tr>
-              <td class="col-wf-sector"><button class="sector-details-btn${r.is_wf_challenge && showWfChallenge ? ' wf-challenge-btn' : ''}"${r.is_wf_challenge && showWfChallenge ? ' title="WorldFlight Challenge sector"' : ''} data-from="${r.from}" data-to="${r.to}" data-wf="${r.number}" data-date="${r.date_utc}" data-dep="${r.dep_time_utc}" data-block="${r.block_time}" data-route="${showAtcRoute ? escapeHtml(r.atc_route) : ''}">${r.is_wf_challenge && showWfChallenge ? '<svg class="wf-challenge-star" viewBox="0 0 24 24" width="13" height="13" fill="currentColor" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>' : ''}${r.number}</button></td>
+              <td class="col-wf-sector"><button class="sector-details-btn${r.is_wf_challenge && showWfChallenge ? ' wf-challenge-btn' : ''}"${r.is_wf_challenge && showWfChallenge ? ' title="WorldFlight Challenge sector"' : ''} data-from="${r.from}" data-to="${r.to}" data-wf="${r.number}" data-date="${r.date_utc}" data-dep="${r.dep_time_utc}" data-block="${r.block_time}" data-route="${showAtcRoute ? escapeHtml(r.atc_route) : ''}">${r.number}</button></td>
 
               <td class="col-from">
                 <span class="icao-tt">
