@@ -18935,6 +18935,11 @@ const HQ_STYLES = `    <style>
         width: 96px;
       }
 
+      /* The booking tables pack a dropdown into every row — the global
+         12px cell padding around it makes rows needlessly tall. */
+      .aff-schedule-card .ot-table tbody td { padding: 5px 10px; }
+      .aff-schedule-card .ot-table thead th { padding: 9px 10px; }
+
       /* Solo affiliate: pilot is fixed (the main CID) */
       .aff-solo-row {
         display: inline-flex;
@@ -19521,6 +19526,28 @@ const MM_STYLES = `    <style>
       .mm-msg.ok  { background: rgba(74,222,128,0.10); color: #4ade80; border: 1px solid rgba(74,222,128,0.30); }
       .mm-msg.err { background: rgba(239,68,68,0.10); color: #fda4af; border: 1px solid rgba(239,68,68,0.30); }
 
+      /* Member missing from the WorldFlight Discord: amber warning + a
+         one-click copy of the invite link to send to them. */
+      .mm-no-discord {
+        color: #f59e0b;
+        cursor: help;
+        font-size: 13px;
+        margin: 0 4px 0 6px;
+      }
+      .mm-copy-invite {
+        background: none;
+        border: 1px solid var(--border);
+        color: var(--muted);
+        border-radius: 6px;
+        font-size: 10.5px;
+        font-weight: 600;
+        padding: 2px 8px;
+        cursor: pointer;
+        white-space: nowrap;
+        transition: color .15s, border-color .15s;
+      }
+      .mm-copy-invite:hover { color: var(--accent); border-color: var(--accent); }
+
       @media (max-width: 720px) {
         .mm-card-header { flex-direction: column; align-items: stretch; }
         .mm-add-row { display: flex; width: 100%; }
@@ -19827,7 +19854,7 @@ app.get('/affiliates/hq', requireLogin, async (req, res) => {
                     const first = i === 0;
                     return `
                     <tr class="${first ? 'wft-group-start' : ''}${flying ? '' : ' mm-inactive-row'}">
-                      <td>${first ? `<span class="ot-cell-callsign">${escapeHtml(r.number)}</span>` : ''}</td>
+                      <td>${first ? `<a class="sector-details-btn" href="/sector/${escapeHtml(r.number)}/${escapeHtml(r.from)}/${escapeHtml(r.to)}" target="_blank" rel="noopener" title="Open the sector overview in a new tab">${escapeHtml(r.number)}</a>` : ''}</td>
                       <td class="ot-cell-active">
                         <input type="checkbox" class="wf-check aff-flying" data-aff-id="${a.id}" data-sector="${escapeHtml(r.number)}" ${flying ? 'checked' : ''} ${readOnly ? 'disabled' : ''} title="${flying ? 'Flying this sector' : 'Not flying this sector'}" />
                       </td>
@@ -20104,7 +20131,7 @@ app.get('/affiliates/hq', requireLogin, async (req, res) => {
                   const status = flowStatus(r, claimedCid);
                   return `
                   <tr data-sector="${escapeHtml(r.number)}">
-                    <td><span class="ot-cell-callsign">${escapeHtml(r.number)}</span></td>
+                    <td><a class="sector-details-btn" href="/sector/${escapeHtml(r.number)}/${escapeHtml(r.from)}/${escapeHtml(r.to)}" target="_blank" rel="noopener" title="Open the sector overview in a new tab">${escapeHtml(r.number)}</a></td>
                     <td>
                       ${readOnly ? (() => {
                         if (soloSchedule) {
@@ -20959,6 +20986,8 @@ app.get('/affiliates/my-members', requireLogin, requireAffiliateOwner, async (re
     if (!nameByCid[cid] && sessName && !/^User \d+$/.test(String(sessName).trim())) nameByCid[cid] = sessName;
   }
 
+  const discordCids = await discordPresenceCids();
+
   const membersByAff = {};
   // Seed each affiliate's list with the Main CID as a non-removable owner row
   owned.forEach(a => {
@@ -21031,7 +21060,7 @@ app.get('/affiliates/my-members', requireLogin, requireAffiliateOwner, async (re
                   <tbody>
                     ${list.map(m => `
                       <tr data-member-cid="${m.cid}"${m.isMain ? ' class="mm-main-row"' : ''}>
-                        <td class="ot-cell-cid">${m.cid}</td>
+                        <td class="ot-cell-cid">${m.cid}${discordCids && !discordCids.has(Number(m.cid)) ? ` <span class="mm-no-discord" title="Member has not joined the WorldFlight Discord">&#9888;</span><button type="button" class="mm-copy-invite" title="Copy the Discord invite link to send to them">Copy invite</button>` : ''}</td>
                         <td class="ot-cell-name">${escapeHtml(m.name || '—')}</td>
                         <td>${m.isMain
                           ? '<span class="ot-muted">—</span>'
@@ -21090,6 +21119,25 @@ ${MM_STYLES}
           var card = f.closest('.mm-card');
           var btn = card && card.querySelector('.mm-add-btn');
           if (btn) btn.click();
+        });
+
+        // Copy the Discord invite for members not yet in the server
+        document.addEventListener('click', function(e) {
+          var b = e.target.closest('.mm-copy-invite');
+          if (!b) return;
+          var url = ${JSON.stringify(WF_DISCORD_INVITE)};
+          function done(ok) {
+            b.textContent = ok ? 'Copied ✓' : 'Copy failed';
+            setTimeout(function() { b.textContent = 'Copy invite'; }, 1400);
+          }
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(url).then(function() { done(true); }, function() { done(false); });
+          } else {
+            var ta = document.createElement('textarea');
+            ta.value = url; document.body.appendChild(ta); ta.select();
+            try { document.execCommand('copy'); done(true); } catch (err) { done(false); }
+            document.body.removeChild(ta);
+          }
         });
 
         document.addEventListener('click', async function(e) {
@@ -21585,7 +21633,7 @@ app.get('/team/hq', requireLogin, async (req, res) => {
                     const first = i === 0;
                     return `
                     <tr class="${first ? 'wft-group-start' : ''}${flying ? '' : ' mm-inactive-row'}">
-                      <td>${first ? `<span class="ot-cell-callsign">${escapeHtml(r.number)}</span>` : ''}</td>
+                      <td>${first ? `<a class="sector-details-btn" href="/sector/${escapeHtml(r.number)}/${escapeHtml(r.from)}/${escapeHtml(r.to)}" target="_blank" rel="noopener" title="Open the sector overview in a new tab">${escapeHtml(r.number)}</a>` : ''}</td>
                       <td class="ot-cell-active">
                         <input type="checkbox" class="wf-check team-flying" data-fleet-id="${t.id}" data-sector="${escapeHtml(r.number)}" ${flying ? 'checked' : ''} ${canEditBookings ? '' : 'disabled'} title="${flying ? 'Flying this sector' : 'Not flying this sector'}" />
                       </td>
@@ -21837,7 +21885,7 @@ app.get('/team/hq', requireLogin, async (req, res) => {
                   const sbAttr = String(sbUrl).replace(/&/g, '&amp;').replace(/"/g, '&quot;');
                   return `
                   <tr data-sector="${escapeHtml(sector)}">
-                    <td><span class="ot-cell-callsign">${escapeHtml(sector)}</span></td>
+                    <td><a class="sector-details-btn" href="/sector/${escapeHtml(sector)}/${escapeHtml(wfRow?.from || '')}/${escapeHtml(wfRow?.to || '')}" target="_blank" rel="noopener" title="Open the sector overview in a new tab">${escapeHtml(sector)}</a></td>
                     <td>
                       <span class="ot-cell-actype">${escapeHtml(cs)}</span>
                     </td>
@@ -22576,6 +22624,7 @@ app.get('/team/manage-members', requireLogin, async (req, res) => {
   const ctx = await loadTeamContext(teamNameUpper, cid, user?.personal?.name_full);
   const { displayName, members, fleet } = ctx;
   const activeCallsigns = fleet.filter(t => t.participatingWf26).map(t => String(t.callsign || '').toUpperCase());
+  const discordCids = await discordPresenceCids();
 
   const content = `
     <div class="mm-wrap">
@@ -22614,7 +22663,7 @@ app.get('/team/manage-members', requireLogin, async (req, res) => {
               ${members.map(m => `
                 <tr data-cid="${m.cid}"${!m.perms.participating ? ' class="mm-inactive-row"' : ''}>
                   <td class="ot-cell-name">${escapeHtml(m.name || '—')}${m.isOwner ? ' <span class="aff-main-badge">Main</span>' : ''}</td>
-                  <td class="ot-cell-cid">${m.cid}</td>
+                  <td class="ot-cell-cid">${m.cid}${discordCids && !discordCids.has(Number(m.cid)) ? ` <span class="mm-no-discord" title="Member has not joined the WorldFlight Discord">&#9888;</span><button type="button" class="mm-copy-invite" title="Copy the Discord invite link to send to them">Copy invite</button>` : ''}</td>
                   <td class="ot-cell-active">
                     <input type="checkbox" class="wf-check team-perm" data-cid="${m.cid}" data-perm="participating" ${m.perms.participating ? 'checked' : ''} ${m.isOwner ? 'disabled title="Managed by Admins"' : ''} />
                   </td>
@@ -22656,6 +22705,26 @@ app.get('/team/manage-members', requireLogin, async (req, res) => {
           if (e.key === 'Enter' && e.target.closest && e.target.closest('.mm-cid-input')) {
             e.preventDefault();
             document.getElementById('teamAddBtn').click();
+          }
+        });
+
+        // Copy the Discord invite for members not yet in the server
+        document.addEventListener('click', function(e) {
+          var b = e.target.closest('.mm-copy-invite');
+          if (!b) return;
+          var url = ${JSON.stringify(WF_DISCORD_INVITE)};
+          function done(ok) {
+            var prev = 'Copy invite';
+            b.textContent = ok ? 'Copied ✓' : 'Copy failed';
+            setTimeout(function() { b.textContent = prev; }, 1400);
+          }
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(url).then(function() { done(true); }, function() { done(false); });
+          } else {
+            var ta = document.createElement('textarea');
+            ta.value = url; document.body.appendChild(ta); ta.select();
+            try { document.execCommand('copy'); done(true); } catch (err) { done(false); }
+            document.body.removeChild(ta);
           }
         });
 
@@ -26098,6 +26167,26 @@ async function persistDiscordNames(namesByCid) {
 async function loadDiscordManualLinks() {
   const rows = await prisma.discordLink?.findMany().catch(() => []) ?? [];
   return new Map(rows.map(l => [String(l.discordId), Number(l.cid)]));
+}
+
+/* CIDs currently resolvable in the WorldFlight Discord (nickname CID or a
+   manual link). Null when Discord isn't configured or the read fails —
+   callers must then show nothing rather than false "not joined" warnings.
+   The guild snapshot is cached, so this is cheap on page loads. */
+async function discordPresenceCids() {
+  if (!discordConfigured()) return null;
+  try {
+    const [snap, manual] = await Promise.all([getGuildSnapshot(), loadDiscordManualLinks()]);
+    if (!snap) return null;
+    const set = new Set();
+    for (const m of snap.members) {
+      const c = manual.get(m.id) || parseCidFromNickname(m.nickname);
+      if (c) set.add(Number(c));
+    }
+    return set;
+  } catch (e) {
+    return null;
+  }
 }
 
 // Search the guild's members so an admin can pick the right person.
