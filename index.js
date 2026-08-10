@@ -12792,16 +12792,9 @@ document.addEventListener('DOMContentLoaded', function () {
             if (!this.value) return;
             var affiliateId = Number(this.value);
             try {
-              // Re-link this affiliate row to the searched user, then grant role.
-              var patchRes = await fetch('/api/admin/affiliates/' + affiliateId, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                credentials: 'same-origin',
-                body: JSON.stringify({ cid: Number(data.cid) })
-              });
-              if (!patchRes.ok) throw new Error('link failed');
-              await toggleRole('WF_AFFILIATE', true);
-              affSelect.dataset.loaded = ''; // force re-fetch to refresh CID labels
+              // Adds the user as a MEMBER of the picked affiliate (and grants
+              // the role). Main-CID transfers live on the Official Teams page.
+              await toggleRole('WF_AFFILIATE', true, { affiliateId: affiliateId });
             } catch (err) {}
           });
 
@@ -13386,7 +13379,7 @@ app.get('/admin/api/documentation/search', requireAdmin, async (req, res) => {
   // Check if it's a CID (all digits)
   if (/^\d+$/.test(q)) {
     const cid = Number(q);
-    const [docPerms, staffReqs, anyStaffReq, anyDocReq, addlRoles, userRow, mailSub, linkedAffiliates] = await Promise.all([
+    const [docPerms, staffReqs, anyStaffReq, anyDocReq, addlRoles, userRow, mailSub, linkedAffiliates, memberAffRows] = await Promise.all([
       prisma.documentationPermission.findMany({ where: { cid } }),
       prisma.staffAccessRequest.findMany({ where: { cid, status: 'APPROVED' } }),
       prisma.staffAccessRequest.findFirst({ where: { cid }, orderBy: { createdAt: 'desc' } }),
@@ -13394,7 +13387,8 @@ app.get('/admin/api/documentation/search', requireAdmin, async (req, res) => {
       prisma.userAdditionalRole.findMany({ where: { cid } }),
       prisma.user.findUnique({ where: { cid } }).catch(() => null),
       prisma.mailingListSubscriber.findFirst({ where: { cid } }).catch(() => null),
-      prisma.affiliate.findMany({ where: { cid }, select: { id: true } }).catch(() => [])
+      prisma.affiliate.findMany({ where: { cid }, select: { id: true } }).catch(() => []),
+      prisma.affiliateMember.findMany({ where: { cid, active: true }, select: { affiliateId: true } }).catch(() => [])
     ]);
     const mailName = mailSub ? [mailSub.firstName, mailSub.lastName].filter(Boolean).join(' ').trim() : '';
     let userName =
@@ -13424,7 +13418,7 @@ app.get('/admin/api/documentation/search', requireAdmin, async (req, res) => {
       additionalRoles: addlRoles.map(r => r.role),
       wfTeamName: wfTeamRow?.teamName ?? null,
       wfAffiliateSince: wfAffiliateRow?.sinceYear ?? null,
-      linkedAffiliateIds: linkedAffiliates.map(a => a.id),
+      linkedAffiliateIds: [...new Set([...linkedAffiliates.map(a => a.id), ...memberAffRows.map(m => m.affiliateId)])],
       docPermissions: docPerms.filter(r => r.pattern !== '****'),
       firAccess: staffReqs,
       isSuperAdmin: isSuperAdmin(cid),
@@ -16779,6 +16773,7 @@ app.post('/admin/api/user-additional-roles/toggle', requireAdmin, async (req, re
   const role = String(req.body?.role || '');
   const enabled = !!req.body?.enabled;
   const teamName = req.body?.teamName ? String(req.body.teamName).trim().toUpperCase() : null;
+  const affiliateId = Number(req.body?.affiliateId) || null;
   if (!cid) return res.status(400).json({ error: 'CID required' });
   if (!USER_ADDITIONAL_ROLES.includes(role)) return res.status(400).json({ error: 'Invalid role' });
   if (role === 'WF_TEAM' && enabled && !teamName) {
@@ -16795,11 +16790,38 @@ app.post('/admin/api/user-additional-roles/toggle', requireAdmin, async (req, re
     if (role === 'WF_TEAM') teamMemberCids.add(cid);
     if (role === 'WF_AFFILIATE') affiliateCids.add(cid);
     if (role === 'WF_ATC') wfAtcCids.add(cid);
+
+    // Tagging WF Affiliate with an affiliate picked means MEMBERSHIP of that
+    // affiliate, not ownership — the main CID is never touched here (transfers
+    // live on the Official Teams admin page, which also moves bookings).
+    // The membership row is what puts them in the Discord roster.
+    if (role === 'WF_AFFILIATE' && affiliateId) {
+      const aff = await prisma.affiliate.findUnique({ where: { id: affiliateId } }).catch(() => null);
+      if (!aff) return res.status(404).json({ error: 'Affiliate not found' });
+      if (Number(aff.cid) !== cid) {
+        await prisma.affiliateMember.upsert({
+          where: { affiliateId_cid: { affiliateId, cid } },
+          update: { active: true },
+          create: { affiliateId, cid }
+        });
+        if (!aff.hasMembers) {
+          await prisma.affiliate.update({ where: { id: affiliateId }, data: { hasMembers: true } });
+          await loadAffiliateOwners();
+        }
+      }
+    }
   } else {
     await prisma.userAdditionalRole.deleteMany({ where: { cid, role } });
     if (role === 'WF_TEAM') teamMemberCids.delete(cid);
     if (role === 'WF_AFFILIATE') affiliateCids.delete(cid);
     if (role === 'WF_ATC') wfAtcCids.delete(cid);
+
+    // Untagging WF Affiliate also drops their memberships — the Discord
+    // roster is built from AffiliateMember rows, so leaving them behind would
+    // keep granting server roles to someone whose portal role was revoked.
+    if (role === 'WF_AFFILIATE') {
+      await prisma.affiliateMember.deleteMany({ where: { cid } }).catch(() => null);
+    }
   }
   res.json({ ok: true });
 });
