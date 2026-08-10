@@ -116,6 +116,42 @@ function getFirsForPoint(lat, lon) {
   return results;
 }
 
+// Shoelace area of a GeoJSON ring, in squared degrees. Only used to compare
+// overlapping polygons against each other, so no projection is needed.
+function firRingArea(ring) {
+  let a = 0;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    a += (ring[j][0] + ring[i][0]) * (ring[j][1] - ring[i][1]);
+  }
+  return Math.abs(a / 2);
+}
+
+/* The FIR that owns an airport on the SURFACE. Overlapping boundary polygons
+   are common — upper sectors, and huge FL0-999 catch-alls like XVCL that span
+   several countries — and geojson file order is meaningless, so taking the
+   first match picks essentially at random. Only polygons that reach the
+   ground (minFL 0 or unset) qualify, and the smallest containing one wins as
+   the most specific: VVDN sits under six polygons, where VVHN-4 (drawn
+   around Da Nang) beats the XVCL catch-all 25x its size. */
+function resolveSurfaceFirForPoint(lat, lon) {
+  let best = null;
+  let bestArea = Infinity;
+  for (const f of firFeatures) {
+    const geom = f.geometry;
+    if (!geom) continue;
+    const minFL = Number(f.properties?.minFL);
+    if (Number.isFinite(minFL) && minFL > 0) continue; // upper sector — can't own an airport
+    const polys = geom.type === 'MultiPolygon' ? geom.coordinates : geom.type === 'Polygon' ? [geom.coordinates] : [];
+    for (const poly of polys) {
+      if (!poly[0] || !pointInPolygon(lat, lon, poly[0])) continue;
+      const area = firRingArea(poly[0]);
+      if (area < bestArea) { bestArea = area; best = baseFirCode(f.properties?.id); }
+      break;
+    }
+  }
+  return best;
+}
+
 /* ===== NAVDATA: DB-BACKED PERSISTENCE =====
    Railway's container filesystem is ephemeral — files uploaded via /admin/airac
    are lost on every deploy. Uploads are therefore also stored in the NavdataFile
@@ -34402,8 +34438,9 @@ async function resolveAirportFir(icao) {
   try {
     const ap = await prisma.airport.findUnique({ where: { icao }, select: { lat: true, lon: true } });
     if (!ap) { airportFirCache.set(icao, null); return null; }
-    const firs = getFirsForPoint(ap.lat, ap.lon);
-    const result = firs[0] || null;
+    // Surface-aware resolution (minFL 0, smallest polygon wins); fall back to
+    // the old first-match behaviour only if nothing ground-level contains it.
+    const result = resolveSurfaceFirForPoint(ap.lat, ap.lon) || (getFirsForPoint(ap.lat, ap.lon)[0] || null);
     airportFirCache.set(icao, result);
     return result;
   } catch (e) { return null; }
@@ -34975,6 +35012,58 @@ app.get('/sector-planning/admin', requireAdmin, async (req, res) => {
   });
   const docSet = new Set(docRows.map(d => d.icao));
 
+  // FIR access coverage: which real users could open each sector's DEP/ARR
+  // side. Mirrors getUserOwnedFirs in bulk (manual grants incl. DIVISION
+  // expansion + the WF FIR Management CSV auto-grants). Super admins are
+  // deliberately ignored — the point is genuine staffing coverage.
+  const [firGrants, allFirsForCoverage] = await Promise.all([
+    prisma.firEventAccess.findMany().catch(() => []),
+    buildFirAnalysis().catch(() => [])
+  ]);
+  const covFirsByDivision = {};
+  allFirsForCoverage.forEach(f => {
+    const d = f.division || '';
+    if (!covFirsByDivision[d]) covFirsByDivision[d] = new Set();
+    covFirsByDivision[d].add(f.fir);
+  });
+  const firToCids = {};
+  const addFirCid = (fir, c) => {
+    const n = Number(c);
+    if (!fir || !n) return;
+    if (!firToCids[fir]) firToCids[fir] = new Set();
+    firToCids[fir].add(n);
+  };
+  for (const g of firGrants) {
+    if (g.scope === 'FIR') addFirCid(g.value, g.cid);
+    else if (g.scope === 'DIVISION' && covFirsByDivision[g.value]) {
+      covFirsByDivision[g.value].forEach(f => addFirCid(f, g.cid));
+    }
+  }
+  const covCsvMap = firManagementState.data?.cidToFirs || {};
+  for (const [c, list] of Object.entries(covCsvMap)) {
+    (Array.isArray(list) ? list : []).forEach(f => addFirCid(f, c));
+  }
+  const firByIcao = {};
+  for (const icao of allIcaos) {
+    firByIcao[icao] = await resolveAirportFir(icao).catch(() => null);
+  }
+  const coverageCids = [...new Set(Object.values(firToCids).flatMap(s => [...s]))];
+  const coverageNames = {};
+  if (coverageCids.length) {
+    const covUsers = await prisma.user.findMany({
+      where: { cid: { in: coverageCids } }, select: { cid: true, name: true }
+    }).catch(() => []);
+    covUsers.forEach(u => { coverageNames[Number(u.cid)] = u.name || ''; });
+  }
+  const coverageFor = (icao) => {
+    const fir = firByIcao[icao];
+    if (!fir) return { count: 0, label: `${icao}: FIR unknown` };
+    const set = firToCids[fir];
+    if (!set || !set.size) return { count: 0, label: `${fir}: no users have access` };
+    const people = [...set].map(c => (coverageNames[c] ? `${coverageNames[c]} (${c})` : `CID ${c}`));
+    return { count: set.size, label: `${fir}:\n${people.join('\n')}` };
+  };
+
   const FLOW_LABELS = { 'NONE': 'No Restrictions', 'BOOKING_REQUIRED': 'Booking Required', 'TIME_SLOT_REQUIRED': 'Time Slot Required' };
   const FLOW_TYPE_MAP = { 'BOOKING_REQUIRED': 'BOOKING_ONLY', 'TIME_SLOT_REQUIRED': 'SLOTTED', 'NONE': 'NONE' };
   const FLOW_TYPE_REV = { 'BOOKING_ONLY': 'BOOKING_REQUIRED', 'SLOTTED': 'TIME_SLOT_REQUIRED', 'NONE': 'NONE' };
@@ -35075,13 +35164,17 @@ app.get('/sector-planning/admin', requireAdmin, async (req, res) => {
           + '<div style="color:var(--success);">' + (s.flowLabel || 'None') + (s.flowRate ? ' · ' + s.flowRate + ' planes/hr' : '') + '</div></div>'
           + '</div>';
       }
-      diffRow = '<tr style="background:rgba(245,158,11,0.04);"><td colspan="9" style="padding:6px 12px 10px;border-bottom:2px solid var(--warning);">'
+      diffRow = '<tr style="background:rgba(245,158,11,0.04);"><td colspan="11" style="padding:6px 12px 10px;border-bottom:2px solid var(--warning);">'
         + diffHtml + '</td></tr>';
     }
+    const depCov = coverageFor(s.from);
+    const arrCov = coverageFor(s.to);
     return `<tr${syncRowStyle}>
       <td style="font-weight:700;"><a href="/sector-planning/${encodeURIComponent(s.wf)}" style="color:var(--accent);text-decoration:none;">${s.wf}</a></td>
       <td style="font-family:monospace;font-size:12px;">${s.from} → ${s.to}</td>
       <td style="font-size:11px;">${s.date}</td>
+      <td style="text-align:center;"><span style="cursor:help;" title="${escapeHtml(depCov.label)}">${depCov.count ? tick : cross}</span></td>
+      <td style="text-align:center;"><span style="cursor:help;" title="${escapeHtml(arrCov.label)}">${arrCov.count ? tick : cross}</span></td>
       <td style="text-align:center;">${s.routeAgreed ? tick : cross}</td>
       <td style="text-align:center;">${s.flowSet ? tick : cross}</td>
       <td style="text-align:center;">${s.depScenery ? tick : cross}</td>
@@ -35121,6 +35214,8 @@ app.get('/sector-planning/admin', requireAdmin, async (req, res) => {
               <th>Sector</th>
               <th>Route</th>
               <th>Date</th>
+              <th>Dep Access</th>
+              <th>Arr Access</th>
               <th>Route Agreed</th>
               <th>Flow Set</th>
               <th>Dep Scenery</th>
