@@ -2593,11 +2593,26 @@ async function autoAssignAffiliateBookings({ reason = '' } = {}) {
 async function rebalanceSlottedSectors({ reason = '' } = {}) {
   try {
     const [teamRows, affRows] = await Promise.all([
-      prisma.officialTeam.findMany({ select: { callsign: true } }),
-      prisma.affiliate.findMany({ select: { callsign: true } })
+      prisma.officialTeam.findMany({ select: { callsign: true, sortOrder: true } }),
+      prisma.affiliate.findMany({ select: { callsign: true, sortOrder: true } })
     ]);
     const teamCs = new Set(teamRows.map(t => String(t.callsign || '').toUpperCase()).filter(Boolean));
     const affCs = new Set(affRows.map(a => String(a.callsign || '').toUpperCase()).filter(Boolean));
+    // Seniority = the admin "Display Order" field (lower shows first). The
+    // most senior operators take the slots closest to the anchor; ties fall
+    // through to callsign so the order stays fully deterministic.
+    const seniorityByCs = {};
+    for (const r of [...teamRows, ...affRows]) {
+      const cs = String(r.callsign || '').toUpperCase();
+      if (!cs) continue;
+      const n = Number(r.sortOrder);
+      const v = Number.isFinite(n) ? n : Number.MAX_SAFE_INTEGER;
+      seniorityByCs[cs] = cs in seniorityByCs ? Math.min(seniorityByCs[cs], v) : v;
+    }
+    const seniorityOf = (b) => {
+      const v = seniorityByCs[String(b.callsign || '').toUpperCase()];
+      return v == null ? Number.MAX_SAFE_INTEGER : v;
+    };
     let totalMoved = 0;
 
     for (const row of (adminSheetCache || [])) {
@@ -2621,23 +2636,42 @@ async function rebalanceSlottedSectors({ reason = '' } = {}) {
         if (!tm) continue;
         units.push({ bookingKey: key, b, kind, dist: Math.abs(Number(tm[1]) * 60 + Number(tm[2]) - anchorMin) });
       }
-      if (units.length < 2) continue;
+      if (!units.length) continue;
 
-      // The slots this group occupies, innermost (closest to dep) first
-      const pool = units
-        .map(u => ({ slotKey: u.b.slotKey, tobt: u.b.tobtTimeUtc, dist: u.dist }))
-        .sort((a, b) => a.dist - b.dist || a.tobt.localeCompare(b.tobt) || a.slotKey.localeCompare(b.slotKey));
+      // Target block: the N grid slots closest to the anchor — NOT just the
+      // slots currently booked, so the block genuinely fans both sides of
+      // the prime slot. Slots held by pilots (non-managed bookings) are
+      // skipped; slots held by the units themselves count as free since
+      // they are being re-seated.
+      const unitKeys = new Set(units.map(u => u.b.slotKey));
+      const gridSlots = [];
+      for (const [k, s] of Object.entries(allTobtSlots)) {
+        if (!k.startsWith(sectorPrefix)) continue;
+        if (isSlotTaken(k) && !unitKeys.has(k)) continue;
+        const gm = /^(\d{2}):(\d{2})$/.exec(s.tobt || '');
+        if (!gm) continue;
+        gridSlots.push({ slotKey: k, tobt: s.tobt, dist: Math.abs(Number(gm[1]) * 60 + Number(gm[2]) - anchorMin) });
+      }
+      gridSlots.sort((a, b) => a.dist - b.dist || a.tobt.localeCompare(b.tobt) || a.slotKey.localeCompare(b.slotKey));
+      const pool = gridSlots.slice(0, units.length);
+      if (pool.length < units.length) {
+        console.warn(`[REBALANCE] ${row.number || sectorPrefix}: grid has ${pool.length} usable slot(s) for ${units.length} bookings — sector skipped`);
+        continue;
+      }
 
-      // Teams first, then affiliates. Within a kind the order must NOT depend
-      // on the slot currently held (dist changes with every move — sorting by
-      // it makes equidistant pairs swap on every run, forever). Callsign+cid
-      // is fixed identity; only genuinely identical units (a multi-slot
-      // fleet's twin bookings, same callsign AND cid) tie-break by current
-      // pool rank so whichever twin is already innermost stays there.
+      // Teams first, then affiliates; within a kind, seniority (the admin
+      // Display Order) decides who sits closest to the anchor. The order must
+      // NOT otherwise depend on the slot currently held (dist changes with
+      // every move — sorting by it makes equidistant pairs swap on every run,
+      // forever). Seniority + callsign + cid is fixed identity; only
+      // genuinely identical units (a multi-slot fleet's twin bookings, same
+      // callsign AND cid) tie-break by current pool rank so whichever twin is
+      // already innermost stays there.
       units.sort((a, b) =>
         a.kind !== b.kind
           ? (a.kind === 'team' ? -1 : 1)
-          : (String(a.b.callsign).localeCompare(String(b.b.callsign))
+          : ((seniorityOf(a.b) - seniorityOf(b.b))
+             || String(a.b.callsign).localeCompare(String(b.b.callsign))
              || Number(a.b.cid) - Number(b.b.cid)
              || a.dist - b.dist
              || String(a.b.tobtTimeUtc).localeCompare(String(b.b.tobtTimeUtc))
@@ -8011,14 +8045,15 @@ function generateTobtSlots({ from, to, dateUtc, depTimeUtc }) {
   const dep = parseUtcDateTime(dateUtc, depTimeUtc);
 
   // Slot capacity = flow rate × 2-hour departure window (e.g. 80/hr → 160).
-  // Connection times are spread over only the FIRST 90 MIN of the window
-  // (dep − 60min → dep + 30min) so the last 30 min is left free for pilots
-  // to push/depart. Slot count is NOT capped — high flow rates produce
-  // multiple bookable slots at the same HH:MM minute. Each slot's slotKey
-  // is suffixed with #2, #3, … to keep it unique while the displayed
-  // `tobt` stays as plain HH:MM.
-  const windowStart = new Date(dep.getTime() - 60 * 60 * 1000);
-  const WINDOW_MIN = 90;        // slots spread across this many minutes
+  // Connection times span dep − 75min → dep + 45min: 120 minutes centred on
+  // the dep−15 slot anchor (SLOT_ANCHOR_OFFSET_MIN), so the block of teams
+  // and affiliates fans symmetrically either side of the prime slot (a 21:00
+  // departure gets TCTs 19:45–21:45 around 20:45). Slot count is NOT capped —
+  // high flow rates produce multiple bookable slots at the same HH:MM
+  // minute. Each slot's slotKey is suffixed with #2, #3, … to keep it unique
+  // while the displayed `tobt` stays as plain HH:MM.
+  const windowStart = new Date(dep.getTime() - 75 * 60 * 1000);
+  const WINDOW_MIN = 120;       // slots spread across this many minutes
   const WINDOW_HOURS = 2;        // capacity is flow × this
 
   const flowKey = `${from}-${to}`;
