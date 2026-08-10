@@ -23802,6 +23802,7 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
             '<div class="modal-card card" style="max-width:540px;text-align:left;">' +
             '<h3 style="margin:0 0 6px;">Confirm role removals</h3>' +
             '<p style="font-size:13px;color:var(--muted);margin:0 0 12px;">This sync will remove <strong style="color:#f87171;">' + p.totalRemovals + ' role(s)</strong> from ' + p.removals.length + ' member(s)' + (p.totalAdds ? ' and add ' + p.totalAdds + ' role(s)' : '') + ':</p>' +
+            ((p.rolesToCreate && p.rolesToCreate.length) ? '<p style="font-size:12.5px;color:#4ade80;margin:0 0 12px;">New role(s) will be created: <strong>' + p.rolesToCreate.map(function(n){var d=document.createElement('span');d.textContent=n;return d.innerHTML;}).join(', ') + '</strong></p>' : '') +
             '<div id="syncRemovalList" style="max-height:300px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-size:12.5px;line-height:1.8;"></div>' +
             '<div class="modal-actions" style="margin-top:14px;">' +
             '<button type="button" class="action-btn" data-act="cancel">Cancel</button>' +
@@ -26172,11 +26173,15 @@ app.get('/admin/api/discord/sync-preview', requireAdmin, async (req, res) => {
     const manualCidByDiscordId = await loadDiscordManualLinks();
     const diff = computeRoleDiff({ rosterGroups, members: snap.members, guildRoleNames: snap.roleNames, manualCidByDiscordId });
     const plan = buildApplyPlan(diff);
-    const safety = isDiffSafeToApply(diff);
+    // The real sync creates any missing roles itself before applying, so a
+    // missing role must not block the preview — report it as "will be
+    // created" instead and judge safety as the post-creation run will.
+    const safety = isDiffSafeToApply({ ...diff, missingRoles: [] });
     res.json({
       removalsEnabled: removalsEnabled(),
       safe: safety.safe,
       reasons: safety.reasons,
+      rolesToCreate: diff.missingRoles,
       totalAdds: plan.totalAdds,
       totalRemovals: plan.totalRemovals,
       removals: plan.ops.filter(o => o.remove.length).map(o => ({ nickname: o.nickname, cid: o.cid, roles: o.remove }))
