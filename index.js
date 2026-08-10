@@ -19434,7 +19434,12 @@ app.get('/affiliates/hq', requireLogin, async (req, res) => {
   const showAtcRoute = isAdmin || isPageEnabled('atc-route');
   // Flow Restrictions + TCT/Status columns follow the same visibility key as
   // the schedule page's flow info — admin-only/hidden keeps them off this page.
-  const showFlowInfo = isAdmin || isPageEnabled('flow-restrictions');
+  // isAdminUser is deliberately NOT enough here: any granular grant (scenery,
+  // suggestions, …) counts as "admin", and a member with only those grants
+  // must not preview hidden flow data. Super admins, holders of the
+  // "WF Schedule / Flow" grant, and the admin read-only view keep the preview.
+  const canPreviewFlow = readOnly || isSuperAdmin(cid) || hasAdminPageAccess(cid, 'wf-schedule');
+  const showFlowInfo = canPreviewFlow || isPageEnabled('flow-restrictions');
   const scheduleRows = showSchedule ? (adminSheetCache || []).filter(r => r.from && r.to && r.number) : [];
 
   function timeWindow(hhmm) {
@@ -21159,7 +21164,12 @@ app.get('/team/hq', requireLogin, async (req, res) => {
     : null;
 
   const showAtcRoute = isAdmin || isPageEnabled('atc-route');
-  const showFlowInfo = isAdmin || isPageEnabled('flow-restrictions');
+  // isAdminUser is deliberately NOT enough for flow/status: any granular grant
+  // (scenery, suggestions, …) counts as "admin", and a member with only those
+  // grants must not preview hidden flow data. Super admins, holders of the
+  // "WF Schedule / Flow" grant, and the admin read-only view keep the preview.
+  const canPreviewFlow = readOnly || isSuperAdmin(cid) || hasAdminPageAccess(cid, 'wf-schedule');
+  const showFlowInfo = canPreviewFlow || isPageEnabled('flow-restrictions');
   const sinceYear = primary?.sinceYear || null;
   const aircraftTypes = [...new Set(fleet.map(t => String(t.aircraftType || '').toUpperCase()).filter(Boolean))];
 
