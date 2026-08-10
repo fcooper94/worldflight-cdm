@@ -18928,6 +18928,12 @@ const HQ_STYLES = `    <style>
         padding: 6px 30px 6px 10px;
         font-size: 12px;
       }
+      /* Team HQ dropdown lists bare CIDs — 96px fits any CID with room for
+         the chevron. Must outrank the 190px rule above (same specificity,
+         declared later). */
+      .aff-schedule-card .team-pilot-select {
+        width: 96px;
+      }
 
       /* Solo affiliate: pilot is fixed (the main CID) */
       .aff-solo-row {
@@ -19799,7 +19805,7 @@ app.get('/affiliates/hq', requireLogin, async (req, res) => {
                   <th class="ot-th-center">Flying</th>
                   <th>Callsign</th>
                   <th>VATSIM Account <span class="tobt-help wft-info">i<span class="tobt-tooltip">This is the VATSIM account that will be connected on VATSIM for this sector.</span></span></th>
-                  ${showFlowInfo ? '<th>Flow Restrictions</th><th>Status</th>' : ''}
+                  ${showFlowInfo ? '<th>Flow</th><th>Status</th>' : ''}
                   ${showAtcRoute ? '<th>ATC Route</th>' : ''}
                   <th>From</th><th>To</th><th>Date</th><th>Dep Window</th><th>Arr Window</th><th>Plan</th>
                 </tr>
@@ -19832,17 +19838,17 @@ app.get('/affiliates/hq', requireLogin, async (req, res) => {
                       <td class="aff-status-cell">${!flying
                         ? '<span class="ot-muted">Not flying</span>'
                         : (status && status.kind === 'tobt'
-                          ? `<span class="aff-flow-status aff-flow-tobt"><span class="aff-tobt-label">${escapeHtml(status.label)}</span><span class="aff-tobt-time">${escapeHtml(status.time)}</span><span class="tobt-help">?<span class="tobt-tooltip">This is your TCT (Target Connection Time).<br>Connect to VATSIM at this time.</span></span></span>`
+                          ? `<span class="aff-flow-status aff-flow-tobt"><span class="aff-tobt-label">${escapeHtml(status.label)}</span><span class="aff-tobt-time">${escapeHtml(status.time)}</span><span class="tobt-tooltip">Target Connection Time &mdash; connect to VATSIM at this time. We stagger pilot connections at the departure airport so the network and controllers aren&#39;t overwhelmed.</span></span>`
                           : `<span class="aff-flow-status aff-flow-${status ? status.kind : 'empty'}">${escapeHtml(status ? status.text : (restricted ? 'Awaiting slot' : '—'))}</span>`)}</td>` : ''}
                       ${showAtcRoute ? `<td>${first ? (r.atc_route && r.atc_route !== '-'
-                        ? `<button type="button" class="aff-route-btn" data-route="${String(r.atc_route).replace(/&/g, '&amp;').replace(/"/g, '&quot;')}" data-route2="${r.atc_route2 && r.atc_route2 !== '-' ? String(r.atc_route2).replace(/&/g, '&amp;').replace(/"/g, '&quot;') : ''}" data-simbrief="${sbAttr}" data-from="${escapeHtml(r.from)}" data-to="${escapeHtml(r.to)}">ATC Route</button>`
-                        : `<span class="ot-muted" style="font-style:italic;">Pending agreement</span>`) : ''}</td>` : ''}
+                        ? `<button type="button" class="aff-route-btn" data-route="${String(r.atc_route).replace(/&/g, '&amp;').replace(/"/g, '&quot;')}" data-route2="${r.atc_route2 && r.atc_route2 !== '-' ? String(r.atc_route2).replace(/&/g, '&amp;').replace(/"/g, '&quot;') : ''}" data-simbrief="${sbAttr}" data-from="${escapeHtml(r.from)}" data-to="${escapeHtml(r.to)}" title="View the agreed ATC route">Route</button>`
+                        : `<span class="ot-muted" style="font-style:italic;" title="To be confirmed &mdash; the ATC route will appear here once agreed between the two airports.">TBC</span>`) : ''}</td>` : ''}
                       <td>${first ? `<a class="aff-icao-link" href="/icao/${escapeHtml(r.from)}">${escapeHtml(r.from)}</a>` : ''}</td>
                       <td>${first ? `<a class="aff-icao-link" href="/icao/${escapeHtml(r.to)}">${escapeHtml(r.to)}</a>` : ''}</td>
                       <td><span class="ot-muted">${first ? escapeHtml(r.date_utc || '') : ''}</span></td>
                       <td><span class="ot-muted">${first ? timeWindow(r.dep_time_utc) : ''}</span></td>
                       <td><span class="ot-muted">${first ? timeWindow(r.arr_time_utc) : ''}</span></td>
-                      <td><a class="aff-route-btn aff-sb-btn" href="${sbAttr}" target="_blank" rel="noopener">Plan with SimBrief</a></td>
+                      <td><a class="aff-route-btn aff-sb-btn" href="${sbAttr}" target="_blank" rel="noopener" title="Plan with SimBrief">Plan</a></td>
                     </tr>`;
                   }).join('');
                 }).join('')}
@@ -20132,7 +20138,7 @@ app.get('/affiliates/hq', requireLogin, async (req, res) => {
                     <td><span class="flowtype-pill flowtype-${flow.cls}">${escapeHtml(flow.label)}</span></td>
                     <td class="aff-status-cell"><span class="aff-flow-status aff-flow-${status.kind}">${
                       status.kind === 'tobt'
-                        ? `<span class="aff-tobt-label">${escapeHtml(status.label)}</span><span class="aff-tobt-time">${escapeHtml(status.time)}</span><span class="tobt-help">?<span class="tobt-tooltip">This is your TCT (Target Connection Time).<br>Connect to VATSIM at this time.<br>We use TCT to stagger pilot connections at this airport so the network and controllers aren&#39;t overwhelmed.</span></span>`
+                        ? `<span class="aff-tobt-label">${escapeHtml(status.label)}</span><span class="aff-tobt-time">${escapeHtml(status.time)}</span><span class="tobt-tooltip">Target Connection Time &mdash; connect to VATSIM at this time. We stagger pilot connections at the departure airport so the network and controllers aren&#39;t overwhelmed.</span>`
                         : escapeHtml(status.text)
                     }</span></td>` : ''}
                     ${showAtcRoute ? `<td>${(() => {
@@ -20140,8 +20146,8 @@ app.get('/affiliates/hq', requireLogin, async (req, res) => {
                       const sbAttr = sbUrl.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
                       const r2Attr = r.atc_route2 && r.atc_route2 !== '-' ? String(r.atc_route2).replace(/&/g, '&amp;').replace(/"/g, '&quot;') : '';
                       return r.atc_route && r.atc_route !== '-'
-                        ? `<button type="button" class="aff-route-btn" data-route="${String(r.atc_route).replace(/&/g, '&amp;').replace(/"/g, '&quot;')}" data-route2="${r2Attr}" data-simbrief="${sbAttr}" data-from="${escapeHtml(r.from)}" data-to="${escapeHtml(r.to)}">ATC Route</button>`
-                        : `<span class="ot-muted" style="font-style:italic;" title="This information will be available once an ATC route has been agreed between the two airports.">Pending agreement</span>`;
+                        ? `<button type="button" class="aff-route-btn" data-route="${String(r.atc_route).replace(/&/g, '&amp;').replace(/"/g, '&quot;')}" data-route2="${r2Attr}" data-simbrief="${sbAttr}" data-from="${escapeHtml(r.from)}" data-to="${escapeHtml(r.to)}" title="View the agreed ATC route">Route</button>`
+                        : `<span class="ot-muted" style="font-style:italic;" title="To be confirmed &mdash; the ATC route will appear here once agreed between the two airports.">TBC</span>`;
                     })()}</td>` : ''}
                     <td><a class="aff-icao-link" href="/icao/${escapeHtml(r.from)}">${escapeHtml(r.from)}</a></td>
                     <td><a class="aff-icao-link" href="/icao/${escapeHtml(r.to)}">${escapeHtml(r.to)}</a></td>
@@ -20151,7 +20157,7 @@ app.get('/affiliates/hq', requireLogin, async (req, res) => {
                     <td>${(() => {
                       const sbUrl = buildAffiliateSimbriefUrl(r, affiliate, claimedCid, showAtcRoute);
                       const sbAttr = sbUrl.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
-                      return `<a class="aff-route-btn aff-sb-btn" href="${sbAttr}" target="_blank" rel="noopener">Plan with SimBrief</a>`;
+                      return `<a class="aff-route-btn aff-sb-btn" href="${sbAttr}" target="_blank" rel="noopener" title="Plan with SimBrief">Plan</a>`;
                     })()}</td>
                   </tr>
                   `;
@@ -20202,22 +20208,22 @@ app.get('/affiliates/hq', requireLogin, async (req, res) => {
           var span = document.createElement('span');
           span.className = 'aff-flow-status aff-flow-' + status.kind;
           if (status.kind === 'tobt' && status.time) {
+            // TCT label + time pill plus a hidden tooltip — no visible "?"
+            // so the column stays narrow; hovering the pill shows the
+            // explainer. The label matters: this column also shows "Booked"
+            // on Booking Required sectors, so bare times would be ambiguous.
             var l = document.createElement('span');
             l.className = 'aff-tobt-label';
             l.textContent = status.label || 'TCT';
+            span.appendChild(l);
             var t = document.createElement('span');
             t.className = 'aff-tobt-time';
             t.textContent = status.time;
-            var h = document.createElement('span');
-            h.className = 'tobt-help';
-            h.textContent = '?';
+            span.appendChild(t);
             var tt = document.createElement('span');
             tt.className = 'tobt-tooltip';
-            tt.innerHTML = 'This is your TCT (Target Connection Time).<br>Connect to VATSIM at this time.<br>We use TCT to stagger pilot connections at this airport so the network and controllers aren&#39;t overwhelmed.';
-            h.appendChild(tt);
-            span.appendChild(l);
-            span.appendChild(t);
-            span.appendChild(h);
+            tt.innerHTML = 'Target Connection Time &mdash; connect to VATSIM at this time. We stagger pilot connections at the departure airport so the network and controllers aren&#39;t overwhelmed.';
+            span.appendChild(tt);
           } else {
             span.textContent = status.text;
           }
@@ -21557,8 +21563,8 @@ app.get('/team/hq', requireLogin, async (req, res) => {
                   <th>Sector</th>
                   <th class="ot-th-center">Flying</th>
                   <th>Callsign</th>
-                  <th>VATSIM Account <span class="tobt-help wft-info">i<span class="tobt-tooltip">This is the VATSIM account you will be connected as for this sector.</span></span>${canManageTeam ? `<a href="/team/manage-members" class="wft-th-link" title="Add or remove the accounts available here">Manage Members</a>` : ''}</th>
-                  ${showFlowInfo ? '<th>Flow Restrictions</th><th>Status</th>' : ''}
+                  <th>VATSIM Account <span class="tobt-help wft-info">i<span class="tobt-tooltip">The VATSIM account (CID) you will be connected as for this sector.</span></span></th>
+                  ${showFlowInfo ? '<th>Flow</th><th>Status</th>' : ''}
                   ${showAtcRoute ? '<th>ATC Route</th>' : ''}
                   <th>From</th><th>To</th><th>Date</th><th>Dep Window</th><th>Arr Window</th><th>Plan</th>
                 </tr>
@@ -21586,7 +21592,7 @@ app.get('/team/hq', requireLogin, async (req, res) => {
                       <td><span class="ot-cell-actype">${escapeHtml(cs)}</span></td>
                       <td>
                         <select class="claim-select team-pilot-select"${b ? ` data-slot-key="${escapeHtml(b.slotKey)}" data-callsign="${escapeHtml(cs)}" data-booking-cid="${Number(b.cid)}"` : ` data-fleet-id="${t.id}" data-sector="${escapeHtml(r.number)}"`} data-prev="${acctCid}"${canEditBookings ? '' : ' disabled title="You do not have permission to edit bookings"'}>
-                          ${assignees.map(m => `<option value="${m.cid}" ${acctCid === m.cid ? 'selected' : ''}>${escapeHtml(m.label)}</option>`).join('')}
+                          ${assignees.map(m => `<option value="${m.cid}" ${acctCid === m.cid ? 'selected' : ''} title="${escapeHtml(m.label)}">${m.cid}</option>`).join('')}
                         </select>
                       </td>
                       ${showFlowInfo ? `
@@ -21594,17 +21600,17 @@ app.get('/team/hq', requireLogin, async (req, res) => {
                       <td class="aff-status-cell">${!flying
                         ? '<span class="ot-muted">Not flying</span>'
                         : (status && status.kind === 'tobt'
-                          ? `<span class="aff-flow-status aff-flow-tobt"><span class="aff-tobt-label">${escapeHtml(status.label)}</span><span class="aff-tobt-time">${escapeHtml(status.time)}</span><span class="tobt-help">?<span class="tobt-tooltip">This is your TCT (Target Connection Time).<br>Connect to VATSIM at this time.<br>We use TCT to stagger pilot connections at this airport so the network and controllers aren&#39;t overwhelmed.</span></span></span>`
+                          ? `<span class="aff-flow-status aff-flow-tobt"><span class="aff-tobt-label">${escapeHtml(status.label)}</span><span class="aff-tobt-time">${escapeHtml(status.time)}</span><span class="tobt-tooltip">Target Connection Time &mdash; connect to VATSIM at this time. We stagger pilot connections at the departure airport so the network and controllers aren&#39;t overwhelmed.</span></span>`
                           : `<span class="aff-flow-status aff-flow-${status ? status.kind : 'empty'}">${escapeHtml(status ? status.text : (restricted ? 'Awaiting slot' : '—'))}</span>`)}</td>` : ''}
                       ${showAtcRoute ? `<td>${first ? (r.atc_route && r.atc_route !== '-'
-                        ? `<button type="button" class="aff-route-btn" data-route="${String(r.atc_route).replace(/&/g, '&amp;').replace(/"/g, '&quot;')}" data-route2="${r.atc_route2 && r.atc_route2 !== '-' ? String(r.atc_route2).replace(/&/g, '&amp;').replace(/"/g, '&quot;') : ''}" data-simbrief="${sbAttr}" data-from="${escapeHtml(r.from)}" data-to="${escapeHtml(r.to)}">ATC Route</button>`
-                        : `<span class="ot-muted" style="font-style:italic;">Pending agreement</span>`) : ''}</td>` : ''}
+                        ? `<button type="button" class="aff-route-btn" data-route="${String(r.atc_route).replace(/&/g, '&amp;').replace(/"/g, '&quot;')}" data-route2="${r.atc_route2 && r.atc_route2 !== '-' ? String(r.atc_route2).replace(/&/g, '&amp;').replace(/"/g, '&quot;') : ''}" data-simbrief="${sbAttr}" data-from="${escapeHtml(r.from)}" data-to="${escapeHtml(r.to)}" title="View the agreed ATC route">Route</button>`
+                        : `<span class="ot-muted" style="font-style:italic;" title="To be confirmed &mdash; the ATC route will appear here once agreed between the two airports.">TBC</span>`) : ''}</td>` : ''}
                       <td>${first ? `<a class="aff-icao-link" href="/icao/${escapeHtml(r.from)}">${escapeHtml(r.from)}</a>` : ''}</td>
                       <td>${first ? `<a class="aff-icao-link" href="/icao/${escapeHtml(r.to)}">${escapeHtml(r.to)}</a>` : ''}</td>
                       <td><span class="ot-muted">${first ? escapeHtml(r.date_utc || '') : ''}</span></td>
                       <td><span class="ot-muted">${first ? timeWindow(r.dep_time_utc) : ''}</span></td>
                       <td><span class="ot-muted">${first ? timeWindow(r.arr_time_utc) : ''}</span></td>
-                      <td><a class="aff-route-btn aff-sb-btn" href="${sbAttr}" target="_blank" rel="noopener">Plan with SimBrief</a></td>
+                      <td><a class="aff-route-btn aff-sb-btn" href="${sbAttr}" target="_blank" rel="noopener" title="Plan with SimBrief">Plan</a></td>
                     </tr>`;
                   }).join('');
                 }).join('')}
@@ -21807,8 +21813,8 @@ app.get('/team/hq', requireLogin, async (req, res) => {
                 <tr>
                   <th>Sector</th>
                   <th>Callsign</th>
-                  <th>VATSIM Account <span class="tobt-help wft-info">i<span class="tobt-tooltip">This is the VATSIM account you will be connected as for this sector.</span></span>${canManageTeam ? `<a href="/team/manage-members" class="wft-th-link" title="Add or remove the accounts available here">Manage Members</a>` : ''}</th>
-                  ${showFlowInfo ? '<th>Flow Restrictions</th><th>Status</th>' : ''}
+                  <th>VATSIM Account <span class="tobt-help wft-info">i<span class="tobt-tooltip">The VATSIM account (CID) you will be connected as for this sector.</span></span></th>
+                  ${showFlowInfo ? '<th>Flow</th><th>Status</th>' : ''}
                   ${showAtcRoute ? '<th>ATC Route</th>' : ''}
                   <th>From</th>
                   <th>To</th>
@@ -21837,25 +21843,25 @@ app.get('/team/hq', requireLogin, async (req, res) => {
                     </td>
                     <td>
                       <select class="claim-select team-pilot-select"${b ? ` data-slot-key="${escapeHtml(b.slotKey)}" data-callsign="${escapeHtml(cs)}" data-booking-cid="${Number(b.cid)}"` : ` data-fleet-id="${activeAircraft ? activeAircraft.id : ''}" data-sector="${escapeHtml(sector)}"`} data-prev="${acctCid}"${canEditBookings ? '' : ' disabled title="You do not have permission to edit bookings"'}>
-                        ${assignees.map(m => `<option value="${m.cid}" ${acctCid === m.cid ? 'selected' : ''}>${escapeHtml(m.label)}</option>`).join('')}
+                        ${assignees.map(m => `<option value="${m.cid}" ${acctCid === m.cid ? 'selected' : ''} title="${escapeHtml(m.label)}">${m.cid}</option>`).join('')}
                       </select>
                     </td>
                     ${showFlowInfo ? `
                     <td><span class="flowtype-pill flowtype-${flow.cls}">${escapeHtml(flow.label)}</span></td>
                     <td class="aff-status-cell"><span class="aff-flow-status aff-flow-${status ? status.kind : 'empty'}">${
                       status && status.kind === 'tobt'
-                        ? `<span class="aff-tobt-label">${escapeHtml(status.label)}</span><span class="aff-tobt-time">${escapeHtml(status.time)}</span><span class="tobt-help">?<span class="tobt-tooltip">This is your TCT (Target Connection Time).<br>Connect to VATSIM at this time.<br>We use TCT to stagger pilot connections at this airport so the network and controllers aren&#39;t overwhelmed.</span></span>`
+                        ? `<span class="aff-tobt-label">${escapeHtml(status.label)}</span><span class="aff-tobt-time">${escapeHtml(status.time)}</span><span class="tobt-tooltip">Target Connection Time &mdash; connect to VATSIM at this time. We stagger pilot connections at the departure airport so the network and controllers aren&#39;t overwhelmed.</span>`
                         : escapeHtml(status ? status.text : (restricted ? 'Awaiting slot' : '—'))
                     }</span></td>` : ''}
                     ${showAtcRoute ? `<td>${wfRow && wfRow.atc_route && wfRow.atc_route !== '-'
-                      ? `<button type="button" class="aff-route-btn" data-route="${String(wfRow.atc_route).replace(/&/g, '&amp;').replace(/"/g, '&quot;')}" data-route2="${wfRow.atc_route2 && wfRow.atc_route2 !== '-' ? String(wfRow.atc_route2).replace(/&/g, '&amp;').replace(/"/g, '&quot;') : ''}" data-simbrief="${sbAttr}" data-from="${escapeHtml(wfRow.from)}" data-to="${escapeHtml(wfRow.to)}">ATC Route</button>`
-                      : `<span class="ot-muted" style="font-style:italic;" title="This information will be available once an ATC route has been agreed between the two airports.">Pending agreement</span>`}</td>` : ''}
+                      ? `<button type="button" class="aff-route-btn" data-route="${String(wfRow.atc_route).replace(/&/g, '&amp;').replace(/"/g, '&quot;')}" data-route2="${wfRow.atc_route2 && wfRow.atc_route2 !== '-' ? String(wfRow.atc_route2).replace(/&/g, '&amp;').replace(/"/g, '&quot;') : ''}" data-simbrief="${sbAttr}" data-from="${escapeHtml(wfRow.from)}" data-to="${escapeHtml(wfRow.to)}" title="View the agreed ATC route">Route</button>`
+                      : `<span class="ot-muted" style="font-style:italic;" title="To be confirmed &mdash; the ATC route will appear here once agreed between the two airports.">TBC</span>`}</td>` : ''}
                     <td><a class="aff-icao-link" href="/icao/${escapeHtml(wfRow?.from || '')}">${escapeHtml(wfRow?.from || '—')}</a></td>
                     <td><a class="aff-icao-link" href="/icao/${escapeHtml(wfRow?.to || '')}">${escapeHtml(wfRow?.to || '—')}</a></td>
                     <td><span class="ot-muted">${escapeHtml(wfRow?.date_utc || '')}</span></td>
                     <td><span class="ot-muted">${timeWindow(wfRow?.dep_time_utc)}</span></td>
                     <td><span class="ot-muted">${timeWindow(wfRow?.arr_time_utc)}</span></td>
-                    <td>${sbUrl ? `<a class="aff-route-btn aff-sb-btn" href="${sbAttr}" target="_blank" rel="noopener">Plan with SimBrief</a>` : '<span class="ot-muted">—</span>'}</td>
+                    <td>${sbUrl ? `<a class="aff-route-btn aff-sb-btn" href="${sbAttr}" target="_blank" rel="noopener" title="Plan with SimBrief">Plan</a>` : '<span class="ot-muted">—</span>'}</td>
                   </tr>`;
                 }).join('')}
               </tbody>
