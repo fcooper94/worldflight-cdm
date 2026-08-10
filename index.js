@@ -26678,8 +26678,23 @@ app.patch('/api/admin/official-teams/:id', requireAdmin, profilePhotoUpload.sing
   if (body.participatingWf26 !== undefined) data.participatingWf26 = asBool(body.participatingWf26);
   if (!Object.keys(data).length && !req.file) return res.status(400).json({ error: 'No fields to update' });
 
+  const oldRow = data.mainCid ? await prisma.officialTeam.findUnique({ where: { id }, select: { mainCid: true, teamName: true } }).catch(() => null) : null;
+
   if (Object.keys(data).length) await prisma.officialTeam.update({ where: { id }, data });
   await saveProfilePhoto('team', id, req.file);
+
+  // When mainCid changes via admin, ensure the new CID has a WF_TEAM role row
+  // and refresh in-memory sets so the sidebar picks up the change immediately.
+  if (data.mainCid && oldRow && data.mainCid !== Number(oldRow.mainCid)) {
+    const teamName = data.teamName || String(oldRow.teamName || '').trim();
+    await prisma.userAdditionalRole.upsert({
+      where: { cid_role: { cid: data.mainCid, role: 'WF_TEAM' } },
+      update: { teamName },
+      create: { cid: data.mainCid, role: 'WF_TEAM', teamName }
+    }).catch(() => {});
+    await loadTeamMembers();
+    console.log('[TEAM-ADMIN] mainCid changed from ' + oldRow.mainCid + ' to ' + data.mainCid);
+  }
 
   // multiSlot describes the whole team, so keep every aircraft in the fleet in
   // step — otherwise auto-assignment would see a half-flagged fleet.
