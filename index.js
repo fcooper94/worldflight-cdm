@@ -12713,6 +12713,7 @@ document.addEventListener('DOMContentLoaded', function () {
             var body = { cid: Number(data.cid), role: role, enabled: enabled };
             if (extra && extra.teamName) body.teamName = extra.teamName;
             if (extra && extra.sinceYear) body.sinceYear = extra.sinceYear;
+            if (extra && extra.affiliateId) body.affiliateId = extra.affiliateId;
             var r = await fetch('/admin/api/user-additional-roles/toggle', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
