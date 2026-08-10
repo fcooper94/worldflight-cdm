@@ -22359,20 +22359,13 @@ app.post('/api/team/fleet', requireLogin, requireFleetManager, async (req, res) 
         description: primary.description,
         website: primary.website,
         sortOrder: await resolveSortOrder(null, prisma.officialTeam),
-        // Teams no longer set this per aircraft — inherit the team's own
-        // participation so a new airframe behaves like the rest of the fleet.
-        // (Auto-assign books once per team, so extra aircraft never claim
-        // extra slots.) Admins still control it on the Teams page.
-        participatingWf26: req.body?.participatingWf26 !== undefined
-          ? (req.body.participatingWf26 === true || String(req.body.participatingWf26) === 'true')
-          : !!primary.participatingWf26
+        // New aircraft start inactive — the user can activate it via the
+        // fleet UI which handles booking migration to the new callsign.
+        participatingWf26: false
       }
     });
     await loadTeamMembers();
-    if (created.participatingWf26) {
-      autoAssignTeamThenAffiliate({ reason: `fleet aircraft ${created.id} added` }).catch(() => {});
-    }
-    console.log(`[TEAM] ${req._fleetTeam}: aircraft ${callsign} (${aircraftType}) added by CID ${req.session.user.data.cid}`);
+    console.log(`[TEAM] ${req._fleetTeam}: aircraft ${callsign} (${aircraftType}) added (inactive) by CID ${req.session.user.data.cid}`);
     res.json({ success: true, id: created.id });
   } catch (e) {
     res.status(500).json({ error: e.message });
