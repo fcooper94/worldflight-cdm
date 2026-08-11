@@ -2118,7 +2118,7 @@ async function loadTeamMembers() {
       if (r.canManageMembers) teamManagerCids.add(Number(r.cid));
       if (r.teamName) teamCidToName.set(Number(r.cid), String(r.teamName).trim().toUpperCase());
     });
-    const owners = await prisma.officialTeam.findMany({ select: { mainCid: true, teamName: true, rosterEnabled: true } });
+    const owners = await prisma.officialTeam.findMany().catch(() => []);
     teamOwnerCids.clear();
     teamRosterNames.clear();
     owners.forEach(o => {
@@ -2126,6 +2126,7 @@ async function loadTeamMembers() {
       if (!c) return;
       teamOwnerCids.add(c);
       teamManagerCids.add(c);
+      if (o.teamName) teamCidToName.set(c, String(o.teamName).trim().toUpperCase());
       if (o.rosterEnabled) teamRosterNames.add(String(o.teamName || '').trim().toUpperCase());
     });
     console.log(`[TEAM] Loaded ${teamMemberCids.size} WF team members, ${teamOwnerCids.size} owners`);
