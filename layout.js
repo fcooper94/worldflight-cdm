@@ -83,9 +83,9 @@ export default function renderLayout({
         <span class="icon">${icons.pin}</span>
         <span class="label">Past Destinations</span>
       </a>
-      ${pv('my-slots') ? `<a href="/my-slots" class="nav-item" data-tooltip="My Slots / Bookings">
+      ${pv('my-slots') ? `<a href="/my-slots" class="nav-item" data-tooltip="My Bookings">
         <span class="icon">${icons.ticket}</span>
-        <span class="label">My Slots / Bookings</span>
+        <span class="label">My Bookings</span>
       </a>` : ''}
       ${pv('suggest-airport') ? `<a href="/suggest-airport" class="nav-item" data-tooltip="Suggest Airport">
         <span class="icon">${icons.bulb}</span>

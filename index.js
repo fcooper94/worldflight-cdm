@@ -31215,7 +31215,7 @@ app.get('/admin/settings', requireAdmin, async (req, res) => {
       items: [
         { key: 'schedule',        label: 'WF Schedule',         icon: '🏠', desc: 'Main event schedule with slot booking' },
         { key: 'world-map',       label: 'Route Map',           icon: '🗺️', desc: 'Interactive world map with live flights' },
-        { key: 'my-slots',        label: 'My Slots / Bookings', icon: '✈️', desc: 'Personal slot and booking overview' },
+        { key: 'my-slots',        label: 'My Bookings', icon: '✈️', desc: 'Personal booking overview' },
         { key: 'atc',             label: 'WF Flow Control',     icon: '🎧', desc: 'Controller departure management view' },
         { key: 'suggest-airport', label: 'Suggest Airport',     icon: '💡', desc: 'Community airport suggestions' },
         { key: 'who-we-are',      label: 'Teams & Affiliates',  icon: '👥', desc: 'Public "Who are we?" page listing Official Teams and WF Affiliates with photos, descriptions and websites (/teams).' },
@@ -41796,6 +41796,7 @@ const selected = value === preselectedKey ? 'selected' : '';
     <script>
   var BOOK_TEAM_CTX = ${teamBookingContext ? JSON.stringify(teamBookingContext) : 'null'};
   var BOOK_MY_CID = ${cid ? cid : 'null'};
+  var BOOK_MY_NAME = ${JSON.stringify(user?.personal?.name_full || '')};
   const select = document.getElementById('depSelect');
   const body = document.getElementById('tobtBody');
 
@@ -41979,105 +41980,35 @@ if (slot.byMe) {
       });
       if (!confirmed) return;
 
+      // If team member, show a notice that this is a personal booking
       if (BOOK_TEAM_CTX) {
-        // Team member — show team/self choice modal
-        callsign = await new Promise(resolve => {
-          const overlay = document.createElement('div');
-          overlay.className = 'modal';
-          overlay.style.zIndex = '20000';
-          overlay.innerHTML = '<div class="modal-backdrop"></div>'
-            + '<div class="modal-dialog booking-confirm-dialog">'
-            + '<div class="booking-confirm-icon">\u2708</div>'
-            + '<h3 class="booking-confirm-title">Confirm Booking</h3>'
-            + '<p class="booking-confirm-sub">Who should this booking be filed under?</p>'
-            + '<div class="booking-confirm-btns">'
-            + '<button class="booking-confirm-btn booking-confirm-self" id="tobtBookSelf">\ud83d\udc64 Book for Myself</button>'
-            + '<button class="booking-confirm-btn booking-confirm-team" id="tobtBookTeam">\ud83d\udc65 Book for ' + BOOK_TEAM_CTX.teamName + '</button>'
+        const proceed = await new Promise(resolve => {
+          const ov = document.createElement('div');
+          ov.className = 'modal';
+          ov.style.zIndex = '20000';
+          ov.innerHTML = '<div class="modal-backdrop"></div>'
+            + '<div class="modal-dialog" style="width:420px;padding:24px;text-align:center;">'
+            + '<h3 style="margin:0 0 12px;color:var(--accent);">Personal Booking</h3>'
+            + '<p style="color:var(--text);font-size:14px;margin:0 0 16px;">This is a <strong>personal booking</strong> for <strong>' + (BOOK_MY_NAME || BOOK_MY_CID) + '</strong> (CID ' + BOOK_MY_CID + ') and not on behalf of your team.</p>'
+            + '<div style="background:rgba(56,189,248,0.08);border:1px solid rgba(56,189,248,0.2);border-radius:8px;padding:12px 14px;margin:0 0 18px;font-size:12px;color:var(--muted);line-height:1.6;text-align:left;">'
+            + 'WF Teams and Affiliates are auto-allocated bookings. You can view your team\\'s bookings on the <a href="/team/hq" style="color:var(--accent);font-weight:600;">Team HQ</a>.'
             + '</div>'
-            + '<div id="tobtBookMsg" style="display:none;margin-bottom:12px;font-size:13px;"></div>'
-            + '<button class="booking-confirm-cancel" id="tobtBookCancel">Cancel</button>'
+            + '<div style="display:flex;gap:10px;justify-content:center;">'
+            + '<button class="action-btn" id="teamNoticeCancel" style="min-width:100px;">Cancel</button>'
+            + '<button class="action-btn primary" id="teamNoticeContinue" style="min-width:140px;">Continue</button>'
+            + '</div>'
             + '</div>';
-          document.body.appendChild(overlay);
-
-          function close(val) { overlay.remove(); resolve(val); }
-          overlay.querySelector('.modal-backdrop').addEventListener('click', function() { close(null); });
-          document.getElementById('tobtBookCancel').addEventListener('click', function() { close(null); });
-
-          document.getElementById('tobtBookSelf').addEventListener('click', async function() {
-            this.disabled = true;
-            this.textContent = 'Booking...';
-            const msg = document.getElementById('tobtBookMsg');
-            const r = await fetch('/api/tobt/book', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ slotKey, callsign: String(BOOK_MY_CID) })
-            });
-            if (!r.ok) {
-              const err = await r.json().catch(() => ({}));
-              msg.textContent = err.error || 'Booking failed.';
-              msg.style.color = '#f87171';
-              msg.style.display = '';
-              this.disabled = false;
-              this.textContent = '\ud83d\udc64 Book for Myself';
-              return;
-            }
-            close(String(BOOK_MY_CID));
-          });
-
-          document.getElementById('tobtBookTeam').addEventListener('click', async function() {
-            const msg = document.getElementById('tobtBookMsg');
-            const cs = BOOK_TEAM_CTX.callsigns || [];
-
-            async function doTeamBook(chosenCallsign) {
-              const r = await fetch('/api/tobt/book', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ slotKey, callsign: String(BOOK_TEAM_CTX.teamOwnerCid), teamBooking: true, teamCallsign: chosenCallsign })
-              });
-              if (!r.ok) {
-                const err = await r.json().catch(() => ({}));
-                msg.textContent = err.error || 'Booking failed.';
-                msg.style.color = '#f87171';
-                msg.style.display = '';
-                return false;
-              }
-              return true;
-            }
-
-            if (cs.length > 1) {
-              // Show callsign picker
-              const btnsDiv = overlay.querySelector('.booking-confirm-btns');
-              btnsDiv.innerHTML = cs.map(function(c) {
-                return '<button class="booking-confirm-btn booking-confirm-team tobt-cs-pick" data-cs="' + c + '">' + c + '</button>';
-              }).join('');
-              overlay.querySelector('.booking-confirm-sub').textContent = 'Which callsign should this booking be for?';
-              btnsDiv.addEventListener('click', async function(ev) {
-                const pickBtn = ev.target.closest('.tobt-cs-pick');
-                if (!pickBtn) return;
-                pickBtn.disabled = true;
-                pickBtn.textContent = 'Booking...';
-                if (await doTeamBook(pickBtn.dataset.cs)) {
-                  close(String(BOOK_TEAM_CTX.teamOwnerCid));
-                } else {
-                  pickBtn.disabled = false;
-                  pickBtn.textContent = pickBtn.dataset.cs;
-                }
-              });
-            } else {
-              this.disabled = true;
-              this.textContent = 'Booking...';
-              if (await doTeamBook(cs[0] || null)) {
-                close(String(BOOK_TEAM_CTX.teamOwnerCid));
-              } else {
-                this.disabled = false;
-                this.textContent = '\ud83d\udc65 Book for ' + BOOK_TEAM_CTX.teamName;
-              }
-            }
-          });
+          document.body.appendChild(ov);
+          function close(v) { ov.remove(); resolve(v); }
+          ov.querySelector('.modal-backdrop').addEventListener('click', function() { close(false); });
+          document.getElementById('teamNoticeCancel').addEventListener('click', function() { close(false); });
+          document.getElementById('teamNoticeContinue').addEventListener('click', function() { close(true); });
         });
-        if (!callsign) return;
-      } else {
-        // Non-team member — show CID input modal
+        if (!proceed) return;
+      }
+
+      {
+        // CID input modal
         callsign = await new Promise(resolve => {
           const modal = document.getElementById('callsignModal');
           const input = document.getElementById('callsignModalInput');
@@ -42384,10 +42315,10 @@ app.get('/my-slots', requireLogin, requirePageEnabled('my-slots'), (req, res) =>
 
   const content = `
  <section class="card my-slots-card">
-      <h2>My Slots</h2>
+      <h2>My Bookings</h2>
 
       ${rows.length === 0 ? `
-        <p><em>You have no booked slots.</em></p>
+        <p><em>You have no bookings.</em></p>
       ` : `
         <div class="my-slots-table-wrapper">
           <table class="my-slots-table" style="min-width:0;table-layout:auto;">
@@ -42422,8 +42353,8 @@ app.get('/my-slots', requireLogin, requirePageEnabled('my-slots'), (req, res) =>
                   <td>${r.dateDisplay}</td>
                   <td>${r.depWindow || '—'}</td>
                   <td>${r.tobt && r.tobt !== '—' && r.tobt !== 'N/A'
-                    ? `Slotted - <span style="color:var(--success);font-weight:600;">${r.tobt.replace(':','')}z</span> <span class="tobt-help">?<span class="tobt-tooltip">This is your TCT (Target Connection Time).<br>Connect to VATSIM at this time.<br>We use TCT to stagger pilot connections at this airport so the network and controllers aren&#39;t overwhelmed.</span></span>`
-                    : `<span style="color:var(--success);font-weight:600;">Booking Confirmed</span> <span class="tobt-help">?<span class="tobt-tooltip">You have a booking for this sector. Slots are not required.<br><b>Plan to depart within the Dep Window.</b></span></span>`}</td>
+                    ? `TCT \u2014 <span style="color:var(--success);font-weight:600;">${displayTobt(r.tobt).replace(':','')}z</span> <span class="tobt-help">?<span class="tobt-tooltip">This is your TCT (Target Connection Time).<br>Connect to VATSIM at this time.<br>We use TCT to stagger pilot connections at this airport so the network and controllers aren&#39;t overwhelmed.</span></span>`
+                    : `<span style="color:var(--success);font-weight:600;">Booking Confirmed</span> <span class="tobt-help">?<span class="tobt-tooltip">You have a booking for this sector.<br><b>Plan to depart within the Dep Window.</b></span></span>`}</td>
                   <td>
                     <button type="button" class="show-route-btn"
                       data-wf="${r.wfSector}" data-from="${r.from}" data-to="${r.to}"
@@ -42431,7 +42362,7 @@ app.get('/my-slots', requireLogin, requirePageEnabled('my-slots'), (req, res) =>
                       data-assigned="${assignedRoute}" data-assigned-label="${assignedRouteLabel}"
                       data-assigned-route="${assignedRouteDisplay}"
                       data-has-split="${hasSplit}" data-cid="${cid}"
-                      data-tobt="${r.tobt !== 'N/A' ? r.tobt : ''}"
+                      data-tobt="${r.tobt !== 'N/A' ? displayTobt(r.tobt) : ''}"
                       data-dep-window="${r.depWindow || ''}"
                       data-date="${r.dateDisplay}"
                       data-simbrief="${r.simbriefUrl.replace(/"/g, '&quot;')}"
@@ -42544,7 +42475,7 @@ app.get('/my-slots', requireLogin, requirePageEnabled('my-slots'), (req, res) =>
           + '<div style="display:flex;justify-content:space-between;font-size:13px;"><span style="color:var(--muted);">Assigned CID</span><strong>' + cidVal + '</strong></div>'
           + (dateVal ? '<div style="display:flex;justify-content:space-between;font-size:13px;"><span style="color:var(--muted);">Date</span><strong>' + dateVal + '</strong></div>' : '')
           + (tobt
-            ? '<div style="display:flex;justify-content:space-between;font-size:13px;"><span style="color:var(--muted);">TCT \u2014 Connect at <span class="tobt-help" style="cursor:help;font-size:11px;">?<span class="tobt-tooltip" style="width:240px;">TCT is your Target Connection Time. Connect to VATSIM at this time. We use TCT to stagger pilot connections so the network and controllers aren\'t overwhelmed.</span></span></span><strong style="color:var(--warning);">' + tobt + ' UTC</strong></div>'
+            ? '<div style="display:flex;justify-content:space-between;font-size:13px;"><span style="color:var(--muted);">TCT \u2014 Connect at</span><strong style="color:var(--warning);">' + tobt + ' UTC</strong></div>'
             : (depWindow ? '<div style="display:flex;justify-content:space-between;font-size:13px;"><span style="color:var(--muted);">Dep Window</span><strong>' + depWindow + '</strong></div>' : ''))
           + (hasSplit ? '<div style="display:flex;justify-content:space-between;font-size:13px;"><span style="color:var(--muted);">Assigned Route</span><strong style="color:var(--success);">' + assignedLabel + '</strong></div>' : '')
           + '</div>'
@@ -42558,7 +42489,7 @@ app.get('/my-slots', requireLogin, requirePageEnabled('my-slots'), (req, res) =>
             + '</div>';
         } else {
           html += '<div style="margin-top:6px;padding:8px 10px;background:rgba(56,189,248,0.06);border:1px solid rgba(56,189,248,0.2);border-radius:6px;font-size:11px;color:var(--muted);line-height:1.5;">'
-            + 'You have a booking for this sector. Slots are not required. <strong>Plan to depart within the Dep Window.</strong>'
+            + 'You have a booking for this sector. <strong>Plan to depart within the Dep Window.</strong>'
             + '</div>';
         }
         var slotKey = btn.getAttribute('data-slot-key') || '';
@@ -42742,7 +42673,7 @@ document.addEventListener('click', async (e) => {
 
   res.send(
     renderLayout({
-      title: 'My Slots',
+      title: 'My Bookings',
       user,
       isAdmin,
       layoutClass: 'dashboard-full',
