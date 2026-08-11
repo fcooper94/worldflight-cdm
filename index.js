@@ -22072,28 +22072,41 @@ app.get('/team/hq', requireLogin, async (req, res) => {
               ${sinceYear ? `<span class="ot-since">Member since ${sinceYear}</span>` : ''}
               <span class="aff-member-count">${members.length} ${members.length === 1 ? 'member' : 'members'}</span>
             </div>
-            ${isMainHolder && members.length > 1 ? `
-            <label style="display:flex;align-items:center;gap:8px;margin-top:10px;cursor:pointer;">
-              <input type="checkbox" id="rosterToggle" ${primary?.rosterEnabled ? 'checked' : ''} style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer;" />
-              <span style="font-size:12px;color:var(--muted);">Enable Crew Roster</span>
-            </label>
-            <script>
-              document.getElementById('rosterToggle').addEventListener('change', async function() {
-                var enabled = this.checked;
-                try {
-                  var r = await fetch('/api/team/hq/roster-toggle', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    credentials: 'same-origin',
-                    body: JSON.stringify({ enabled: enabled })
-                  });
-                  if (r.ok) location.reload();
-                  else { this.checked = !enabled; alert('Failed to update'); }
-                } catch (e) { this.checked = !enabled; }
-              });
-            </script>
-            ` : ''}
           </div>
+          ${(isMainHolder || canManageTeamMembers(cid)) && members.length > 1 ? `
+          <div style="display:flex;align-items:center;margin-left:auto;">
+            <label id="rosterToggleWrap" style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:10px 16px;border-radius:8px;border:1px solid ${primary?.rosterEnabled ? 'rgba(56,189,248,0.3)' : 'var(--border)'};background:${primary?.rosterEnabled ? 'rgba(56,189,248,0.06)' : 'var(--panel2)'};transition:all 0.15s;">
+              <div style="position:relative;width:38px;height:20px;">
+                <input type="checkbox" id="rosterToggle" ${primary?.rosterEnabled ? 'checked' : ''} style="position:absolute;opacity:0;width:100%;height:100%;cursor:pointer;margin:0;z-index:1;" />
+                <div id="rosterTrack" style="position:absolute;inset:0;border-radius:10px;background:${primary?.rosterEnabled ? 'var(--accent)' : 'var(--border)'};transition:background 0.2s;"></div>
+                <div id="rosterKnob" style="position:absolute;top:2px;${primary?.rosterEnabled ? 'left:20px' : 'left:2px'};width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,0.3);transition:left 0.2s;"></div>
+              </div>
+              <span style="font-size:12px;font-weight:600;color:${primary?.rosterEnabled ? 'var(--accent)' : 'var(--muted)'};">Crew Roster</span>
+            </label>
+          </div>
+          <script>
+            document.getElementById('rosterToggle').addEventListener('change', async function() {
+              var enabled = this.checked;
+              var track = document.getElementById('rosterTrack');
+              var knob = document.getElementById('rosterKnob');
+              var wrap = document.getElementById('rosterToggleWrap');
+              track.style.background = enabled ? 'var(--accent)' : 'var(--border)';
+              knob.style.left = enabled ? '20px' : '2px';
+              wrap.style.borderColor = enabled ? 'rgba(56,189,248,0.3)' : 'var(--border)';
+              wrap.style.background = enabled ? 'rgba(56,189,248,0.06)' : 'var(--panel2)';
+              try {
+                var r = await fetch('/api/team/hq/roster-toggle', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  credentials: 'same-origin',
+                  body: JSON.stringify({ enabled: enabled })
+                });
+                if (r.ok) location.reload();
+                else { this.checked = !enabled; this.dispatchEvent(new Event('change')); alert('Failed to update'); }
+              } catch (e) { this.checked = !enabled; this.dispatchEvent(new Event('change')); }
+            });
+          </script>
+          ` : ''}
         </div>
       </section>
 
@@ -22689,8 +22702,8 @@ app.post('/api/team/hq/roster-toggle', requireLogin, async (req, res) => {
     if (!teamNameUpper) return res.status(403).json({ error: 'Team not linked' });
     const all = await prisma.officialTeam.findMany();
     const fleet = all.filter(t => String(t.teamName || '').trim().toUpperCase() === teamNameUpper);
-    if (!fleet.some(t => Number(t.mainCid) === cid) && !isAdminUser(cid)) {
-      return res.status(403).json({ error: 'Only the team Main CID can toggle roster' });
+    if (!fleet.some(t => Number(t.mainCid) === cid) && !isAdminUser(cid) && !canManageTeamMembers(cid)) {
+      return res.status(403).json({ error: 'You do not have permission to toggle roster' });
     }
     const enabled = !!req.body?.enabled;
     for (const t of fleet) {
@@ -22710,8 +22723,8 @@ app.post('/api/team/roster/config', requireLogin, async (req, res) => {
     if (!teamNameUpper) return res.status(403).json({ error: 'Team not linked' });
     const all = await prisma.officialTeam.findMany({ select: { mainCid: true, teamName: true } });
     const fleet = all.filter(t => String(t.teamName || '').trim().toUpperCase() === teamNameUpper);
-    if (!fleet.some(t => Number(t.mainCid) === cid) && !isAdminUser(cid)) {
-      return res.status(403).json({ error: 'Only the team Main CID can edit roster config' });
+    if (!fleet.some(t => Number(t.mainCid) === cid) && !isAdminUser(cid) && !canManageTeamMembers(cid)) {
+      return res.status(403).json({ error: 'You do not have permission to edit roster config' });
     }
     const { foEnabled, feEnabled, feLabel, obs1Enabled, obs2Enabled } = req.body || {};
     await prisma.rosterConfig.upsert({
