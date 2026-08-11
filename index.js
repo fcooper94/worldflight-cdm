@@ -20462,6 +20462,22 @@ app.get('/affiliates/hq', requireLogin, async (req, res) => {
 
         // ----- Manual callsigns per-sector -----
         (function() {
+          var mcOverlay = null;
+          function mcShowOverlay(text) {
+            if (mcOverlay) mcOverlay.remove();
+            mcOverlay = document.createElement('div');
+            mcOverlay.style.cssText = 'position:fixed;inset:0;z-index:20002;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.5);';
+            mcOverlay.innerHTML = '<div style="background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:20px 28px;text-align:center;box-shadow:var(--shadow);">'
+              + '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" style="animation:mcSpin 1s linear infinite;"><path d="M21 12a9 9 0 1 1-6.22-8.56"/></svg>'
+              + '<p style="margin:10px 0 0;color:var(--text);font-weight:600;font-size:14px;">' + text + '</p>'
+              + '</div>';
+            document.body.appendChild(mcOverlay);
+          }
+          function mcHideOverlay() { if (mcOverlay) { mcOverlay.remove(); mcOverlay = null; } }
+          var mcStyle = document.createElement('style');
+          mcStyle.textContent = '@keyframes mcSpin { to { transform: rotate(360deg); } }';
+          document.head.appendChild(mcStyle);
+
           var mcMsgEl = document.getElementById('manualCsMsg');
           function mcMsg(text, ok) {
             if (!mcMsgEl) return;
@@ -20483,7 +20499,7 @@ app.get('/affiliates/hq', requireLogin, async (req, res) => {
               if (!cs) { mcMsg('Enter a callsign', false); return; }
               if (!pilotCid) { mcMsg('Select a VATSIM account', false); return; }
               saveBtn.disabled = true;
-              saveBtn.textContent = '...';
+              mcShowOverlay('Saving\u2026');
               try {
                 var r = await fetch('/api/affiliates/hq/manual-claim', {
                   method: 'POST',
@@ -20500,13 +20516,13 @@ app.get('/affiliates/hq', requireLogin, async (req, res) => {
                 var d = await r.json().catch(function() { return {}; });
                 if (r.ok) {
                   mcMsg('Saved!', true);
-                  setTimeout(function() { location.reload(); }, 800);
+                  setTimeout(function() { location.reload(); }, 600);
                 } else {
+                  mcHideOverlay();
                   mcMsg(d.error || 'Failed to save', false);
                 }
-              } catch (err) { mcMsg('Failed to save', false); }
+              } catch (err) { mcHideOverlay(); mcMsg('Failed to save', false); }
               saveBtn.disabled = false;
-              saveBtn.textContent = 'Save';
             }
 
             // Delete
@@ -20532,6 +20548,7 @@ app.get('/affiliates/hq', requireLogin, async (req, res) => {
               });
               if (!confirmed) return;
               delBtn.disabled = true;
+              mcShowOverlay('Removing\u2026');
               try {
                 var r = await fetch('/api/affiliates/hq/manual-claim', {
                   method: 'POST',
@@ -20540,8 +20557,8 @@ app.get('/affiliates/hq', requireLogin, async (req, res) => {
                   body: JSON.stringify({ action: 'delete', claimId: delBtn.dataset.claimId, sectorNumber: '' })
                 });
                 if (r.ok) location.reload();
-                else { var d = await r.json().catch(function() { return {}; }); mcMsg(d.error || 'Failed', false); delBtn.disabled = false; }
-              } catch (err) { mcMsg('Failed', false); delBtn.disabled = false; }
+                else { mcHideOverlay(); var d = await r.json().catch(function() { return {}; }); mcMsg(d.error || 'Failed', false); delBtn.disabled = false; }
+              } catch (err) { mcHideOverlay(); mcMsg('Failed', false); delBtn.disabled = false; }
             }
 
             // Add another aircraft
