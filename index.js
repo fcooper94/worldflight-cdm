@@ -23186,7 +23186,7 @@ app.get('/team/roster', requireLogin, async (req, res) => {
     .join('');
 
   // Config section (main CID only)
-  const configHtml = isMainHolder ? `
+  const configHtml = (isMainHolder || canManageTeamMembers(cid)) ? `
     <section class="card" style="padding:20px;margin-bottom:20px;">
       <h3 style="margin:0 0 12px;color:var(--accent);font-size:15px;">Roster Configuration</h3>
       <form id="rosterConfigForm" style="display:flex;flex-wrap:wrap;gap:16px;align-items:flex-end;">
