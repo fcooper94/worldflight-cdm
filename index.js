@@ -8017,8 +8017,10 @@ function generateTobtSlots({ from, to, dateUtc, depTimeUtc }) {
   // multiple bookable slots at the same HH:MM minute. Each slot's slotKey
   // is suffixed with #2, #3, … to keep it unique while the displayed
   // `tobt` stays as plain HH:MM.
-  const windowStart = new Date(dep.getTime() - 60 * 60 * 1000);
-  const WINDOW_MIN = 90;        // slots spread across this many minutes
+  // Connect times span from 15 min before the departure window opens to
+  // 15 min before it closes: (dep − 75min) → (dep + 45min) = 120 min.
+  const windowStart = new Date(dep.getTime() - 75 * 60 * 1000);
+  const WINDOW_MIN = 120;        // slots spread across this many minutes
   const WINDOW_HOURS = 2;        // capacity is flow × this
 
   const flowKey = `${from}-${to}`;
@@ -9838,11 +9840,11 @@ app.get('/sector/:wf/:from/:to', async (req, res) => {
   }
 
   const remainingText = bookingsFull ? '' :
-    flowType === 'SLOTTED' && slotTotal > 0 ? slotsLeft + ' Slot' + (slotsLeft !== 1 ? 's' : '') + ' Left' :
+    flowType === 'SLOTTED' && slotTotal > 0 ? slotsLeft + ' Booking' + (slotsLeft !== 1 ? 's' : '') + ' Left' :
     flowType === 'BOOKING_ONLY' && bookingCap && bookingCap.total > 0 ? bookingCap.remaining + ' Booking' + (bookingCap.remaining !== 1 ? 's' : '') + ' Left' : '';
 
   const slotsFull = flowType === 'SLOTTED' && slotTotal > 0 && slotsLeft <= 0;
-  const flowLabel = bookingsFull ? 'No Bookings Left!' : slotsFull ? 'No Slots Left!' : (flowType === 'SLOTTED' ? 'Time Slot Required' : flowType === 'BOOKING_ONLY' ? 'Booking Required' : 'No Restrictions');
+  const flowLabel = bookingsFull ? 'No Bookings Left!' : slotsFull ? 'No Bookings Left!' : (flowType === 'SLOTTED' ? 'Booking Required' : flowType === 'BOOKING_ONLY' ? 'Booking Required' : 'No Restrictions');
   const flowClass = (bookingsFull || slotsFull) ? 'full' : (flowType === 'SLOTTED' ? 'slotted' : flowType === 'BOOKING_ONLY' ? 'booking' : 'none');
 
   // Check if user has a booking for this sector
@@ -9939,7 +9941,7 @@ app.get('/sector/:wf/:from/:to', async (req, res) => {
         ` : `
         <div class="sector-banner sector-banner-flow-${flowClass}" style="width:calc(40% - 8px);min-width:250px;flex-direction:column;justify-content:space-between;padding:16px;box-sizing:border-box;overflow:hidden;">
           <div style="font-size:11px;color:inherit;opacity:0.7;text-align:center;line-height:1.4;">
-            ${flowType === 'SLOTTED' ? 'The FIR Manager has set a restriction on this route. To participate you require a Time Slot.' : flowType === 'BOOKING_ONLY' ? 'The FIR Manager has set a restriction on this route. To participate you require a Booking.' : 'There are no flow restrictions on this route. You may depart freely within the departure window.'}
+            ${flowType === 'SLOTTED' ? 'The FIR Manager has set a restriction on this route. To participate you require a Booking.' : flowType === 'BOOKING_ONLY' ? 'The FIR Manager has set a restriction on this route. To participate you require a Booking.' : 'There are no flow restrictions on this route. You may depart freely within the departure window.'}
           </div>
           <div style="display:flex;flex-direction:column;align-items:center;gap:8px;">
             <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/><path d="M12 6v6l4 2"/></svg>
@@ -9954,7 +9956,7 @@ app.get('/sector/:wf/:from/:to', async (req, res) => {
               const sbRoute = encodeURIComponent((isAdmin || isPageEnabled('atc-route')) ? assignedAtcRoute : '');
               const sbUrl = 'https://dispatch.simbrief.com/options/custom?orig=' + fromIcao + '&dest=' + toIcao + '&route=' + sbRoute + '&manualrmk=' + encodeURIComponent('Route validated from www.worldflight.center');
               return '<a href="#" id="viewBookingBtn" style="display:block;text-align:center;padding:10px;margin:0 -17px -17px;border-top:1px solid var(--border);border-radius:0 0 11px 11px;width:calc(100% + 34px);font-size:13px;font-weight:600;text-decoration:none;background:rgba(74,222,128,0.1);color:var(--success);cursor:pointer;" onclick="event.preventDefault();document.getElementById(\'bookingConfirmModal\').style.display=\'flex\';">'
-                + (flowType === 'SLOTTED' && bookingTobt ? '\u2713 You have a Time Slot \u2014 click for details' : '\u2713 You have a Booking \u2014 click for details')
+                + (flowType === 'SLOTTED' && bookingTobt ? '\u2713 You have a Booking \u2014 click for details' : '\u2713 You have a Booking \u2014 click for details')
                 + '</a>'
                 + '<div id="bookingConfirmModal" style="display:none;position:fixed;inset:0;z-index:1000;align-items:center;justify-content:center;padding:16px;">'
                 + '<div style="position:absolute;inset:0;background:rgba(0,0,0,0.65);backdrop-filter:blur(2px);" onclick="event.stopPropagation();document.getElementById(\'bookingConfirmModal\').style.display=\'none\';"></div>'
@@ -9982,13 +9984,13 @@ app.get('/sector/:wf/:from/:to', async (req, res) => {
                 + '</div></div>';
             } else if (!user) {
               return '<a href="/auth/login?next=' + encodeURIComponent('/sector/' + wfNum + '/' + fromIcao + '/' + toIcao) + '" style="display:block;text-align:center;padding:10px;margin:0 -17px -17px;border-top:1px solid var(--border);border-radius:0 0 11px 11px;width:calc(100% + 34px);font-size:13px;font-weight:600;text-decoration:none;background:var(--panel2);color:var(--warning);">'
-                + (flowType === 'SLOTTED' ? 'Login to book a Time Slot \u2192' : 'Login to make a Booking \u2192') + '</a>';
+                + (flowType === 'SLOTTED' ? 'Login to book \u2192' : 'Login to make a Booking \u2192') + '</a>';
             } else {
               const bookHref = flowType === 'SLOTTED'
                 ? '/book?from=' + fromIcao + '&to=' + toIcao + '&dateUtc=' + encodeURIComponent(leg ? leg.date_utc : '') + '&depTimeUtc=' + encodeURIComponent(leg ? leg.dep_time_utc : '')
                 : '#" id="sectorBookingBtn" data-sector="' + fromIcao + '-' + toIcao + '|' + (leg ? leg.date_utc : '') + '|' + (leg ? leg.dep_time_utc : '');
               return '<a href="' + bookHref + '" style="display:block;text-align:center;padding:10px;margin:0 -17px -17px;border-top:1px solid var(--border);border-radius:0 0 11px 11px;width:calc(100% + 34px);font-size:13px;font-weight:600;text-decoration:none;background:var(--panel2);color:var(--accent);transition:background 0.15s;" onmouseover="this.style.background=\'var(--bg0)\'" onmouseout="this.style.background=\'var(--panel2)\'">'
-                + (bookingsFull ? 'No remaining bookings' : flowType === 'SLOTTED' ? 'Click here to book a Time Slot \u2192' : 'Click here to book \u2192') + '</a>';
+                + (bookingsFull ? 'No remaining bookings' : flowType === 'SLOTTED' ? 'Click here to book \u2192' : 'Click here to book \u2192') + '</a>';
             }
           })() : ''}
         </div>
@@ -10206,8 +10208,8 @@ app.get('/sector/:wf/:from/:to', async (req, res) => {
           overlay.className = 'modal';
           overlay.innerHTML = '<div class="modal-backdrop"></div>'
             + '<div class="modal-dialog" style="width:360px;padding:24px;text-align:center;">'
-            + '<h3 style="margin:0 0 8px;color:#f87171;">Cancel ${flowType === 'SLOTTED' ? 'Time Slot' : 'Booking'}?</h3>'
-            + '<p style="color:var(--muted);font-size:13px;margin-bottom:20px;">Are you sure you want to cancel your ${flowType === 'SLOTTED' ? 'time slot' : 'booking'} for this sector? This cannot be undone.</p>'
+            + '<h3 style="margin:0 0 8px;color:#f87171;">Cancel Booking?</h3>'
+            + '<p style="color:var(--muted);font-size:13px;margin-bottom:20px;">Are you sure you want to cancel your booking for this sector? This cannot be undone.</p>'
             + '<div id="cancelBookMsg" style="display:none;margin-bottom:12px;font-size:13px;"></div>'
             + '<div class="modal-actions" style="gap:8px;">'
             + '<button class="modal-btn modal-btn-cancel" id="cancelBookNo">Keep</button>'
@@ -10678,7 +10680,7 @@ app.get('/schedule', requirePageEnabled('schedule'), async (req, res) => {
 
                 /* Bookable — hover pill */
                 const pillClass = flowtype === 'BOOKING_ONLY' ? 'flowtype-booking_only' : 'flowtype-slotted';
-                const label = flowtype === 'BOOKING_ONLY' ? 'Booking Required' : 'Time Slot Required';
+                const label = 'Booking Required';
                 const hoverLabel = isLoggedIn ? 'Click to Book' : 'Login to Book';
 
                 if (!isLoggedIn) {
@@ -10714,10 +10716,10 @@ app.get('/schedule', requirePageEnabled('schedule'), async (req, res) => {
                     if (!isSlotTaken(k)) slotsLeft++;
                   }
                 }
-                const slotRemainLabel = slotTotal > 0 ? slotsLeft + ' Slot' + (slotsLeft !== 1 ? 's' : '') + ' Left' : '';
+                const slotRemainLabel = slotTotal > 0 ? slotsLeft + ' Booking' + (slotsLeft !== 1 ? 's' : '') + ' Left' : '';
 
                 if (slotTotal > 0 && slotsLeft <= 0) {
-                  return '<td class="col-book"><span class="flowtype-pill flowtype-full">No Slots Left!</span></td>';
+                  return '<td class="col-book"><span class="flowtype-pill flowtype-full">No Bookings Left!</span></td>';
                 }
 
                 return '<td class="col-book">'
@@ -32662,7 +32664,7 @@ let primaryStatusHtml = '';
     primaryStatusHtml = `
       <span
         class="status-pill non-booked"
-        title="${pageFlowMode === 'SLOTTED' ? 'Flying to WF destination without a time slot' : 'Flying to WF destination without a booking'}"
+        title="${pageFlowMode === 'SLOTTED' ? 'Flying to WF destination without a booking' : 'Flying to WF destination without a booking'}"
       >
         ${pageFlowMode === 'SLOTTED' ? 'No Slot' : 'Non-Booked'}
       </span>`;
@@ -35057,7 +35059,7 @@ app.get('/sector-planning/admin', requireAdmin, async (req, res) => {
     return { count: set.size, label: `${fir}:\n${people.join('\n')}` };
   };
 
-  const FLOW_LABELS = { 'NONE': 'No Restrictions', 'BOOKING_REQUIRED': 'Booking Required', 'TIME_SLOT_REQUIRED': 'Time Slot Required' };
+  const FLOW_LABELS = { 'NONE': 'No Restrictions', 'BOOKING_REQUIRED': 'Booking Required', 'TIME_SLOT_REQUIRED': 'Bookings with Connect Times' };
   const FLOW_TYPE_MAP = { 'BOOKING_REQUIRED': 'BOOKING_ONLY', 'TIME_SLOT_REQUIRED': 'SLOTTED', 'NONE': 'NONE' };
   const FLOW_TYPE_REV = { 'BOOKING_ONLY': 'BOOKING_REQUIRED', 'SLOTTED': 'TIME_SLOT_REQUIRED', 'NONE': 'NONE' };
 
@@ -35494,11 +35496,19 @@ app.get('/sector-planning/:wf/slots.json', requirePageEnabled('sector-planning')
     });
   }
   rows.sort((a, b) => (a.slot || 'zz:zz').localeCompare(b.slot || 'zz:zz'));
-  const users = await prisma.user.findMany({
-    where: { cid: { in: rows.map(r => Number(r.cid)).filter(Boolean) } },
-    select: { cid: true, name: true }
-  }).catch(() => []);
-  const nameByCid = Object.fromEntries(users.map(u => [u.cid, u.name || '']));
+  const cids = rows.map(r => Number(r.cid)).filter(Boolean);
+  const [users, maskedAffiliates] = await Promise.all([
+    prisma.user.findMany({
+      where: { cid: { in: cids } },
+      select: { cid: true, name: true }
+    }).catch(() => []),
+    prisma.affiliate.findMany({
+      where: { cid: { in: cids }, maskName: true },
+      select: { cid: true }
+    }).catch(() => [])
+  ]);
+  const maskedCids = new Set(maskedAffiliates.map(a => a.cid));
+  const nameByCid = Object.fromEntries(users.map(u => [u.cid, maskedCids.has(u.cid) ? '[Hidden]' : (u.name || '')]));
   rows.forEach(r => { r.name = nameByCid[r.cid] || ''; });
 
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
@@ -35547,7 +35557,7 @@ app.get('/sector-planning/:wf/slots', requirePageEnabled('sector-planning'), asy
 </style></head><body>
 <div class="head">
   <h1>${wf} — ${sched.from} → ${sched.to}</h1>
-  <div class="sub">${slotted ? 'Departure slots (TCT) and booked CIDs' : 'Booking Required — search a CID to check for a booking'} · auto-refreshes every 30s</div>
+  <div class="sub">${slotted ? 'Bookings and connect times' : 'Booking Required — search a CID to check for a booking'} · auto-refreshes every 30s</div>
 </div>
 <div class="wrap">
   ${slotted ? '' : '<input id="cidSearch" type="text" inputmode="numeric" placeholder="Search CID for booking…" autofocus /><div id="searchResult" class="result"></div>'}
@@ -35561,12 +35571,12 @@ app.get('/sector-planning/:wf/slots', requirePageEnabled('sector-planning'), asy
   function render() {
     document.getElementById('count').textContent = DATA.rows.length + ' booking' + (DATA.rows.length === 1 ? '' : 's');
     if (SLOTTED) {
-      var html = '<table><thead><tr><th>Slot (TCT)</th><th>CID</th><th>Callsign</th><th>Name</th></tr></thead><tbody>';
+      var html = '<table><thead><tr><th>Connect at</th><th>CID</th><th>Callsign</th><th>Name</th></tr></thead><tbody>';
       DATA.rows.forEach(function(r) {
         html += '<tr><td class="slot">' + esc(r.slot || '—') + '</td><td>' + esc(r.cid) + '</td><td class="cs">' + esc(r.callsign || '—') + '</td><td>' + esc(r.name || '—') + '</td></tr>';
       });
       html += '</tbody></table>';
-      if (!DATA.rows.length) html = '<div class="muted">No slots booked yet.</div>';
+      if (!DATA.rows.length) html = '<div class="muted">No bookings yet.</div>';
       document.getElementById('tableWrap').innerHTML = html;
     } else {
       runSearch();
@@ -35781,11 +35791,11 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
     : (plan.depFlowType === 'BOOKING_REQUIRED' ? 'BOOKING' : null);
   const headerVatcanEventId = headerFlowMode ? await vatcanResolveEventIdForWf(wf) : null;
 
-  const FLOW_LABELS = { 'NONE': 'No Restrictions', 'BOOKING_REQUIRED': 'Booking Required', 'TIME_SLOT_REQUIRED': 'Time Slot Required' };
+  const FLOW_LABELS = { 'NONE': 'No Restrictions', 'BOOKING_REQUIRED': 'Booking Required', 'TIME_SLOT_REQUIRED': 'Bookings with Connect Times' };
   const FLOW_TOOLTIPS = {
     'NONE': 'Any pilot can take part without restrictions.',
     'BOOKING_REQUIRED': 'To depart within the departure window, pilots must have a booking.',
-    'TIME_SLOT_REQUIRED': 'Pilots must hold a TCT slot at the departure airport to depart.'
+    'TIME_SLOT_REQUIRED': 'Pilots must have a booking to depart from this airport.'
   };
   const TIME_SLOT_AIRPORT = 'YSSY';
   const depWindowUtc = sched.dep_time_utc ? buildTimeWindow(sched.dep_time_utc) : '';
@@ -36229,11 +36239,11 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
       <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
         <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="${c.edge}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
         <div style="min-width:200px;">
-          <div style="font-size:13.5px;font-weight:700;color:${c.title};">${slotted ? 'Slotted — TCT slots required to depart' : 'Booking Required to depart'}</div>
-          <div style="font-size:11.5px;color:var(--muted);margin-top:1px;">${slotted ? 'Pilots must hold a departure slot (TCT) for this sector.' : 'Pilots must have a booking to depart within the window — no fixed slot times.'}</div>
+          <div style="font-size:13.5px;font-weight:700;color:${c.title};">${slotted ? 'Booking Required — with connect times' : 'Booking Required to depart'}</div>
+          <div style="font-size:11.5px;color:var(--muted);margin-top:1px;">${slotted ? 'Pilots must have a booking to depart. Each booking has a connect time.' : 'Pilots must have a booking to depart within the window — no fixed slot times.'}</div>
         </div>
         <div style="margin-left:auto;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-          <button type="button" id="spSlotsPopupBtn" class="action-btn" style="font-size:11px;padding:5px 12px;">${slotted ? 'View Slots &amp; CIDs' : 'Search CID Bookings'}</button>
+          <button type="button" id="spSlotsPopupBtn" class="action-btn" style="font-size:11px;padding:5px 12px;">${slotted ? 'View Bookings' : 'Search CID Bookings'}</button>
           <a href="/api/slots/${wf.toLowerCase()}.json" target="_blank" rel="noopener" class="action-btn" style="font-size:11px;padding:5px 12px;text-decoration:none;" title="Public live JSON of this sector's bookings — [{cid, slot}]">Live JSON</a>
           <span style="font-size:11px;color:var(--muted);padding:4px 10px;border:1px solid ${c.border};border-radius:999px;" title="VATCAN bookings event id for this sector">VATCAN Event: <strong style="color:var(--text);">${headerVatcanEventId != null ? headerVatcanEventId : 'not linked'}</strong></span>
         </div>
@@ -36277,7 +36287,7 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
               <div class="sp-check-sub">${(() => {
                 if (!checklist.depFlowSet) {
                   if (checklist.depFlowType === 'BOOKING_REQUIRED' || checklist.depFlowType === 'TIME_SLOT_REQUIRED') {
-                    const lbl = checklist.depFlowType === 'TIME_SLOT_REQUIRED' ? 'Time Slot Required' : 'Booking Required';
+                    const lbl = checklist.depFlowType === 'TIME_SLOT_REQUIRED' ? 'Bookings with Connect Times' : 'Booking Required';
                     return '<span style="color:#fbbf24;font-weight:600;">' + lbl + ' selected — enter a flow rate to activate.</span>';
                   }
                   return 'Departure team needs to pick a flow restriction option.';
@@ -37218,7 +37228,7 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
       function spRenderFlowRateTotal() {
         var totalEl = document.getElementById('spFlowRateTotal');
         if (!totalEl) return;
-        var noun = window.SP.depFlowType === 'TIME_SLOT_REQUIRED' ? 'time slots' : 'bookings';
+        var noun = window.SP.depFlowType === 'TIME_SLOT_REQUIRED' ? 'bookings' : 'bookings';
         var rate = window.SP.depFlowRate;
         if (rate == null || rate === '' || !isFinite(rate)) {
           totalEl.innerHTML = '<span style="color:var(--muted);">Set a rate to see the total ' + noun + '.</span>';
@@ -37238,7 +37248,7 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
         if (reasonWrap) reasonWrap.style.display = (flowType && flowType !== 'NONE') ? 'block' : 'none';
       }
 
-      var FLOW_LABELS_CLIENT = { 'NONE': 'No Restrictions', 'BOOKING_REQUIRED': 'Booking Required', 'TIME_SLOT_REQUIRED': 'Time Slot Required' };
+      var FLOW_LABELS_CLIENT = { 'NONE': 'No Restrictions', 'BOOKING_REQUIRED': 'Booking Required', 'TIME_SLOT_REQUIRED': 'Bookings with Connect Times' };
       function spRefreshDepFlowCheck() {
         var chk = document.getElementById('spChkDepFlow');
         if (!chk) return;
@@ -42171,7 +42181,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   res.send(
     renderLayout({
-      title: 'Book a Slot',
+      title: 'Make a Booking',
       user,
       isAdmin,
       layoutClass: 'dashboard-full', // ✅ ADD THIS
