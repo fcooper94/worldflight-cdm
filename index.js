@@ -17703,6 +17703,40 @@ app.get('/api/schedule.json', async (req, res) => {
   });
 });
 
+// ── Public teams per-sector JSON ──────────────────────────────────────
+app.get('/api/teams/:wf.json', async (req, res) => {
+  const wf = String(req.params.wf || '').toUpperCase();
+  const sched = (adminSheetCache || []).find(r => r?.number === wf);
+  if (!sched) return res.status(404).json({ error: 'Sector not found' });
+
+  const [teams, assignments] = await Promise.all([
+    prisma.officialTeam.findMany({
+      where: { participatingWf26: true },
+      orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }]
+    }).catch(() => []),
+    prisma.teamSectorAssignment?.findMany({
+      where: { sectorNumber: wf }
+    }).catch(() => []) || []
+  ]);
+
+  const assignByCid = {};
+  (assignments || []).forEach(a => { assignByCid[a.officialTeamId] = a.cid; });
+
+  const result = teams.map(t => ({
+    teamName: t.teamName,
+    callsign: t.callsign,
+    cid: assignByCid[t.id] || t.mainCid
+  }));
+
+  res.setHeader('Cache-Control', 'public, max-age=60');
+  res.json({
+    sector: wf,
+    from: sched.from,
+    to: sched.to,
+    teams: result
+  });
+});
+
 app.get('/api/slots/:wfNum.json', (req, res) => {
   const out = buildSlotsForWf(req.params.wfNum);
   if (!out) return res.status(404).json({ error: 'Sector not found' });
@@ -41685,7 +41719,7 @@ app.get('/book', async (req, res) => {
         String(t.teamName || '').trim().toUpperCase() === wfTeamRow.teamName &&
         t.participatingWf26 && t.mainCid
       );
-      if (match) {
+      if (match && (wfTeamRow.canEditBookings !== false || Number(match.mainCid) === cid)) {
         teamBookingContext = { teamName: wfTeamRow.teamName, teamOwnerCid: Number(match.mainCid), callsigns: teamCallsigns };
       }
     }
@@ -41910,6 +41944,41 @@ if (slot.byMe) {
 
     let callsign;
     if (action === 'book') {
+      // Show booking terms confirmation first
+      const confirmed = await new Promise(resolve => {
+        const ov = document.createElement('div');
+        ov.className = 'modal';
+        ov.style.zIndex = '20001';
+        ov.innerHTML = '<div class="modal-backdrop"></div>'
+          + '<div class="modal-dialog" style="width:440px;padding:28px;text-align:left;">'
+          + '<h3 style="margin:0 0 4px;text-align:center;color:var(--accent);">Confirm Booking</h3>'
+          + '<p style="text-align:center;font-size:12px;color:var(--muted);margin:0 0 14px;">Your TCT (Target Connection Time)</p>'
+          + '<div style="text-align:center;margin:0 0 16px;padding:14px;background:var(--panel2,#0d1526);border:1px solid var(--border);border-radius:10px;">'
+          + '<span style="font-size:36px;font-weight:800;color:var(--accent);letter-spacing:3px;">' + tobt + 'z</span>'
+          + '</div>'
+          + '<div style="background:rgba(56,189,248,0.08);border:1px solid rgba(56,189,248,0.2);border-radius:8px;padding:12px 14px;margin:0 0 16px;font-size:12px;color:var(--muted);line-height:1.6;">'
+          + 'We use <strong style="color:var(--text);">TCT</strong> to stagger pilot connections at this airport so the network and controllers aren\\'t overwhelmed by everyone logging in at once.'
+          + '</div>'
+          + '<p style="color:var(--text);font-size:13px;margin:0 0 12px;font-weight:700;">By booking, I confirm I understand:</p>'
+          + '<ul style="color:var(--text);font-size:13px;margin:0 0 20px;padding-left:20px;line-height:1.8;">'
+          + '<li>This is <strong style="color:#f87171;">not a slot</strong> \u2014 it is a booking with a target connection time.</li>'
+          + '<li>I will endeavour to connect on a <strong>vacant stand</strong> within <strong>\u00b15 minutes</strong> of my TCT.</li>'
+          + '<li>This booking allows me to depart within the <strong>defined event departure window</strong>.</li>'
+          + '<li>Local ATC will <strong>Flow / Meter / Regulate</strong> as required.</li>'
+          + '</ul>'
+          + '<div style="display:flex;gap:10px;justify-content:center;">'
+          + '<button class="action-btn" id="bookTermsCancel" style="min-width:100px;">Cancel</button>'
+          + '<button class="action-btn primary" id="bookTermsAgree" style="min-width:140px;">I Agree &amp; Book</button>'
+          + '</div>'
+          + '</div>';
+        document.body.appendChild(ov);
+        function close(v) { ov.remove(); resolve(v); }
+        ov.querySelector('.modal-backdrop').addEventListener('click', function() { close(false); });
+        document.getElementById('bookTermsCancel').addEventListener('click', function() { close(false); });
+        document.getElementById('bookTermsAgree').addEventListener('click', function() { close(true); });
+      });
+      if (!confirmed) return;
+
       if (BOOK_TEAM_CTX) {
         // Team member — show team/self choice modal
         callsign = await new Promise(resolve => {
