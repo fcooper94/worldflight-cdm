@@ -23151,6 +23151,17 @@ app.get('/team/roster', requireLogin, async (req, res) => {
   const scheduleRows = adminSheetCache || [];
   const showSchedule = isPageVisibleTo('schedule', isAdmin);
 
+  function timeWindow(hhmm) {
+    if (!hhmm) return '';
+    const m = String(hhmm).match(/^(\d{1,2}):?(\d{2})$/);
+    if (!m) return hhmm;
+    const mins = parseInt(m[1]) * 60 + parseInt(m[2]);
+    const lo = (mins - 60 + 1440) % 1440;
+    const hi = (mins + 60) % 1440;
+    const fmt = v => `${String(Math.floor(v / 60)).padStart(2, '0')}${String(v % 60).padStart(2, '0')}`;
+    return `${fmt(lo)}-${fmt(hi)}z`;
+  }
+
   // Load roster config
   const rosterConfig = await prisma.rosterConfig.findUnique({
     where: { entityType_entityName: { entityType: 'team', entityName: teamNameUpper } }
