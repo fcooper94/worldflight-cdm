@@ -19839,7 +19839,8 @@ app.get('/affiliates/hq', requireLogin, async (req, res) => {
 
   const affIsMainHolder = !!(affiliate && !readOnly && affFleet.some(a => Number(a.cid) === cid));
 
-  const affFleetCard = !isMultiAircraft ? '' : `
+  const isManualCallsigns = !!(affiliate && affiliate.manualCallsigns);
+  const affFleetCard = !isMultiAircraft || isManualCallsigns ? '' : `
       <section class="card aff-members-card">
         <header class="aff-members-header">
           <h3 class="section-title" style="margin:0;">Our Fleet</h3>
@@ -20748,6 +20749,7 @@ app.post('/api/affiliates/fleet', requireLogin, requireAffiliate, async (req, re
         sinceYear: primary.sinceYear,
         hasMembers: primary.hasMembers,
         multiAircraft: true,
+        manualCallsigns: !!primary.manualCallsigns,
         fleetLimit: primary.fleetLimit || null,
         aircraftType: aircraftType || null,
         description: primary.description,
@@ -23218,7 +23220,7 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
     n + g.people.filter(p => syncStateFor(p.cid).kind === 'ok').length, 0);
 
   const teamRecord = (t) => JSON.stringify({ teamName: t.teamName, callsign: t.callsign, mainCid: t.mainCid, aircraftType: t.aircraftType, country: t.country, sinceYear: t.sinceYear, multiSlot: t.multiSlot, description: t.description, website: t.website, sortOrder: t.sortOrder, participatingWf26: t.participatingWf26 }).replace(/'/g, '&#39;');
-  const affRecord = (a) => JSON.stringify({ name: a.name, callsign: a.callsign, simType: a.simType, cid: a.cid, sinceYear: a.sinceYear, hasMembers: a.hasMembers, multiAircraft: a.multiAircraft, fleetLimit: a.fleetLimit, aircraftType: a.aircraftType, description: a.description, website: a.website, sortOrder: a.sortOrder, participatingWf26: a.participatingWf26 }).replace(/'/g, '&#39;');
+  const affRecord = (a) => JSON.stringify({ name: a.name, callsign: a.callsign, simType: a.simType, cid: a.cid, sinceYear: a.sinceYear, hasMembers: a.hasMembers, multiAircraft: a.multiAircraft, manualCallsigns: a.manualCallsigns, fleetLimit: a.fleetLimit, aircraftType: a.aircraftType, description: a.description, website: a.website, sortOrder: a.sortOrder, participatingWf26: a.participatingWf26 }).replace(/'/g, '&#39;');
   const appRecord = (a) => JSON.stringify({
     id: a.id, callsign: a.callsign, simType: a.simType, cid: a.cid, hasMembers: a.hasMembers, multiAircraft: a.multiAircraft,
     contact: a.contact, discord: a.discord, email: a.email,
@@ -24160,9 +24162,10 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
   <label style="display:block; margin:10px 0 6px;">Allow multiple aircraft?</label>
   <select name="multiAircraft">
     <option value="false" selected>No &mdash; one callsign</option>
-    <option value="true">Yes &mdash; a fleet, each aircraft gets its own slot</option>
+    <option value="full">Yes &mdash; a fleet, each aircraft gets its own booking</option>
+    <option value="manual">Yes &mdash; callsigns manually entered</option>
   </select>
-  <p style="font-size:11px;color:var(--muted);margin:6px 0 0;line-height:1.5;">Applies to every affiliate sharing this name. When Yes, they manage a fleet on their HQ and each aircraft is allocated its own booking.</p>
+  <p style="font-size:11px;color:var(--muted);margin:6px 0 0;line-height:1.5;">Applies to every affiliate sharing this name. Each callsign is allocated its own booking.</p>
 
   <div id="fleetLimitRow" style="display:none;">
     <label style="display:block; margin:10px 0 6px;">Max fleet size</label>
@@ -24443,11 +24446,11 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
           var hasMembersSel = form.querySelector('select[name="hasMembers"]');
           if (hasMembersSel) hasMembersSel.value = record.hasMembers ? 'true' : 'false';
           var multiAcSel = form.querySelector('select[name="multiAircraft"]');
-          if (multiAcSel) multiAcSel.value = record.multiAircraft ? 'true' : 'false';
+          if (multiAcSel) multiAcSel.value = record.manualCallsigns ? 'manual' : record.multiAircraft ? 'full' : 'false';
           var fleetLimitIn = form.querySelector('input[name="fleetLimit"]');
           if (fleetLimitIn) fleetLimitIn.value = record.fleetLimit || '';
           var fleetLimitRow = document.getElementById('fleetLimitRow');
-          if (fleetLimitRow) fleetLimitRow.style.display = record.multiAircraft ? '' : 'none';
+          if (fleetLimitRow) fleetLimitRow.style.display = (record.multiAircraft || record.manualCallsigns) ? '' : 'none';
           var affAcIn = form.querySelector('input[name="affAircraftType"]');
           if (affAcIn) affAcIn.value = record.aircraftType || '';
         }
@@ -24466,7 +24469,7 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
       var maSelect = form.querySelector('select[name="multiAircraft"]');
       var flRow = document.getElementById('fleetLimitRow');
       if (maSelect && flRow) {
-        maSelect.onchange = function() { flRow.style.display = this.value === 'true' ? '' : 'none'; };
+        maSelect.onchange = function() { flRow.style.display = (this.value === 'full' || this.value === 'manual') ? '' : 'none'; };
         if (!record) flRow.style.display = 'none';
       }
 
@@ -24770,7 +24773,9 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
         payload.hasMembers = String(fd.get('hasMembers') || '').toLowerCase() === 'true';
         if (type === 'affiliate') {
           payload.name = (fd.get('affiliateName') || '').toString().trim();
-          payload.multiAircraft = String(fd.get('multiAircraft') || 'false') === 'true';
+          var maVal = String(fd.get('multiAircraft') || 'false');
+          payload.multiAircraft = maVal === 'full' || maVal === 'manual';
+          payload.manualCallsigns = maVal === 'manual';
           payload.fleetLimit = (fd.get('fleetLimit') || '').toString().trim() || null;
           payload.aircraftType = (fd.get('affAircraftType') || '').toString().trim().toUpperCase();
         }
@@ -26879,6 +26884,7 @@ app.patch('/api/admin/affiliates/:id', requireAdmin, profilePhotoUpload.single('
   }
   if (body.hasMembers !== undefined) data.hasMembers = asBool(body.hasMembers);
   if (body.multiAircraft !== undefined) data.multiAircraft = asBool(body.multiAircraft);
+  if (body.manualCallsigns !== undefined) data.manualCallsigns = asBool(body.manualCallsigns);
   if (body.fleetLimit !== undefined) {
     const fl = body.fleetLimit === '' || body.fleetLimit == null ? null : Number(body.fleetLimit);
     data.fleetLimit = (fl && Number.isFinite(fl) && fl > 0) ? Math.min(fl, 20) : null;

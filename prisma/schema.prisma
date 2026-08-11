@@ -34,6 +34,7 @@ model Affiliate {
   multiAircraft     Boolean  @default(false)
   maskName          Boolean  @default(false)
   fleetLimit        Int?
+  manualCallsigns   Boolean  @default(false)
   aircraftType      String?
   description       String?
   website           String?
@@ -59,9 +60,10 @@ model AffiliateSectorClaim {
   affiliateId  Int
   sectorNumber String
   cid          Int
+  callsign     String?
   claimedAt    DateTime @default(now())
 
-  @@unique([affiliateId, sectorNumber])
+  @@unique([affiliateId, sectorNumber, callsign])
   @@index([affiliateId])
   @@index([cid])
 }
