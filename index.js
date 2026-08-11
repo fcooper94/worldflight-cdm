@@ -19979,7 +19979,7 @@ app.get('/affiliates/hq', requireLogin, async (req, res) => {
 
   let affManualTable = '';
   if (isManualCallsigns) {
-    const mcColspan = showFlowInfo ? (readOnly ? 8 : 9) : (readOnly ? 6 : 7);
+    const mcColspan = showFlowInfo ? 8 : 6;
     let mcBody = '';
     for (const r of scheduleRows) {
       const claims = manualClaimsBySector[r.number] || [];
@@ -20005,17 +20005,21 @@ app.get('/affiliates/hq', requireLogin, async (req, res) => {
         } else {
           mcBody += '<td><input type="text" class="mc-cs-input" value="' + escapeHtml(cs) + '" maxlength="10" placeholder="Callsign" data-claim-id="' + (cl.id || '') + '" data-sector="' + escapeHtml(r.number) + '" style="width:100px;text-transform:uppercase;padding:5px 8px;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:4px;font-size:12px;font-family:monospace;font-weight:600;" /></td>';
         }
-        // VATSIM Account
+        // VATSIM Account + actions
         if (readOnly) {
           const cidLabel = cl.cid ? (nameByCid[cl.cid] ? nameByCid[cl.cid] + ' \u00b7 ' + cl.cid : String(cl.cid)) : '\u2014';
           mcBody += '<td><span>' + escapeHtml(cidLabel) + '</span></td>';
         } else {
-          mcBody += '<td><select class="mc-cid-select" data-claim-id="' + (cl.id || '') + '" data-sector="' + escapeHtml(r.number) + '" style="font-size:12px;padding:4px 6px;">';
+          mcBody += '<td><div style="display:flex;align-items:center;gap:6px;">';
+          mcBody += '<select class="mc-cid-select" data-claim-id="' + (cl.id || '') + '" data-sector="' + escapeHtml(r.number) + '" style="font-size:12px;padding:4px 6px;flex:1;">';
           mcBody += '<option value="">\u2014 Select \u2014</option>';
           for (const m of memberOptions) {
             mcBody += '<option value="' + m.cid + '"' + (cl.cid === m.cid ? ' selected' : '') + '>' + escapeHtml(m.label) + '</option>';
           }
-          mcBody += '</select></td>';
+          mcBody += '</select>';
+          mcBody += '<button type="button" class="action-btn mc-save-btn" data-claim-id="' + (cl.id || '') + '" data-sector="' + escapeHtml(r.number) + '" style="font-size:10px;padding:3px 8px;">Save</button>';
+          if (cl.id) mcBody += '<button type="button" class="action-btn mc-del-btn" data-claim-id="' + cl.id + '" style="font-size:10px;padding:3px 6px;background:rgba(239,68,68,0.1);color:#f87171;border-color:#f87171;">&times;</button>';
+          mcBody += '</div></td>';
         }
         // Flow + Status
         if (showFlowInfo) {
@@ -20033,13 +20037,7 @@ app.get('/affiliates/hq', requireLogin, async (req, res) => {
         mcBody += '<td>' + (first ? '<a class="aff-icao-link" href="/icao/' + escapeHtml(r.to) + '">' + escapeHtml(r.to) + '</a>' : '') + '</td>';
         mcBody += '<td>' + (first ? '<span class="ot-muted">' + escapeHtml(r.date_utc || '') + '</span>' : '') + '</td>';
         mcBody += '<td>' + (first ? '<span class="ot-muted">' + timeWindow(r.dep_time_utc) + '</span>' : '') + '</td>';
-        // Actions
-        if (!readOnly) {
-          mcBody += '<td style="white-space:nowrap;">';
-          mcBody += '<button type="button" class="action-btn mc-save-btn" data-claim-id="' + (cl.id || '') + '" data-sector="' + escapeHtml(r.number) + '" style="font-size:10px;padding:3px 8px;">Save</button>';
-          if (cl.id) mcBody += ' <button type="button" class="action-btn mc-del-btn" data-claim-id="' + cl.id + '" style="font-size:10px;padding:3px 6px;background:rgba(239,68,68,0.1);color:#f87171;border-color:#f87171;">&times;</button>';
-          mcBody += '</td>';
-        }
+        // (actions are inline with VATSIM Account)
         mcBody += '</tr>';
         // Add another aircraft link
         if (canAdd) {
@@ -20053,7 +20051,6 @@ app.get('/affiliates/hq', requireLogin, async (req, res) => {
       + '<th>Sector</th><th>Callsign</th><th>VATSIM Account</th>'
       + (showFlowInfo ? '<th>Flow</th><th>Status</th>' : '')
       + '<th>From</th><th>To</th><th>Date</th><th>Dep Window</th>'
-      + (!readOnly ? '<th></th>' : '')
       + '</tr></thead><tbody>' + mcBody + '</tbody></table></div>';
   }
 
@@ -20515,7 +20512,25 @@ app.get('/affiliates/hq', requireLogin, async (req, res) => {
             // Delete
             var delBtn = e.target.closest('.mc-del-btn');
             if (delBtn) {
-              if (!confirm('Remove this callsign entry?')) return;
+              var confirmed = await new Promise(function(resolve) {
+                var ov = document.createElement('div');
+                ov.className = 'modal';
+                ov.style.zIndex = '20001';
+                ov.innerHTML = '<div class="modal-backdrop"></div>'
+                  + '<div class="modal-dialog" style="width:380px;padding:24px;text-align:center;">'
+                  + '<h3 style="margin:0 0 8px;color:#f87171;">Remove Callsign?</h3>'
+                  + '<p style="color:var(--muted);font-size:13px;margin:0 0 20px;">This will remove the callsign entry and cancel any associated booking for this sector.</p>'
+                  + '<div style="display:flex;gap:10px;justify-content:center;">'
+                  + '<button class="action-btn" id="mcDelCancel" style="min-width:100px;">Keep</button>'
+                  + '<button class="action-btn" id="mcDelConfirm" style="min-width:100px;background:rgba(239,68,68,0.15);color:#f87171;border-color:#f87171;">Remove</button>'
+                  + '</div></div>';
+                document.body.appendChild(ov);
+                function close(v) { ov.remove(); resolve(v); }
+                ov.querySelector('.modal-backdrop').addEventListener('click', function() { close(false); });
+                document.getElementById('mcDelCancel').addEventListener('click', function() { close(false); });
+                document.getElementById('mcDelConfirm').addEventListener('click', function() { close(true); });
+              });
+              if (!confirmed) return;
               delBtn.disabled = true;
               try {
                 var r = await fetch('/api/affiliates/hq/manual-claim', {
