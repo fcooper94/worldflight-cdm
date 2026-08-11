@@ -2819,14 +2819,14 @@ async function assignAffiliatePilotToSector(affiliate, scheduleRow, claimCid, ov
   }).catch(() => []);
   const affCids = [Number(affiliate.cid), ...memberRows.map(m => Number(m.cid))].filter(Number.isFinite);
 
-  // Look for an existing booking — by callsign for manual mode, by affiliate CIDs otherwise
-  const existing = overrideCallsign
-    ? await prisma.tobtBooking.findFirst({
-        where: { callsign, slotKey: { startsWith: sectorPrefix } }
-      })
-    : await prisma.tobtBooking.findFirst({
-        where: { cid: { in: affCids }, slotKey: { startsWith: sectorPrefix } }
-      });
+  // Look for an existing booking by callsign first, then fall back to CID lookup.
+  // Callsign match is preferred because multi-aircraft affiliates can have the
+  // same CID holding bookings under different callsigns on the same sector.
+  const existing = await prisma.tobtBooking.findFirst({
+    where: { callsign, slotKey: { startsWith: sectorPrefix } }
+  }) || (!overrideCallsign ? await prisma.tobtBooking.findFirst({
+    where: { cid: { in: affCids }, slotKey: { startsWith: sectorPrefix }, callsign }
+  }) : null);
 
   if (existing) {
     if (Number(existing.cid) === newCid && String(existing.callsign || '').toUpperCase() === callsign) return; // already correct
