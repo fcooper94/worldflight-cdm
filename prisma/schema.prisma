@@ -33,6 +33,7 @@ model Affiliate {
   hasMembers        Boolean  @default(false)
   multiAircraft     Boolean  @default(false)
   maskName          Boolean  @default(false)
+  fleetLimit        Int?
   aircraftType      String?
   description       String?
   website           String?

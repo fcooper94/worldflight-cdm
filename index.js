@@ -19844,8 +19844,8 @@ app.get('/affiliates/hq', requireLogin, async (req, res) => {
         <header class="aff-members-header">
           <h3 class="section-title" style="margin:0;">Our Fleet</h3>
           <div style="display:flex;align-items:center;gap:12px;">
-            <span class="aff-member-count">${affFleet.length} aircraft</span>
-            ${affIsMainHolder ? `<button type="button" class="ot-btn" id="affFleetAddBtn">+ Add Aircraft</button>` : ''}
+            <span class="aff-member-count">${affiliate.fleetLimit ? affFleet.length + '/' + affiliate.fleetLimit : affFleet.length} aircraft</span>
+            ${affIsMainHolder && (!affiliate.fleetLimit || affFleet.length < affiliate.fleetLimit) ? `<button type="button" class="ot-btn" id="affFleetAddBtn">+ Add Aircraft</button>` : ''}
           </div>
         </header>
         ${affIsMainHolder ? '<div id="affFleetMsg" style="display:none;font-size:12px;margin:0 0 10px;"></div>' : ''}
@@ -20730,24 +20730,30 @@ app.post('/api/affiliates/fleet', requireLogin, requireAffiliate, async (req, re
     const fleet = await resolveAffiliateFleet(cid);
     if (!fleet) return res.status(403).json({ error: 'Your affiliate is not set up for multiple aircraft.' });
 
+    // Enforce fleet limit if set
+    const primary = fleet.rows[0] || fleet.mine;
+    if (primary.fleetLimit && fleet.rows.length >= primary.fleetLimit) {
+      return res.status(400).json({ error: 'Fleet limit reached (' + primary.fleetLimit + ' aircraft maximum).' });
+    }
+
     const clash = await prisma.affiliate.findFirst({ where: { callsign } });
     if (clash) return res.status(409).json({ error: `Callsign ${callsign} is already in use` });
 
-    const p0 = fleet.rows[0] || fleet.mine;
     const created = await prisma.affiliate.create({
       data: {
-        name: p0.name,
+        name: primary.name,
         callsign,
-        simType: p0.simType,
+        simType: primary.simType,
         cid: acCid,
-        sinceYear: p0.sinceYear,
-        hasMembers: p0.hasMembers,
+        sinceYear: primary.sinceYear,
+        hasMembers: primary.hasMembers,
         multiAircraft: true,
+        fleetLimit: primary.fleetLimit || null,
         aircraftType: aircraftType || null,
-        description: p0.description,
-        website: p0.website,
+        description: primary.description,
+        website: primary.website,
         sortOrder: await resolveSortOrder(null, prisma.affiliate),
-        participatingWf26: p0.participatingWf26
+        participatingWf26: primary.participatingWf26
       }
     });
     if (!isAdminUser(acCid)) {
@@ -23212,7 +23218,7 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
     n + g.people.filter(p => syncStateFor(p.cid).kind === 'ok').length, 0);
 
   const teamRecord = (t) => JSON.stringify({ teamName: t.teamName, callsign: t.callsign, mainCid: t.mainCid, aircraftType: t.aircraftType, country: t.country, sinceYear: t.sinceYear, multiSlot: t.multiSlot, description: t.description, website: t.website, sortOrder: t.sortOrder, participatingWf26: t.participatingWf26 }).replace(/'/g, '&#39;');
-  const affRecord = (a) => JSON.stringify({ name: a.name, callsign: a.callsign, simType: a.simType, cid: a.cid, sinceYear: a.sinceYear, hasMembers: a.hasMembers, multiAircraft: a.multiAircraft, aircraftType: a.aircraftType, description: a.description, website: a.website, sortOrder: a.sortOrder, participatingWf26: a.participatingWf26 }).replace(/'/g, '&#39;');
+  const affRecord = (a) => JSON.stringify({ name: a.name, callsign: a.callsign, simType: a.simType, cid: a.cid, sinceYear: a.sinceYear, hasMembers: a.hasMembers, multiAircraft: a.multiAircraft, fleetLimit: a.fleetLimit, aircraftType: a.aircraftType, description: a.description, website: a.website, sortOrder: a.sortOrder, participatingWf26: a.participatingWf26 }).replace(/'/g, '&#39;');
   const appRecord = (a) => JSON.stringify({
     id: a.id, callsign: a.callsign, simType: a.simType, cid: a.cid, hasMembers: a.hasMembers, multiAircraft: a.multiAircraft,
     contact: a.contact, discord: a.discord, email: a.email,
@@ -24156,7 +24162,13 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
     <option value="false" selected>No &mdash; one callsign</option>
     <option value="true">Yes &mdash; a fleet, each aircraft gets its own slot</option>
   </select>
-  <p style="font-size:11px;color:var(--muted);margin:6px 0 0;line-height:1.5;">Applies to every affiliate sharing this name. When Yes, they manage a fleet on their HQ and each aircraft is allocated its own slot.</p>
+  <p style="font-size:11px;color:var(--muted);margin:6px 0 0;line-height:1.5;">Applies to every affiliate sharing this name. When Yes, they manage a fleet on their HQ and each aircraft is allocated its own booking.</p>
+
+  <div id="fleetLimitRow" style="display:none;">
+    <label style="display:block; margin:10px 0 6px;">Max fleet size</label>
+    <input name="fleetLimit" type="number" min="1" max="20" placeholder="e.g. 3" style="width:80px;text-align:center;" />
+    <p style="font-size:11px;color:var(--muted);margin:6px 0 0;">Maximum number of aircraft this affiliate can add to their fleet.</p>
+  </div>
 
   <label style="display:block; margin:10px 0 6px;">Has multiple users?</label>
   <select name="hasMembers">
@@ -24432,6 +24444,10 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
           if (hasMembersSel) hasMembersSel.value = record.hasMembers ? 'true' : 'false';
           var multiAcSel = form.querySelector('select[name="multiAircraft"]');
           if (multiAcSel) multiAcSel.value = record.multiAircraft ? 'true' : 'false';
+          var fleetLimitIn = form.querySelector('input[name="fleetLimit"]');
+          if (fleetLimitIn) fleetLimitIn.value = record.fleetLimit || '';
+          var fleetLimitRow = document.getElementById('fleetLimitRow');
+          if (fleetLimitRow) fleetLimitRow.style.display = record.multiAircraft ? '' : 'none';
           var affAcIn = form.querySelector('input[name="affAircraftType"]');
           if (affAcIn) affAcIn.value = record.aircraftType || '';
         }
@@ -24445,6 +24461,14 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
       }
 
       modal.classList.remove('hidden');
+
+      // Toggle fleet limit row when multiAircraft changes
+      var maSelect = form.querySelector('select[name="multiAircraft"]');
+      var flRow = document.getElementById('fleetLimitRow');
+      if (maSelect && flRow) {
+        maSelect.onchange = function() { flRow.style.display = this.value === 'true' ? '' : 'none'; };
+        if (!record) flRow.style.display = 'none';
+      }
 
       // Focus first enabled input/select (not hidden/disabled)
       const firstFocusable = modal.querySelector('input:not([type="hidden"]):not([type="checkbox"]):not(:disabled), select:not(:disabled), textarea:not(:disabled)');
@@ -24747,6 +24771,7 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
         if (type === 'affiliate') {
           payload.name = (fd.get('affiliateName') || '').toString().trim();
           payload.multiAircraft = String(fd.get('multiAircraft') || 'false') === 'true';
+          payload.fleetLimit = (fd.get('fleetLimit') || '').toString().trim() || null;
           payload.aircraftType = (fd.get('affAircraftType') || '').toString().trim().toUpperCase();
         }
         if (type === 'application') {
@@ -26854,6 +26879,10 @@ app.patch('/api/admin/affiliates/:id', requireAdmin, profilePhotoUpload.single('
   }
   if (body.hasMembers !== undefined) data.hasMembers = asBool(body.hasMembers);
   if (body.multiAircraft !== undefined) data.multiAircraft = asBool(body.multiAircraft);
+  if (body.fleetLimit !== undefined) {
+    const fl = body.fleetLimit === '' || body.fleetLimit == null ? null : Number(body.fleetLimit);
+    data.fleetLimit = (fl && Number.isFinite(fl) && fl > 0) ? Math.min(fl, 20) : null;
+  }
   if (body.name !== undefined) data.name = String(body.name).trim().slice(0, 60) || null;
   if (body.aircraftType !== undefined) data.aircraftType = String(body.aircraftType).trim().toUpperCase().slice(0, 10) || null;
   if (body.description !== undefined) data.description = cleanBio(body.description);
