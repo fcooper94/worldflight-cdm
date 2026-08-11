@@ -20010,7 +20010,7 @@ app.get('/affiliates/hq', requireLogin, async (req, res) => {
           const cidLabel = cl.cid ? (nameByCid[cl.cid] ? nameByCid[cl.cid] + ' \u00b7 ' + cl.cid : String(cl.cid)) : '\u2014';
           mcBody += '<td><span>' + escapeHtml(cidLabel) + '</span></td>';
         } else {
-          mcBody += '<td><select class="claim-select mc-cid-select" data-claim-id="' + (cl.id || '') + '" data-sector="' + escapeHtml(r.number) + '" style="font-size:12px;padding:4px 6px;">';
+          mcBody += '<td><select class="mc-cid-select" data-claim-id="' + (cl.id || '') + '" data-sector="' + escapeHtml(r.number) + '" style="font-size:12px;padding:4px 6px;">';
           mcBody += '<option value="">\u2014 Select \u2014</option>';
           for (const m of memberOptions) {
             mcBody += '<option value="' + m.cid + '"' + (cl.cid === m.cid ? ' selected' : '') + '>' + escapeHtml(m.label) + '</option>';
@@ -20539,7 +20539,7 @@ app.get('/affiliates/hq', requireLogin, async (req, res) => {
               newTr.dataset.sector = sector;
               newTr.innerHTML = '<td></td>'
                 + '<td><input type="text" class="mc-cs-input" value="" maxlength="10" placeholder="Callsign" data-claim-id="" data-sector="' + sector + '" style="width:100px;text-transform:uppercase;padding:5px 8px;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:4px;font-size:12px;font-family:monospace;font-weight:600;" /></td>'
-                + '<td><select class="claim-select mc-cid-select" data-claim-id="" data-sector="' + sector + '" style="font-size:12px;padding:4px 6px;">'
+                + '<td><select class="mc-cid-select" data-claim-id="" data-sector="' + sector + '" style="font-size:12px;padding:4px 6px;">'
                 + '<option value="">\\u2014 Select \\u2014</option>'
                 + document.querySelector('.mc-cid-select').innerHTML.split('</option>').filter(function(o) { return o.indexOf('value="') > -1 && o.indexOf('value=""') === -1; }).map(function(o) { return o + '</option>'; }).join('')
                 + '</select></td>'
