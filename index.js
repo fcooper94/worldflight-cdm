@@ -467,6 +467,7 @@ function renderLayout(opts) {
     sectorPlanOutOfSync: (cid && isAdminUser(cid)) ? sectorPlanOutOfSyncCount : 0,
     canManageAffiliateMembers: cid ? canManageAffiliateMembers(cid) : false,
     canManageTeamMembers: cid ? canManageTeamMembers(cid) : false,
+    teamRosterEnabled: cid ? hasTeamRoster(cid) : false,
     activeEvent: active ? { id: active.id, name: active.name, year: active.year } : null
   });
 }
@@ -2103,23 +2104,29 @@ function requireAdminPage(pageKey) {
 const teamMemberCids = new Set();
 const teamOwnerCids = new Set();    // mainCid of any OfficialTeam row
 const teamManagerCids = new Set();  // owners + members holding canManageMembers
+const teamRosterNames = new Set();  // uppercase teamName for teams with rosterEnabled
+const teamCidToName = new Map();    // cid -> uppercase teamName
 
 async function loadTeamMembers() {
   try {
     const rows = await prisma.userAdditionalRole.findMany({ where: { role: 'WF_TEAM' } });
     teamMemberCids.clear();
     teamManagerCids.clear();
+    teamCidToName.clear();
     rows.forEach(r => {
       teamMemberCids.add(r.cid);
       if (r.canManageMembers) teamManagerCids.add(Number(r.cid));
+      if (r.teamName) teamCidToName.set(Number(r.cid), String(r.teamName).trim().toUpperCase());
     });
-    const owners = await prisma.officialTeam.findMany({ select: { mainCid: true } });
+    const owners = await prisma.officialTeam.findMany({ select: { mainCid: true, teamName: true, rosterEnabled: true } });
     teamOwnerCids.clear();
+    teamRosterNames.clear();
     owners.forEach(o => {
       const c = Number(o.mainCid);
       if (!c) return;
       teamOwnerCids.add(c);
       teamManagerCids.add(c);
+      if (o.rosterEnabled) teamRosterNames.add(String(o.teamName || '').trim().toUpperCase());
     });
     console.log(`[TEAM] Loaded ${teamMemberCids.size} WF team members, ${teamOwnerCids.size} owners`);
   } catch (e) {}
@@ -2134,6 +2141,14 @@ function isTeamMember(cid) {
 
 function canManageTeamMembers(cid) {
   return !!cid && teamManagerCids.has(Number(cid));
+}
+
+function hasTeamRoster(cid) {
+  if (!cid) return false;
+  const tn = teamCidToName.get(Number(cid));
+  if (tn && teamRosterNames.has(tn)) return true;
+  // Also check owner CIDs directly
+  return false;
 }
 
 function requireTeamMember(req, res, next) {
@@ -22056,6 +22071,27 @@ app.get('/team/hq', requireLogin, async (req, res) => {
               ${sinceYear ? `<span class="ot-since">Member since ${sinceYear}</span>` : ''}
               <span class="aff-member-count">${members.length} ${members.length === 1 ? 'member' : 'members'}</span>
             </div>
+            ${isMainHolder && members.length > 1 ? `
+            <label style="display:flex;align-items:center;gap:8px;margin-top:10px;cursor:pointer;">
+              <input type="checkbox" id="rosterToggle" ${primary?.rosterEnabled ? 'checked' : ''} style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer;" />
+              <span style="font-size:12px;color:var(--muted);">Enable Crew Roster</span>
+            </label>
+            <script>
+              document.getElementById('rosterToggle').addEventListener('change', async function() {
+                var enabled = this.checked;
+                try {
+                  var r = await fetch('/api/team/hq/roster-toggle', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'same-origin',
+                    body: JSON.stringify({ enabled: enabled })
+                  });
+                  if (r.ok) location.reload();
+                  else { this.checked = !enabled; alert('Failed to update'); }
+                } catch (e) { this.checked = !enabled; }
+              });
+            </script>
+            ` : ''}
           </div>
         </div>
       </section>
@@ -22644,6 +22680,96 @@ app.get('/team/hq', requireLogin, async (req, res) => {
   res.send(renderLayout({ title: pageTitle, user, isAdmin, content, layoutClass: 'dashboard-full' }));
 });
 
+// Toggle roster on/off for a team. Syncs across all fleet rows.
+app.post('/api/team/hq/roster-toggle', requireLogin, async (req, res) => {
+  const cid = Number(req.session.user.data.cid);
+  try {
+    const teamNameUpper = await resolveUserTeamName(cid);
+    if (!teamNameUpper) return res.status(403).json({ error: 'Team not linked' });
+    const all = await prisma.officialTeam.findMany();
+    const fleet = all.filter(t => String(t.teamName || '').trim().toUpperCase() === teamNameUpper);
+    if (!fleet.some(t => Number(t.mainCid) === cid) && !isAdminUser(cid)) {
+      return res.status(403).json({ error: 'Only the team Main CID can toggle roster' });
+    }
+    const enabled = !!req.body?.enabled;
+    for (const t of fleet) {
+      await prisma.officialTeam.update({ where: { id: t.id }, data: { rosterEnabled: enabled } }).catch(() => {});
+    }
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Save roster config (which roles are enabled)
+app.post('/api/team/roster/config', requireLogin, async (req, res) => {
+  const cid = Number(req.session.user.data.cid);
+  try {
+    const teamNameUpper = await resolveUserTeamName(cid);
+    if (!teamNameUpper) return res.status(403).json({ error: 'Team not linked' });
+    const all = await prisma.officialTeam.findMany({ select: { mainCid: true, teamName: true } });
+    const fleet = all.filter(t => String(t.teamName || '').trim().toUpperCase() === teamNameUpper);
+    if (!fleet.some(t => Number(t.mainCid) === cid) && !isAdminUser(cid)) {
+      return res.status(403).json({ error: 'Only the team Main CID can edit roster config' });
+    }
+    const { foEnabled, feEnabled, feLabel, obs1Enabled, obs2Enabled } = req.body || {};
+    await prisma.rosterConfig.upsert({
+      where: { entityType_entityName: { entityType: 'team', entityName: teamNameUpper } },
+      update: {
+        foEnabled: foEnabled !== false,
+        feEnabled: !!feEnabled,
+        feLabel: String(feLabel || 'Flight Engineer').trim().slice(0, 40),
+        obs1Enabled: !!obs1Enabled,
+        obs2Enabled: !!obs2Enabled,
+        updatedAt: new Date()
+      },
+      create: {
+        entityType: 'team', entityName: teamNameUpper,
+        foEnabled: foEnabled !== false,
+        feEnabled: !!feEnabled,
+        feLabel: String(feLabel || 'Flight Engineer').trim().slice(0, 40),
+        obs1Enabled: !!obs1Enabled,
+        obs2Enabled: !!obs2Enabled
+      }
+    });
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Save a roster assignment (who is assigned to which role on which sector)
+app.post('/api/team/roster/assign', requireLogin, async (req, res) => {
+  const cid = Number(req.session.user.data.cid);
+  try {
+    const teamNameUpper = await resolveUserTeamName(cid);
+    if (!teamNameUpper) return res.status(403).json({ error: 'Team not linked' });
+    // Any team member can edit the roster
+    const { sectorNumber, role, assignCid } = req.body || {};
+    if (!sectorNumber || !role) return res.status(400).json({ error: 'sectorNumber and role required' });
+    const validRoles = ['captain', 'fo', 'fe', 'obs1', 'obs2'];
+    if (!validRoles.includes(role)) return res.status(400).json({ error: 'Invalid role' });
+
+    if (!assignCid || assignCid === '' || assignCid === '0') {
+      // Clear assignment
+      await prisma.rosterAssignment.deleteMany({
+        where: { entityType: 'team', entityName: teamNameUpper, sectorNumber, role }
+      });
+    } else {
+      const targetCid = Number(assignCid);
+      if (!Number.isFinite(targetCid)) return res.status(400).json({ error: 'Invalid CID' });
+      await prisma.rosterAssignment.upsert({
+        where: { entityType_entityName_sectorNumber_role: { entityType: 'team', entityName: teamNameUpper, sectorNumber, role } },
+        update: { cid: targetCid, updatedAt: new Date() },
+        create: { entityType: 'team', entityName: teamNameUpper, sectorNumber, role, cid: targetCid }
+      });
+    }
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // Main CID (or admin) edits the team's public profile. Applied to EVERY
 // OfficialTeam row of the team so all its fleet cards on /teams stay in sync.
 app.post('/api/team/hq/profile', requireLogin, (req, res, next) => {
@@ -22986,6 +23112,207 @@ app.post('/api/team/sectors/toggle', requireLogin, async (req, res) => {
 });
 
 /* ===== MANAGE MEMBERS (mirrors /affiliates/my-members) ===== */
+// ── Team Crew Roster ───────────────────────────────────────────────────
+app.get('/team/roster', requireLogin, async (req, res) => {
+  const user = req.session.user.data;
+  const cid = Number(user.cid);
+  const isAdmin = isAdminUser(cid);
+
+  if (!isTeamMember(cid) && !isAdmin) {
+    return renderForbidden(req, res, 'This page is for WF team members only.');
+  }
+  const teamNameUpper = await resolveUserTeamName(cid);
+  if (!teamNameUpper) return renderForbidden(req, res, 'No team linked to your account.');
+
+  const ctx = await loadTeamContext(teamNameUpper, cid, user?.personal?.name_full);
+  const { fleet, primary, displayName, ownerCids, members } = ctx;
+
+  if (!primary?.rosterEnabled) {
+    return res.redirect('/team/hq');
+  }
+
+  const isMainHolder = ownerCids.has(cid);
+  const scheduleRows = adminSheetCache || [];
+  const showSchedule = isPageVisibleTo('schedule', isAdmin);
+
+  // Load roster config
+  const rosterConfig = await prisma.rosterConfig.findUnique({
+    where: { entityType_entityName: { entityType: 'team', entityName: teamNameUpper } }
+  }).catch(() => null) || { foEnabled: true, feEnabled: false, feLabel: 'Flight Engineer', obs1Enabled: false, obs2Enabled: false };
+
+  // Load assignments
+  const assignments = await prisma.rosterAssignment.findMany({
+    where: { entityType: 'team', entityName: teamNameUpper }
+  }).catch(() => []);
+  const assignMap = {};
+  assignments.forEach(a => { assignMap[a.sectorNumber + '|' + a.role] = a.cid; });
+
+  // Build role columns
+  const roles = [{ key: 'captain', label: 'Captain', enabled: true }];
+  if (rosterConfig.foEnabled) roles.push({ key: 'fo', label: 'First Officer', enabled: true });
+  if (rosterConfig.feEnabled) roles.push({ key: 'fe', label: rosterConfig.feLabel || 'Flight Engineer', enabled: true });
+  if (rosterConfig.obs1Enabled) roles.push({ key: 'obs1', label: 'Observer 1', enabled: true });
+  if (rosterConfig.obs2Enabled) roles.push({ key: 'obs2', label: 'Observer 2', enabled: true });
+
+  const memberOptsHtml = members
+    .map(m => '<option value="' + m.cid + '">' + escapeHtml(m.name ? m.name + ' \u00b7 ' + m.cid : String(m.cid)) + '</option>')
+    .join('');
+
+  // Config section (main CID only)
+  const configHtml = isMainHolder ? `
+    <section class="card" style="padding:20px;margin-bottom:20px;">
+      <h3 style="margin:0 0 12px;color:var(--accent);font-size:15px;">Roster Configuration</h3>
+      <form id="rosterConfigForm" style="display:flex;flex-wrap:wrap;gap:16px;align-items:flex-end;">
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted);">
+          <input type="checkbox" checked disabled style="width:15px;height:15px;" /> Captain
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;">
+          <input type="checkbox" name="foEnabled" ${rosterConfig.foEnabled ? 'checked' : ''} style="width:15px;height:15px;accent-color:var(--accent);" /> First Officer
+        </label>
+        <div style="display:flex;align-items:center;gap:6px;">
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;">
+            <input type="checkbox" name="feEnabled" ${rosterConfig.feEnabled ? 'checked' : ''} style="width:15px;height:15px;accent-color:var(--accent);" />
+          </label>
+          <select name="feLabel" style="font-size:12px;padding:3px 8px;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:4px;">
+            <option value="Flight Engineer" ${rosterConfig.feLabel === 'Flight Engineer' ? 'selected' : ''}>Flight Engineer</option>
+            <option value="Social Secretary" ${rosterConfig.feLabel === 'Social Secretary' ? 'selected' : ''}>Social Secretary</option>
+          </select>
+        </div>
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;">
+          <input type="checkbox" name="obs1Enabled" ${rosterConfig.obs1Enabled ? 'checked' : ''} style="width:15px;height:15px;accent-color:var(--accent);" /> Observer 1
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;">
+          <input type="checkbox" name="obs2Enabled" ${rosterConfig.obs2Enabled ? 'checked' : ''} style="width:15px;height:15px;accent-color:var(--accent);" /> Observer 2
+        </label>
+        <button type="submit" class="action-btn primary" style="font-size:11px;padding:4px 14px;">Save Config</button>
+        <span id="rosterConfigMsg" style="font-size:12px;display:none;"></span>
+      </form>
+    </section>
+  ` : '';
+
+  // Schedule table
+  const scheduleHtml = !showSchedule || !scheduleRows.length ? `
+    <section class="card" style="padding:20px;">
+      <p style="color:var(--muted);font-size:13px;">Schedule not yet available.</p>
+    </section>
+  ` : `
+    <section class="card" style="padding:20px;">
+      <div class="ot-table-wrap">
+        <table class="ot-table">
+          <thead>
+            <tr>
+              <th>Sector</th>
+              <th>From</th>
+              <th>To</th>
+              <th>Date</th>
+              <th>Dep Window</th>
+              <th>Arr Window</th>
+              ${roles.map(r => '<th>' + escapeHtml(r.label) + '</th>').join('')}
+            </tr>
+          </thead>
+          <tbody>
+            ${scheduleRows.map(r => {
+              return '<tr>'
+                + '<td><a class="sector-details-btn" href="/sector/' + escapeHtml(r.number) + '/' + escapeHtml(r.from) + '/' + escapeHtml(r.to) + '" target="_blank" rel="noopener">' + escapeHtml(r.number) + '</a></td>'
+                + '<td><a class="aff-icao-link" href="/icao/' + escapeHtml(r.from) + '">' + escapeHtml(r.from) + '</a></td>'
+                + '<td><a class="aff-icao-link" href="/icao/' + escapeHtml(r.to) + '">' + escapeHtml(r.to) + '</a></td>'
+                + '<td><span class="ot-muted">' + escapeHtml(r.date_utc || '') + '</span></td>'
+                + '<td><span class="ot-muted">' + timeWindow(r.dep_time_utc) + '</span></td>'
+                + '<td><span class="ot-muted">' + timeWindow(r.arr_time_utc) + '</span></td>'
+                + roles.map(role => {
+                    const assigned = assignMap[r.number + '|' + role.key] || '';
+                    return '<td><select class="roster-assign" data-sector="' + escapeHtml(r.number) + '" data-role="' + role.key + '" style="font-size:11px;padding:3px 6px;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:4px;width:100%;">'
+                      + '<option value="">—</option>'
+                      + memberOptsHtml.replace(new RegExp('value="' + assigned + '"'), 'value="' + assigned + '" selected')
+                      + '</select></td>';
+                  }).join('')
+                + '</tr>';
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  `;
+
+  const content = `
+    <div style="max-width:100%;">
+      <h2 style="color:var(--accent);margin:0 0 16px;">Crew Roster \u2014 ${escapeHtml(displayName)}</h2>
+      ${configHtml}
+      ${scheduleHtml}
+    </div>
+
+    <script>
+    (function() {
+      // Config save
+      var configForm = document.getElementById('rosterConfigForm');
+      if (configForm) {
+        configForm.addEventListener('submit', async function(e) {
+          e.preventDefault();
+          var msg = document.getElementById('rosterConfigMsg');
+          try {
+            var r = await fetch('/api/team/roster/config', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'same-origin',
+              body: JSON.stringify({
+                foEnabled: configForm.querySelector('[name="foEnabled"]').checked,
+                feEnabled: configForm.querySelector('[name="feEnabled"]').checked,
+                feLabel: configForm.querySelector('[name="feLabel"]').value,
+                obs1Enabled: configForm.querySelector('[name="obs1Enabled"]').checked,
+                obs2Enabled: configForm.querySelector('[name="obs2Enabled"]').checked
+              })
+            });
+            if (r.ok) {
+              msg.textContent = 'Saved!';
+              msg.style.color = '#4ade80';
+              msg.style.display = '';
+              setTimeout(function() { location.reload(); }, 600);
+            } else {
+              msg.textContent = 'Failed to save';
+              msg.style.color = '#f87171';
+              msg.style.display = '';
+            }
+          } catch (err) {
+            msg.textContent = 'Failed to save';
+            msg.style.color = '#f87171';
+            msg.style.display = '';
+          }
+        });
+      }
+
+      // Roster assignment on change
+      document.addEventListener('change', async function(e) {
+        var sel = e.target.closest('.roster-assign');
+        if (!sel) return;
+        sel.style.opacity = '0.5';
+        try {
+          var r = await fetch('/api/team/roster/assign', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify({
+              sectorNumber: sel.dataset.sector,
+              role: sel.dataset.role,
+              assignCid: sel.value || ''
+            })
+          });
+          sel.style.opacity = '1';
+          if (!r.ok) {
+            var d = await r.json().catch(function() { return {}; });
+            alert(d.error || 'Failed to save');
+          }
+        } catch (err) {
+          sel.style.opacity = '1';
+          alert('Failed to save');
+        }
+      });
+    })();
+    </script>
+  `;
+
+  res.send(renderLayout({ title: 'Crew Roster', user, isAdmin, content, layoutClass: 'dashboard-full' }));
+});
+
 app.get('/team/manage-members', requireLogin, async (req, res) => {
   const user = req.session.user.data;
   const cid = Number(user.cid);

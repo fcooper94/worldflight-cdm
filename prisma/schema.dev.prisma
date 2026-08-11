@@ -16,6 +16,7 @@ model OfficialTeam {
   country           String
   sinceYear         Int?
   multiSlot         Boolean  @default(false)
+  rosterEnabled     Boolean  @default(false)
   description       String?
   website           String?
   sortOrder         Int      @default(0)
@@ -35,6 +36,7 @@ model Affiliate {
   maskName          Boolean  @default(false)
   fleetLimit        Int?
   manualCallsigns   Boolean  @default(false)
+  rosterEnabled     Boolean  @default(false)
   aircraftType      String?
   description       String?
   website           String?
@@ -532,4 +534,31 @@ model TeamSectorAssignment {
 
   @@unique([officialTeamId, sectorNumber])
   @@index([officialTeamId])
+}
+
+model RosterConfig {
+  id              Int      @id @default(autoincrement())
+  entityType      String
+  entityName      String
+  foEnabled       Boolean  @default(true)
+  feEnabled       Boolean  @default(false)
+  feLabel         String   @default("Flight Engineer")
+  obs1Enabled     Boolean  @default(false)
+  obs2Enabled     Boolean  @default(false)
+  updatedAt       DateTime @default(now())
+
+  @@unique([entityType, entityName])
+}
+
+model RosterAssignment {
+  id              Int      @id @default(autoincrement())
+  entityType      String
+  entityName      String
+  sectorNumber    String
+  role            String
+  cid             Int
+  updatedAt       DateTime @default(now())
+
+  @@unique([entityType, entityName, sectorNumber, role])
+  @@index([entityType, entityName])
 }
