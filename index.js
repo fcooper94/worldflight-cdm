@@ -2805,13 +2805,13 @@ function getFlowStatus(scheduleRow, claimedCid) {
 // the sector (held by main CID or another member), transfer it to the new pilot;
 // otherwise try to create a fresh booking using the same SLOTTED/BOOKING_ONLY
 // logic as auto-assignment.
-async function assignAffiliatePilotToSector(affiliate, scheduleRow, claimCid) {
+async function assignAffiliatePilotToSector(affiliate, scheduleRow, claimCid, overrideCallsign) {
   if (!affiliate || !scheduleRow || !claimCid) return;
   const newCid = Number(claimCid);
   if (!Number.isFinite(newCid)) return;
 
   const sectorPrefix = `${scheduleRow.from}-${scheduleRow.to}|${scheduleRow.date_utc}|${scheduleRow.dep_time_utc}`;
-  const callsign = String(affiliate.callsign || '').toUpperCase();
+  const callsign = overrideCallsign ? String(overrideCallsign).toUpperCase() : String(affiliate.callsign || '').toUpperCase();
 
   // Build set of CIDs in this affiliate (main + members)
   const memberRows = await prisma.affiliateMember.findMany({
@@ -2819,16 +2819,17 @@ async function assignAffiliatePilotToSector(affiliate, scheduleRow, claimCid) {
   }).catch(() => []);
   const affCids = [Number(affiliate.cid), ...memberRows.map(m => Number(m.cid))].filter(Number.isFinite);
 
-  // Look for an existing booking for this sector held by anyone in the affiliate
-  const existing = await prisma.tobtBooking.findFirst({
-    where: {
-      cid: { in: affCids },
-      slotKey: { startsWith: sectorPrefix }
-    }
-  });
+  // Look for an existing booking — by callsign for manual mode, by affiliate CIDs otherwise
+  const existing = overrideCallsign
+    ? await prisma.tobtBooking.findFirst({
+        where: { callsign, slotKey: { startsWith: sectorPrefix } }
+      })
+    : await prisma.tobtBooking.findFirst({
+        where: { cid: { in: affCids }, slotKey: { startsWith: sectorPrefix } }
+      });
 
   if (existing) {
-    if (Number(existing.cid) === newCid) return; // already correct
+    if (Number(existing.cid) === newCid && String(existing.callsign || '').toUpperCase() === callsign) return; // already correct
     const oldCid = Number(existing.cid);
     await prisma.tobtBooking.update({
       where: { id: existing.id },
@@ -19752,11 +19753,19 @@ app.get('/affiliates/hq', requireLogin, async (req, res) => {
   }
   // Per-aircraft claims: cid 0 means "not flying this sector".
   const fleetClaims = {};
+  // For manual callsigns mode: group claims by sector (multiple per sector possible)
+  const manualClaimsBySector = {};
   if (isMultiAircraft && affFleet.length) {
     const rows = await prisma.affiliateSectorClaim.findMany({
       where: { affiliateId: { in: affFleet.map(a => a.id) } }
     }).catch(() => []);
-    rows.forEach(cl => { fleetClaims[`${cl.affiliateId}|${cl.sectorNumber}`] = Number(cl.cid); });
+    rows.forEach(cl => {
+      fleetClaims[`${cl.affiliateId}|${cl.sectorNumber}`] = Number(cl.cid);
+      if (isManualCallsigns && cl.callsign) {
+        if (!manualClaimsBySector[cl.sectorNumber]) manualClaimsBySector[cl.sectorNumber] = [];
+        manualClaimsBySector[cl.sectorNumber].push({ id: cl.id, cid: cl.cid, callsign: cl.callsign });
+      }
+    });
   }
   // Bookings held by any aircraft in the fleet, keyed by callsign + sector.
   const fleetCallsignSet = new Set(affFleet.map(a => String(a.callsign || '').toUpperCase()).filter(Boolean));
@@ -19955,6 +19964,98 @@ app.get('/affiliates/hq', requireLogin, async (req, res) => {
               </tbody>
             </table>
           </div>`;
+
+  const fleetLimit = affiliate?.fleetLimit || 3;
+  // Build bookings lookup for manual callsign claims
+  const manualBookingByCs = {};
+  if (isManualCallsigns) {
+    Object.values(tobtBookingsByKey).forEach(b => {
+      if (!b || !b.callsign) return;
+      const cs = String(b.callsign).toUpperCase();
+      const parts = String(b.slotKey).split('|');
+      manualBookingByCs[`${cs}|${parts[0]}|${parts[1]}|${parts[2]}`] = b;
+    });
+  }
+
+  let affManualTable = '';
+  if (isManualCallsigns) {
+    const mcColspan = showFlowInfo ? (readOnly ? 8 : 9) : (readOnly ? 6 : 7);
+    let mcBody = '';
+    for (const r of scheduleRows) {
+      const claims = manualClaimsBySector[r.number] || [];
+      const flow = getFlowRestriction(r);
+      const flowKey = r.from + '-' + r.to;
+      const restricted = (sharedFlowTypes[flowKey] || 'NONE') !== 'NONE';
+      const rows = claims.length ? claims : [{ id: null, cid: 0, callsign: '' }];
+      for (let i = 0; i < rows.length; i++) {
+        const cl = rows[i];
+        const cs = String(cl.callsign || '').toUpperCase();
+        const sectorKey = r.from + '-' + r.to + '|' + r.date_utc + '|' + r.dep_time_utc;
+        const b = cs ? manualBookingByCs[cs + '|' + sectorKey] || null : null;
+        const status = b ? getFlowStatus(r, Number(b.cid)) : null;
+        const first = i === 0;
+        const canAdd = !readOnly && claims.length < fleetLimit && i === rows.length - 1;
+
+        mcBody += '<tr class="' + (first ? 'wft-group-start' : '') + '" data-sector="' + escapeHtml(r.number) + '">';
+        // Sector
+        mcBody += '<td>' + (first ? '<a class="sector-details-btn" href="/sector/' + escapeHtml(r.number) + '/' + escapeHtml(r.from) + '/' + escapeHtml(r.to) + '" target="_blank" rel="noopener">' + escapeHtml(r.number) + '</a>' : '') + '</td>';
+        // Callsign
+        if (readOnly) {
+          mcBody += '<td><span class="ot-cell-callsign">' + (cs || '\u2014') + '</span></td>';
+        } else {
+          mcBody += '<td><input type="text" class="mc-cs-input" value="' + escapeHtml(cs) + '" maxlength="10" placeholder="Callsign" data-claim-id="' + (cl.id || '') + '" data-sector="' + escapeHtml(r.number) + '" style="width:100px;text-transform:uppercase;padding:5px 8px;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:4px;font-size:12px;font-family:monospace;font-weight:600;" /></td>';
+        }
+        // VATSIM Account
+        if (readOnly) {
+          const cidLabel = cl.cid ? (nameByCid[cl.cid] ? nameByCid[cl.cid] + ' \u00b7 ' + cl.cid : String(cl.cid)) : '\u2014';
+          mcBody += '<td><span>' + escapeHtml(cidLabel) + '</span></td>';
+        } else {
+          mcBody += '<td><select class="claim-select mc-cid-select" data-claim-id="' + (cl.id || '') + '" data-sector="' + escapeHtml(r.number) + '" style="font-size:12px;padding:4px 6px;">';
+          mcBody += '<option value="">\u2014 Select \u2014</option>';
+          for (const m of memberOptions) {
+            mcBody += '<option value="' + m.cid + '"' + (cl.cid === m.cid ? ' selected' : '') + '>' + escapeHtml(m.label) + '</option>';
+          }
+          mcBody += '</select></td>';
+        }
+        // Flow + Status
+        if (showFlowInfo) {
+          mcBody += '<td>' + (first ? '<span class="flowtype-pill flowtype-' + flow.cls + '">' + escapeHtml(flow.label) + '</span>' : '') + '</td>';
+          if (!cs) {
+            mcBody += '<td class="aff-status-cell"><span class="ot-muted">\u2014</span></td>';
+          } else if (status && status.kind === 'tobt') {
+            mcBody += '<td class="aff-status-cell"><span class="aff-flow-status aff-flow-tobt"><span class="aff-tobt-label">' + escapeHtml(status.label) + '</span><span class="aff-tobt-time">' + escapeHtml(status.time) + '</span></span></td>';
+          } else {
+            mcBody += '<td class="aff-status-cell"><span class="aff-flow-status aff-flow-' + (status ? status.kind : 'empty') + '">' + escapeHtml(status ? status.text : (restricted ? 'Awaiting' : '\u2014')) + '</span></td>';
+          }
+        }
+        // From / To / Date / Window
+        mcBody += '<td>' + (first ? '<a class="aff-icao-link" href="/icao/' + escapeHtml(r.from) + '">' + escapeHtml(r.from) + '</a>' : '') + '</td>';
+        mcBody += '<td>' + (first ? '<a class="aff-icao-link" href="/icao/' + escapeHtml(r.to) + '">' + escapeHtml(r.to) + '</a>' : '') + '</td>';
+        mcBody += '<td>' + (first ? '<span class="ot-muted">' + escapeHtml(r.date_utc || '') + '</span>' : '') + '</td>';
+        mcBody += '<td>' + (first ? '<span class="ot-muted">' + timeWindow(r.dep_time_utc) + '</span>' : '') + '</td>';
+        // Actions
+        if (!readOnly) {
+          mcBody += '<td style="white-space:nowrap;">';
+          mcBody += '<button type="button" class="action-btn mc-save-btn" data-claim-id="' + (cl.id || '') + '" data-sector="' + escapeHtml(r.number) + '" style="font-size:10px;padding:3px 8px;">Save</button>';
+          if (cl.id) mcBody += ' <button type="button" class="action-btn mc-del-btn" data-claim-id="' + cl.id + '" style="font-size:10px;padding:3px 6px;background:rgba(239,68,68,0.1);color:#f87171;border-color:#f87171;">&times;</button>';
+          mcBody += '</td>';
+        }
+        mcBody += '</tr>';
+        // Add another aircraft link
+        if (canAdd) {
+          mcBody += '<tr class="mc-add-row" data-sector="' + escapeHtml(r.number) + '"><td></td><td colspan="' + mcColspan + '"><button type="button" class="mc-add-btn" data-sector="' + escapeHtml(r.number) + '" style="background:none;border:none;color:var(--accent);font-size:11px;font-weight:600;cursor:pointer;padding:2px 0;">+ Add another aircraft</button></td></tr>';
+        }
+      }
+    }
+    affManualTable = '<p class="wft-multi-note">Enter your callsign(s) for each sector. Each callsign gets its own booking. Up to ' + fleetLimit + ' aircraft per sector.</p>'
+      + '<div id="manualCsMsg" style="display:none;font-size:12px;margin:0 0 10px;"></div>'
+      + '<div class="ot-table-wrap"><table class="ot-table wft-multi-table"><thead><tr>'
+      + '<th>Sector</th><th>Callsign</th><th>VATSIM Account</th>'
+      + (showFlowInfo ? '<th>Flow</th><th>Status</th>' : '')
+      + '<th>From</th><th>To</th><th>Date</th><th>Dep Window</th>'
+      + (!readOnly ? '<th></th>' : '')
+      + '</tr></thead><tbody>' + mcBody + '</tbody></table></div>';
+  }
 
   const memberOptsHtml = memberOptions
     .map(m => `<option value="${m.cid}">${escapeHtml(m.label)}${m.isMain ? ' (main)' : ''}</option>`)
@@ -20175,7 +20276,7 @@ app.get('/affiliates/hq', requireLogin, async (req, res) => {
             <div class="ot-empty-title">No sectors loaded</div>
             <div class="ot-empty-sub">Check back soon — schedule data hasn't been loaded yet.</div>
           </div>
-        ` : isMultiAircraft ? affMultiTable : `
+        ` : isManualCallsigns ? affManualTable : isMultiAircraft ? affMultiTable : `
           <div class="ot-table-wrap">
             <table class="ot-table">
               <thead>
@@ -20361,6 +20462,98 @@ app.get('/affiliates/hq', requireLogin, async (req, res) => {
 
         // Snapshot original values so we can revert on failure
         document.querySelectorAll('.claim-select').forEach(function(s) { s.dataset.prev = s.value; });
+
+        // ----- Manual callsigns per-sector -----
+        (function() {
+          var mcMsgEl = document.getElementById('manualCsMsg');
+          function mcMsg(text, ok) {
+            if (!mcMsgEl) return;
+            mcMsgEl.textContent = text;
+            mcMsgEl.style.color = ok ? '#4ade80' : '#f87171';
+            mcMsgEl.style.display = '';
+            if (ok) setTimeout(function() { mcMsgEl.style.display = 'none'; }, 2500);
+          }
+
+          document.addEventListener('click', async function(e) {
+            // Save
+            var saveBtn = e.target.closest('.mc-save-btn');
+            if (saveBtn) {
+              var tr = saveBtn.closest('tr');
+              var csInput = tr.querySelector('.mc-cs-input');
+              var cidSelect = tr.querySelector('.mc-cid-select');
+              var cs = csInput ? csInput.value.trim().toUpperCase() : '';
+              var pilotCid = cidSelect ? cidSelect.value : '';
+              if (!cs) { mcMsg('Enter a callsign', false); return; }
+              if (!pilotCid) { mcMsg('Select a VATSIM account', false); return; }
+              saveBtn.disabled = true;
+              saveBtn.textContent = '...';
+              try {
+                var r = await fetch('/api/affiliates/hq/manual-claim', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  credentials: 'same-origin',
+                  body: JSON.stringify({
+                    action: 'save',
+                    claimId: saveBtn.dataset.claimId || null,
+                    sectorNumber: saveBtn.dataset.sector,
+                    callsign: cs,
+                    claimCid: Number(pilotCid)
+                  })
+                });
+                var d = await r.json().catch(function() { return {}; });
+                if (r.ok) {
+                  mcMsg('Saved!', true);
+                  setTimeout(function() { location.reload(); }, 800);
+                } else {
+                  mcMsg(d.error || 'Failed to save', false);
+                }
+              } catch (err) { mcMsg('Failed to save', false); }
+              saveBtn.disabled = false;
+              saveBtn.textContent = 'Save';
+            }
+
+            // Delete
+            var delBtn = e.target.closest('.mc-del-btn');
+            if (delBtn) {
+              if (!confirm('Remove this callsign entry?')) return;
+              delBtn.disabled = true;
+              try {
+                var r = await fetch('/api/affiliates/hq/manual-claim', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  credentials: 'same-origin',
+                  body: JSON.stringify({ action: 'delete', claimId: delBtn.dataset.claimId, sectorNumber: '' })
+                });
+                if (r.ok) location.reload();
+                else { var d = await r.json().catch(function() { return {}; }); mcMsg(d.error || 'Failed', false); delBtn.disabled = false; }
+              } catch (err) { mcMsg('Failed', false); delBtn.disabled = false; }
+            }
+
+            // Add another aircraft
+            var addBtn = e.target.closest('.mc-add-btn');
+            if (addBtn) {
+              var sector = addBtn.dataset.sector;
+              var addRow = addBtn.closest('tr');
+              // Insert a new editable row before the add-another row
+              var newTr = document.createElement('tr');
+              newTr.dataset.sector = sector;
+              newTr.innerHTML = '<td></td>'
+                + '<td><input type="text" class="mc-cs-input" value="" maxlength="10" placeholder="Callsign" data-claim-id="" data-sector="' + sector + '" style="width:100px;text-transform:uppercase;padding:5px 8px;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:4px;font-size:12px;font-family:monospace;font-weight:600;" /></td>'
+                + '<td><select class="claim-select mc-cid-select" data-claim-id="" data-sector="' + sector + '" style="font-size:12px;padding:4px 6px;">'
+                + '<option value="">\\u2014 Select \\u2014</option>'
+                + document.querySelector('.mc-cid-select').innerHTML.split('</option>').filter(function(o) { return o.indexOf('value="') > -1 && o.indexOf('value=""') === -1; }).map(function(o) { return o + '</option>'; }).join('')
+                + '</select></td>'
+                + (document.querySelector('.aff-status-cell') ? '<td></td><td></td>' : '')
+                + '<td></td><td></td><td></td><td></td>'
+                + '<td style="white-space:nowrap;"><button type="button" class="action-btn mc-save-btn" data-claim-id="" data-sector="' + sector + '" style="font-size:10px;padding:3px 8px;">Save</button></td>';
+              addRow.parentNode.insertBefore(newTr, addRow);
+              // Focus the new callsign input
+              newTr.querySelector('.mc-cs-input').focus();
+              // Remove the add button if at limit — on reload the server will re-render correctly
+              addRow.remove();
+            }
+          });
+        })();
 
         // ----- Multi-aircraft fleet -----
         var affBusy = null;
@@ -21021,6 +21214,69 @@ app.post('/api/affiliates/hq/claim', requireLogin, requireAffiliate, async (req,
   }
 
   res.json({ ok: true, status: getFlowStatus(scheduleRow, claimCid) });
+});
+
+// Manual callsign claim: save (upsert), add, or delete a per-sector callsign+CID entry
+app.post('/api/affiliates/hq/manual-claim', requireLogin, requireAffiliate, async (req, res) => {
+  const cid = Number(req.session?.user?.data?.cid);
+  const { action, claimId, sectorNumber, callsign, claimCid } = req.body || {};
+  if (!sectorNumber && action !== 'delete') return res.status(400).json({ error: 'sectorNumber required' });
+
+  const affiliate = await resolveUserAffiliate(cid);
+  if (!affiliate || !affiliate.manualCallsigns) return res.status(403).json({ error: 'Not a manual-callsigns affiliate' });
+
+  const flLimit = affiliate.fleetLimit || 3;
+
+  if (action === 'delete') {
+    if (!claimId) return res.status(400).json({ error: 'claimId required' });
+    await prisma.affiliateSectorClaim.delete({ where: { id: Number(claimId) } }).catch(() => null);
+    // Cancel any booking under the deleted callsign for this sector
+    // (auto-assign reconcile will handle this on next run)
+    return res.json({ ok: true });
+  }
+
+  const cs = String(callsign || '').trim().toUpperCase();
+  if (!cs || !/^[A-Z0-9-]{2,10}$/.test(cs)) return res.status(400).json({ error: 'Callsign must be 2-10 letters/numbers' });
+  const pilotCid = Number(claimCid);
+  if (!Number.isFinite(pilotCid) || pilotCid <= 0) return res.status(400).json({ error: 'Select a VATSIM account' });
+
+  // Validate pilot is in this affiliate
+  if (pilotCid !== Number(affiliate.cid)) {
+    const m = await prisma.affiliateMember.findFirst({
+      where: { affiliateId: affiliate.id, cid: pilotCid }
+    });
+    if (!m) return res.status(400).json({ error: 'Selected pilot is not part of this affiliate' });
+  }
+
+  const scheduleRow = (adminSheetCache || []).find(r => r.number === sectorNumber);
+  if (!scheduleRow) return res.status(400).json({ error: 'Unknown sector' });
+
+  if (claimId) {
+    // Update existing claim
+    await prisma.affiliateSectorClaim.update({
+      where: { id: Number(claimId) },
+      data: { cid: pilotCid, callsign: cs }
+    });
+  } else {
+    // Adding new — check fleet limit
+    const existing = await prisma.affiliateSectorClaim.findMany({
+      where: { affiliateId: affiliate.id, sectorNumber, callsign: { not: null } }
+    });
+    if (existing.length >= flLimit) return res.status(400).json({ error: 'Fleet limit reached (' + flLimit + ' aircraft per sector)' });
+
+    await prisma.affiliateSectorClaim.create({
+      data: { affiliateId: affiliate.id, sectorNumber, cid: pilotCid, callsign: cs }
+    });
+  }
+
+  // Create/update the booking for this callsign + CID
+  try {
+    await assignAffiliatePilotToSector(affiliate, scheduleRow, pilotCid, cs);
+  } catch (err) {
+    console.error('[AFF-MANUAL] booking sync failed:', err.message);
+  }
+
+  res.json({ ok: true });
 });
 
 /* ===== AFFILIATE MEMBERS (My Members page) ===== */
