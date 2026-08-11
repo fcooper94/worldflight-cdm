@@ -19761,7 +19761,7 @@ app.get('/affiliates/hq', requireLogin, async (req, res) => {
     }).catch(() => []);
     rows.forEach(cl => {
       fleetClaims[`${cl.affiliateId}|${cl.sectorNumber}`] = Number(cl.cid);
-      if (isManualCallsigns && cl.callsign) {
+      if (affiliate && affiliate.manualCallsigns && cl.callsign) {
         if (!manualClaimsBySector[cl.sectorNumber]) manualClaimsBySector[cl.sectorNumber] = [];
         manualClaimsBySector[cl.sectorNumber].push({ id: cl.id, cid: cl.cid, callsign: cl.callsign });
       }
