@@ -5999,7 +5999,9 @@ html[data-map-theme="light"] .ac-label {
   font-size: 12px;
   font-weight: 500;
   color: var(--text);
-  white-space: nowrap;
+  white-space: normal;
+  max-width: 220px;
+  text-align: center;
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
