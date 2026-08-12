@@ -22074,7 +22074,7 @@ app.get('/team/hq', requireLogin, async (req, res) => {
             </div>
           </div>
           ${(isMainHolder || canManageTeamMembers(cid)) && members.length > 1 ? `
-          <div style="flex-shrink:0;">
+          <div style="flex-shrink:0;position:relative;">
             <label id="rosterToggleWrap" style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:10px 16px;border-radius:8px;border:1px solid ${primary?.rosterEnabled ? 'rgba(56,189,248,0.3)' : 'var(--border)'};background:${primary?.rosterEnabled ? 'rgba(56,189,248,0.06)' : 'var(--panel2)'};transition:all 0.15s;">
               <div style="position:relative;width:38px;height:20px;">
                 <input type="checkbox" id="rosterToggle" ${primary?.rosterEnabled ? 'checked' : ''} style="position:absolute;opacity:0;width:100%;height:100%;cursor:pointer;margin:0;z-index:1;" />
@@ -22082,6 +22082,7 @@ app.get('/team/hq', requireLogin, async (req, res) => {
                 <div id="rosterKnob" style="position:absolute;top:2px;${primary?.rosterEnabled ? 'left:20px' : 'left:2px'};width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,0.3);transition:left 0.2s;"></div>
               </div>
               <span style="font-size:12px;font-weight:600;color:${primary?.rosterEnabled ? 'var(--accent)' : 'var(--muted)'};">Crew Roster</span>
+              <span class="tobt-help" style="cursor:help;font-size:10px;margin-left:2px;">?<span class="tobt-tooltip" style="width:220px;">Enable this to create a crew roster so you can record who is flying which leg within your team.</span></span>
             </label>
           </div>
           <script>
