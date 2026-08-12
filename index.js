@@ -18575,6 +18575,9 @@ async function resolveUserAffiliate(cid) {
 /* Shared HQ stylesheet — used by both the Affiliate HQ and the WF Team HQ
    so the two pages stay visually identical. Pure CSS, no interpolation. */
 const HQ_STYLES = `    <style>
+      .roster-tip { display:none;position:absolute;bottom:calc(100% + 8px);right:0;width:240px;padding:10px 14px;background:var(--panel);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:12px;line-height:1.6;font-weight:400;box-shadow:0 4px 16px rgba(0,0,0,0.4);z-index:100;pointer-events:none;white-space:normal; }
+      .roster-tip::before { content:'';position:absolute;bottom:-6px;right:14px;width:10px;height:10px;background:var(--panel);border-right:1px solid var(--border);border-bottom:1px solid var(--border);transform:rotate(45deg); }
+      .roster-tip-host:hover .roster-tip { display:block; }
       .affiliate-hq-wrap {
         width: 100%;
         max-width: 2200px;
@@ -19929,7 +19932,7 @@ app.get('/affiliates/hq', requireLogin, async (req, res) => {
                   <th>Sector</th>
                   <th class="ot-th-center">Flying</th>
                   <th>Callsign</th>
-                  <th>VATSIM Account <span class="tobt-help wft-info">i<span class="tobt-tooltip">This is the VATSIM account that will be connected on VATSIM for this sector.</span></span></th>
+                  <th>VATSIM Account <span class="roster-tip-host" style="cursor:help;font-size:10px;color:var(--muted);border:1px solid var(--border);border-radius:50%;width:16px;height:16px;display:inline-flex;align-items:center;justify-content:center;position:relative;vertical-align:middle;margin-left:4px;">i<span class="roster-tip">This is the VATSIM account that will be connected on VATSIM for this sector.</span></span></th>
                   ${showFlowInfo ? '<th>Flow</th><th>Status</th>' : ''}
                   ${showAtcRoute ? '<th>ATC Route</th>' : ''}
                   <th>From</th><th>To</th><th>Date</th><th>Dep Window</th><th>Arr Window</th><th>Plan</th>
@@ -19963,7 +19966,7 @@ app.get('/affiliates/hq', requireLogin, async (req, res) => {
                       <td class="aff-status-cell">${!flying
                         ? '<span class="ot-muted">Not flying</span>'
                         : (status && status.kind === 'tobt'
-                          ? `<span class="aff-flow-status aff-flow-tobt"><span class="aff-tobt-label">${escapeHtml(status.label)}</span><span class="aff-tobt-time">${escapeHtml(status.time)}</span><span class="tobt-tooltip">Target Connection Time &mdash; connect to VATSIM at this time. We stagger pilot connections at the departure airport so the network and controllers aren&#39;t overwhelmed.</span></span>`
+                          ? `<span class="aff-flow-status aff-flow-tobt"><span class="aff-tobt-label">${escapeHtml(status.label)}</span><span class="aff-tobt-time">${escapeHtml(status.time)}</span><span class="tobt-tooltip">Target Connection Time &mdash; connect to VATSIM at this time.<br><br>We stagger pilot connections at the departure airport so the network and controllers aren&#39;t overwhelmed.</span></span>`
                           : `<span class="aff-flow-status aff-flow-${status ? status.kind : 'empty'}">${escapeHtml(status ? status.text : (restricted ? 'Awaiting slot' : '—'))}</span>`)}</td>` : ''}
                       ${showAtcRoute ? `<td>${first ? (r.atc_route && r.atc_route !== '-'
                         ? `<button type="button" class="aff-route-btn" data-route="${String(r.atc_route).replace(/&/g, '&amp;').replace(/"/g, '&quot;')}" data-route2="${r.atc_route2 && r.atc_route2 !== '-' ? String(r.atc_route2).replace(/&/g, '&amp;').replace(/"/g, '&quot;') : ''}" data-simbrief="${sbAttr}" data-from="${escapeHtml(r.from)}" data-to="${escapeHtml(r.to)}" title="View the agreed ATC route">Route</button>`
@@ -20352,7 +20355,7 @@ app.get('/affiliates/hq', requireLogin, async (req, res) => {
                     <td><span class="flowtype-pill flowtype-${flow.cls}">${escapeHtml(flow.label)}</span></td>
                     <td class="aff-status-cell"><span class="aff-flow-status aff-flow-${status.kind}">${
                       status.kind === 'tobt'
-                        ? `<span class="aff-tobt-label">${escapeHtml(status.label)}</span><span class="aff-tobt-time">${escapeHtml(status.time)}</span><span class="tobt-tooltip">Target Connection Time &mdash; connect to VATSIM at this time. We stagger pilot connections at the departure airport so the network and controllers aren&#39;t overwhelmed.</span>`
+                        ? `<span class="aff-tobt-label">${escapeHtml(status.label)}</span><span class="aff-tobt-time">${escapeHtml(status.time)}</span><span class="tobt-tooltip">Target Connection Time &mdash; connect to VATSIM at this time.<br><br>We stagger pilot connections at the departure airport so the network and controllers aren&#39;t overwhelmed.</span>`
                         : escapeHtml(status.text)
                     }</span></td>` : ''}
                     ${showAtcRoute ? `<td>${(() => {
@@ -20436,7 +20439,7 @@ app.get('/affiliates/hq', requireLogin, async (req, res) => {
             span.appendChild(t);
             var tt = document.createElement('span');
             tt.className = 'tobt-tooltip';
-            tt.innerHTML = 'Target Connection Time &mdash; connect to VATSIM at this time. We stagger pilot connections at the departure airport so the network and controllers aren&#39;t overwhelmed.';
+            tt.innerHTML = 'Target Connection Time &mdash; connect to VATSIM at this time.<br><br>We stagger pilot connections at the departure airport so the network and controllers aren&#39;t overwhelmed.';
             span.appendChild(tt);
           } else {
             span.textContent = status.text;
@@ -21995,7 +21998,7 @@ app.get('/team/hq', requireLogin, async (req, res) => {
                   <th>Sector</th>
                   <th class="ot-th-center">Flying</th>
                   <th>Callsign</th>
-                  <th>VATSIM Account <span class="tobt-help wft-info">i<span class="tobt-tooltip">The VATSIM account (CID) you will be connected as for this sector.</span></span></th>
+                  <th>VATSIM Account <span class="roster-tip-host" style="cursor:help;font-size:10px;color:var(--muted);border:1px solid var(--border);border-radius:50%;width:16px;height:16px;display:inline-flex;align-items:center;justify-content:center;position:relative;vertical-align:middle;margin-left:4px;">i<span class="roster-tip">The VATSIM account (CID) you will be connected as for this sector.</span></span></th>
                   ${showFlowInfo ? '<th>Flow</th><th>Status</th>' : ''}
                   ${showAtcRoute ? '<th>ATC Route</th>' : ''}
                   <th>From</th><th>To</th><th>Date</th><th>Dep Window</th><th>Arr Window</th><th>Plan</th>
@@ -22032,7 +22035,7 @@ app.get('/team/hq', requireLogin, async (req, res) => {
                       <td class="aff-status-cell">${!flying
                         ? '<span class="ot-muted">Not flying</span>'
                         : (status && status.kind === 'tobt'
-                          ? `<span class="aff-flow-status aff-flow-tobt"><span class="aff-tobt-label">${escapeHtml(status.label)}</span><span class="aff-tobt-time">${escapeHtml(status.time)}</span><span class="tobt-tooltip">Target Connection Time &mdash; connect to VATSIM at this time. We stagger pilot connections at the departure airport so the network and controllers aren&#39;t overwhelmed.</span></span>`
+                          ? `<span class="aff-flow-status aff-flow-tobt"><span class="aff-tobt-label">${escapeHtml(status.label)}</span><span class="aff-tobt-time">${escapeHtml(status.time)}</span><span class="tobt-tooltip">Target Connection Time &mdash; connect to VATSIM at this time.<br><br>We stagger pilot connections at the departure airport so the network and controllers aren&#39;t overwhelmed.</span></span>`
                           : `<span class="aff-flow-status aff-flow-${status ? status.kind : 'empty'}">${escapeHtml(status ? status.text : (restricted ? 'Awaiting slot' : '—'))}</span>`)}</td>` : ''}
                       ${showAtcRoute ? `<td>${first ? (r.atc_route && r.atc_route !== '-'
                         ? `<button type="button" class="aff-route-btn" data-route="${String(r.atc_route).replace(/&/g, '&amp;').replace(/"/g, '&quot;')}" data-route2="${r.atc_route2 && r.atc_route2 !== '-' ? String(r.atc_route2).replace(/&/g, '&amp;').replace(/"/g, '&quot;') : ''}" data-simbrief="${sbAttr}" data-from="${escapeHtml(r.from)}" data-to="${escapeHtml(r.to)}" title="View the agreed ATC route">Route</button>`
@@ -22061,8 +22064,8 @@ app.get('/team/hq', requireLogin, async (req, res) => {
       </section>
       ` : ''}
 
-      <section class="card side-label-card aff-identity-card">
-        <div class="card-side-body aff-identity-body" style="flex-direction:row;align-items:center;justify-content:space-between;">
+      <section class="card side-label-card aff-identity-card" style="position:relative;">
+        <div class="card-side-body aff-identity-body">
           <div class="aff-identity-main">
             <div class="aff-identity-eyebrow">Official WorldFlight Team</div>
             <div class="aff-identity-name">${escapeHtml(displayName)}</div>
@@ -22074,7 +22077,7 @@ app.get('/team/hq', requireLogin, async (req, res) => {
             </div>
           </div>
           ${(isMainHolder || canManageTeamMembers(cid)) && members.length > 1 ? `
-          <div style="flex-shrink:0;position:relative;">
+          <div style="position:absolute;top:16px;right:16px;">
             <label id="rosterToggleWrap" style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:10px 16px;border-radius:8px;border:1px solid ${primary?.rosterEnabled ? 'rgba(56,189,248,0.3)' : 'var(--border)'};background:${primary?.rosterEnabled ? 'rgba(56,189,248,0.06)' : 'var(--panel2)'};transition:all 0.15s;">
               <div style="position:relative;width:38px;height:20px;">
                 <input type="checkbox" id="rosterToggle" ${primary?.rosterEnabled ? 'checked' : ''} style="position:absolute;opacity:0;width:100%;height:100%;cursor:pointer;margin:0;z-index:1;" />
@@ -22082,7 +22085,7 @@ app.get('/team/hq', requireLogin, async (req, res) => {
                 <div id="rosterKnob" style="position:absolute;top:2px;${primary?.rosterEnabled ? 'left:20px' : 'left:2px'};width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,0.3);transition:left 0.2s;"></div>
               </div>
               <span style="font-size:12px;font-weight:600;color:${primary?.rosterEnabled ? 'var(--accent)' : 'var(--muted)'};">Crew Roster</span>
-              <span class="tobt-help" style="cursor:help;font-size:10px;margin-left:2px;">?<span class="tobt-tooltip" style="width:220px;">Enable this to create a crew roster so you can record who is flying which leg within your team.</span></span>
+              <span class="roster-tip-host" style="cursor:help;font-size:10px;color:var(--muted);margin-left:2px;border:1px solid var(--border);border-radius:50%;width:16px;height:16px;display:inline-flex;align-items:center;justify-content:center;position:relative;">?<span class="roster-tip">Enable this to create a crew roster so you can record who is flying which leg within your team.</span></span>
             </label>
           </div>
           <script>
@@ -22280,7 +22283,7 @@ app.get('/team/hq', requireLogin, async (req, res) => {
                 <tr>
                   <th>Sector</th>
                   <th>Callsign</th>
-                  <th>VATSIM Account <span class="tobt-help wft-info">i<span class="tobt-tooltip">The VATSIM account (CID) you will be connected as for this sector.</span></span></th>
+                  <th>VATSIM Account <span class="roster-tip-host" style="cursor:help;font-size:10px;color:var(--muted);border:1px solid var(--border);border-radius:50%;width:16px;height:16px;display:inline-flex;align-items:center;justify-content:center;position:relative;vertical-align:middle;margin-left:4px;">i<span class="roster-tip">The VATSIM account (CID) you will be connected as for this sector.</span></span></th>
                   ${showFlowInfo ? '<th>Flow</th><th>Status</th>' : ''}
                   ${showAtcRoute ? '<th>ATC Route</th>' : ''}
                   <th>From</th>
@@ -22317,7 +22320,7 @@ app.get('/team/hq', requireLogin, async (req, res) => {
                     <td><span class="flowtype-pill flowtype-${flow.cls}">${escapeHtml(flow.label)}</span></td>
                     <td class="aff-status-cell"><span class="aff-flow-status aff-flow-${status ? status.kind : 'empty'}">${
                       status && status.kind === 'tobt'
-                        ? `<span class="aff-tobt-label">${escapeHtml(status.label)}</span><span class="aff-tobt-time">${escapeHtml(status.time)}</span><span class="tobt-tooltip">Target Connection Time &mdash; connect to VATSIM at this time. We stagger pilot connections at the departure airport so the network and controllers aren&#39;t overwhelmed.</span>`
+                        ? `<span class="aff-tobt-label">${escapeHtml(status.label)}</span><span class="aff-tobt-time">${escapeHtml(status.time)}</span><span class="tobt-tooltip">Target Connection Time &mdash; connect to VATSIM at this time.<br><br>We stagger pilot connections at the departure airport so the network and controllers aren&#39;t overwhelmed.</span>`
                         : escapeHtml(status ? status.text : (restricted ? 'Awaiting slot' : '—'))
                     }</span></td>` : ''}
                     ${showAtcRoute ? `<td>${wfRow && wfRow.atc_route && wfRow.atc_route !== '-'
@@ -22787,6 +22790,73 @@ app.post('/api/team/roster/assign', requireLogin, async (req, res) => {
   }
 });
 
+// Public roster JSON API
+app.get('/api/roster/:slug.json', async (req, res) => {
+  const slug = String(req.params.slug || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (!slug) return res.status(400).json({ error: 'Invalid team slug' });
+
+  const allTeams = await prisma.officialTeam.findMany().catch(() => []);
+  const match = allTeams.find(t => String(t.teamName || '').toLowerCase().replace(/[^a-z0-9]+/g, '') === slug);
+  if (!match) return res.status(404).json({ error: 'Team not found' });
+  if (!match.rosterEnabled) return res.status(404).json({ error: 'Roster not enabled for this team' });
+
+  const teamNameUpper = String(match.teamName).trim().toUpperCase();
+
+  const [config, assignments, users] = await Promise.all([
+    prisma.rosterConfig.findUnique({
+      where: { entityType_entityName: { entityType: 'team', entityName: teamNameUpper } }
+    }).catch(() => null),
+    prisma.rosterAssignment.findMany({
+      where: { entityType: 'team', entityName: teamNameUpper }
+    }).catch(() => []),
+    prisma.user.findMany().catch(() => [])
+  ]);
+
+  const cfg = config || { foEnabled: true, feEnabled: false, feLabel: 'Flight Engineer', obs1Enabled: false, obs2Enabled: false };
+  const nameByCid = {};
+  users.forEach(u => { if (u.name) nameByCid[u.cid] = u.name; });
+
+  const assignMap = {};
+  assignments.forEach(a => {
+    if (!assignMap[a.sectorNumber]) assignMap[a.sectorNumber] = {};
+    assignMap[a.sectorNumber][a.role] = { cid: a.cid, name: nameByCid[a.cid] || null };
+  });
+
+  const enabledRoles = ['captain'];
+  if (cfg.foEnabled) enabledRoles.push('fo');
+  if (cfg.feEnabled) enabledRoles.push('fe');
+  if (cfg.obs1Enabled) enabledRoles.push('obs1');
+  if (cfg.obs2Enabled) enabledRoles.push('obs2');
+
+  const roleLabels = { captain: 'Captain', fo: 'First Officer', fe: cfg.feLabel || 'Flight Engineer', obs1: 'Observer 1', obs2: 'Observer 2' };
+
+  const scheduleRows = adminSheetCache || [];
+  const sectors = scheduleRows.map(r => {
+    const crew = {};
+    for (const role of enabledRoles) {
+      const a = assignMap[r.number]?.[role];
+      crew[roleLabels[role]] = a ? { cid: a.cid, name: a.name } : null;
+    }
+    return {
+      sector: r.number,
+      from: r.from,
+      to: r.to,
+      dateUtc: r.date_utc,
+      depWindow: r.dep_time_utc ? subtractMinutes(r.dep_time_utc, 60) + '-' + addMinutes(r.dep_time_utc, 60) + 'z' : null,
+      arrWindow: r.arr_time_utc ? subtractMinutes(r.arr_time_utc, 60) + '-' + addMinutes(r.arr_time_utc, 60) + 'z' : null,
+      crew
+    };
+  });
+
+  res.setHeader('Cache-Control', 'public, max-age=30');
+  res.json({
+    team: match.teamName,
+    generatedAt: new Date().toISOString(),
+    roles: enabledRoles.map(r => roleLabels[r]),
+    sectors
+  });
+});
+
 // Main CID (or admin) edits the team's public profile. Applied to EVERY
 // OfficialTeam row of the team so all its fleet cards on /teams stay in sync.
 app.post('/api/team/hq/profile', requireLogin, (req, res, next) => {
@@ -23189,31 +23259,35 @@ app.get('/team/roster', requireLogin, async (req, res) => {
   // Config section (main CID only)
   const configHtml = (isMainHolder || canManageTeamMembers(cid)) ? `
     <section class="card" style="padding:20px;margin-bottom:20px;">
-      <h3 style="margin:0 0 12px;color:var(--accent);font-size:15px;">Roster Configuration</h3>
-      <form id="rosterConfigForm" style="display:flex;flex-wrap:wrap;gap:16px;align-items:flex-end;">
-        <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted);">
-          <input type="checkbox" checked disabled style="width:15px;height:15px;" /> Captain
+      <div style="display:flex;align-items:center;justify-content:space-between;margin:0 0 14px;">
+        <h3 style="margin:0;color:var(--accent);font-size:15px;">Roster Configuration</h3>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span id="rosterConfigMsg" style="font-size:12px;display:none;"></span>
+          <a href="/api/roster/${encodeURIComponent(displayName.toLowerCase().replace(/[^a-z0-9]+/g, ''))}.json" target="_blank" rel="noopener" class="action-btn" style="font-size:11px;padding:5px 14px;text-decoration:none;" title="Live JSON feed of your crew roster.&#10;&#10;Use it to display your roster data on your own website or tools.">Roster API ?</a>
+        </div>
+      </div>
+      <form id="rosterConfigForm" style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;">
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);padding:8px 14px;background:var(--panel2);border:1px solid var(--border);border-radius:8px;cursor:default;opacity:0.7;">
+          <input type="checkbox" checked disabled style="width:16px;height:16px;" /> Captain
         </label>
-        <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;">
-          <input type="checkbox" name="foEnabled" ${rosterConfig.foEnabled ? 'checked' : ''} style="width:15px;height:15px;accent-color:var(--accent);" /> First Officer
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;padding:8px 14px;background:var(--panel2);border:1px solid ${rosterConfig.foEnabled ? 'rgba(56,189,248,0.3)' : 'var(--border)'};border-radius:8px;transition:border-color 0.15s;">
+          <input type="checkbox" name="foEnabled" ${rosterConfig.foEnabled ? 'checked' : ''} style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer;" /> First Officer
         </label>
-        <div style="display:flex;align-items:center;gap:6px;">
-          <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;">
-            <input type="checkbox" name="feEnabled" ${rosterConfig.feEnabled ? 'checked' : ''} style="width:15px;height:15px;accent-color:var(--accent);" />
+        <div style="display:flex;align-items:center;gap:0;background:var(--panel2);border:1px solid ${rosterConfig.feEnabled ? 'rgba(56,189,248,0.3)' : 'var(--border)'};border-radius:8px;overflow:hidden;transition:border-color 0.15s;">
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;padding:8px 12px;">
+            <input type="checkbox" name="feEnabled" ${rosterConfig.feEnabled ? 'checked' : ''} style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer;" />
           </label>
-          <select name="feLabel" style="font-size:12px;padding:3px 8px;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:4px;">
+          <select name="feLabel" style="font-size:12px;padding:8px 10px;background:transparent;color:var(--text);border:none;border-left:1px solid var(--border);cursor:pointer;font-family:inherit;">
             <option value="Flight Engineer" ${rosterConfig.feLabel === 'Flight Engineer' ? 'selected' : ''}>Flight Engineer</option>
             <option value="Social Secretary" ${rosterConfig.feLabel === 'Social Secretary' ? 'selected' : ''}>Social Secretary</option>
           </select>
         </div>
-        <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;">
-          <input type="checkbox" name="obs1Enabled" ${rosterConfig.obs1Enabled ? 'checked' : ''} style="width:15px;height:15px;accent-color:var(--accent);" /> Observer 1
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;padding:8px 14px;background:var(--panel2);border:1px solid ${rosterConfig.obs1Enabled ? 'rgba(56,189,248,0.3)' : 'var(--border)'};border-radius:8px;transition:border-color 0.15s;">
+          <input type="checkbox" name="obs1Enabled" ${rosterConfig.obs1Enabled ? 'checked' : ''} style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer;" /> Observer 1
         </label>
-        <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;">
-          <input type="checkbox" name="obs2Enabled" ${rosterConfig.obs2Enabled ? 'checked' : ''} style="width:15px;height:15px;accent-color:var(--accent);" /> Observer 2
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;padding:8px 14px;background:var(--panel2);border:1px solid ${rosterConfig.obs2Enabled ? 'rgba(56,189,248,0.3)' : 'var(--border)'};border-radius:8px;transition:border-color 0.15s;">
+          <input type="checkbox" name="obs2Enabled" ${rosterConfig.obs2Enabled ? 'checked' : ''} style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer;" /> Observer 2
         </label>
-        <button type="submit" class="action-btn primary" style="font-size:11px;padding:4px 14px;">Save Config</button>
-        <span id="rosterConfigMsg" style="font-size:12px;display:none;"></span>
       </form>
     </section>
   ` : '';
@@ -23271,12 +23345,14 @@ app.get('/team/roster', requireLogin, async (req, res) => {
 
     <script>
     (function() {
-      // Config save
+      // Config live-save on any checkbox/select change
       var configForm = document.getElementById('rosterConfigForm');
       if (configForm) {
-        configForm.addEventListener('submit', async function(e) {
-          e.preventDefault();
+        async function saveConfig() {
           var msg = document.getElementById('rosterConfigMsg');
+          msg.textContent = 'Saving\u2026';
+          msg.style.color = 'var(--muted)';
+          msg.style.display = '';
           try {
             var r = await fetch('/api/team/roster/config', {
               method: 'POST',
@@ -23293,19 +23369,18 @@ app.get('/team/roster', requireLogin, async (req, res) => {
             if (r.ok) {
               msg.textContent = 'Saved!';
               msg.style.color = '#4ade80';
-              msg.style.display = '';
-              setTimeout(function() { location.reload(); }, 600);
+              setTimeout(function() { location.reload(); }, 500);
             } else {
-              msg.textContent = 'Failed to save';
+              msg.textContent = 'Failed';
               msg.style.color = '#f87171';
-              msg.style.display = '';
             }
           } catch (err) {
-            msg.textContent = 'Failed to save';
+            msg.textContent = 'Failed';
             msg.style.color = '#f87171';
-            msg.style.display = '';
           }
-        });
+        }
+        configForm.addEventListener('change', saveConfig);
+        configForm.addEventListener('submit', function(e) { e.preventDefault(); });
       }
 
       // Roster assignment on change
