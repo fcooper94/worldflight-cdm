@@ -7013,6 +7013,15 @@ async function loadScheduleFromDb(eventId) {
     }
     const staffing_route = published ? rawRoute : stripSidStar(proposedRoute, r.from, r.to);
 
+    // Same treatment for the split (Route B): the finalised secondary route if
+    // published, else whichever side has proposed one. Without this the FIRs
+    // that only Route B crosses are never staffed — the split traffic flies
+    // through airspace nobody was told to cover.
+    const depSplit = (plan.depSplitRoute || '').trim();
+    const arrSplit = (plan.arrSplitRoute || '').trim();
+    const proposedRoute2 = depSplit || arrSplit;
+    const staffing_route2 = published2 ? rawRoute2 : stripSidStar(proposedRoute2, r.from, r.to);
+
     return {
       number: r.number,
       from: r.from,
@@ -7028,6 +7037,7 @@ async function loadScheduleFromDb(eventId) {
       atc_route_raw2: rawRoute2,
       route_agreed: published,
       staffing_route,
+      staffing_route2,
       route_state,
       proposed_by,
       is_wf_challenge: r.isWfChallenge === true
@@ -10356,23 +10366,13 @@ app.get('/sector/:wf/:from/:to', async (req, res) => {
             document.getElementById('sectorBookSelf').addEventListener('click', function() {
               submitBooking(this, { callsign: String(myCid) }, document.getElementById('sectorBookMsg'));
             });
+            // Operator slots are allocated by auto-assignment - booking one by
+            // hand here would double-book the team/affiliate.
             document.getElementById('sectorBookTeam').addEventListener('click', function() {
-              var cs = teamCtx.callsigns || [];
               var msg = document.getElementById('sectorBookMsg');
-              if (cs.length > 1) {
-                var btnsDiv = overlay.querySelector('.booking-confirm-btns');
-                btnsDiv.innerHTML = cs.map(function(c) {
-                  return '<button class="booking-confirm-btn booking-confirm-team sector-cs-pick" data-cs="' + c + '">' + c + '</button>';
-                }).join('');
-                overlay.querySelector('.booking-confirm-sub').textContent = 'Which callsign should this booking be for?';
-                btnsDiv.addEventListener('click', function(ev) {
-                  var pickBtn = ev.target.closest('.sector-cs-pick');
-                  if (!pickBtn) return;
-                  submitBooking(pickBtn, { callsign: String(teamCtx.teamOwnerCid), teamBooking: true, teamCallsign: pickBtn.dataset.cs }, msg);
-                });
-              } else {
-                submitBooking(this, { callsign: String(teamCtx.teamOwnerCid), teamBooking: true, teamCallsign: cs[0] || null }, msg);
-              }
+              msg.innerHTML = 'Bookings for your team/affiliate are handled automatically and you do not need to make bookings. See your <a href="/team/hq" style="color:var(--accent);">Team/Affiliate HQ</a> for your bookings.';
+              msg.style.color = '#fbbf24';
+              msg.style.display = '';
             });
           } else {
             overlay.innerHTML = '<div class="modal-backdrop"></div>'
@@ -10898,34 +10898,13 @@ function openTeamBookingModal(sector) {
     socket.emit('createBookingOnly', { sector: sector, callsign: String(WF_MY_CID) });
     close();
   });
+  // Operator slots are allocated by auto-assignment - booking one by hand
+  // here would double-book the team/affiliate.
   document.getElementById('sbkTeam').addEventListener('click', function() {
-    var cs = WF_TEAM_CTX.callsigns || [];
-    if (cs.length > 1) {
-      var btnsDiv = overlay.querySelector('.booking-confirm-btns');
-      btnsDiv.innerHTML = cs.map(function(c) {
-        return '<button class="booking-confirm-btn booking-confirm-team sbk-cs-pick" data-cs="' + c + '">' + c + '</button>';
-      }).join('');
-      overlay.querySelector('.booking-confirm-sub').textContent = 'Which callsign should this booking be for?';
-      btnsDiv.addEventListener('click', function(ev) {
-        var pickBtn = ev.target.closest('.sbk-cs-pick');
-        if (!pickBtn) return;
-        socket.emit('createBookingOnly', {
-          sector: sector,
-          callsign: String(WF_TEAM_CTX.teamOwnerCid),
-          teamBooking: true,
-          teamCallsign: pickBtn.dataset.cs
-        });
-        close();
-      });
-    } else {
-      socket.emit('createBookingOnly', {
-        sector: sector,
-        callsign: String(WF_TEAM_CTX.teamOwnerCid),
-        teamBooking: true,
-        teamCallsign: cs[0] || null
-      });
-      close();
-    }
+    var msg = document.getElementById('sbkMsg');
+    msg.innerHTML = 'Bookings for your team/affiliate are handled automatically and you do not need to make bookings. See your <a href="/team/hq" style="color:var(--accent);">Team/Affiliate HQ</a> for your bookings.';
+    msg.style.color = '#fbbf24';
+    msg.style.display = '';
   });
 }
 
@@ -30791,8 +30770,9 @@ async function _buildFirAnalysisInner() {
   for (const leg of legs) {
     allIcaos.add(leg.from);
     allIcaos.add(leg.to);
-    if (leg.staffing_route) {
-      for (const tok of leg.staffing_route.split(/\s+/).filter(Boolean)) {
+    for (const routeStr of [leg.staffing_route, leg.staffing_route2]) {
+      if (!routeStr) continue;
+      for (const tok of String(routeStr).split(/\s+/).filter(Boolean)) {
         if (/^[A-Z]{4}$/.test(tok.toUpperCase())) allIcaos.add(tok.toUpperCase());
       }
     }
@@ -30804,41 +30784,38 @@ async function _buildFirAnalysisInner() {
   const airportLookup = {};
   for (const ap of airportRows) airportLookup[ap.icao] = ap;
 
-  for (const leg of legs) {
-    // No route yet (neither proposed nor finalised) → no staffing data for this
-    // sector. Without this guard the dep + arr airports alone give points.length
-    // === 2, so a straight dep→arr line would be drawn and its crossed FIRs
-    // listed even though no route exists.
-    if (!leg.staffing_route) continue;
-
+  /* Which FIRs one route string crosses, as fractions along its own length.
+     Shared by the primary route and the split (Route B) so both are staffed
+     from identical geometry. Returns [] when the route can't be resolved to
+     at least two points. */
+  function computeRouteFirSegments(leg, routeStr) {
+    if (!routeStr) return [];
     const points = [];
 
     // Resolve route points using in-memory lookup
     const depAp = airportLookup[leg.from];
     if (depAp) points.push({ name: leg.from, lat: depAp.lat, lon: depAp.lon });
 
-    if (leg.staffing_route) {
-      const tokens = leg.staffing_route.split(/\s+/).filter(Boolean);
-      for (const tok of tokens) {
-        const lastPt = points.length > 0 ? points[points.length - 1] : (depAp || { lat: 0, lon: 0 });
-        const llFix = parseNavLatLon(tok);
-        if (llFix) { points.push({ name: tok, lat: llFix.lat, lon: llFix.lon }); continue; }
-        const upper = tok.toUpperCase();
-        if (/^(DCT|[A-Z]{1,2}\d{1,4}|[A-Z]\d{1,4}[A-Z]?)$/.test(upper) && upper.length <= 5 && /\d/.test(upper)) continue;
-        if (upper === 'DCT') continue;
-        const fix = closestFix(upper, lastPt.lat, lastPt.lon);
-        if (fix) { points.push({ name: upper, lat: fix.lat, lon: fix.lon }); continue; }
-        if (/^[A-Z]{4}$/.test(upper)) {
-          const ap = airportLookup[upper];
-          if (ap) { points.push({ name: upper, lat: ap.lat, lon: ap.lon }); continue; }
-        }
+    const tokens = String(routeStr).split(/\s+/).filter(Boolean);
+    for (const tok of tokens) {
+      const lastPt = points.length > 0 ? points[points.length - 1] : (depAp || { lat: 0, lon: 0 });
+      const llFix = parseNavLatLon(tok);
+      if (llFix) { points.push({ name: tok, lat: llFix.lat, lon: llFix.lon }); continue; }
+      const upper = tok.toUpperCase();
+      if (/^(DCT|[A-Z]{1,2}\d{1,4}|[A-Z]\d{1,4}[A-Z]?)$/.test(upper) && upper.length <= 5 && /\d/.test(upper)) continue;
+      if (upper === 'DCT') continue;
+      const fix = closestFix(upper, lastPt.lat, lastPt.lon);
+      if (fix) { points.push({ name: upper, lat: fix.lat, lon: fix.lon }); continue; }
+      if (/^[A-Z]{4}$/.test(upper)) {
+        const ap = airportLookup[upper];
+        if (ap) { points.push({ name: upper, lat: ap.lat, lon: ap.lon }); continue; }
       }
     }
 
     const arrAp = airportLookup[leg.to];
     if (arrAp) points.push({ name: leg.to, lat: arrAp.lat, lon: arrAp.lon });
 
-    if (points.length < 2) continue;
+    if (points.length < 2) return [];
 
     // Fix antimeridian crossings
     for (let k = 1; k < points.length; k++) {
@@ -30866,7 +30843,7 @@ async function _buildFirAnalysisInner() {
     // Sample route for FIR transits
     const SAMPLES = 100;
     let lastFir = null;
-    const legFirSegments = [];
+    const segments = [];
 
     for (let s = 0; s <= SAMPLES; s++) {
       const frac = s / SAMPLES;
@@ -30885,11 +30862,30 @@ async function _buildFirAnalysisInner() {
       const firId = firs[0] || null;
 
       if (firId && firId !== lastFir) {
-        if (legFirSegments.length > 0) legFirSegments[legFirSegments.length - 1].exitFrac = frac;
-        legFirSegments.push({ fir: firId, entryFrac: frac, exitFrac: 1.0 });
+        if (segments.length > 0) segments[segments.length - 1].exitFrac = frac;
+        segments.push({ fir: firId, entryFrac: frac, exitFrac: 1.0 });
         lastFir = firId;
       }
     }
+
+    return segments;
+  }
+
+  for (const leg of legs) {
+    // No route yet (neither proposed nor finalised) → no staffing data for this
+    // sector. Without this guard the dep + arr airports alone give points.length
+    // === 2, so a straight dep→arr line would be drawn and its crossed FIRs
+    // listed even though no route exists.
+    if (!leg.staffing_route) continue;
+
+    // Both routes are staffed. A FIR crossed by both yields two segments for
+    // the same leg, which the merge pass below collapses into one entry with
+    // a window covering both — so nothing is double-counted.
+    const legFirSegments = [
+      ...computeRouteFirSegments(leg, leg.staffing_route).map(s => ({ ...s, route: 'A' })),
+      ...computeRouteFirSegments(leg, leg.staffing_route2).map(s => ({ ...s, route: 'B' }))
+    ];
+    if (!legFirSegments.length) continue;
 
     // Parse dep/block times — use wind-adjusted block if available
     const depParts = (leg.dep_time_utc || '').split(':');
@@ -30935,6 +30931,9 @@ async function _buildFirAnalysisInner() {
         arrTime: leg.arr_time_utc || '',
         atcRoute: leg.staffing_route || '',
         atcRoute2: leg.atc_route2 || '',
+        // Which of the sector's routes brings traffic through this FIR.
+        // Unioned in the merge pass when both do.
+        routes: [seg.route || 'A'],
         route_state: leg.route_state || 'none',
         proposed_by: leg.proposed_by || '',
         entryFrac: seg.entryFrac,
@@ -30987,6 +30986,7 @@ async function _buildFirAnalysisInner() {
         // Extend the existing entry to cover both transits
         prev.exitFrac = Math.max(prev.exitFrac, leg.exitFrac);
         prev.entryFrac = Math.min(prev.entryFrac, leg.entryFrac);
+        for (const r of (leg.routes || [])) if (!prev.routes.includes(r)) prev.routes.push(r);
         if (leg.entryTime && prev.entryTime && leg.entryTime < prev.entryTime) prev.entryTime = leg.entryTime;
         if (leg.exitTime && prev.exitTime && leg.exitTime > prev.exitTime) prev.exitTime = leg.exitTime;
         if (leg.staffStart && prev.staffStart && leg.staffStart < prev.staffStart) prev.staffStart = leg.staffStart;
@@ -36515,6 +36515,7 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
           staffMins: leg.staffMins,
           flowType: leg.flowType, depFlow: leg.depFlow,
           combinedWith: leg.combinedWith || [],
+          routes: leg.routes || ['A'],
           windAdjusted: leg.windAdjusted || false,
           windDeltaMin: leg.windDeltaMin || 0
         });
@@ -36533,6 +36534,8 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
     const transitMin = (t) => { const m = parseHHMM(t); if (m == null) return Infinity; return m < anchorMin ? m + 1440 : m; };
     sectorFirLegs.sort((a, b) => transitMin(a.staffStart) - transitMin(b.staffStart));
   }
+  // Only label FIRs by route when this sector actually has a split flying.
+  const hasSplitRoute = sectorFirLegs.some(fl => (fl.routes || []).includes('B'));
 
   const routeComparison = compareRoutes(plan.depRouteSuggestion, plan.arrRouteSuggestion);
 
@@ -36879,6 +36882,30 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
         .sp-top-grid { grid-template-columns: 1fr; }
         .sp-top-grid > .sp-top-map { grid-column: 1; }
       }
+      /* Middle column stacks the overview above the readiness checklist, so
+         it is the grid item rather than either card. */
+      .sp-top-col { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+      .sp-top-col > .card { display: flex; flex-direction: column; min-width: 0; }
+      .sp-top-col > .sp-overview-card { flex: 0 0 auto; }
+      .sp-top-col > .sp-top-checklist-card { flex: 1 1 auto; }
+
+      .sp-overview-card h3 { margin: 0 0 8px; font-size: 13px; }
+      .sp-ov-route {
+        display: flex; align-items: center; gap: 8px;
+        margin-bottom: 8px;
+      }
+      .sp-ov-icao {
+        font-family: monospace; font-size: 16px; font-weight: 700;
+        letter-spacing: 0.06em; color: var(--accent);
+      }
+      .sp-ov-arrow { color: var(--muted); font-size: 13px; }
+      .sp-ov-local { font-size: 10px; color: var(--muted); }
+      /* Two fixed rows: date + sector, then both windows side by side —
+         rather than letting the flex strip wrap them unevenly. */
+      .sp-ov-details { flex-direction: column; flex-wrap: nowrap; gap: 8px; }
+      .sp-ov-line { display: flex; gap: 14px; min-width: 0; }
+      .sp-ov-line > .sp-detail-item { flex: 1 1 0; min-width: 0; }
+
       .sp-top-checklist-card h3 { margin: 0 0 8px; font-size: 13px; }
       .sp-top-checklist-card .sp-checklist { gap: 6px; }
       .sp-top-checklist-card .sp-check { padding: 6px 8px; }
@@ -36914,6 +36941,16 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
       .sp-fir-row .win  { grid-column: 1 / -1; display: flex; gap: 8px; font-family: monospace; font-size: 11px; color: var(--muted); flex-wrap: wrap; align-items: center; }
       .sp-fir-row .win .utc { color: #38bdf8; }
       .sp-fir-row .win .lcl { color: var(--muted); }
+      /* Route split: FIRs only the secondary route crosses are tinted amber
+         so it is obvious which cover exists because of the split. */
+      .sp-fir-route-a  { color: #7dd3fc !important; background: rgba(56,189,248,0.12) !important; border: 1px solid rgba(56,189,248,0.3); }
+      .sp-fir-route-b  { color: #fcd34d !important; background: rgba(245,158,11,0.14) !important; border: 1px solid rgba(245,158,11,0.38); }
+      .sp-fir-route-ab { color: #d8b4fe !important; background: rgba(168,85,247,0.14) !important; border: 1px solid rgba(168,85,247,0.35); }
+      .sp-fir-row.is-route-b {
+        background: rgba(245,158,11,0.05);
+        border-color: rgba(245,158,11,0.3);
+      }
+      .sp-fir-row.is-route-b .win .utc { color: #fbbf24; }
       .sp-fir-empty { font-size: 11px; color: var(--muted); text-align: center; padding: 12px 4px; }
 
       /* ── Status strip (top dashboard of section verdicts) ─────────────── */
@@ -37109,6 +37146,40 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
         <div id="spMap"></div>
       </section>
 
+      <div class="sp-top-col">
+      <section class="card sp-overview-card">
+        <h3>Sector Overview</h3>
+        <div class="sp-ov-route">
+          <span class="sp-ov-icao">${fromIcao}</span>
+          <span class="sp-ov-arrow">→</span>
+          <span class="sp-ov-icao">${toIcao}</span>
+        </div>
+        <div class="sp-details sp-ov-details" style="margin:0;">
+          <div class="sp-ov-line">
+            <div class="sp-detail-item">
+              <span class="sp-detail-label">Date</span>
+              <span class="sp-detail-value">${sched.date_utc || '-'}</span>
+            </div>
+            <div class="sp-detail-item">
+              <span class="sp-detail-label">Sector</span>
+              <span class="sp-detail-value">${wf}</span>
+            </div>
+          </div>
+          <div class="sp-ov-line">
+            <div class="sp-detail-item">
+              <span class="sp-detail-label">Dep Window (UTC)</span>
+              <span class="sp-detail-value">${depWindowUtc || '-'}</span>
+              ${depWindowLocal ? `<span class="sp-ov-local">${depWindowLocal}</span>` : ''}
+            </div>
+            <div class="sp-detail-item">
+              <span class="sp-detail-label">Arr Window (UTC)</span>
+              <span class="sp-detail-value">${arrWindowUtc || '-'}</span>
+              ${arrWindowLocal ? `<span class="sp-ov-local">${arrWindowLocal}</span>` : ''}
+            </div>
+          </div>
+        </div>
+      </section>
+
       <section class="card sp-top-checklist-card">
         <h3>Sector Readiness</h3>
         <div class="sp-checklist sp-checklist-stack">
@@ -37178,6 +37249,7 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
           </div>
         </div>
       </section><!-- /sp-top-checklist-card -->
+      </div><!-- /sp-top-col -->
 
       <section class="card sp-firs-card">
         <div class="sp-firs-head">
@@ -37207,16 +37279,28 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
               const tag = isDep ? ' <span class="div" style="color:#fbbf24;background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.35);">DEP</span>'
                        : isArr ? ' <span class="div" style="color:#fbcfe8;background:rgba(244,114,182,0.12);border:1px solid rgba(244,114,182,0.35);">ARR</span>'
                        : '';
+              // Which route brings traffic here. Only worth showing once a
+              // split exists — otherwise every FIR is trivially Route A.
+              const rts = fl.routes || ['A'];
+              const routeTag = hasSplitRoute
+                ? (rts.length > 1
+                    ? ' <span class="div sp-fir-route sp-fir-route-ab">A+B</span>'
+                    : rts[0] === 'B'
+                      ? ' <span class="div sp-fir-route sp-fir-route-b">B</span>'
+                      : ' <span class="div sp-fir-route sp-fir-route-a">A</span>')
+                : '';
               const win = fl.staffStart && fl.staffEnd ? `<span class="utc">${fl.staffStart}–${fl.staffEnd}z</span>` : '';
               const localWin = fl.staffStartLocal && fl.staffEndLocal ? `<span class="lcl">${fl.staffStartLocal}–${fl.staffEndLocal} local</span>` : '';
-              return `<div class="sp-fir-row">
-                <span class="name">${fl.fir}${tag}</span>
+              return `<div class="sp-fir-row${rts.length === 1 && rts[0] === 'B' ? ' is-route-b' : ''}">
+                <span class="name">${fl.fir}${tag}${routeTag}</span>
                 <span class="div">${fl.division || ''}</span>
                 <span class="win">${win}${localWin}</span>
               </div>`;
             }).join('')}
           </div>
-        ` : '<div class="sp-fir-empty">No FIRs found for this sector yet.</div>'}
+        ` : `<div class="sp-fir-empty">${checklist.atcRouteAgreed
+              ? 'No FIRs found for this sector yet.'
+              : 'Transited FIRs will be displayed once a route has been agreed.'}</div>`}
       </section>
     </div><!-- /sp-top-grid -->
 
@@ -38020,10 +38104,12 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
           if (!isFinite(pct) || pct < 5 || pct > 95) { spSetMsg(msg, 'Split must be 5–95%', false); return; }
           var res = await spPostJson('/api/sector-plan/' + encodeURIComponent(window.SP.wf) + '/split', { side: side, route: route, pct: Math.round(pct) });
           if (res.ok) {
-            window.SP[sideKey + 'SplitRoute'] = route;
+            var cleanedSplit = res.data.cleanedRoute || route;
+            if (res.data.sidStarStripped) document.getElementById(pfx + 'Route').value = cleanedSplit;
+            window.SP[sideKey + 'SplitRoute'] = cleanedSplit;
             window.SP[sideKey + 'SplitPct'] = Math.round(pct);
             window.SP.splitAgreed = false;
-            spSetMsg(msg, 'Saved', true);
+            spSetMsg(msg, res.data.sidStarStripped ? 'Saved — SID/STAR removed from route' : 'Saved', true);
             spRenderSplitComparison();
             if (window.SP._spMap) window.SP._spMap.drawSplitRoute();
           } else spSetMsg(msg, res.data.error || 'Failed', false);
@@ -38599,25 +38685,19 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
         }
 
         function drawFirPolygons(firIds) {
-          firIds.forEach(function(firId) {
-            if (ctx.drawnFirs[firId]) return;
-            var feat = ctx.allShiftedFeatures[firId];
-            if (!feat) return;
-            ctx.drawnFirs[firId] = true;
-            var color = colorForFir(firId);
-            var layer = L.geoJSON(feat, { style: { color: color, weight: 2, fillColor: ctx.hexToRgba(color, 0.18), fillOpacity: 0.32 } }).addTo(map);
-            layer.bindTooltip(ctx.displayFir(firId), { sticky: true, className: 'fir-tooltip' });
-            ctx.proposedFirLayers.push(layer);
-          });
+          ctx.drawFirPolygons(firIds, ctx.proposedFirLayers);
         }
 
+        // Route A is painted first so shared FIRs keep their palette colour;
+        // the split then fills in only the airspace A doesn't already cover.
+        var sidePromises = [];
         sides.forEach(function(s) {
           if (!s.route || !s.route.trim()) {
             firCells[s.side] = '<div style="font-size:11px;color:var(--muted);">No route proposed yet.</div>';
             renderFirCells();
             return;
           }
-          fetch('/api/resolve-route?from=' + window.SP.fromIcao + '&to=' + window.SP.toIcao + '&route=' + encodeURIComponent(s.route) + '&depTime=&blockTime=')
+          sidePromises.push(fetch('/api/resolve-route?from=' + window.SP.fromIcao + '&to=' + window.SP.toIcao + '&route=' + encodeURIComponent(s.route) + '&depTime=&blockTime=')
             .then(function(r) { return r.json(); })
             .then(function(rd) {
               if (!rd.points || rd.points.length < 2) {
@@ -38661,8 +38741,12 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
             .catch(function() {
               firCells[s.side] = '<div style="font-size:11px;color:#f87171;">Failed to resolve route.</div>';
               renderFirCells();
-            });
+            }));
         });
+        // Redrawing route A resets drawnFirs, so repaint the split's airspace
+        // once both sides have settled — otherwise a route save silently
+        // clears the Route B polygons.
+        if (sidePromises.length) Promise.all(sidePromises).then(function() { spDrawSplitRoute(); });
 
         function renderFirCells() {
           if (!content) return;
@@ -38677,9 +38761,14 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
         if (!ctx) return;
         var map = ctx.map;
 
-        // Clear previous split route layers
+        // Clear previous split route layers (line + its own FIR polygons)
         (ctx.splitRouteLayers || []).forEach(function(l) { try { map.removeLayer(l); } catch (e) {} });
         ctx.splitRouteLayers = [];
+        (ctx.splitFirLayers || []).forEach(function(l) {
+          try { map.removeLayer(l); } catch (e) {}
+          if (l._wfFirId) delete ctx.drawnFirs[l._wfFirId];
+        });
+        ctx.splitFirLayers = [];
 
         // Use whichever split route exists (prefer agreed, else dep, else arr)
         var splitRoute = '';
@@ -38717,9 +38806,17 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
             }
             line.bindTooltip('Route B (split)', { sticky: true, className: 'fir-tooltip' });
 
+            // Paint the airspace this route enters. Anything the primary
+            // route already covers is skipped by the drawnFirs guard, so
+            // only the split-only FIRs (e.g. UKBV on WF2635) light up amber.
+            var allFirs = (rd.firs || []).map(function(f) { return f.fir; });
+            var seenAll = {}; var uniqAll = [];
+            allFirs.forEach(function(f) { if (!seenAll[f]) { seenAll[f] = 1; uniqAll.push(f); } });
+            ctx.drawFirPolygons(uniqAll, ctx.splitFirLayers, true);
+
             // Show FIRs
             if (splitFirsBox) {
-              var firs = (rd.firs || []).map(function(f) { return f.fir; });
+              var firs = allFirs;
               var seen = {}; var uniq = [];
               firs.forEach(function(f) { if (!seen[f]) { seen[f] = 1; uniq.push(f); } });
               if (!uniq.length) {
@@ -38845,8 +38942,35 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
             proposedFirLayers: [],
             proposedRouteLayers: { DEP: [], ARR: [] },
             splitRouteLayers: [],
+            splitFirLayers: [],
             drawnFirs: {},
             colors: { DEP: '#818cf8', ARR: '#f472b6' },
+            /* Paint FIR polygons, skipping any already on the map. "into" is
+               the layer array that owns them (so each caller clears its own),
+               and "routeB" tints them amber + dashed to mark airspace that is
+               only entered because of the split. */
+            drawFirPolygons: function(firIds, into, routeB) {
+              var self = window.SP._spMap;
+              (firIds || []).forEach(function(firId) {
+                if (self.drawnFirs[firId]) return;
+                var feat = self.allShiftedFeatures[firId];
+                if (!feat) return;
+                self.drawnFirs[firId] = true;
+                var color = routeB ? '#fbbf24' : (function() {
+                  if (self.colorByFir[firId]) return self.colorByFir[firId];
+                  var pal = ['#f59e0b','#ef4444','#22c55e','#3b82f6','#a855f7','#ec4899','#14b8a6','#f97316','#06b6d4','#eab308','#8b5cf6','#10b981','#e11d48','#0ea5e9'];
+                  self.colorByFir[firId] = pal[Object.keys(self.colorByFir).length % pal.length];
+                  return self.colorByFir[firId];
+                })();
+                var style = routeB
+                  ? { color: color, weight: 2, dashArray: '6, 5', fillColor: self.hexToRgba(color, 0.14), fillOpacity: 0.26 }
+                  : { color: color, weight: 2, fillColor: self.hexToRgba(color, 0.18), fillOpacity: 0.32 };
+                var layer = L.geoJSON(feat, { style: style }).addTo(self.map);
+                layer.bindTooltip(self.displayFir(firId) + (routeB ? ' — Route B only' : ''), { sticky: true, className: 'fir-tooltip' });
+                layer._wfFirId = firId;   // so the owner can un-register it on clear
+                (into || self.proposedFirLayers).push(layer);
+              });
+            },
             drawProposedRoutes: spDrawProposedRoutes,
             drawSplitRoute: spDrawSplitRoute
           };
@@ -39006,11 +39130,21 @@ app.post('/api/sector-plan/:wf/split', requireLogin, async (req, res) => {
     if (!sched) return res.status(404).json({ error: 'WF not found' });
     if (!(await canEditPlanSide(cid, side, sched.from, sched.to))) return res.status(403).json({ error: 'No edit access' });
     const plan = await getOrCreateSectorPlan(wf, sched.from, sched.to);
+    // Strip SID/STAR exactly as the primary route does — otherwise the split
+    // is stored with a SID the fix lookup can't resolve, and the two sides'
+    // proposals can't match if only one was entered with one.
+    const cleaned = route ? (stripSidStar(route, sched.from, sched.to) || null) : null;
+    const stripped = !!(route && cleaned !== route.trim());
     const data = side === 'DEP'
-      ? { depSplitRoute: route, depSplitPct: pct !== null ? Math.round(pct) : null, splitAgreed: false, depUpdatedBy: cid, depUpdatedAt: new Date() }
-      : { arrSplitRoute: route, arrSplitPct: pct !== null ? Math.round(pct) : null, splitAgreed: false, arrUpdatedBy: cid, arrUpdatedAt: new Date() };
+      ? { depSplitRoute: cleaned, depSplitPct: pct !== null ? Math.round(pct) : null, splitAgreed: false, depUpdatedBy: cid, depUpdatedAt: new Date() }
+      : { arrSplitRoute: cleaned, arrSplitPct: pct !== null ? Math.round(pct) : null, splitAgreed: false, arrUpdatedBy: cid, arrUpdatedAt: new Date() };
     await prisma.sectorPlan.update({ where: { id: plan.id }, data });
-    res.json({ success: true });
+    // The split now feeds staffing (staffing_route2), so a change here must
+    // rebuild the schedule cache and drop the FIR analysis exactly as a
+    // primary-route change does — otherwise Route B's FIRs go stale.
+    await loadScheduleFromDb(activeEventId);
+    clearFirAnalysisCache();
+    res.json({ success: true, cleanedRoute: cleaned, sidStarStripped: stripped });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -39034,6 +39168,10 @@ app.post('/api/sector-plan/:wf/split-agree', requireLogin, async (req, res) => {
     const aPct = plan.arrSplitPct != null ? plan.arrSplitPct : 50;
     if (dNorm !== aNorm || dPct !== aPct) return res.status(400).json({ error: 'Proposals don\'t match — coordinate with the other side first' });
     await prisma.sectorPlan.update({ where: { id: plan.id }, data: { splitAgreed: true } });
+    // Agreeing promotes the split to the published Route B, which changes
+    // staffing_route2 — rebuild the caches that depend on it.
+    await loadScheduleFromDb(activeEventId);
+    clearFirAnalysisCache();
     res.json({ success: true });
   } catch (e) {
     res.status(500).json({ error: e.message });
