@@ -10,6 +10,7 @@ export default function renderLayout({
   sectorPlanOutOfSync = 0,
   canManageAffiliateMembers = false,
   canManageTeamMembers = false,
+  teamRosterEnabled = false,
   content,
   layoutClass = '',
   pageVisibility = {},
@@ -83,9 +84,9 @@ export default function renderLayout({
         <span class="icon">${icons.pin}</span>
         <span class="label">Past Destinations</span>
       </a>
-      ${pv('my-slots') ? `<a href="/my-slots" class="nav-item" data-tooltip="My Slots / Bookings">
+      ${pv('my-slots') ? `<a href="/my-slots" class="nav-item" data-tooltip="My Bookings">
         <span class="icon">${icons.ticket}</span>
-        <span class="label">My Slots / Bookings</span>
+        <span class="label">My Bookings</span>
       </a>` : ''}
       ${pv('suggest-airport') ? `<a href="/suggest-airport" class="nav-item" data-tooltip="Suggest Airport">
         <span class="icon">${icons.bulb}</span>
@@ -135,6 +136,10 @@ export default function renderLayout({
       ${canManageTeamMembers ? `<a href="/team/manage-members" class="nav-item" data-tooltip="Manage Members">
         <span class="icon">${icons.users}</span>
         <span class="label">Manage Members</span>
+      </a>` : ''}
+      ${teamRosterEnabled ? `<a href="/team/roster" class="nav-item" data-tooltip="Crew Roster">
+        <span class="icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></span>
+        <span class="label">Crew Roster</span>
       </a>` : ''}
     </div>
     ` : ''}

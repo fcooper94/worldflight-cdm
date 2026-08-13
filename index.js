@@ -467,6 +467,7 @@ function renderLayout(opts) {
     sectorPlanOutOfSync: (cid && isAdminUser(cid)) ? sectorPlanOutOfSyncCount : 0,
     canManageAffiliateMembers: cid ? canManageAffiliateMembers(cid) : false,
     canManageTeamMembers: cid ? canManageTeamMembers(cid) : false,
+    teamRosterEnabled: cid ? hasTeamRoster(cid) : false,
     activeEvent: active ? { id: active.id, name: active.name, year: active.year } : null
   });
 }
@@ -2103,23 +2104,30 @@ function requireAdminPage(pageKey) {
 const teamMemberCids = new Set();
 const teamOwnerCids = new Set();    // mainCid of any OfficialTeam row
 const teamManagerCids = new Set();  // owners + members holding canManageMembers
+const teamRosterNames = new Set();  // uppercase teamName for teams with rosterEnabled
+const teamCidToName = new Map();    // cid -> uppercase teamName
 
 async function loadTeamMembers() {
   try {
     const rows = await prisma.userAdditionalRole.findMany({ where: { role: 'WF_TEAM' } });
     teamMemberCids.clear();
     teamManagerCids.clear();
+    teamCidToName.clear();
     rows.forEach(r => {
       teamMemberCids.add(r.cid);
       if (r.canManageMembers) teamManagerCids.add(Number(r.cid));
+      if (r.teamName) teamCidToName.set(Number(r.cid), String(r.teamName).trim().toUpperCase());
     });
-    const owners = await prisma.officialTeam.findMany({ select: { mainCid: true } });
+    const owners = await prisma.officialTeam.findMany().catch(() => []);
     teamOwnerCids.clear();
+    teamRosterNames.clear();
     owners.forEach(o => {
       const c = Number(o.mainCid);
       if (!c) return;
       teamOwnerCids.add(c);
       teamManagerCids.add(c);
+      if (o.teamName) teamCidToName.set(c, String(o.teamName).trim().toUpperCase());
+      if (o.rosterEnabled) teamRosterNames.add(String(o.teamName || '').trim().toUpperCase());
     });
     console.log(`[TEAM] Loaded ${teamMemberCids.size} WF team members, ${teamOwnerCids.size} owners`);
   } catch (e) {}
@@ -2134,6 +2142,14 @@ function isTeamMember(cid) {
 
 function canManageTeamMembers(cid) {
   return !!cid && teamManagerCids.has(Number(cid));
+}
+
+function hasTeamRoster(cid) {
+  if (!cid) return false;
+  const tn = teamCidToName.get(Number(cid));
+  if (tn && teamRosterNames.has(tn)) return true;
+  // Also check owner CIDs directly
+  return false;
 }
 
 function requireTeamMember(req, res, next) {
@@ -2839,13 +2855,13 @@ function getFlowStatus(scheduleRow, claimedCid) {
 // the sector (held by main CID or another member), transfer it to the new pilot;
 // otherwise try to create a fresh booking using the same SLOTTED/BOOKING_ONLY
 // logic as auto-assignment.
-async function assignAffiliatePilotToSector(affiliate, scheduleRow, claimCid) {
+async function assignAffiliatePilotToSector(affiliate, scheduleRow, claimCid, overrideCallsign) {
   if (!affiliate || !scheduleRow || !claimCid) return;
   const newCid = Number(claimCid);
   if (!Number.isFinite(newCid)) return;
 
   const sectorPrefix = `${scheduleRow.from}-${scheduleRow.to}|${scheduleRow.date_utc}|${scheduleRow.dep_time_utc}`;
-  const callsign = String(affiliate.callsign || '').toUpperCase();
+  const callsign = overrideCallsign ? String(overrideCallsign).toUpperCase() : String(affiliate.callsign || '').toUpperCase();
 
   // Build set of CIDs in this affiliate (main + members)
   const memberRows = await prisma.affiliateMember.findMany({
@@ -2853,16 +2869,17 @@ async function assignAffiliatePilotToSector(affiliate, scheduleRow, claimCid) {
   }).catch(() => []);
   const affCids = [Number(affiliate.cid), ...memberRows.map(m => Number(m.cid))].filter(Number.isFinite);
 
-  // Look for an existing booking for this sector held by anyone in the affiliate
+  // Look for an existing booking by callsign first, then fall back to CID lookup.
+  // Callsign match is preferred because multi-aircraft affiliates can have the
+  // same CID holding bookings under different callsigns on the same sector.
   const existing = await prisma.tobtBooking.findFirst({
-    where: {
-      cid: { in: affCids },
-      slotKey: { startsWith: sectorPrefix }
-    }
-  });
+    where: { callsign, slotKey: { startsWith: sectorPrefix } }
+  }) || (!overrideCallsign ? await prisma.tobtBooking.findFirst({
+    where: { cid: { in: affCids }, slotKey: { startsWith: sectorPrefix }, callsign }
+  }) : null);
 
   if (existing) {
-    if (Number(existing.cid) === newCid) return; // already correct
+    if (Number(existing.cid) === newCid && String(existing.callsign || '').toUpperCase() === callsign) return; // already correct
     const oldCid = Number(existing.cid);
     await prisma.tobtBooking.update({
       where: { id: existing.id },
@@ -8045,15 +8062,16 @@ function generateTobtSlots({ from, to, dateUtc, depTimeUtc }) {
   const dep = parseUtcDateTime(dateUtc, depTimeUtc);
 
   // Slot capacity = flow rate × 2-hour departure window (e.g. 80/hr → 160).
-  // Connection times span dep − 75min → dep + 45min: 120 minutes centred on
-  // the dep−15 slot anchor (SLOT_ANCHOR_OFFSET_MIN), so the block of teams
-  // and affiliates fans symmetrically either side of the prime slot (a 21:00
-  // departure gets TCTs 19:45–21:45 around 20:45). Slot count is NOT capped —
-  // high flow rates produce multiple bookable slots at the same HH:MM
-  // minute. Each slot's slotKey is suffixed with #2, #3, … to keep it unique
-  // while the displayed `tobt` stays as plain HH:MM.
+  // Connect times span from 15 min before the departure window opens to
+  // 15 min before it closes: (dep − 75min) → (dep + 45min) = 120 min. That
+  // is centred on the dep−15 slot anchor (SLOT_ANCHOR_OFFSET_MIN), so the
+  // block of teams and affiliates fans symmetrically either side of the
+  // prime slot (a 21:00 departure gets TCTs 19:45–21:45 around 20:45).
+  // Slot count is NOT capped — high flow rates produce multiple bookable
+  // slots at the same HH:MM minute. Each slot's slotKey is suffixed with
+  // #2, #3, … to keep it unique while the displayed `tobt` stays HH:MM.
   const windowStart = new Date(dep.getTime() - 75 * 60 * 1000);
-  const WINDOW_MIN = 120;       // slots spread across this many minutes
+  const WINDOW_MIN = 120;        // slots spread across this many minutes
   const WINDOW_HOURS = 2;        // capacity is flow × this
 
   const flowKey = `${from}-${to}`;
@@ -8075,8 +8093,8 @@ function generateTobtSlots({ from, to, dateUtc, depTimeUtc }) {
 
   // Exact target capacity, no minute-cap. flow=80 → 160 slots.
   const targetCount = Math.max(1, Math.round(flow * WINDOW_HOURS));
-  // Even spacing across the 90-min window. With N slots, the first sits at
-  // windowStart and the last at windowStart + 90min.
+  // Even spacing across the window. With N slots, the first sits at
+  // windowStart and the last at windowStart + WINDOW_MIN.
   const stepSec = (WINDOW_MIN * 60) / Math.max(1, targetCount - 1 || targetCount);
 
   // Each returned slot has:
@@ -9873,11 +9891,11 @@ app.get('/sector/:wf/:from/:to', async (req, res) => {
   }
 
   const remainingText = bookingsFull ? '' :
-    flowType === 'SLOTTED' && slotTotal > 0 ? slotsLeft + ' Slot' + (slotsLeft !== 1 ? 's' : '') + ' Left' :
+    flowType === 'SLOTTED' && slotTotal > 0 ? slotsLeft + ' Booking' + (slotsLeft !== 1 ? 's' : '') + ' Left' :
     flowType === 'BOOKING_ONLY' && bookingCap && bookingCap.total > 0 ? bookingCap.remaining + ' Booking' + (bookingCap.remaining !== 1 ? 's' : '') + ' Left' : '';
 
   const slotsFull = flowType === 'SLOTTED' && slotTotal > 0 && slotsLeft <= 0;
-  const flowLabel = bookingsFull ? 'No Bookings Left!' : slotsFull ? 'No Slots Left!' : (flowType === 'SLOTTED' ? 'Time Slot Required' : flowType === 'BOOKING_ONLY' ? 'Booking Required' : 'No Restrictions');
+  const flowLabel = bookingsFull ? 'No Bookings Left!' : slotsFull ? 'No Bookings Left!' : (flowType === 'SLOTTED' ? 'Booking Required' : flowType === 'BOOKING_ONLY' ? 'Booking Required' : 'No Restrictions');
   const flowClass = (bookingsFull || slotsFull) ? 'full' : (flowType === 'SLOTTED' ? 'slotted' : flowType === 'BOOKING_ONLY' ? 'booking' : 'none');
 
   // Check if user has a booking for this sector
@@ -9974,7 +9992,7 @@ app.get('/sector/:wf/:from/:to', async (req, res) => {
         ` : `
         <div class="sector-banner sector-banner-flow-${flowClass}" style="width:calc(40% - 8px);min-width:250px;flex-direction:column;justify-content:space-between;padding:16px;box-sizing:border-box;overflow:hidden;">
           <div style="font-size:11px;color:inherit;opacity:0.7;text-align:center;line-height:1.4;">
-            ${flowType === 'SLOTTED' ? 'The FIR Manager has set a restriction on this route. To participate you require a Time Slot.' : flowType === 'BOOKING_ONLY' ? 'The FIR Manager has set a restriction on this route. To participate you require a Booking.' : 'There are no flow restrictions on this route. You may depart freely within the departure window.'}
+            ${flowType === 'SLOTTED' ? 'The FIR Manager has set a restriction on this route. To participate you require a Booking.' : flowType === 'BOOKING_ONLY' ? 'The FIR Manager has set a restriction on this route. To participate you require a Booking.' : 'There are no flow restrictions on this route. You may depart freely within the departure window.'}
           </div>
           <div style="display:flex;flex-direction:column;align-items:center;gap:8px;">
             <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/><path d="M12 6v6l4 2"/></svg>
@@ -9989,7 +10007,7 @@ app.get('/sector/:wf/:from/:to', async (req, res) => {
               const sbRoute = encodeURIComponent((isAdmin || isPageEnabled('atc-route')) ? assignedAtcRoute : '');
               const sbUrl = 'https://dispatch.simbrief.com/options/custom?orig=' + fromIcao + '&dest=' + toIcao + '&route=' + sbRoute + '&manualrmk=' + encodeURIComponent('Route validated from www.worldflight.center');
               return '<a href="#" id="viewBookingBtn" style="display:block;text-align:center;padding:10px;margin:0 -17px -17px;border-top:1px solid var(--border);border-radius:0 0 11px 11px;width:calc(100% + 34px);font-size:13px;font-weight:600;text-decoration:none;background:rgba(74,222,128,0.1);color:var(--success);cursor:pointer;" onclick="event.preventDefault();document.getElementById(\'bookingConfirmModal\').style.display=\'flex\';">'
-                + (flowType === 'SLOTTED' && bookingTobt ? '\u2713 You have a Time Slot \u2014 click for details' : '\u2713 You have a Booking \u2014 click for details')
+                + (flowType === 'SLOTTED' && bookingTobt ? '\u2713 You have a Booking \u2014 click for details' : '\u2713 You have a Booking \u2014 click for details')
                 + '</a>'
                 + '<div id="bookingConfirmModal" style="display:none;position:fixed;inset:0;z-index:1000;align-items:center;justify-content:center;padding:16px;">'
                 + '<div style="position:absolute;inset:0;background:rgba(0,0,0,0.65);backdrop-filter:blur(2px);" onclick="event.stopPropagation();document.getElementById(\'bookingConfirmModal\').style.display=\'none\';"></div>'
@@ -10017,13 +10035,13 @@ app.get('/sector/:wf/:from/:to', async (req, res) => {
                 + '</div></div>';
             } else if (!user) {
               return '<a href="/auth/login?next=' + encodeURIComponent('/sector/' + wfNum + '/' + fromIcao + '/' + toIcao) + '" style="display:block;text-align:center;padding:10px;margin:0 -17px -17px;border-top:1px solid var(--border);border-radius:0 0 11px 11px;width:calc(100% + 34px);font-size:13px;font-weight:600;text-decoration:none;background:var(--panel2);color:var(--warning);">'
-                + (flowType === 'SLOTTED' ? 'Login to book a Time Slot \u2192' : 'Login to make a Booking \u2192') + '</a>';
+                + (flowType === 'SLOTTED' ? 'Login to book \u2192' : 'Login to make a Booking \u2192') + '</a>';
             } else {
               const bookHref = flowType === 'SLOTTED'
                 ? '/book?from=' + fromIcao + '&to=' + toIcao + '&dateUtc=' + encodeURIComponent(leg ? leg.date_utc : '') + '&depTimeUtc=' + encodeURIComponent(leg ? leg.dep_time_utc : '')
                 : '#" id="sectorBookingBtn" data-sector="' + fromIcao + '-' + toIcao + '|' + (leg ? leg.date_utc : '') + '|' + (leg ? leg.dep_time_utc : '');
               return '<a href="' + bookHref + '" style="display:block;text-align:center;padding:10px;margin:0 -17px -17px;border-top:1px solid var(--border);border-radius:0 0 11px 11px;width:calc(100% + 34px);font-size:13px;font-weight:600;text-decoration:none;background:var(--panel2);color:var(--accent);transition:background 0.15s;" onmouseover="this.style.background=\'var(--bg0)\'" onmouseout="this.style.background=\'var(--panel2)\'">'
-                + (bookingsFull ? 'No remaining bookings' : flowType === 'SLOTTED' ? 'Click here to book a Time Slot \u2192' : 'Click here to book \u2192') + '</a>';
+                + (bookingsFull ? 'No remaining bookings' : flowType === 'SLOTTED' ? 'Click here to book \u2192' : 'Click here to book \u2192') + '</a>';
             }
           })() : ''}
         </div>
@@ -10241,8 +10259,8 @@ app.get('/sector/:wf/:from/:to', async (req, res) => {
           overlay.className = 'modal';
           overlay.innerHTML = '<div class="modal-backdrop"></div>'
             + '<div class="modal-dialog" style="width:360px;padding:24px;text-align:center;">'
-            + '<h3 style="margin:0 0 8px;color:#f87171;">Cancel ${flowType === 'SLOTTED' ? 'Time Slot' : 'Booking'}?</h3>'
-            + '<p style="color:var(--muted);font-size:13px;margin-bottom:20px;">Are you sure you want to cancel your ${flowType === 'SLOTTED' ? 'time slot' : 'booking'} for this sector? This cannot be undone.</p>'
+            + '<h3 style="margin:0 0 8px;color:#f87171;">Cancel Booking?</h3>'
+            + '<p style="color:var(--muted);font-size:13px;margin-bottom:20px;">Are you sure you want to cancel your booking for this sector? This cannot be undone.</p>'
             + '<div id="cancelBookMsg" style="display:none;margin-bottom:12px;font-size:13px;"></div>'
             + '<div class="modal-actions" style="gap:8px;">'
             + '<button class="modal-btn modal-btn-cancel" id="cancelBookNo">Keep</button>'
@@ -10713,7 +10731,7 @@ app.get('/schedule', requirePageEnabled('schedule'), async (req, res) => {
 
                 /* Bookable — hover pill */
                 const pillClass = flowtype === 'BOOKING_ONLY' ? 'flowtype-booking_only' : 'flowtype-slotted';
-                const label = flowtype === 'BOOKING_ONLY' ? 'Booking Required' : 'Time Slot Required';
+                const label = 'Booking Required';
                 const hoverLabel = isLoggedIn ? 'Click to Book' : 'Login to Book';
 
                 if (!isLoggedIn) {
@@ -10749,10 +10767,10 @@ app.get('/schedule', requirePageEnabled('schedule'), async (req, res) => {
                     if (!isSlotTaken(k)) slotsLeft++;
                   }
                 }
-                const slotRemainLabel = slotTotal > 0 ? slotsLeft + ' Slot' + (slotsLeft !== 1 ? 's' : '') + ' Left' : '';
+                const slotRemainLabel = slotTotal > 0 ? slotsLeft + ' Booking' + (slotsLeft !== 1 ? 's' : '') + ' Left' : '';
 
                 if (slotTotal > 0 && slotsLeft <= 0) {
-                  return '<td class="col-book"><span class="flowtype-pill flowtype-full">No Slots Left!</span></td>';
+                  return '<td class="col-book"><span class="flowtype-pill flowtype-full">No Bookings Left!</span></td>';
                 }
 
                 return '<td class="col-book">'
@@ -17736,6 +17754,40 @@ app.get('/api/schedule.json', async (req, res) => {
   });
 });
 
+// ── Public teams per-sector JSON ──────────────────────────────────────
+app.get('/api/teams/:wf.json', async (req, res) => {
+  const wf = String(req.params.wf || '').toUpperCase();
+  const sched = (adminSheetCache || []).find(r => r?.number === wf);
+  if (!sched) return res.status(404).json({ error: 'Sector not found' });
+
+  const [teams, assignments] = await Promise.all([
+    prisma.officialTeam.findMany({
+      where: { participatingWf26: true },
+      orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }]
+    }).catch(() => []),
+    prisma.teamSectorAssignment?.findMany({
+      where: { sectorNumber: wf }
+    }).catch(() => []) || []
+  ]);
+
+  const assignByCid = {};
+  (assignments || []).forEach(a => { assignByCid[a.officialTeamId] = a.cid; });
+
+  const result = teams.map(t => ({
+    teamName: t.teamName,
+    callsign: t.callsign,
+    cid: assignByCid[t.id] || t.mainCid
+  }));
+
+  res.setHeader('Cache-Control', 'public, max-age=60');
+  res.json({
+    sector: wf,
+    from: sched.from,
+    to: sched.to,
+    teams: result
+  });
+});
+
 app.get('/api/slots/:wfNum.json', (req, res) => {
   const out = buildSlotsForWf(req.params.wfNum);
   if (!out) return res.status(404).json({ error: 'Sector not found' });
@@ -18557,6 +18609,9 @@ async function resolveUserAffiliate(cid) {
 /* Shared HQ stylesheet — used by both the Affiliate HQ and the WF Team HQ
    so the two pages stay visually identical. Pure CSS, no interpolation. */
 const HQ_STYLES = `    <style>
+      .roster-tip { display:none;position:absolute;bottom:calc(100% + 8px);right:0;width:240px;padding:10px 14px;background:var(--panel);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:12px;line-height:1.6;font-weight:400;box-shadow:0 4px 16px rgba(0,0,0,0.4);z-index:100;pointer-events:none;white-space:normal; }
+      .roster-tip::before { content:'';position:absolute;bottom:-6px;right:14px;width:10px;height:10px;background:var(--panel);border-right:1px solid var(--border);border-bottom:1px solid var(--border);transform:rotate(45deg); }
+      .roster-tip-host:hover .roster-tip { display:block; }
       .affiliate-hq-wrap {
         width: 100%;
         max-width: 2200px;
@@ -19751,11 +19806,19 @@ app.get('/affiliates/hq', requireLogin, async (req, res) => {
   }
   // Per-aircraft claims: cid 0 means "not flying this sector".
   const fleetClaims = {};
+  // For manual callsigns mode: group claims by sector (multiple per sector possible)
+  const manualClaimsBySector = {};
   if (isMultiAircraft && affFleet.length) {
     const rows = await prisma.affiliateSectorClaim.findMany({
       where: { affiliateId: { in: affFleet.map(a => a.id) } }
     }).catch(() => []);
-    rows.forEach(cl => { fleetClaims[`${cl.affiliateId}|${cl.sectorNumber}`] = Number(cl.cid); });
+    rows.forEach(cl => {
+      fleetClaims[`${cl.affiliateId}|${cl.sectorNumber}`] = Number(cl.cid);
+      if (affiliate && affiliate.manualCallsigns && cl.callsign) {
+        if (!manualClaimsBySector[cl.sectorNumber]) manualClaimsBySector[cl.sectorNumber] = [];
+        manualClaimsBySector[cl.sectorNumber].push({ id: cl.id, cid: cl.cid, callsign: cl.callsign });
+      }
+    });
   }
   // Bookings held by any aircraft in the fleet, keyed by callsign + sector.
   const fleetCallsignSet = new Set(affFleet.map(a => String(a.callsign || '').toUpperCase()).filter(Boolean));
@@ -19838,13 +19901,14 @@ app.get('/affiliates/hq', requireLogin, async (req, res) => {
 
   const affIsMainHolder = !!(affiliate && !readOnly && affFleet.some(a => Number(a.cid) === cid));
 
-  const affFleetCard = !isMultiAircraft ? '' : `
+  const isManualCallsigns = !!(affiliate && affiliate.manualCallsigns);
+  const affFleetCard = !isMultiAircraft || isManualCallsigns ? '' : `
       <section class="card aff-members-card">
         <header class="aff-members-header">
           <h3 class="section-title" style="margin:0;">Our Fleet</h3>
           <div style="display:flex;align-items:center;gap:12px;">
-            <span class="aff-member-count">${affFleet.length} aircraft</span>
-            ${affIsMainHolder ? `<button type="button" class="ot-btn" id="affFleetAddBtn">+ Add Aircraft</button>` : ''}
+            <span class="aff-member-count">${affiliate.fleetLimit ? affFleet.length + '/' + affiliate.fleetLimit : affFleet.length} aircraft</span>
+            ${affIsMainHolder && (!affiliate.fleetLimit || affFleet.length < affiliate.fleetLimit) ? `<button type="button" class="ot-btn" id="affFleetAddBtn">+ Add Aircraft</button>` : ''}
           </div>
         </header>
         ${affIsMainHolder ? '<div id="affFleetMsg" style="display:none;font-size:12px;margin:0 0 10px;"></div>' : ''}
@@ -19902,7 +19966,7 @@ app.get('/affiliates/hq', requireLogin, async (req, res) => {
                   <th>Sector</th>
                   <th class="ot-th-center">Flying</th>
                   <th>Callsign</th>
-                  <th>VATSIM Account <span class="tobt-help wft-info">i<span class="tobt-tooltip">This is the VATSIM account that will be connected on VATSIM for this sector.</span></span></th>
+                  <th>VATSIM Account <span class="roster-tip-host" style="cursor:help;font-size:10px;color:var(--muted);border:1px solid var(--border);border-radius:50%;width:16px;height:16px;display:inline-flex;align-items:center;justify-content:center;position:relative;vertical-align:middle;margin-left:4px;">i<span class="roster-tip">This is the VATSIM account that will be connected on VATSIM for this sector.</span></span></th>
                   ${showFlowInfo ? '<th>Flow</th><th>Status</th>' : ''}
                   ${showAtcRoute ? '<th>ATC Route</th>' : ''}
                   <th>From</th><th>To</th><th>Date</th><th>Dep Window</th><th>Arr Window</th><th>Plan</th>
@@ -19936,7 +20000,7 @@ app.get('/affiliates/hq', requireLogin, async (req, res) => {
                       <td class="aff-status-cell">${!flying
                         ? '<span class="ot-muted">Not flying</span>'
                         : (status && status.kind === 'tobt'
-                          ? `<span class="aff-flow-status aff-flow-tobt"><span class="aff-tobt-label">${escapeHtml(status.label)}</span><span class="aff-tobt-time">${escapeHtml(status.time)}</span><span class="tobt-tooltip">Target Connection Time &mdash; connect to VATSIM at this time. We stagger pilot connections at the departure airport so the network and controllers aren&#39;t overwhelmed.</span></span>`
+                          ? `<span class="aff-flow-status aff-flow-tobt"><span class="aff-tobt-label">${escapeHtml(status.label)}</span><span class="aff-tobt-time">${escapeHtml(status.time)}</span><span class="tobt-tooltip">Target Connection Time &mdash; connect to VATSIM at this time.<br><br>We stagger pilot connections at the departure airport so the network and controllers aren&#39;t overwhelmed.</span></span>`
                           : `<span class="aff-flow-status aff-flow-${status ? status.kind : 'empty'}">${escapeHtml(status ? status.text : (restricted ? 'Awaiting slot' : '—'))}</span>`)}</td>` : ''}
                       ${showAtcRoute ? `<td>${first ? (r.atc_route && r.atc_route !== '-'
                         ? `<button type="button" class="aff-route-btn" data-route="${String(r.atc_route).replace(/&/g, '&amp;').replace(/"/g, '&quot;')}" data-route2="${r.atc_route2 && r.atc_route2 !== '-' ? String(r.atc_route2).replace(/&/g, '&amp;').replace(/"/g, '&quot;') : ''}" data-simbrief="${sbAttr}" data-from="${escapeHtml(r.from)}" data-to="${escapeHtml(r.to)}" title="View the agreed ATC route">Route</button>`
@@ -19953,6 +20017,95 @@ app.get('/affiliates/hq', requireLogin, async (req, res) => {
               </tbody>
             </table>
           </div>`;
+
+  const fleetLimit = affiliate?.fleetLimit || 3;
+  // Build bookings lookup for manual callsign claims
+  const manualBookingByCs = {};
+  if (isManualCallsigns) {
+    Object.values(tobtBookingsByKey).forEach(b => {
+      if (!b || !b.callsign) return;
+      const cs = String(b.callsign).toUpperCase();
+      const parts = String(b.slotKey).split('|');
+      manualBookingByCs[`${cs}|${parts[0]}|${parts[1]}|${parts[2]}`] = b;
+    });
+  }
+
+  let affManualTable = '';
+  if (isManualCallsigns) {
+    const mcColspan = showFlowInfo ? 8 : 6;
+    let mcBody = '';
+    for (const r of scheduleRows) {
+      const claims = manualClaimsBySector[r.number] || [];
+      const flow = getFlowRestriction(r);
+      const flowKey = r.from + '-' + r.to;
+      const restricted = (sharedFlowTypes[flowKey] || 'NONE') !== 'NONE';
+      const rows = claims.length ? claims : [{ id: null, cid: 0, callsign: '' }];
+      for (let i = 0; i < rows.length; i++) {
+        const cl = rows[i];
+        const cs = String(cl.callsign || '').toUpperCase();
+        const sectorKey = r.from + '-' + r.to + '|' + r.date_utc + '|' + r.dep_time_utc;
+        const b = cs ? manualBookingByCs[cs + '|' + sectorKey] || null : null;
+        const status = b ? getFlowStatus(r, Number(b.cid)) : null;
+        const first = i === 0;
+        const canAdd = !readOnly && claims.length < fleetLimit && i === rows.length - 1;
+
+        mcBody += '<tr class="' + (first ? 'wft-group-start' : '') + '" data-sector="' + escapeHtml(r.number) + '">';
+        // Sector
+        mcBody += '<td>' + (first ? '<a class="sector-details-btn" href="/sector/' + escapeHtml(r.number) + '/' + escapeHtml(r.from) + '/' + escapeHtml(r.to) + '" target="_blank" rel="noopener">' + escapeHtml(r.number) + '</a>' : '') + '</td>';
+        // Callsign
+        if (readOnly) {
+          mcBody += '<td><span class="ot-cell-callsign">' + (cs || '\u2014') + '</span></td>';
+        } else {
+          mcBody += '<td><input type="text" class="mc-cs-input" value="' + escapeHtml(cs) + '" maxlength="10" placeholder="Callsign" data-claim-id="' + (cl.id || '') + '" data-sector="' + escapeHtml(r.number) + '" style="width:100px;text-transform:uppercase;padding:5px 8px;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:4px;font-size:12px;font-family:monospace;font-weight:600;" /></td>';
+        }
+        // VATSIM Account + actions
+        if (readOnly) {
+          const cidLabel = cl.cid ? (nameByCid[cl.cid] ? nameByCid[cl.cid] + ' \u00b7 ' + cl.cid : String(cl.cid)) : '\u2014';
+          mcBody += '<td><span>' + escapeHtml(cidLabel) + '</span></td>';
+        } else {
+          mcBody += '<td><div style="display:flex;align-items:center;gap:6px;">';
+          mcBody += '<select class="mc-cid-select" data-claim-id="' + (cl.id || '') + '" data-sector="' + escapeHtml(r.number) + '" style="font-size:12px;padding:4px 6px;flex:1;">';
+          mcBody += '<option value="">\u2014 Select \u2014</option>';
+          for (const m of memberOptions) {
+            mcBody += '<option value="' + m.cid + '"' + (cl.cid === m.cid ? ' selected' : '') + '>' + escapeHtml(m.label) + '</option>';
+          }
+          mcBody += '</select>';
+          mcBody += '<button type="button" class="action-btn mc-save-btn" data-claim-id="' + (cl.id || '') + '" data-sector="' + escapeHtml(r.number) + '" style="font-size:10px;padding:3px 8px;">Save</button>';
+          if (cl.id) mcBody += '<button type="button" class="action-btn mc-del-btn" data-claim-id="' + cl.id + '" style="font-size:10px;padding:3px 6px;background:rgba(239,68,68,0.1);color:#f87171;border-color:#f87171;">&times;</button>';
+          mcBody += '</div></td>';
+        }
+        // Flow + Status
+        if (showFlowInfo) {
+          mcBody += '<td>' + (first ? '<span class="flowtype-pill flowtype-' + flow.cls + '">' + escapeHtml(flow.label) + '</span>' : '') + '</td>';
+          if (!cs) {
+            mcBody += '<td class="aff-status-cell"><span class="ot-muted">\u2014</span></td>';
+          } else if (status && status.kind === 'tobt') {
+            mcBody += '<td class="aff-status-cell"><span class="aff-flow-status aff-flow-tobt"><span class="aff-tobt-label">' + escapeHtml(status.label) + '</span><span class="aff-tobt-time">' + escapeHtml(status.time) + '</span></span></td>';
+          } else {
+            mcBody += '<td class="aff-status-cell"><span class="aff-flow-status aff-flow-' + (status ? status.kind : 'empty') + '">' + escapeHtml(status ? status.text : (restricted ? 'Awaiting' : '\u2014')) + '</span></td>';
+          }
+        }
+        // From / To / Date / Window
+        mcBody += '<td>' + (first ? '<a class="aff-icao-link" href="/icao/' + escapeHtml(r.from) + '">' + escapeHtml(r.from) + '</a>' : '') + '</td>';
+        mcBody += '<td>' + (first ? '<a class="aff-icao-link" href="/icao/' + escapeHtml(r.to) + '">' + escapeHtml(r.to) + '</a>' : '') + '</td>';
+        mcBody += '<td>' + (first ? '<span class="ot-muted">' + escapeHtml(r.date_utc || '') + '</span>' : '') + '</td>';
+        mcBody += '<td>' + (first ? '<span class="ot-muted">' + timeWindow(r.dep_time_utc) + '</span>' : '') + '</td>';
+        // (actions are inline with VATSIM Account)
+        mcBody += '</tr>';
+        // Add another aircraft link
+        if (canAdd) {
+          mcBody += '<tr class="mc-add-row" data-sector="' + escapeHtml(r.number) + '"><td></td><td colspan="' + mcColspan + '"><button type="button" class="mc-add-btn" data-sector="' + escapeHtml(r.number) + '" style="background:none;border:none;color:var(--accent);font-size:11px;font-weight:600;cursor:pointer;padding:2px 0;">+ Add another aircraft</button></td></tr>';
+        }
+      }
+    }
+    affManualTable = '<p class="wft-multi-note">Enter your callsign(s) for each sector. Each callsign gets its own booking. Up to ' + fleetLimit + ' aircraft per sector.</p>'
+      + '<div id="manualCsMsg" style="display:none;font-size:12px;margin:0 0 10px;"></div>'
+      + '<div class="ot-table-wrap"><table class="ot-table wft-multi-table"><thead><tr>'
+      + '<th>Sector</th><th>Callsign</th><th>VATSIM Account</th>'
+      + (showFlowInfo ? '<th>Flow</th><th>Status</th>' : '')
+      + '<th>From</th><th>To</th><th>Date</th><th>Dep Window</th>'
+      + '</tr></thead><tbody>' + mcBody + '</tbody></table></div>';
+  }
 
   const memberOptsHtml = memberOptions
     .map(m => `<option value="${m.cid}">${escapeHtml(m.label)}${m.isMain ? ' (main)' : ''}</option>`)
@@ -20173,7 +20326,7 @@ app.get('/affiliates/hq', requireLogin, async (req, res) => {
             <div class="ot-empty-title">No sectors loaded</div>
             <div class="ot-empty-sub">Check back soon — schedule data hasn't been loaded yet.</div>
           </div>
-        ` : isMultiAircraft ? affMultiTable : `
+        ` : isManualCallsigns ? affManualTable : isMultiAircraft ? affMultiTable : `
           <div class="ot-table-wrap">
             <table class="ot-table">
               <thead>
@@ -20236,7 +20389,7 @@ app.get('/affiliates/hq', requireLogin, async (req, res) => {
                     <td><span class="flowtype-pill flowtype-${flow.cls}">${escapeHtml(flow.label)}</span></td>
                     <td class="aff-status-cell"><span class="aff-flow-status aff-flow-${status.kind}">${
                       status.kind === 'tobt'
-                        ? `<span class="aff-tobt-label">${escapeHtml(status.label)}</span><span class="aff-tobt-time">${escapeHtml(status.time)}</span><span class="tobt-tooltip">Target Connection Time &mdash; connect to VATSIM at this time. We stagger pilot connections at the departure airport so the network and controllers aren&#39;t overwhelmed.</span>`
+                        ? `<span class="aff-tobt-label">${escapeHtml(status.label)}</span><span class="aff-tobt-time">${escapeHtml(status.time)}</span><span class="tobt-tooltip">Target Connection Time &mdash; connect to VATSIM at this time.<br><br>We stagger pilot connections at the departure airport so the network and controllers aren&#39;t overwhelmed.</span>`
                         : escapeHtml(status.text)
                     }</span></td>` : ''}
                     ${showAtcRoute ? `<td>${(() => {
@@ -20320,7 +20473,7 @@ app.get('/affiliates/hq', requireLogin, async (req, res) => {
             span.appendChild(t);
             var tt = document.createElement('span');
             tt.className = 'tobt-tooltip';
-            tt.innerHTML = 'Target Connection Time &mdash; connect to VATSIM at this time. We stagger pilot connections at the departure airport so the network and controllers aren&#39;t overwhelmed.';
+            tt.innerHTML = 'Target Connection Time &mdash; connect to VATSIM at this time.<br><br>We stagger pilot connections at the departure airport so the network and controllers aren&#39;t overwhelmed.';
             span.appendChild(tt);
           } else {
             span.textContent = status.text;
@@ -20359,6 +20512,133 @@ app.get('/affiliates/hq', requireLogin, async (req, res) => {
 
         // Snapshot original values so we can revert on failure
         document.querySelectorAll('.claim-select').forEach(function(s) { s.dataset.prev = s.value; });
+
+        // ----- Manual callsigns per-sector -----
+        (function() {
+          var mcOverlay = null;
+          function mcShowOverlay(text) {
+            if (mcOverlay) mcOverlay.remove();
+            mcOverlay = document.createElement('div');
+            mcOverlay.style.cssText = 'position:fixed;inset:0;z-index:20002;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.5);';
+            mcOverlay.innerHTML = '<div style="background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:20px 28px;text-align:center;box-shadow:var(--shadow);">'
+              + '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" style="animation:mcSpin 1s linear infinite;"><path d="M21 12a9 9 0 1 1-6.22-8.56"/></svg>'
+              + '<p style="margin:10px 0 0;color:var(--text);font-weight:600;font-size:14px;">' + text + '</p>'
+              + '</div>';
+            document.body.appendChild(mcOverlay);
+          }
+          function mcHideOverlay() { if (mcOverlay) { mcOverlay.remove(); mcOverlay = null; } }
+          var mcStyle = document.createElement('style');
+          mcStyle.textContent = '@keyframes mcSpin { to { transform: rotate(360deg); } }';
+          document.head.appendChild(mcStyle);
+
+          var mcMsgEl = document.getElementById('manualCsMsg');
+          function mcMsg(text, ok) {
+            if (!mcMsgEl) return;
+            mcMsgEl.textContent = text;
+            mcMsgEl.style.color = ok ? '#4ade80' : '#f87171';
+            mcMsgEl.style.display = '';
+            if (ok) setTimeout(function() { mcMsgEl.style.display = 'none'; }, 2500);
+          }
+
+          document.addEventListener('click', async function(e) {
+            // Save
+            var saveBtn = e.target.closest('.mc-save-btn');
+            if (saveBtn) {
+              var tr = saveBtn.closest('tr');
+              var csInput = tr.querySelector('.mc-cs-input');
+              var cidSelect = tr.querySelector('.mc-cid-select');
+              var cs = csInput ? csInput.value.trim().toUpperCase() : '';
+              var pilotCid = cidSelect ? cidSelect.value : '';
+              if (!cs) { mcMsg('Enter a callsign', false); return; }
+              if (!pilotCid) { mcMsg('Select a VATSIM account', false); return; }
+              saveBtn.disabled = true;
+              mcShowOverlay('Saving\u2026');
+              try {
+                var r = await fetch('/api/affiliates/hq/manual-claim', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  credentials: 'same-origin',
+                  body: JSON.stringify({
+                    action: 'save',
+                    claimId: saveBtn.dataset.claimId || null,
+                    sectorNumber: saveBtn.dataset.sector,
+                    callsign: cs,
+                    claimCid: Number(pilotCid)
+                  })
+                });
+                var d = await r.json().catch(function() { return {}; });
+                if (r.ok) {
+                  mcMsg('Saved!', true);
+                  setTimeout(function() { location.reload(); }, 600);
+                } else {
+                  mcHideOverlay();
+                  mcMsg(d.error || 'Failed to save', false);
+                }
+              } catch (err) { mcHideOverlay(); mcMsg('Failed to save', false); }
+              saveBtn.disabled = false;
+            }
+
+            // Delete
+            var delBtn = e.target.closest('.mc-del-btn');
+            if (delBtn) {
+              var confirmed = await new Promise(function(resolve) {
+                var ov = document.createElement('div');
+                ov.className = 'modal';
+                ov.style.zIndex = '20001';
+                ov.innerHTML = '<div class="modal-backdrop"></div>'
+                  + '<div class="modal-dialog" style="width:380px;padding:24px;text-align:center;">'
+                  + '<h3 style="margin:0 0 8px;color:#f87171;">Remove Callsign?</h3>'
+                  + '<p style="color:var(--muted);font-size:13px;margin:0 0 20px;">This will remove the callsign entry and cancel any associated booking for this sector.</p>'
+                  + '<div style="display:flex;gap:10px;justify-content:center;">'
+                  + '<button class="action-btn" id="mcDelCancel" style="min-width:100px;">Keep</button>'
+                  + '<button class="action-btn" id="mcDelConfirm" style="min-width:100px;background:rgba(239,68,68,0.15);color:#f87171;border-color:#f87171;">Remove</button>'
+                  + '</div></div>';
+                document.body.appendChild(ov);
+                function close(v) { ov.remove(); resolve(v); }
+                ov.querySelector('.modal-backdrop').addEventListener('click', function() { close(false); });
+                document.getElementById('mcDelCancel').addEventListener('click', function() { close(false); });
+                document.getElementById('mcDelConfirm').addEventListener('click', function() { close(true); });
+              });
+              if (!confirmed) return;
+              delBtn.disabled = true;
+              mcShowOverlay('Removing\u2026');
+              try {
+                var r = await fetch('/api/affiliates/hq/manual-claim', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  credentials: 'same-origin',
+                  body: JSON.stringify({ action: 'delete', claimId: delBtn.dataset.claimId, sectorNumber: '' })
+                });
+                if (r.ok) location.reload();
+                else { mcHideOverlay(); var d = await r.json().catch(function() { return {}; }); mcMsg(d.error || 'Failed', false); delBtn.disabled = false; }
+              } catch (err) { mcHideOverlay(); mcMsg('Failed', false); delBtn.disabled = false; }
+            }
+
+            // Add another aircraft
+            var addBtn = e.target.closest('.mc-add-btn');
+            if (addBtn) {
+              var sector = addBtn.dataset.sector;
+              var addRow = addBtn.closest('tr');
+              // Insert a new editable row before the add-another row
+              var newTr = document.createElement('tr');
+              newTr.dataset.sector = sector;
+              newTr.innerHTML = '<td></td>'
+                + '<td><input type="text" class="mc-cs-input" value="" maxlength="10" placeholder="Callsign" data-claim-id="" data-sector="' + sector + '" style="width:100px;text-transform:uppercase;padding:5px 8px;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:4px;font-size:12px;font-family:monospace;font-weight:600;" /></td>'
+                + '<td><select class="mc-cid-select" data-claim-id="" data-sector="' + sector + '" style="font-size:12px;padding:4px 6px;">'
+                + '<option value="">\\u2014 Select \\u2014</option>'
+                + document.querySelector('.mc-cid-select').innerHTML.split('</option>').filter(function(o) { return o.indexOf('value="') > -1 && o.indexOf('value=""') === -1; }).map(function(o) { return o + '</option>'; }).join('')
+                + '</select></td>'
+                + (document.querySelector('.aff-status-cell') ? '<td></td><td></td>' : '')
+                + '<td></td><td></td><td></td><td></td>'
+                + '<td style="white-space:nowrap;"><button type="button" class="action-btn mc-save-btn" data-claim-id="" data-sector="' + sector + '" style="font-size:10px;padding:3px 8px;">Save</button></td>';
+              addRow.parentNode.insertBefore(newTr, addRow);
+              // Focus the new callsign input
+              newTr.querySelector('.mc-cs-input').focus();
+              // Remove the add button if at limit — on reload the server will re-render correctly
+              addRow.remove();
+            }
+          });
+        })();
 
         // ----- Multi-aircraft fleet -----
         var affBusy = null;
@@ -20729,24 +21009,31 @@ app.post('/api/affiliates/fleet', requireLogin, requireAffiliate, async (req, re
     const fleet = await resolveAffiliateFleet(cid);
     if (!fleet) return res.status(403).json({ error: 'Your affiliate is not set up for multiple aircraft.' });
 
+    // Enforce fleet limit if set
+    const primary = fleet.rows[0] || fleet.mine;
+    if (primary.fleetLimit && fleet.rows.length >= primary.fleetLimit) {
+      return res.status(400).json({ error: 'Fleet limit reached (' + primary.fleetLimit + ' aircraft maximum).' });
+    }
+
     const clash = await prisma.affiliate.findFirst({ where: { callsign } });
     if (clash) return res.status(409).json({ error: `Callsign ${callsign} is already in use` });
 
-    const p0 = fleet.rows[0] || fleet.mine;
     const created = await prisma.affiliate.create({
       data: {
-        name: p0.name,
+        name: primary.name,
         callsign,
-        simType: p0.simType,
+        simType: primary.simType,
         cid: acCid,
-        sinceYear: p0.sinceYear,
-        hasMembers: p0.hasMembers,
+        sinceYear: primary.sinceYear,
+        hasMembers: primary.hasMembers,
         multiAircraft: true,
+        manualCallsigns: !!primary.manualCallsigns,
+        fleetLimit: primary.fleetLimit || null,
         aircraftType: aircraftType || null,
-        description: p0.description,
-        website: p0.website,
+        description: primary.description,
+        website: primary.website,
         sortOrder: await resolveSortOrder(null, prisma.affiliate),
-        participatingWf26: p0.participatingWf26
+        participatingWf26: primary.participatingWf26
       }
     });
     if (!isAdminUser(acCid)) {
@@ -21012,6 +21299,69 @@ app.post('/api/affiliates/hq/claim', requireLogin, requireAffiliate, async (req,
   }
 
   res.json({ ok: true, status: getFlowStatus(scheduleRow, claimCid) });
+});
+
+// Manual callsign claim: save (upsert), add, or delete a per-sector callsign+CID entry
+app.post('/api/affiliates/hq/manual-claim', requireLogin, requireAffiliate, async (req, res) => {
+  const cid = Number(req.session?.user?.data?.cid);
+  const { action, claimId, sectorNumber, callsign, claimCid } = req.body || {};
+  if (!sectorNumber && action !== 'delete') return res.status(400).json({ error: 'sectorNumber required' });
+
+  const affiliate = await resolveUserAffiliate(cid);
+  if (!affiliate || !affiliate.manualCallsigns) return res.status(403).json({ error: 'Not a manual-callsigns affiliate' });
+
+  const flLimit = affiliate.fleetLimit || 3;
+
+  if (action === 'delete') {
+    if (!claimId) return res.status(400).json({ error: 'claimId required' });
+    await prisma.affiliateSectorClaim.delete({ where: { id: Number(claimId) } }).catch(() => null);
+    // Cancel any booking under the deleted callsign for this sector
+    // (auto-assign reconcile will handle this on next run)
+    return res.json({ ok: true });
+  }
+
+  const cs = String(callsign || '').trim().toUpperCase();
+  if (!cs || !/^[A-Z0-9-]{2,10}$/.test(cs)) return res.status(400).json({ error: 'Callsign must be 2-10 letters/numbers' });
+  const pilotCid = Number(claimCid);
+  if (!Number.isFinite(pilotCid) || pilotCid <= 0) return res.status(400).json({ error: 'Select a VATSIM account' });
+
+  // Validate pilot is in this affiliate
+  if (pilotCid !== Number(affiliate.cid)) {
+    const m = await prisma.affiliateMember.findFirst({
+      where: { affiliateId: affiliate.id, cid: pilotCid }
+    });
+    if (!m) return res.status(400).json({ error: 'Selected pilot is not part of this affiliate' });
+  }
+
+  const scheduleRow = (adminSheetCache || []).find(r => r.number === sectorNumber);
+  if (!scheduleRow) return res.status(400).json({ error: 'Unknown sector' });
+
+  if (claimId) {
+    // Update existing claim
+    await prisma.affiliateSectorClaim.update({
+      where: { id: Number(claimId) },
+      data: { cid: pilotCid, callsign: cs }
+    });
+  } else {
+    // Adding new — check fleet limit
+    const existing = await prisma.affiliateSectorClaim.findMany({
+      where: { affiliateId: affiliate.id, sectorNumber, callsign: { not: null } }
+    });
+    if (existing.length >= flLimit) return res.status(400).json({ error: 'Fleet limit reached (' + flLimit + ' aircraft per sector)' });
+
+    await prisma.affiliateSectorClaim.create({
+      data: { affiliateId: affiliate.id, sectorNumber, cid: pilotCid, callsign: cs }
+    });
+  }
+
+  // Create/update the booking for this callsign + CID
+  try {
+    await assignAffiliatePilotToSector(affiliate, scheduleRow, pilotCid, cs);
+  } catch (err) {
+    console.error('[AFF-MANUAL] booking sync failed:', err.message);
+  }
+
+  res.json({ ok: true });
 });
 
 /* ===== AFFILIATE MEMBERS (My Members page) ===== */
@@ -21682,7 +22032,7 @@ app.get('/team/hq', requireLogin, async (req, res) => {
                   <th>Sector</th>
                   <th class="ot-th-center">Flying</th>
                   <th>Callsign</th>
-                  <th>VATSIM Account <span class="tobt-help wft-info">i<span class="tobt-tooltip">The VATSIM account (CID) you will be connected as for this sector.</span></span></th>
+                  <th>VATSIM Account <span class="roster-tip-host" style="cursor:help;font-size:10px;color:var(--muted);border:1px solid var(--border);border-radius:50%;width:16px;height:16px;display:inline-flex;align-items:center;justify-content:center;position:relative;vertical-align:middle;margin-left:4px;">i<span class="roster-tip">The VATSIM account (CID) you will be connected as for this sector.</span></span></th>
                   ${showFlowInfo ? '<th>Flow</th><th>Status</th>' : ''}
                   ${showAtcRoute ? '<th>ATC Route</th>' : ''}
                   <th>From</th><th>To</th><th>Date</th><th>Dep Window</th><th>Arr Window</th><th>Plan</th>
@@ -21719,7 +22069,7 @@ app.get('/team/hq', requireLogin, async (req, res) => {
                       <td class="aff-status-cell">${!flying
                         ? '<span class="ot-muted">Not flying</span>'
                         : (status && status.kind === 'tobt'
-                          ? `<span class="aff-flow-status aff-flow-tobt"><span class="aff-tobt-label">${escapeHtml(status.label)}</span><span class="aff-tobt-time">${escapeHtml(status.time)}</span><span class="tobt-tooltip">Target Connection Time &mdash; connect to VATSIM at this time. We stagger pilot connections at the departure airport so the network and controllers aren&#39;t overwhelmed.</span></span>`
+                          ? `<span class="aff-flow-status aff-flow-tobt"><span class="aff-tobt-label">${escapeHtml(status.label)}</span><span class="aff-tobt-time">${escapeHtml(status.time)}</span><span class="tobt-tooltip">Target Connection Time &mdash; connect to VATSIM at this time.<br><br>We stagger pilot connections at the departure airport so the network and controllers aren&#39;t overwhelmed.</span></span>`
                           : `<span class="aff-flow-status aff-flow-${status ? status.kind : 'empty'}">${escapeHtml(status ? status.text : (restricted ? 'Awaiting slot' : '—'))}</span>`)}</td>` : ''}
                       ${showAtcRoute ? `<td>${first ? (r.atc_route && r.atc_route !== '-'
                         ? `<button type="button" class="aff-route-btn" data-route="${String(r.atc_route).replace(/&/g, '&amp;').replace(/"/g, '&quot;')}" data-route2="${r.atc_route2 && r.atc_route2 !== '-' ? String(r.atc_route2).replace(/&/g, '&amp;').replace(/"/g, '&quot;') : ''}" data-simbrief="${sbAttr}" data-from="${escapeHtml(r.from)}" data-to="${escapeHtml(r.to)}" title="View the agreed ATC route">Route</button>`
@@ -21748,7 +22098,7 @@ app.get('/team/hq', requireLogin, async (req, res) => {
       </section>
       ` : ''}
 
-      <section class="card side-label-card aff-identity-card">
+      <section class="card side-label-card aff-identity-card" style="position:relative;">
         <div class="card-side-body aff-identity-body">
           <div class="aff-identity-main">
             <div class="aff-identity-eyebrow">Official WorldFlight Team</div>
@@ -21760,6 +22110,41 @@ app.get('/team/hq', requireLogin, async (req, res) => {
               <span class="aff-member-count">${members.length} ${members.length === 1 ? 'member' : 'members'}</span>
             </div>
           </div>
+          ${(isMainHolder || canManageTeamMembers(cid)) && members.length > 1 ? `
+          <div style="position:absolute;top:16px;right:16px;">
+            <label id="rosterToggleWrap" style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:10px 16px;border-radius:8px;border:1px solid ${primary?.rosterEnabled ? 'rgba(56,189,248,0.3)' : 'var(--border)'};background:${primary?.rosterEnabled ? 'rgba(56,189,248,0.06)' : 'var(--panel2)'};transition:all 0.15s;">
+              <div style="position:relative;width:38px;height:20px;">
+                <input type="checkbox" id="rosterToggle" ${primary?.rosterEnabled ? 'checked' : ''} style="position:absolute;opacity:0;width:100%;height:100%;cursor:pointer;margin:0;z-index:1;" />
+                <div id="rosterTrack" style="position:absolute;inset:0;border-radius:10px;background:${primary?.rosterEnabled ? 'var(--accent)' : 'var(--border)'};transition:background 0.2s;"></div>
+                <div id="rosterKnob" style="position:absolute;top:2px;${primary?.rosterEnabled ? 'left:20px' : 'left:2px'};width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,0.3);transition:left 0.2s;"></div>
+              </div>
+              <span style="font-size:12px;font-weight:600;color:${primary?.rosterEnabled ? 'var(--accent)' : 'var(--muted)'};">Crew Roster</span>
+              <span class="roster-tip-host" style="cursor:help;font-size:10px;color:var(--muted);margin-left:2px;border:1px solid var(--border);border-radius:50%;width:16px;height:16px;display:inline-flex;align-items:center;justify-content:center;position:relative;">?<span class="roster-tip">Enable this to create a crew roster so you can record who is flying which leg within your team.</span></span>
+            </label>
+          </div>
+          <script>
+            document.getElementById('rosterToggle').addEventListener('change', async function() {
+              var enabled = this.checked;
+              var track = document.getElementById('rosterTrack');
+              var knob = document.getElementById('rosterKnob');
+              var wrap = document.getElementById('rosterToggleWrap');
+              track.style.background = enabled ? 'var(--accent)' : 'var(--border)';
+              knob.style.left = enabled ? '20px' : '2px';
+              wrap.style.borderColor = enabled ? 'rgba(56,189,248,0.3)' : 'var(--border)';
+              wrap.style.background = enabled ? 'rgba(56,189,248,0.06)' : 'var(--panel2)';
+              try {
+                var r = await fetch('/api/team/hq/roster-toggle', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  credentials: 'same-origin',
+                  body: JSON.stringify({ enabled: enabled })
+                });
+                if (r.ok) location.reload();
+                else { this.checked = !enabled; this.dispatchEvent(new Event('change')); alert('Failed to update'); }
+              } catch (e) { this.checked = !enabled; this.dispatchEvent(new Event('change')); }
+            });
+          </script>
+          ` : ''}
         </div>
       </section>
 
@@ -21932,7 +22317,7 @@ app.get('/team/hq', requireLogin, async (req, res) => {
                 <tr>
                   <th>Sector</th>
                   <th>Callsign</th>
-                  <th>VATSIM Account <span class="tobt-help wft-info">i<span class="tobt-tooltip">The VATSIM account (CID) you will be connected as for this sector.</span></span></th>
+                  <th>VATSIM Account <span class="roster-tip-host" style="cursor:help;font-size:10px;color:var(--muted);border:1px solid var(--border);border-radius:50%;width:16px;height:16px;display:inline-flex;align-items:center;justify-content:center;position:relative;vertical-align:middle;margin-left:4px;">i<span class="roster-tip">The VATSIM account (CID) you will be connected as for this sector.</span></span></th>
                   ${showFlowInfo ? '<th>Flow</th><th>Status</th>' : ''}
                   ${showAtcRoute ? '<th>ATC Route</th>' : ''}
                   <th>From</th>
@@ -21969,7 +22354,7 @@ app.get('/team/hq', requireLogin, async (req, res) => {
                     <td><span class="flowtype-pill flowtype-${flow.cls}">${escapeHtml(flow.label)}</span></td>
                     <td class="aff-status-cell"><span class="aff-flow-status aff-flow-${status ? status.kind : 'empty'}">${
                       status && status.kind === 'tobt'
-                        ? `<span class="aff-tobt-label">${escapeHtml(status.label)}</span><span class="aff-tobt-time">${escapeHtml(status.time)}</span><span class="tobt-tooltip">Target Connection Time &mdash; connect to VATSIM at this time. We stagger pilot connections at the departure airport so the network and controllers aren&#39;t overwhelmed.</span>`
+                        ? `<span class="aff-tobt-label">${escapeHtml(status.label)}</span><span class="aff-tobt-time">${escapeHtml(status.time)}</span><span class="tobt-tooltip">Target Connection Time &mdash; connect to VATSIM at this time.<br><br>We stagger pilot connections at the departure airport so the network and controllers aren&#39;t overwhelmed.</span>`
                         : escapeHtml(status ? status.text : (restricted ? 'Awaiting slot' : '—'))
                     }</span></td>` : ''}
                     ${showAtcRoute ? `<td>${wfRow && wfRow.atc_route && wfRow.atc_route !== '-'
@@ -22347,6 +22732,165 @@ app.get('/team/hq', requireLogin, async (req, res) => {
   res.send(renderLayout({ title: pageTitle, user, isAdmin, content, layoutClass: 'dashboard-full' }));
 });
 
+// Toggle roster on/off for a team. Syncs across all fleet rows.
+app.post('/api/team/hq/roster-toggle', requireLogin, async (req, res) => {
+  const cid = Number(req.session.user.data.cid);
+  try {
+    const teamNameUpper = await resolveUserTeamName(cid);
+    if (!teamNameUpper) return res.status(403).json({ error: 'Team not linked' });
+    const all = await prisma.officialTeam.findMany();
+    const fleet = all.filter(t => String(t.teamName || '').trim().toUpperCase() === teamNameUpper);
+    if (!fleet.some(t => Number(t.mainCid) === cid) && !isAdminUser(cid) && !canManageTeamMembers(cid)) {
+      return res.status(403).json({ error: 'You do not have permission to toggle roster' });
+    }
+    const enabled = !!req.body?.enabled;
+    for (const t of fleet) {
+      await prisma.officialTeam.update({ where: { id: t.id }, data: { rosterEnabled: enabled } }).catch(() => {});
+    }
+    // Refresh in-memory sets so the sidebar link appears/disappears immediately
+    await loadTeamMembers();
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Save roster config (which roles are enabled)
+app.post('/api/team/roster/config', requireLogin, async (req, res) => {
+  const cid = Number(req.session.user.data.cid);
+  try {
+    const teamNameUpper = await resolveUserTeamName(cid);
+    if (!teamNameUpper) return res.status(403).json({ error: 'Team not linked' });
+    const all = await prisma.officialTeam.findMany({ select: { mainCid: true, teamName: true } });
+    const fleet = all.filter(t => String(t.teamName || '').trim().toUpperCase() === teamNameUpper);
+    if (!fleet.some(t => Number(t.mainCid) === cid) && !isAdminUser(cid) && !canManageTeamMembers(cid)) {
+      return res.status(403).json({ error: 'You do not have permission to edit roster config' });
+    }
+    const { foEnabled, feEnabled, feLabel, obs1Enabled, obs2Enabled } = req.body || {};
+    await prisma.rosterConfig.upsert({
+      where: { entityType_entityName: { entityType: 'team', entityName: teamNameUpper } },
+      update: {
+        foEnabled: foEnabled !== false,
+        feEnabled: !!feEnabled,
+        feLabel: String(feLabel || 'Flight Engineer').trim().slice(0, 40),
+        obs1Enabled: !!obs1Enabled,
+        obs2Enabled: !!obs2Enabled,
+        updatedAt: new Date()
+      },
+      create: {
+        entityType: 'team', entityName: teamNameUpper,
+        foEnabled: foEnabled !== false,
+        feEnabled: !!feEnabled,
+        feLabel: String(feLabel || 'Flight Engineer').trim().slice(0, 40),
+        obs1Enabled: !!obs1Enabled,
+        obs2Enabled: !!obs2Enabled
+      }
+    });
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Save a roster assignment (who is assigned to which role on which sector)
+app.post('/api/team/roster/assign', requireLogin, async (req, res) => {
+  const cid = Number(req.session.user.data.cid);
+  try {
+    const teamNameUpper = await resolveUserTeamName(cid);
+    if (!teamNameUpper) return res.status(403).json({ error: 'Team not linked' });
+    // Any team member can edit the roster
+    const { sectorNumber, role, assignCid } = req.body || {};
+    if (!sectorNumber || !role) return res.status(400).json({ error: 'sectorNumber and role required' });
+    const validRoles = ['captain', 'fo', 'fe', 'obs1', 'obs2'];
+    if (!validRoles.includes(role)) return res.status(400).json({ error: 'Invalid role' });
+
+    if (!assignCid || assignCid === '' || assignCid === '0') {
+      // Clear assignment
+      await prisma.rosterAssignment.deleteMany({
+        where: { entityType: 'team', entityName: teamNameUpper, sectorNumber, role }
+      });
+    } else {
+      const targetCid = Number(assignCid);
+      if (!Number.isFinite(targetCid)) return res.status(400).json({ error: 'Invalid CID' });
+      await prisma.rosterAssignment.upsert({
+        where: { entityType_entityName_sectorNumber_role: { entityType: 'team', entityName: teamNameUpper, sectorNumber, role } },
+        update: { cid: targetCid, updatedAt: new Date() },
+        create: { entityType: 'team', entityName: teamNameUpper, sectorNumber, role, cid: targetCid }
+      });
+    }
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Public roster JSON API
+app.get('/api/roster/:slug.json', async (req, res) => {
+  const slug = String(req.params.slug || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (!slug) return res.status(400).json({ error: 'Invalid team slug' });
+
+  const allTeams = await prisma.officialTeam.findMany().catch(() => []);
+  const match = allTeams.find(t => String(t.teamName || '').toLowerCase().replace(/[^a-z0-9]+/g, '') === slug);
+  if (!match) return res.status(404).json({ error: 'Team not found' });
+  if (!match.rosterEnabled) return res.status(404).json({ error: 'Roster not enabled for this team' });
+
+  const teamNameUpper = String(match.teamName).trim().toUpperCase();
+
+  const [config, assignments, users] = await Promise.all([
+    prisma.rosterConfig.findUnique({
+      where: { entityType_entityName: { entityType: 'team', entityName: teamNameUpper } }
+    }).catch(() => null),
+    prisma.rosterAssignment.findMany({
+      where: { entityType: 'team', entityName: teamNameUpper }
+    }).catch(() => []),
+    prisma.user.findMany().catch(() => [])
+  ]);
+
+  const cfg = config || { foEnabled: true, feEnabled: false, feLabel: 'Flight Engineer', obs1Enabled: false, obs2Enabled: false };
+  const nameByCid = {};
+  users.forEach(u => { if (u.name) nameByCid[u.cid] = u.name; });
+
+  const assignMap = {};
+  assignments.forEach(a => {
+    if (!assignMap[a.sectorNumber]) assignMap[a.sectorNumber] = {};
+    assignMap[a.sectorNumber][a.role] = { cid: a.cid, name: nameByCid[a.cid] || null };
+  });
+
+  const enabledRoles = ['captain'];
+  if (cfg.foEnabled) enabledRoles.push('fo');
+  if (cfg.feEnabled) enabledRoles.push('fe');
+  if (cfg.obs1Enabled) enabledRoles.push('obs1');
+  if (cfg.obs2Enabled) enabledRoles.push('obs2');
+
+  const roleLabels = { captain: 'Captain', fo: 'First Officer', fe: cfg.feLabel || 'Flight Engineer', obs1: 'Observer 1', obs2: 'Observer 2' };
+
+  const scheduleRows = adminSheetCache || [];
+  const sectors = scheduleRows.map(r => {
+    const crew = {};
+    for (const role of enabledRoles) {
+      const a = assignMap[r.number]?.[role];
+      crew[roleLabels[role]] = a ? { cid: a.cid, name: a.name } : null;
+    }
+    return {
+      sector: r.number,
+      from: r.from,
+      to: r.to,
+      dateUtc: r.date_utc,
+      depWindow: r.dep_time_utc ? subtractMinutes(r.dep_time_utc, 60) + '-' + addMinutes(r.dep_time_utc, 60) + 'z' : null,
+      arrWindow: r.arr_time_utc ? subtractMinutes(r.arr_time_utc, 60) + '-' + addMinutes(r.arr_time_utc, 60) + 'z' : null,
+      crew
+    };
+  });
+
+  res.setHeader('Cache-Control', 'public, max-age=30');
+  res.json({
+    team: match.teamName,
+    generatedAt: new Date().toISOString(),
+    roles: enabledRoles.map(r => roleLabels[r]),
+    sectors
+  });
+});
+
 // Main CID (or admin) edits the team's public profile. Applied to EVERY
 // OfficialTeam row of the team so all its fleet cards on /teams stay in sync.
 app.post('/api/team/hq/profile', requireLogin, (req, res, next) => {
@@ -22430,20 +22974,13 @@ app.post('/api/team/fleet', requireLogin, requireFleetManager, async (req, res) 
         description: primary.description,
         website: primary.website,
         sortOrder: await resolveSortOrder(null, prisma.officialTeam),
-        // Teams no longer set this per aircraft — inherit the team's own
-        // participation so a new airframe behaves like the rest of the fleet.
-        // (Auto-assign books once per team, so extra aircraft never claim
-        // extra slots.) Admins still control it on the Teams page.
-        participatingWf26: req.body?.participatingWf26 !== undefined
-          ? (req.body.participatingWf26 === true || String(req.body.participatingWf26) === 'true')
-          : !!primary.participatingWf26
+        // New aircraft start inactive — the user can activate it via the
+        // fleet UI which handles booking migration to the new callsign.
+        participatingWf26: false
       }
     });
     await loadTeamMembers();
-    if (created.participatingWf26) {
-      autoAssignTeamThenAffiliate({ reason: `fleet aircraft ${created.id} added` }).catch(() => {});
-    }
-    console.log(`[TEAM] ${req._fleetTeam}: aircraft ${callsign} (${aircraftType}) added by CID ${req.session.user.data.cid}`);
+    console.log(`[TEAM] ${req._fleetTeam}: aircraft ${callsign} (${aircraftType}) added (inactive) by CID ${req.session.user.data.cid}`);
     res.json({ success: true, id: created.id });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -22696,6 +23233,223 @@ app.post('/api/team/sectors/toggle', requireLogin, async (req, res) => {
 });
 
 /* ===== MANAGE MEMBERS (mirrors /affiliates/my-members) ===== */
+// ── Team Crew Roster ───────────────────────────────────────────────────
+app.get('/team/roster', requireLogin, async (req, res) => {
+  const user = req.session.user.data;
+  const cid = Number(user.cid);
+  const isAdmin = isAdminUser(cid);
+
+  if (!isTeamMember(cid) && !isAdmin) {
+    return renderForbidden(req, res, 'This page is for WF team members only.');
+  }
+  const teamNameUpper = await resolveUserTeamName(cid);
+  if (!teamNameUpper) return renderForbidden(req, res, 'No team linked to your account.');
+
+  const ctx = await loadTeamContext(teamNameUpper, cid, user?.personal?.name_full);
+  const { fleet, primary, displayName, ownerCids, members } = ctx;
+
+  if (!primary?.rosterEnabled) {
+    return res.redirect('/team/hq');
+  }
+
+  const isMainHolder = ownerCids.has(cid);
+  const scheduleRows = adminSheetCache || [];
+  const showSchedule = isPageVisibleTo('schedule', isAdmin);
+
+  function timeWindow(hhmm) {
+    if (!hhmm) return '';
+    const m = String(hhmm).match(/^(\d{1,2}):?(\d{2})$/);
+    if (!m) return hhmm;
+    const mins = parseInt(m[1]) * 60 + parseInt(m[2]);
+    const lo = (mins - 60 + 1440) % 1440;
+    const hi = (mins + 60) % 1440;
+    const fmt = v => `${String(Math.floor(v / 60)).padStart(2, '0')}${String(v % 60).padStart(2, '0')}`;
+    return `${fmt(lo)}-${fmt(hi)}z`;
+  }
+
+  // Load roster config
+  const rosterConfig = await prisma.rosterConfig.findUnique({
+    where: { entityType_entityName: { entityType: 'team', entityName: teamNameUpper } }
+  }).catch(() => null) || { foEnabled: true, feEnabled: false, feLabel: 'Flight Engineer', obs1Enabled: false, obs2Enabled: false };
+
+  // Load assignments
+  const assignments = await prisma.rosterAssignment.findMany({
+    where: { entityType: 'team', entityName: teamNameUpper }
+  }).catch(() => []);
+  const assignMap = {};
+  assignments.forEach(a => { assignMap[a.sectorNumber + '|' + a.role] = a.cid; });
+
+  // Build role columns
+  const roles = [{ key: 'captain', label: 'Captain', enabled: true }];
+  if (rosterConfig.foEnabled) roles.push({ key: 'fo', label: 'First Officer', enabled: true });
+  if (rosterConfig.feEnabled) roles.push({ key: 'fe', label: rosterConfig.feLabel || 'Flight Engineer', enabled: true });
+  if (rosterConfig.obs1Enabled) roles.push({ key: 'obs1', label: 'Observer 1', enabled: true });
+  if (rosterConfig.obs2Enabled) roles.push({ key: 'obs2', label: 'Observer 2', enabled: true });
+
+  const memberOptsHtml = members
+    .map(m => '<option value="' + m.cid + '">' + escapeHtml(m.name ? m.name + ' \u00b7 ' + m.cid : String(m.cid)) + '</option>')
+    .join('');
+
+  // Config section (main CID only)
+  const configHtml = (isMainHolder || canManageTeamMembers(cid)) ? `
+    <section class="card" style="padding:20px;margin-bottom:20px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin:0 0 14px;">
+        <h3 style="margin:0;color:var(--accent);font-size:15px;">Roster Configuration</h3>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span id="rosterConfigMsg" style="font-size:12px;display:none;"></span>
+          <a href="/api/roster/${encodeURIComponent(displayName.toLowerCase().replace(/[^a-z0-9]+/g, ''))}.json" target="_blank" rel="noopener" class="action-btn" style="font-size:11px;padding:5px 14px;text-decoration:none;" title="Live JSON feed of your crew roster.&#10;&#10;Use it to display your roster data on your own website or tools.">Roster API ?</a>
+        </div>
+      </div>
+      <form id="rosterConfigForm" style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;">
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);padding:8px 14px;background:var(--panel2);border:1px solid var(--border);border-radius:8px;cursor:default;opacity:0.7;">
+          <input type="checkbox" checked disabled style="width:16px;height:16px;" /> Captain
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;padding:8px 14px;background:var(--panel2);border:1px solid ${rosterConfig.foEnabled ? 'rgba(56,189,248,0.3)' : 'var(--border)'};border-radius:8px;transition:border-color 0.15s;">
+          <input type="checkbox" name="foEnabled" ${rosterConfig.foEnabled ? 'checked' : ''} style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer;" /> First Officer
+        </label>
+        <div style="display:flex;align-items:center;gap:0;background:var(--panel2);border:1px solid ${rosterConfig.feEnabled ? 'rgba(56,189,248,0.3)' : 'var(--border)'};border-radius:8px;overflow:hidden;transition:border-color 0.15s;">
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;padding:8px 12px;">
+            <input type="checkbox" name="feEnabled" ${rosterConfig.feEnabled ? 'checked' : ''} style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer;" />
+          </label>
+          <select name="feLabel" style="font-size:12px;padding:8px 10px;background:transparent;color:var(--text);border:none;border-left:1px solid var(--border);cursor:pointer;font-family:inherit;">
+            <option value="Flight Engineer" ${rosterConfig.feLabel === 'Flight Engineer' ? 'selected' : ''}>Flight Engineer</option>
+            <option value="Social Secretary" ${rosterConfig.feLabel === 'Social Secretary' ? 'selected' : ''}>Social Secretary</option>
+          </select>
+        </div>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;padding:8px 14px;background:var(--panel2);border:1px solid ${rosterConfig.obs1Enabled ? 'rgba(56,189,248,0.3)' : 'var(--border)'};border-radius:8px;transition:border-color 0.15s;">
+          <input type="checkbox" name="obs1Enabled" ${rosterConfig.obs1Enabled ? 'checked' : ''} style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer;" /> Observer 1
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;padding:8px 14px;background:var(--panel2);border:1px solid ${rosterConfig.obs2Enabled ? 'rgba(56,189,248,0.3)' : 'var(--border)'};border-radius:8px;transition:border-color 0.15s;">
+          <input type="checkbox" name="obs2Enabled" ${rosterConfig.obs2Enabled ? 'checked' : ''} style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer;" /> Observer 2
+        </label>
+      </form>
+    </section>
+  ` : '';
+
+  // Schedule table
+  const scheduleHtml = !showSchedule || !scheduleRows.length ? `
+    <section class="card" style="padding:20px;">
+      <p style="color:var(--muted);font-size:13px;">Schedule not yet available.</p>
+    </section>
+  ` : `
+    <section class="card" style="padding:20px;">
+      <div class="ot-table-wrap">
+        <table class="ot-table">
+          <thead>
+            <tr>
+              <th>Sector</th>
+              <th>From</th>
+              <th>To</th>
+              <th>Date</th>
+              <th>Dep Window</th>
+              <th>Arr Window</th>
+              ${roles.map(r => '<th>' + escapeHtml(r.label) + '</th>').join('')}
+            </tr>
+          </thead>
+          <tbody>
+            ${scheduleRows.map(r => {
+              return '<tr>'
+                + '<td><a class="sector-details-btn" href="/sector/' + escapeHtml(r.number) + '/' + escapeHtml(r.from) + '/' + escapeHtml(r.to) + '" target="_blank" rel="noopener">' + escapeHtml(r.number) + '</a></td>'
+                + '<td><a class="aff-icao-link" href="/icao/' + escapeHtml(r.from) + '">' + escapeHtml(r.from) + '</a></td>'
+                + '<td><a class="aff-icao-link" href="/icao/' + escapeHtml(r.to) + '">' + escapeHtml(r.to) + '</a></td>'
+                + '<td><span class="ot-muted">' + escapeHtml(r.date_utc || '') + '</span></td>'
+                + '<td><span class="ot-muted">' + timeWindow(r.dep_time_utc) + '</span></td>'
+                + '<td><span class="ot-muted">' + timeWindow(r.arr_time_utc) + '</span></td>'
+                + roles.map(role => {
+                    const assigned = assignMap[r.number + '|' + role.key] || '';
+                    return '<td><select class="roster-assign" data-sector="' + escapeHtml(r.number) + '" data-role="' + role.key + '" style="font-size:11px;padding:3px 6px;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:4px;width:100%;">'
+                      + '<option value="">—</option>'
+                      + memberOptsHtml.replace(new RegExp('value="' + assigned + '"'), 'value="' + assigned + '" selected')
+                      + '</select></td>';
+                  }).join('')
+                + '</tr>';
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  `;
+
+  const content = `
+    <div style="max-width:100%;">
+      <h2 style="color:var(--accent);margin:0 0 16px;">Crew Roster \u2014 ${escapeHtml(displayName)}</h2>
+      ${configHtml}
+      ${scheduleHtml}
+    </div>
+
+    <script>
+    (function() {
+      // Config live-save on any checkbox/select change
+      var configForm = document.getElementById('rosterConfigForm');
+      if (configForm) {
+        async function saveConfig() {
+          var msg = document.getElementById('rosterConfigMsg');
+          msg.textContent = 'Saving\u2026';
+          msg.style.color = 'var(--muted)';
+          msg.style.display = '';
+          try {
+            var r = await fetch('/api/team/roster/config', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'same-origin',
+              body: JSON.stringify({
+                foEnabled: configForm.querySelector('[name="foEnabled"]').checked,
+                feEnabled: configForm.querySelector('[name="feEnabled"]').checked,
+                feLabel: configForm.querySelector('[name="feLabel"]').value,
+                obs1Enabled: configForm.querySelector('[name="obs1Enabled"]').checked,
+                obs2Enabled: configForm.querySelector('[name="obs2Enabled"]').checked
+              })
+            });
+            if (r.ok) {
+              msg.textContent = 'Saved!';
+              msg.style.color = '#4ade80';
+              setTimeout(function() { location.reload(); }, 500);
+            } else {
+              msg.textContent = 'Failed';
+              msg.style.color = '#f87171';
+            }
+          } catch (err) {
+            msg.textContent = 'Failed';
+            msg.style.color = '#f87171';
+          }
+        }
+        configForm.addEventListener('change', saveConfig);
+        configForm.addEventListener('submit', function(e) { e.preventDefault(); });
+      }
+
+      // Roster assignment on change
+      document.addEventListener('change', async function(e) {
+        var sel = e.target.closest('.roster-assign');
+        if (!sel) return;
+        sel.style.opacity = '0.5';
+        try {
+          var r = await fetch('/api/team/roster/assign', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify({
+              sectorNumber: sel.dataset.sector,
+              role: sel.dataset.role,
+              assignCid: sel.value || ''
+            })
+          });
+          sel.style.opacity = '1';
+          if (!r.ok) {
+            var d = await r.json().catch(function() { return {}; });
+            alert(d.error || 'Failed to save');
+          }
+        } catch (err) {
+          sel.style.opacity = '1';
+          alert('Failed to save');
+        }
+      });
+    })();
+    </script>
+  `;
+
+  res.send(renderLayout({ title: 'Crew Roster', user, isAdmin, content, layoutClass: 'dashboard-full' }));
+});
+
 app.get('/team/manage-members', requireLogin, async (req, res) => {
   const user = req.session.user.data;
   const cid = Number(user.cid);
@@ -23218,7 +23972,7 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
     n + g.people.filter(p => syncStateFor(p.cid).kind === 'ok').length, 0);
 
   const teamRecord = (t) => JSON.stringify({ teamName: t.teamName, callsign: t.callsign, mainCid: t.mainCid, aircraftType: t.aircraftType, country: t.country, sinceYear: t.sinceYear, multiSlot: t.multiSlot, description: t.description, website: t.website, sortOrder: t.sortOrder, participatingWf26: t.participatingWf26 }).replace(/'/g, '&#39;');
-  const affRecord = (a) => JSON.stringify({ name: a.name, callsign: a.callsign, simType: a.simType, cid: a.cid, sinceYear: a.sinceYear, hasMembers: a.hasMembers, multiAircraft: a.multiAircraft, aircraftType: a.aircraftType, description: a.description, website: a.website, sortOrder: a.sortOrder, participatingWf26: a.participatingWf26 }).replace(/'/g, '&#39;');
+  const affRecord = (a) => JSON.stringify({ name: a.name, callsign: a.callsign, simType: a.simType, cid: a.cid, sinceYear: a.sinceYear, hasMembers: a.hasMembers, multiAircraft: a.multiAircraft, manualCallsigns: a.manualCallsigns, fleetLimit: a.fleetLimit, aircraftType: a.aircraftType, description: a.description, website: a.website, sortOrder: a.sortOrder, participatingWf26: a.participatingWf26 }).replace(/'/g, '&#39;');
   const appRecord = (a) => JSON.stringify({
     id: a.id, callsign: a.callsign, simType: a.simType, cid: a.cid, hasMembers: a.hasMembers, multiAircraft: a.multiAircraft,
     contact: a.contact, discord: a.discord, email: a.email,
@@ -24160,9 +24914,16 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
   <label style="display:block; margin:10px 0 6px;">Allow multiple aircraft?</label>
   <select name="multiAircraft">
     <option value="false" selected>No &mdash; one callsign</option>
-    <option value="true">Yes &mdash; a fleet, each aircraft gets its own slot</option>
+    <option value="full">Yes &mdash; a fleet, each aircraft gets its own booking</option>
+    <option value="manual">Yes &mdash; callsigns manually entered</option>
   </select>
-  <p style="font-size:11px;color:var(--muted);margin:6px 0 0;line-height:1.5;">Applies to every affiliate sharing this name. When Yes, they manage a fleet on their HQ and each aircraft is allocated its own slot.</p>
+  <p style="font-size:11px;color:var(--muted);margin:6px 0 0;line-height:1.5;">Applies to every affiliate sharing this name. Each callsign is allocated its own booking.</p>
+
+  <div id="fleetLimitRow" style="display:none;">
+    <label style="display:block; margin:10px 0 6px;">Max fleet size</label>
+    <input name="fleetLimit" type="number" min="1" max="20" placeholder="e.g. 3" style="width:80px;text-align:center;" />
+    <p style="font-size:11px;color:var(--muted);margin:6px 0 0;">Maximum number of aircraft this affiliate can add to their fleet.</p>
+  </div>
 
   <label style="display:block; margin:10px 0 6px;">Has multiple users?</label>
   <select name="hasMembers">
@@ -24437,7 +25198,11 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
           var hasMembersSel = form.querySelector('select[name="hasMembers"]');
           if (hasMembersSel) hasMembersSel.value = record.hasMembers ? 'true' : 'false';
           var multiAcSel = form.querySelector('select[name="multiAircraft"]');
-          if (multiAcSel) multiAcSel.value = record.multiAircraft ? 'true' : 'false';
+          if (multiAcSel) multiAcSel.value = record.manualCallsigns ? 'manual' : record.multiAircraft ? 'full' : 'false';
+          var fleetLimitIn = form.querySelector('input[name="fleetLimit"]');
+          if (fleetLimitIn) fleetLimitIn.value = record.fleetLimit || '';
+          var fleetLimitRow = document.getElementById('fleetLimitRow');
+          if (fleetLimitRow) fleetLimitRow.style.display = (record.multiAircraft || record.manualCallsigns) ? '' : 'none';
           var affAcIn = form.querySelector('input[name="affAircraftType"]');
           if (affAcIn) affAcIn.value = record.aircraftType || '';
         }
@@ -24451,6 +25216,14 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
       }
 
       modal.classList.remove('hidden');
+
+      // Toggle fleet limit row when multiAircraft changes
+      var maSelect = form.querySelector('select[name="multiAircraft"]');
+      var flRow = document.getElementById('fleetLimitRow');
+      if (maSelect && flRow) {
+        maSelect.onchange = function() { flRow.style.display = (this.value === 'full' || this.value === 'manual') ? '' : 'none'; };
+        if (!record) flRow.style.display = 'none';
+      }
 
       // Focus first enabled input/select (not hidden/disabled)
       const firstFocusable = modal.querySelector('input:not([type="hidden"]):not([type="checkbox"]):not(:disabled), select:not(:disabled), textarea:not(:disabled)');
@@ -24752,7 +25525,10 @@ app.get('/official-teams', requireAdmin, async (req, res) => {
         payload.hasMembers = String(fd.get('hasMembers') || '').toLowerCase() === 'true';
         if (type === 'affiliate') {
           payload.name = (fd.get('affiliateName') || '').toString().trim();
-          payload.multiAircraft = String(fd.get('multiAircraft') || 'false') === 'true';
+          var maVal = String(fd.get('multiAircraft') || 'false');
+          payload.multiAircraft = maVal === 'full' || maVal === 'manual';
+          payload.manualCallsigns = maVal === 'manual';
+          payload.fleetLimit = (fd.get('fleetLimit') || '').toString().trim() || null;
           payload.aircraftType = (fd.get('affAircraftType') || '').toString().trim().toUpperCase();
         }
         if (type === 'application') {
@@ -26860,6 +27636,11 @@ app.patch('/api/admin/affiliates/:id', requireAdmin, profilePhotoUpload.single('
   }
   if (body.hasMembers !== undefined) data.hasMembers = asBool(body.hasMembers);
   if (body.multiAircraft !== undefined) data.multiAircraft = asBool(body.multiAircraft);
+  if (body.manualCallsigns !== undefined) data.manualCallsigns = asBool(body.manualCallsigns);
+  if (body.fleetLimit !== undefined) {
+    const fl = body.fleetLimit === '' || body.fleetLimit == null ? null : Number(body.fleetLimit);
+    data.fleetLimit = (fl && Number.isFinite(fl) && fl > 0) ? Math.min(fl, 20) : null;
+  }
   if (body.name !== undefined) data.name = String(body.name).trim().slice(0, 60) || null;
   if (body.aircraftType !== undefined) data.aircraftType = String(body.aircraftType).trim().toUpperCase().slice(0, 10) || null;
   if (body.description !== undefined) data.description = cleanBio(body.description);
@@ -31221,7 +32002,7 @@ app.get('/admin/settings', requireAdmin, async (req, res) => {
       items: [
         { key: 'schedule',        label: 'WF Schedule',         icon: '🏠', desc: 'Main event schedule with slot booking' },
         { key: 'world-map',       label: 'Route Map',           icon: '🗺️', desc: 'Interactive world map with live flights' },
-        { key: 'my-slots',        label: 'My Slots / Bookings', icon: '✈️', desc: 'Personal slot and booking overview' },
+        { key: 'my-slots',        label: 'My Bookings', icon: '✈️', desc: 'Personal booking overview' },
         { key: 'atc',             label: 'WF Flow Control',     icon: '🎧', desc: 'Controller departure management view' },
         { key: 'suggest-airport', label: 'Suggest Airport',     icon: '💡', desc: 'Community airport suggestions' },
         { key: 'who-we-are',      label: 'Teams & Affiliates',  icon: '👥', desc: 'Public "Who are we?" page listing Official Teams and WF Affiliates with photos, descriptions and websites (/teams).' },
@@ -32704,7 +33485,7 @@ let primaryStatusHtml = '';
     primaryStatusHtml = `
       <span
         class="status-pill non-booked"
-        title="${pageFlowMode === 'SLOTTED' ? 'Flying to WF destination without a time slot' : 'Flying to WF destination without a booking'}"
+        title="${pageFlowMode === 'SLOTTED' ? 'Flying to WF destination without a booking' : 'Flying to WF destination without a booking'}"
       >
         ${pageFlowMode === 'SLOTTED' ? 'No Slot' : 'Non-Booked'}
       </span>`;
@@ -35099,7 +35880,7 @@ app.get('/sector-planning/admin', requireAdmin, async (req, res) => {
     return { count: set.size, label: `${fir}:\n${people.join('\n')}` };
   };
 
-  const FLOW_LABELS = { 'NONE': 'No Restrictions', 'BOOKING_REQUIRED': 'Booking Required', 'TIME_SLOT_REQUIRED': 'Time Slot Required' };
+  const FLOW_LABELS = { 'NONE': 'No Restrictions', 'BOOKING_REQUIRED': 'Booking Required', 'TIME_SLOT_REQUIRED': 'Bookings with Connect Times' };
   const FLOW_TYPE_MAP = { 'BOOKING_REQUIRED': 'BOOKING_ONLY', 'TIME_SLOT_REQUIRED': 'SLOTTED', 'NONE': 'NONE' };
   const FLOW_TYPE_REV = { 'BOOKING_ONLY': 'BOOKING_REQUIRED', 'SLOTTED': 'TIME_SLOT_REQUIRED', 'NONE': 'NONE' };
 
@@ -35536,11 +36317,19 @@ app.get('/sector-planning/:wf/slots.json', requirePageEnabled('sector-planning')
     });
   }
   rows.sort((a, b) => (a.slot || 'zz:zz').localeCompare(b.slot || 'zz:zz'));
-  const users = await prisma.user.findMany({
-    where: { cid: { in: rows.map(r => Number(r.cid)).filter(Boolean) } },
-    select: { cid: true, name: true }
-  }).catch(() => []);
-  const nameByCid = Object.fromEntries(users.map(u => [u.cid, u.name || '']));
+  const cids = rows.map(r => Number(r.cid)).filter(Boolean);
+  const [users, maskedAffiliates] = await Promise.all([
+    prisma.user.findMany({
+      where: { cid: { in: cids } },
+      select: { cid: true, name: true }
+    }).catch(() => []),
+    prisma.affiliate.findMany({
+      where: { cid: { in: cids }, maskName: true },
+      select: { cid: true }
+    }).catch(() => [])
+  ]);
+  const maskedCids = new Set(maskedAffiliates.map(a => a.cid));
+  const nameByCid = Object.fromEntries(users.map(u => [u.cid, maskedCids.has(u.cid) ? '[Hidden]' : (u.name || '')]));
   rows.forEach(r => { r.name = nameByCid[r.cid] || ''; });
 
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
@@ -35589,7 +36378,7 @@ app.get('/sector-planning/:wf/slots', requirePageEnabled('sector-planning'), asy
 </style></head><body>
 <div class="head">
   <h1>${wf} — ${sched.from} → ${sched.to}</h1>
-  <div class="sub">${slotted ? 'Departure slots (TCT) and booked CIDs' : 'Booking Required — search a CID to check for a booking'} · auto-refreshes every 30s</div>
+  <div class="sub">${slotted ? 'Bookings and connect times' : 'Booking Required — search a CID to check for a booking'} · auto-refreshes every 30s</div>
 </div>
 <div class="wrap">
   ${slotted ? '' : '<input id="cidSearch" type="text" inputmode="numeric" placeholder="Search CID for booking…" autofocus /><div id="searchResult" class="result"></div>'}
@@ -35603,12 +36392,12 @@ app.get('/sector-planning/:wf/slots', requirePageEnabled('sector-planning'), asy
   function render() {
     document.getElementById('count').textContent = DATA.rows.length + ' booking' + (DATA.rows.length === 1 ? '' : 's');
     if (SLOTTED) {
-      var html = '<table><thead><tr><th>Slot (TCT)</th><th>CID</th><th>Callsign</th><th>Name</th></tr></thead><tbody>';
+      var html = '<table><thead><tr><th>Connect at</th><th>CID</th><th>Callsign</th><th>Name</th></tr></thead><tbody>';
       DATA.rows.forEach(function(r) {
         html += '<tr><td class="slot">' + esc(r.slot || '—') + '</td><td>' + esc(r.cid) + '</td><td class="cs">' + esc(r.callsign || '—') + '</td><td>' + esc(r.name || '—') + '</td></tr>';
       });
       html += '</tbody></table>';
-      if (!DATA.rows.length) html = '<div class="muted">No slots booked yet.</div>';
+      if (!DATA.rows.length) html = '<div class="muted">No bookings yet.</div>';
       document.getElementById('tableWrap').innerHTML = html;
     } else {
       runSearch();
@@ -35823,11 +36612,11 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
     : (plan.depFlowType === 'BOOKING_REQUIRED' ? 'BOOKING' : null);
   const headerVatcanEventId = headerFlowMode ? await vatcanResolveEventIdForWf(wf) : null;
 
-  const FLOW_LABELS = { 'NONE': 'No Restrictions', 'BOOKING_REQUIRED': 'Booking Required', 'TIME_SLOT_REQUIRED': 'Time Slot Required' };
+  const FLOW_LABELS = { 'NONE': 'No Restrictions', 'BOOKING_REQUIRED': 'Booking Required', 'TIME_SLOT_REQUIRED': 'Bookings with Connect Times' };
   const FLOW_TOOLTIPS = {
     'NONE': 'Any pilot can take part without restrictions.',
     'BOOKING_REQUIRED': 'To depart within the departure window, pilots must have a booking.',
-    'TIME_SLOT_REQUIRED': 'Pilots must hold a TCT slot at the departure airport to depart.'
+    'TIME_SLOT_REQUIRED': 'Pilots must have a booking to depart from this airport.'
   };
   const TIME_SLOT_AIRPORT = 'YSSY';
   const depWindowUtc = sched.dep_time_utc ? buildTimeWindow(sched.dep_time_utc) : '';
@@ -36271,11 +37060,11 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
       <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
         <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="${c.edge}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
         <div style="min-width:200px;">
-          <div style="font-size:13.5px;font-weight:700;color:${c.title};">${slotted ? 'Slotted — TCT slots required to depart' : 'Booking Required to depart'}</div>
-          <div style="font-size:11.5px;color:var(--muted);margin-top:1px;">${slotted ? 'Pilots must hold a departure slot (TCT) for this sector.' : 'Pilots must have a booking to depart within the window — no fixed slot times.'}</div>
+          <div style="font-size:13.5px;font-weight:700;color:${c.title};">${slotted ? 'Booking Required — with connect times' : 'Booking Required to depart'}</div>
+          <div style="font-size:11.5px;color:var(--muted);margin-top:1px;">${slotted ? 'Pilots must have a booking to depart. Each booking has a connect time.' : 'Pilots must have a booking to depart within the window — no fixed slot times.'}</div>
         </div>
         <div style="margin-left:auto;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-          <button type="button" id="spSlotsPopupBtn" class="action-btn" style="font-size:11px;padding:5px 12px;">${slotted ? 'View Slots &amp; CIDs' : 'Search CID Bookings'}</button>
+          <button type="button" id="spSlotsPopupBtn" class="action-btn" style="font-size:11px;padding:5px 12px;">${slotted ? 'View Bookings' : 'Search CID Bookings'}</button>
           <a href="/api/slots/${wf.toLowerCase()}.json" target="_blank" rel="noopener" class="action-btn" style="font-size:11px;padding:5px 12px;text-decoration:none;" title="Public live JSON of this sector's bookings — [{cid, slot}]">Live JSON</a>
           <span style="font-size:11px;color:var(--muted);padding:4px 10px;border:1px solid ${c.border};border-radius:999px;" title="VATCAN bookings event id for this sector">VATCAN Event: <strong style="color:var(--text);">${headerVatcanEventId != null ? headerVatcanEventId : 'not linked'}</strong></span>
         </div>
@@ -36319,7 +37108,7 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
               <div class="sp-check-sub">${(() => {
                 if (!checklist.depFlowSet) {
                   if (checklist.depFlowType === 'BOOKING_REQUIRED' || checklist.depFlowType === 'TIME_SLOT_REQUIRED') {
-                    const lbl = checklist.depFlowType === 'TIME_SLOT_REQUIRED' ? 'Time Slot Required' : 'Booking Required';
+                    const lbl = checklist.depFlowType === 'TIME_SLOT_REQUIRED' ? 'Bookings with Connect Times' : 'Booking Required';
                     return '<span style="color:#fbbf24;font-weight:600;">' + lbl + ' selected — enter a flow rate to activate.</span>';
                   }
                   return 'Departure team needs to pick a flow restriction option.';
@@ -37260,7 +38049,7 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
       function spRenderFlowRateTotal() {
         var totalEl = document.getElementById('spFlowRateTotal');
         if (!totalEl) return;
-        var noun = window.SP.depFlowType === 'TIME_SLOT_REQUIRED' ? 'time slots' : 'bookings';
+        var noun = window.SP.depFlowType === 'TIME_SLOT_REQUIRED' ? 'bookings' : 'bookings';
         var rate = window.SP.depFlowRate;
         if (rate == null || rate === '' || !isFinite(rate)) {
           totalEl.innerHTML = '<span style="color:var(--muted);">Set a rate to see the total ' + noun + '.</span>';
@@ -37280,7 +38069,7 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
         if (reasonWrap) reasonWrap.style.display = (flowType && flowType !== 'NONE') ? 'block' : 'none';
       }
 
-      var FLOW_LABELS_CLIENT = { 'NONE': 'No Restrictions', 'BOOKING_REQUIRED': 'Booking Required', 'TIME_SLOT_REQUIRED': 'Time Slot Required' };
+      var FLOW_LABELS_CLIENT = { 'NONE': 'No Restrictions', 'BOOKING_REQUIRED': 'Booking Required', 'TIME_SLOT_REQUIRED': 'Bookings with Connect Times' };
       function spRefreshDepFlowCheck() {
         var chk = document.getElementById('spChkDepFlow');
         if (!chk) return;
@@ -41717,7 +42506,7 @@ app.get('/book', async (req, res) => {
         String(t.teamName || '').trim().toUpperCase() === wfTeamRow.teamName &&
         t.participatingWf26 && t.mainCid
       );
-      if (match) {
+      if (match && (wfTeamRow.canEditBookings !== false || Number(match.mainCid) === cid)) {
         teamBookingContext = { teamName: wfTeamRow.teamName, teamOwnerCid: Number(match.mainCid), callsigns: teamCallsigns };
       }
     }
@@ -41794,6 +42583,7 @@ const selected = value === preselectedKey ? 'selected' : '';
     <script>
   var BOOK_TEAM_CTX = ${teamBookingContext ? JSON.stringify(teamBookingContext) : 'null'};
   var BOOK_MY_CID = ${cid ? cid : 'null'};
+  var BOOK_MY_NAME = ${JSON.stringify(user?.personal?.name_full || '')};
   const select = document.getElementById('depSelect');
   const body = document.getElementById('tobtBody');
 
@@ -41942,105 +42732,70 @@ if (slot.byMe) {
 
     let callsign;
     if (action === 'book') {
+      // Show booking terms confirmation first
+      const confirmed = await new Promise(resolve => {
+        const ov = document.createElement('div');
+        ov.className = 'modal';
+        ov.style.zIndex = '20001';
+        ov.innerHTML = '<div class="modal-backdrop"></div>'
+          + '<div class="modal-dialog" style="width:440px;padding:28px;text-align:left;">'
+          + '<h3 style="margin:0 0 4px;text-align:center;color:var(--accent);">Confirm Booking</h3>'
+          + '<p style="text-align:center;font-size:12px;color:var(--muted);margin:0 0 14px;">Your TCT (Target Connection Time)</p>'
+          + '<div style="text-align:center;margin:0 0 16px;padding:14px;background:var(--panel2,#0d1526);border:1px solid var(--border);border-radius:10px;">'
+          + '<span style="font-size:36px;font-weight:800;color:var(--accent);letter-spacing:3px;">' + tobt + 'z</span>'
+          + '</div>'
+          + '<div style="background:rgba(56,189,248,0.08);border:1px solid rgba(56,189,248,0.2);border-radius:8px;padding:12px 14px;margin:0 0 16px;font-size:12px;color:var(--muted);line-height:1.6;">'
+          + 'We use <strong style="color:var(--text);">TCT</strong> to stagger pilot connections at this airport so the network and controllers aren\\'t overwhelmed by everyone logging in at once.'
+          + '</div>'
+          + '<p style="color:var(--text);font-size:13px;margin:0 0 12px;font-weight:700;">By booking, I confirm I understand:</p>'
+          + '<ul style="color:var(--text);font-size:13px;margin:0 0 20px;padding-left:20px;line-height:1.8;">'
+          + '<li>This is <strong style="color:#f87171;">not a slot</strong> \u2014 it is a booking with a target connection time.</li>'
+          + '<li>I will endeavour to connect on a <strong>vacant stand</strong> within <strong>\u00b15 minutes</strong> of my TCT.</li>'
+          + '<li>This booking allows me to depart within the <strong>defined event departure window</strong>.</li>'
+          + '<li>Local ATC will <strong>Flow / Meter / Regulate</strong> as required.</li>'
+          + '</ul>'
+          + '<div style="display:flex;gap:10px;justify-content:center;">'
+          + '<button class="action-btn" id="bookTermsCancel" style="min-width:100px;">Cancel</button>'
+          + '<button class="action-btn primary" id="bookTermsAgree" style="min-width:140px;">I Agree &amp; Book</button>'
+          + '</div>'
+          + '</div>';
+        document.body.appendChild(ov);
+        function close(v) { ov.remove(); resolve(v); }
+        ov.querySelector('.modal-backdrop').addEventListener('click', function() { close(false); });
+        document.getElementById('bookTermsCancel').addEventListener('click', function() { close(false); });
+        document.getElementById('bookTermsAgree').addEventListener('click', function() { close(true); });
+      });
+      if (!confirmed) return;
+
+      // If team member, show a notice that this is a personal booking
       if (BOOK_TEAM_CTX) {
-        // Team member — show team/self choice modal
-        callsign = await new Promise(resolve => {
-          const overlay = document.createElement('div');
-          overlay.className = 'modal';
-          overlay.style.zIndex = '20000';
-          overlay.innerHTML = '<div class="modal-backdrop"></div>'
-            + '<div class="modal-dialog booking-confirm-dialog">'
-            + '<div class="booking-confirm-icon">\u2708</div>'
-            + '<h3 class="booking-confirm-title">Confirm Booking</h3>'
-            + '<p class="booking-confirm-sub">Who should this booking be filed under?</p>'
-            + '<div class="booking-confirm-btns">'
-            + '<button class="booking-confirm-btn booking-confirm-self" id="tobtBookSelf">\ud83d\udc64 Book for Myself</button>'
-            + '<button class="booking-confirm-btn booking-confirm-team" id="tobtBookTeam">\ud83d\udc65 Book for ' + BOOK_TEAM_CTX.teamName + '</button>'
+        const proceed = await new Promise(resolve => {
+          const ov = document.createElement('div');
+          ov.className = 'modal';
+          ov.style.zIndex = '20000';
+          ov.innerHTML = '<div class="modal-backdrop"></div>'
+            + '<div class="modal-dialog" style="width:420px;padding:24px;text-align:center;">'
+            + '<h3 style="margin:0 0 12px;color:var(--accent);">Personal Booking</h3>'
+            + '<p style="color:var(--text);font-size:14px;margin:0 0 16px;">This is a <strong>personal booking</strong> for <strong>' + (BOOK_MY_NAME || BOOK_MY_CID) + '</strong> (CID ' + BOOK_MY_CID + ') and not on behalf of your team.</p>'
+            + '<div style="background:rgba(56,189,248,0.08);border:1px solid rgba(56,189,248,0.2);border-radius:8px;padding:12px 14px;margin:0 0 18px;font-size:12px;color:var(--muted);line-height:1.6;text-align:left;">'
+            + 'WF Teams and Affiliates are auto-allocated bookings. You can view your team\\'s bookings on the <a href="/team/hq" style="color:var(--accent);font-weight:600;">Team HQ</a>.'
             + '</div>'
-            + '<div id="tobtBookMsg" style="display:none;margin-bottom:12px;font-size:13px;"></div>'
-            + '<button class="booking-confirm-cancel" id="tobtBookCancel">Cancel</button>'
+            + '<div style="display:flex;gap:10px;justify-content:center;">'
+            + '<button class="action-btn" id="teamNoticeCancel" style="min-width:100px;">Cancel</button>'
+            + '<button class="action-btn primary" id="teamNoticeContinue" style="min-width:140px;">Continue</button>'
+            + '</div>'
             + '</div>';
-          document.body.appendChild(overlay);
-
-          function close(val) { overlay.remove(); resolve(val); }
-          overlay.querySelector('.modal-backdrop').addEventListener('click', function() { close(null); });
-          document.getElementById('tobtBookCancel').addEventListener('click', function() { close(null); });
-
-          document.getElementById('tobtBookSelf').addEventListener('click', async function() {
-            this.disabled = true;
-            this.textContent = 'Booking...';
-            const msg = document.getElementById('tobtBookMsg');
-            const r = await fetch('/api/tobt/book', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ slotKey, callsign: String(BOOK_MY_CID) })
-            });
-            if (!r.ok) {
-              const err = await r.json().catch(() => ({}));
-              msg.textContent = err.error || 'Booking failed.';
-              msg.style.color = '#f87171';
-              msg.style.display = '';
-              this.disabled = false;
-              this.textContent = '\ud83d\udc64 Book for Myself';
-              return;
-            }
-            close(String(BOOK_MY_CID));
-          });
-
-          document.getElementById('tobtBookTeam').addEventListener('click', async function() {
-            const msg = document.getElementById('tobtBookMsg');
-            const cs = BOOK_TEAM_CTX.callsigns || [];
-
-            async function doTeamBook(chosenCallsign) {
-              const r = await fetch('/api/tobt/book', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ slotKey, callsign: String(BOOK_TEAM_CTX.teamOwnerCid), teamBooking: true, teamCallsign: chosenCallsign })
-              });
-              if (!r.ok) {
-                const err = await r.json().catch(() => ({}));
-                msg.textContent = err.error || 'Booking failed.';
-                msg.style.color = '#f87171';
-                msg.style.display = '';
-                return false;
-              }
-              return true;
-            }
-
-            if (cs.length > 1) {
-              // Show callsign picker
-              const btnsDiv = overlay.querySelector('.booking-confirm-btns');
-              btnsDiv.innerHTML = cs.map(function(c) {
-                return '<button class="booking-confirm-btn booking-confirm-team tobt-cs-pick" data-cs="' + c + '">' + c + '</button>';
-              }).join('');
-              overlay.querySelector('.booking-confirm-sub').textContent = 'Which callsign should this booking be for?';
-              btnsDiv.addEventListener('click', async function(ev) {
-                const pickBtn = ev.target.closest('.tobt-cs-pick');
-                if (!pickBtn) return;
-                pickBtn.disabled = true;
-                pickBtn.textContent = 'Booking...';
-                if (await doTeamBook(pickBtn.dataset.cs)) {
-                  close(String(BOOK_TEAM_CTX.teamOwnerCid));
-                } else {
-                  pickBtn.disabled = false;
-                  pickBtn.textContent = pickBtn.dataset.cs;
-                }
-              });
-            } else {
-              this.disabled = true;
-              this.textContent = 'Booking...';
-              if (await doTeamBook(cs[0] || null)) {
-                close(String(BOOK_TEAM_CTX.teamOwnerCid));
-              } else {
-                this.disabled = false;
-                this.textContent = '\ud83d\udc65 Book for ' + BOOK_TEAM_CTX.teamName;
-              }
-            }
-          });
+          document.body.appendChild(ov);
+          function close(v) { ov.remove(); resolve(v); }
+          ov.querySelector('.modal-backdrop').addEventListener('click', function() { close(false); });
+          document.getElementById('teamNoticeCancel').addEventListener('click', function() { close(false); });
+          document.getElementById('teamNoticeContinue').addEventListener('click', function() { close(true); });
         });
-        if (!callsign) return;
-      } else {
-        // Non-team member — show CID input modal
+        if (!proceed) return;
+      }
+
+      {
+        // CID input modal
         callsign = await new Promise(resolve => {
           const modal = document.getElementById('callsignModal');
           const input = document.getElementById('callsignModalInput');
@@ -42213,7 +42968,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   res.send(
     renderLayout({
-      title: 'Book a Slot',
+      title: 'Make a Booking',
       user,
       isAdmin,
       layoutClass: 'dashboard-full', // ✅ ADD THIS
@@ -42347,10 +43102,10 @@ app.get('/my-slots', requireLogin, requirePageEnabled('my-slots'), (req, res) =>
 
   const content = `
  <section class="card my-slots-card">
-      <h2>My Slots</h2>
+      <h2>My Bookings</h2>
 
       ${rows.length === 0 ? `
-        <p><em>You have no booked slots.</em></p>
+        <p><em>You have no bookings.</em></p>
       ` : `
         <div class="my-slots-table-wrapper">
           <table class="my-slots-table" style="min-width:0;table-layout:auto;">
@@ -42385,8 +43140,8 @@ app.get('/my-slots', requireLogin, requirePageEnabled('my-slots'), (req, res) =>
                   <td>${r.dateDisplay}</td>
                   <td>${r.depWindow || '—'}</td>
                   <td>${r.tobt && r.tobt !== '—' && r.tobt !== 'N/A'
-                    ? `Slotted - <span style="color:var(--success);font-weight:600;">${r.tobt.replace(':','')}z</span> <span class="tobt-help">?<span class="tobt-tooltip">This is your TCT (Target Connection Time).<br>Connect to VATSIM at this time.<br>We use TCT to stagger pilot connections at this airport so the network and controllers aren&#39;t overwhelmed.</span></span>`
-                    : `<span style="color:var(--success);font-weight:600;">Booking Confirmed</span> <span class="tobt-help">?<span class="tobt-tooltip">You have a booking for this sector. Slots are not required.<br><b>Plan to depart within the Dep Window.</b></span></span>`}</td>
+                    ? `TCT \u2014 <span style="color:var(--success);font-weight:600;">${displayTobt(r.tobt).replace(':','')}z</span> <span class="tobt-help">?<span class="tobt-tooltip">This is your TCT (Target Connection Time).<br>Connect to VATSIM at this time.<br>We use TCT to stagger pilot connections at this airport so the network and controllers aren&#39;t overwhelmed.</span></span>`
+                    : `<span style="color:var(--success);font-weight:600;">Booking Confirmed</span> <span class="tobt-help">?<span class="tobt-tooltip">You have a booking for this sector.<br><b>Plan to depart within the Dep Window.</b></span></span>`}</td>
                   <td>
                     <button type="button" class="show-route-btn"
                       data-wf="${r.wfSector}" data-from="${r.from}" data-to="${r.to}"
@@ -42394,7 +43149,7 @@ app.get('/my-slots', requireLogin, requirePageEnabled('my-slots'), (req, res) =>
                       data-assigned="${assignedRoute}" data-assigned-label="${assignedRouteLabel}"
                       data-assigned-route="${assignedRouteDisplay}"
                       data-has-split="${hasSplit}" data-cid="${cid}"
-                      data-tobt="${r.tobt !== 'N/A' ? r.tobt : ''}"
+                      data-tobt="${r.tobt !== 'N/A' ? displayTobt(r.tobt) : ''}"
                       data-dep-window="${r.depWindow || ''}"
                       data-date="${r.dateDisplay}"
                       data-simbrief="${r.simbriefUrl.replace(/"/g, '&quot;')}"
@@ -42507,7 +43262,7 @@ app.get('/my-slots', requireLogin, requirePageEnabled('my-slots'), (req, res) =>
           + '<div style="display:flex;justify-content:space-between;font-size:13px;"><span style="color:var(--muted);">Assigned CID</span><strong>' + cidVal + '</strong></div>'
           + (dateVal ? '<div style="display:flex;justify-content:space-between;font-size:13px;"><span style="color:var(--muted);">Date</span><strong>' + dateVal + '</strong></div>' : '')
           + (tobt
-            ? '<div style="display:flex;justify-content:space-between;font-size:13px;"><span style="color:var(--muted);">TCT \u2014 Connect at <span class="tobt-help" style="cursor:help;font-size:11px;">?<span class="tobt-tooltip" style="width:240px;">TCT is your Target Connection Time. Connect to VATSIM at this time. We use TCT to stagger pilot connections so the network and controllers aren\'t overwhelmed.</span></span></span><strong style="color:var(--warning);">' + tobt + ' UTC</strong></div>'
+            ? '<div style="display:flex;justify-content:space-between;font-size:13px;"><span style="color:var(--muted);">TCT \u2014 Connect at</span><strong style="color:var(--warning);">' + tobt + ' UTC</strong></div>'
             : (depWindow ? '<div style="display:flex;justify-content:space-between;font-size:13px;"><span style="color:var(--muted);">Dep Window</span><strong>' + depWindow + '</strong></div>' : ''))
           + (hasSplit ? '<div style="display:flex;justify-content:space-between;font-size:13px;"><span style="color:var(--muted);">Assigned Route</span><strong style="color:var(--success);">' + assignedLabel + '</strong></div>' : '')
           + '</div>'
@@ -42521,7 +43276,7 @@ app.get('/my-slots', requireLogin, requirePageEnabled('my-slots'), (req, res) =>
             + '</div>';
         } else {
           html += '<div style="margin-top:6px;padding:8px 10px;background:rgba(56,189,248,0.06);border:1px solid rgba(56,189,248,0.2);border-radius:6px;font-size:11px;color:var(--muted);line-height:1.5;">'
-            + 'You have a booking for this sector. Slots are not required. <strong>Plan to depart within the Dep Window.</strong>'
+            + 'You have a booking for this sector. <strong>Plan to depart within the Dep Window.</strong>'
             + '</div>';
         }
         var slotKey = btn.getAttribute('data-slot-key') || '';
@@ -42705,7 +43460,7 @@ document.addEventListener('click', async (e) => {
 
   res.send(
     renderLayout({
-      title: 'My Slots',
+      title: 'My Bookings',
       user,
       isAdmin,
       layoutClass: 'dashboard-full',
