@@ -21139,6 +21139,24 @@ app.delete('/api/affiliates/fleet/:id', requireLogin, requireAffiliate, async (r
   }
 });
 
+/* Set the single "no callsign" sector claim for an affiliate (cid 0 = not
+   flying, a positive cid = assigned pilot).
+
+   Manual-callsigns affiliates keep one claim PER aircraft, each carrying a
+   callsign, which is why the unique key is [affiliateId, sectorNumber,
+   callsign]. Everyone else has exactly one claim per sector with callsign
+   NULL — and Postgres treats NULLs as distinct, so those rows cannot be
+   addressed by a compound upsert at all. Update-then-create keeps the
+   one-row-per-sector behaviour without relying on the unique key. */
+async function setAffiliateSectorClaim(affiliateId, sectorNumber, cid) {
+  const updated = await prisma.affiliateSectorClaim.updateMany({
+    where: { affiliateId, sectorNumber, callsign: null },
+    data: { cid }
+  });
+  if (updated.count) return;
+  await prisma.affiliateSectorClaim.create({ data: { affiliateId, sectorNumber, cid } });
+}
+
 // Flying / not flying for one aircraft on one sector (cid 0 = released).
 app.post('/api/affiliates/fleet/:id/flying', requireLogin, requireAffiliate, async (req, res) => {
   const cid = Number(req.session.user.data.cid);
@@ -21168,11 +21186,7 @@ app.post('/api/affiliates/fleet/:id/flying', requireLogin, requireAffiliate, asy
         await autoAssignTeamThenAffiliate({ reason: `${row.callsign} opted in to ${sectorNumber}` }).catch(() => {});
       }
     } else {
-      await prisma.affiliateSectorClaim.upsert({
-        where: { affiliateId_sectorNumber: { affiliateId: id, sectorNumber } },
-        update: { cid: 0 },
-        create: { affiliateId: id, sectorNumber, cid: 0 }
-      });
+      await setAffiliateSectorClaim(id, sectorNumber, 0);
       const prefix = `${sched.from}-${sched.to}|${sched.date_utc}|${sched.dep_time_utc}`;
       const cs = String(row.callsign || '').toUpperCase();
       const bookings = !restricted
@@ -21231,11 +21245,7 @@ app.post('/api/affiliates/hq/solo-toggle', requireLogin, requireAffiliate, async
       try { io.emit('bookingCancelled', { slotKey: b.slotKey }); } catch {}
     }
     // Mark released via sentinel cid=0
-    await prisma.affiliateSectorClaim.upsert({
-      where: { affiliateId_sectorNumber: { affiliateId: affiliate.id, sectorNumber } },
-      update: { cid: 0 },
-      create: { affiliateId: affiliate.id, sectorNumber, cid: 0 }
-    });
+    await setAffiliateSectorClaim(affiliate.id, sectorNumber, 0);
     return res.json({ ok: true });
   }
 
@@ -21284,11 +21294,7 @@ app.post('/api/affiliates/hq/claim', requireLogin, requireAffiliate, async (req,
   const scheduleRow = (adminSheetCache || []).find(r => r.number === sectorNumber);
   if (!scheduleRow) return res.status(400).json({ error: 'Unknown sector' });
 
-  await prisma.affiliateSectorClaim.upsert({
-    where: { affiliateId_sectorNumber: { affiliateId: affiliate.id, sectorNumber } },
-    update: { cid: claimCid },
-    create: { affiliateId: affiliate.id, sectorNumber, cid: claimCid }
-  });
+  await setAffiliateSectorClaim(affiliate.id, sectorNumber, claimCid);
 
   // Transfer/create the sector booking so the assigned pilot holds it.
   // Awaited so the response carries the up-to-date status pill.
@@ -27486,12 +27492,33 @@ app.delete('/api/admin/affiliates/:id', requireAdmin, async (req, res) => {
   const id = Number(req.params.id);
   if (!id) return res.status(400).json({ error: 'Invalid id' });
 
-  const existing = await prisma.affiliate.findUnique({ where: { id }, select: { cid: true } }).catch(() => null);
+  const existing = await prisma.affiliate.findUnique({ where: { id }, select: { cid: true, callsign: true } }).catch(() => null);
   const memberRows = await prisma.affiliateMember.findMany({ where: { affiliateId: id }, select: { cid: true } }).catch(() => []);
 
+  // Release any slots this affiliate holds before the row goes. Otherwise the
+  // booking lingers under a callsign that no longer exists: the slot stays out
+  // of the pool, the pilot still appears in the VATCAN list, and the sector
+  // reads as fuller than it is. Mirrors the affiliate-side fleet delete.
+  const deletedCs = String(existing?.callsign || '').toUpperCase();
+  let released = 0;
+  if (deletedCs) {
+    const bookings = await prisma.tobtBooking.findMany({ where: { callsign: deletedCs } }).catch(() => []);
+    for (const bk of bookings) {
+      await prisma.tobtBooking.delete({ where: { id: bk.id } }).catch(() => null);
+      const bookingKey = `${Number(bk.cid)}:${bk.slotKey}`;
+      deleteBookingByBookingKey(bookingKey);
+      if (tobtBookingsByCid[Number(bk.cid)]) tobtBookingsByCid[Number(bk.cid)].delete(bookingKey);
+      try { io.emit('bookingCancelled', { slotKey: bk.slotKey }); } catch {}
+      vatcanPushForSlotKey(bk.slotKey);
+      released++;
+    }
+  }
+
+  await prisma.affiliateSectorClaim.deleteMany({ where: { affiliateId: id } }).catch(() => null);
   await prisma.affiliateMember.deleteMany({ where: { affiliateId: id } }).catch(() => null);
   await prisma.affiliate.delete({ where: { id } }).catch(() => null);
   await loadAffiliateOwners();
+  if (released) console.log(`[AFFILIATE] Deleted ${deletedCs} — released ${released} booking(s)`);
 
   // Drop WF_AFFILIATE from anyone this delete orphaned (main + members)
   if (existing) await revokeAffiliateRoleIfOrphaned(existing.cid);
