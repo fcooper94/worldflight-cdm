@@ -29073,6 +29073,7 @@ firstRowInputs.forEach(function(input) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         eventId: window.WF_EVENT_ID,
+        prev: prevSelect.value,
         from: fromVal,
         to: toVal,
         depFlow: Number(document.getElementById('addLegFlow').value) || 0,
@@ -29085,9 +29086,11 @@ firstRowInputs.forEach(function(input) {
 
     if (res.ok) location.reload();
     else {
+      var reason = '';
+      try { reason = (await res.json()).error || ''; } catch (err) {}
       submitBtn.disabled = false;
       submitBtn.textContent = 'Add Leg';
-      msg.textContent = 'Failed to add leg.';
+      msg.textContent = reason || 'Failed to add leg.';
       msg.style.color = 'var(--danger)';
       msg.classList.remove('hidden');
     }
@@ -31176,37 +31179,64 @@ app.post('/admin/api/schedule/wf-challenge', requireAdmin, async (req, res) => {
 });
 
 app.post('/admin/api/schedule-row/add', requireAdmin, async (req, res) => {
-  const { eventId, from, to, depFlow, flowType, atcRoute, atcRoute2, blockTime, flightTime } = req.body;
+  const { eventId, prev, from, to, depFlow, flowType, atcRoute, atcRoute2, blockTime, flightTime } = req.body;
 
-  // Find next WF number
-  const existing = await prisma.wfScheduleRow.findMany({
+  const rows = await prisma.wfScheduleRow.findMany({
     where: { eventId },
-    orderBy: { sortOrder: 'desc' },
-    take: 1
+    orderBy: { sortOrder: 'asc' }
   });
 
-  const lastOrder = existing.length ? existing[0].sortOrder : -1;
   const evt = wfEvents.find(e => e.id === eventId);
   const isWf = evt?.isWorldFlight !== false;
-  let nextNum;
-  if (isWf) {
-    const yearPrefix = String(evt?.year || new Date().getFullYear()).slice(-2);
-    const sectorCount = existing.length
-      ? parseInt(existing[0].number.replace(/\D/g, '').slice(-2)) || existing.length
-      : 0;
-    nextNum = 'WF' + yearPrefix + String(sectorCount + 1).padStart(2, '0');
-  } else {
-    const suffix = (evt?.flightSuffix || '').toUpperCase().trim() || 'FL';
-    let nextSeq;
-    if (existing.length) {
-      nextSeq = (parseInt(existing[0].number.replace(/\D/g, '')) || existing.length) + 1;
-    } else {
-      nextSeq = evt?.flightStartNumber ?? 1;
-    }
-    nextNum = suffix + String(nextSeq).padStart(3, '0');
+  const yearPrefix = String(evt?.year || new Date().getFullYear()).slice(-2);
+  const suffix = (evt?.flightSuffix || '').toUpperCase().trim() || 'FL';
+
+  // A leg's number follows its place in the running order: WF numbers carry a
+  // two-digit sector count, other events use the configured suffix + sequence.
+  const numberForSeq = (seq) => isWf
+    ? 'WF' + yearPrefix + String(seq).padStart(2, '0')
+    : suffix + String(seq).padStart(3, '0');
+  const seqOf = (number) => {
+    const digits = String(number || '').replace(/\D/g, '');
+    return parseInt(isWf ? digits.slice(-2) : digits, 10);
+  };
+
+  // "Previous Leg" in the Add Leg modal decides where the new sector lands —
+  // straight after the leg it was told to follow, not on the end of the list.
+  const wantsStart = prev === 'START';
+  const prevRow = prev && !wantsStart ? rows.find(r => r.number === prev) : null;
+  if (prev && !wantsStart && !prevRow) {
+    return res.status(400).json({ error: `${prev} is no longer in the schedule — reload the page and try again.` });
   }
 
-  const isFirstLeg = existing.length === 0;
+  let sortOrder, nextNum;
+  if (prevRow) {
+    const prevSeq = seqOf(prevRow.number);
+    sortOrder = prevRow.sortOrder + 1;
+    nextNum = Number.isFinite(prevSeq) ? numberForSeq(prevSeq + 1) : null;
+  } else if (wantsStart || rows.length === 0) {
+    sortOrder = 0;
+    nextNum = numberForSeq(isWf ? 1 : (evt?.flightStartNumber ?? 1));
+  } else {
+    // No previous leg supplied at all — keep the old behaviour and append.
+    const last = rows[rows.length - 1];
+    sortOrder = last.sortOrder + 1;
+    nextNum = numberForSeq(seqOf(last.number) + 1);
+  }
+  if (!nextNum) return res.status(400).json({ error: 'Could not work out a sector number for this leg.' });
+
+  // Inserting mid-schedule would have to renumber every following leg, and the
+  // number is what sector plans, claims and team assignments are keyed on. So
+  // only fill a genuine gap, and say so plainly when there isn't one.
+  const clash = rows.find(r => r.number === nextNum || r.sortOrder === sortOrder);
+  if (clash) {
+    const after = prevRow ? prevRow.number : 'the start of the schedule';
+    return res.status(409).json({
+      error: `${clash.number} already follows ${after}. Delete it first, or pick the last leg to add on the end — inserting here would renumber every later sector.`
+    });
+  }
+
+  const isFirstLeg = sortOrder === 0;
   let seedDate = '';
   if (isFirstLeg && evt?.startDateUtc && /^\d{4}-\d{2}-\d{2}$/.test(evt.startDateUtc)) {
     const parts = evt.startDateUtc.split('-');
@@ -31215,7 +31245,7 @@ app.post('/admin/api/schedule-row/add', requireAdmin, async (req, res) => {
   const row = await prisma.wfScheduleRow.create({
     data: {
       eventId,
-      sortOrder: lastOrder + 1,
+      sortOrder,
       number: nextNum,
       from: (from || '').toUpperCase(),
       to: (to || '').toUpperCase(),
