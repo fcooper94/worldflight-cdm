@@ -528,9 +528,11 @@ async function main() {
   L.push('#define Coast 5263440');
   L.push('');
 
-  // INFO centered on departure
+  // INFO centered on departure. The nine fields must follow [INFO] with no
+  // blank line between — EuroScope reads them positionally, so a leading
+  // blank shifts every field by one and the latitude slot receives the
+  // airport code, which cannot parse as a coordinate.
   L.push('[INFO]');
-  L.push('');
   L.push(`${LEG_NAME} (${FROM} -> ${TO})`);
   L.push(`${FROM}_CTR`);
   L.push(FROM);
@@ -1926,28 +1928,21 @@ async function main() {
   fs.writeFileSync(profilesPath, JSON.stringify(profiles, null, 2), 'utf-8');
 
   // ===== TOPSKY RADARS =====
-  // Generate radar grid covering all transited FIRs
+  /* Deliberately NOT generated.
+     This block used to write a TopSkyRadars.txt with one radar per VATSpy
+     radar (86 for OMDB->ZULS) and, on EVERY radar, a POSITIONS line listing
+     every position in the leg — 171 characters against the ~20 a real
+     adaptation uses (UK: "POSITIONS:SCO:STC:EGPD", 22 radars). Loading it
+     made TopSky terminate EuroScope during plugin init, with no Windows
+     crash record. Proven by swapping this file alone into an otherwise
+     working TopSky folder.
+     The file is optional — Portugal vACC's adaptation ships none at all —
+     and radar definitions only affect simulated coverage, so the correct
+     fix is to omit it rather than emit a malformed one. If per-leg radars
+     are wanted later, POSITIONS must list only the few positions that use
+     that radar. */
   const topskyDir = path.join(OUTPUT_DIR, 'Data', 'Plugin', 'TopSky');
   if (fs.existsSync(topskyDir)) {
-    // Build position prefix list for POSITIONS field
-    const posPrefixes = [FROM, TO, ...vatspy.positions.map(p => p.callsign)];
-    const uniquePrefixes = [...new Set(posPrefixes)].join(':');
-
-    const radarLines = [];
-    for (const radar of vatspy.radars) {
-      radarLines.push(`RADAR:${radar.name}`);
-      radarLines.push(`POSITIONS:${uniquePrefixes}`);
-      radarLines.push(`LOCATION:${coordPair(radar.lat, radar.lon).replace(' ', ':')}`);
-      radarLines.push('ALTITUDE:500');
-      radarLines.push('BEAMWIDTH:1.4');
-      radarLines.push('PULSEWIDTH:1');
-      radarLines.push('MAXANGLE:87');
-      radarLines.push('RANGE:0:300');
-      radarLines.push('');
-    }
-    fs.writeFileSync(path.join(topskyDir, 'TopSkyRadars.txt'), radarLines.join('\r\n'), 'utf-8');
-    console.log(`  ${vatspy.radars.length} TopSky radars generated`);
-
     // Write extended centreline tick marks to TopSkyMaps.txt
     // Generate extended centreline MAP entries with ACTIVE:RWY triggers — append, don't overwrite
     const mapsPath = path.join(topskyDir, 'TopSkyMaps.txt');
