@@ -403,7 +403,13 @@
       "PowerShell(cd C:\\\\dev\\\\WorldFlight-Planning; python \"C:\\\\Users\\\\Fraser\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--dev-WorldFlight-Planning\\\\943bd8e0-dc87-4b34-b5be-0f1ce0b8c5c5\\\\scratchpad\\\\patch_claude.py\"; \"---\"; \\(Get-Content CLAUDE.md | Measure-Object -Line\\).Lines)",
       "Bash(cd /c/dev/WorldFlight-Planning; sed -n '221,250p' CLAUDE.md; echo \"...\"; sed -n '310,333p' CLAUDE.md | head -12)",
       "Bash(git pull *)",
-      "Bash(node \"C:/Users/Fraser/AppData/Local/Temp/claude/c--dev-WorldFlight-Planning/943bd8e0-dc87-4b34-b5be-0f1ce0b8c5c5/scratchpad/sched.js\")"
+      "Bash(node \"C:/Users/Fraser/AppData/Local/Temp/claude/c--dev-WorldFlight-Planning/943bd8e0-dc87-4b34-b5be-0f1ce0b8c5c5/scratchpad/sched.js\")",
+      "Bash(node \"C:/Users/Fraser/AppData/Local/Temp/claude/c--dev-WorldFlight-Planning/943bd8e0-dc87-4b34-b5be-0f1ce0b8c5c5/scratchpad/fircov.mjs\")",
+      "Bash(node --check scripts/lib/parsers.js)",
+      "Bash(sed -i \"s/const FIR_ALIASES = { EGTL: 'EGTT' };/const FIR_ALIASES = { EGTL: 'EGTT', VOBL: 'VOMF' };/\" fircov.mjs)",
+      "Bash(node fircov.mjs)",
+      "Bash(sed -i \"s/VOBL: 'VOMF' }/VOBL: 'VOMF', DNMM: 'DNKK' }/\" fircov.mjs)",
+      "Bash(node \"C:/Users/Fraser/AppData/Local/Temp/claude/c--dev-WorldFlight-Planning/943bd8e0-dc87-4b34-b5be-0f1ce0b8c5c5/scratchpad/sweep.mjs\")"
     ]
   }
 }

@@ -88,8 +88,15 @@ function pointInPolygon(lat, lon, coords) {
   return inside;
 }
 
+/* Boundary polygons that are terminal areas rather than FIRs, mapped to the
+   FIR that actually owns them. Nothing in the geojson marks the difference,
+   and these sit *inside* their parent, so the smallest-polygon rule in
+   resolveSurfaceFirForPoint picks them over the FIR — leaving the airport
+   resolved to a code no one can ever be granted. */
 const FIR_ALIASES = {
   'EGTL': 'EGTT',  // London Terminal → London Area
+  'VOBL': 'VOMF',  // Bengaluru terminal → Chennai FIR (sits inside VOMF-UBL)
+  'DNMM': 'DNKK',  // Lagos sector → Kano FIR, the only Nigerian code granted
 };
 
 function baseFirCode(id) {

@@ -191,7 +191,9 @@ export function parseRouteFIRs(geojsonPath, depLat, depLon, arrLat, arrLon, rout
     return inside;
   }
 
-  const FIR_ALIASES = { 'EGTL': 'EGTT' };
+  // Keep in sync with FIR_ALIASES in index.js — terminal-area polygons mapped
+  // to the FIR that owns them.
+  const FIR_ALIASES = { 'EGTL': 'EGTT', 'VOBL': 'VOMF', 'DNMM': 'DNKK' };
   function baseFirCode(id) {
     if (!id) return null;
     const base = id.split('-')[0];
