@@ -8,6 +8,7 @@ export default function renderLayout({
   isWfAtc = false,
   hasFirAccess = false,
   sectorPlanOutOfSync = 0,
+  sectorPlanActions = 0,
   canManageAffiliateMembers = false,
   canManageTeamMembers = false,
   teamRosterEnabled = false,
@@ -114,7 +115,7 @@ export default function renderLayout({
       </a>` : ''}
       ${pv('sector-planning') && hasFirAccess ? `<a href="/sector-planning" class="nav-item" data-tooltip="Sector Planning">
         <span class="icon">${icons.clipboard}</span>
-        <span class="label">Sector Planning${sectorPlanOutOfSync > 0 ? ` <span class="nav-badge" title="${sectorPlanOutOfSync} sector${sectorPlanOutOfSync === 1 ? '' : 's'} need syncing">${sectorPlanOutOfSync}</span>` : ''}</span>
+        <span class="label">Sector Planning${sectorPlanActions > 0 ? ` <span class="nav-badge action" title="${sectorPlanActions} sector${sectorPlanActions === 1 ? '' : 's'} waiting on your response">${sectorPlanActions}</span>` : ''}${sectorPlanOutOfSync > 0 ? ` <span class="nav-badge" title="${sectorPlanOutOfSync} sector${sectorPlanOutOfSync === 1 ? '' : 's'} need syncing">${sectorPlanOutOfSync}</span>` : ''}</span>
       </a>` : ''}
     </div>` : ''}
 

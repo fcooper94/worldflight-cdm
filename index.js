@@ -472,6 +472,7 @@ function renderLayout(opts) {
     isWfAtc: cid ? (isWfAtc(cid) || isAdminUser(cid)) : false,
     hasFirAccess: cid ? (userHasFirAccess(cid) || isAdminUser(cid)) : false,
     sectorPlanOutOfSync: (cid && isAdminUser(cid)) ? sectorPlanOutOfSyncCount : 0,
+    sectorPlanActions: cid ? sectorPlanActionCount(cid) : 0,
     canManageAffiliateMembers: cid ? canManageAffiliateMembers(cid) : false,
     canManageTeamMembers: cid ? canManageTeamMembers(cid) : false,
     teamRosterEnabled: cid ? hasTeamRoster(cid) : false,
@@ -3275,6 +3276,7 @@ await (async () => {
   rebuildAllTobtSlots();       // 🔑 NOW WORKS
 
   refreshSectorPlanOutOfSyncCount(); // prime the out-of-sync badge count
+  refreshSectorPlanActions();        // prime the per-user "needs your response" badge
 
   // Auto-assign bookings/slots for all participating teams (first), then
   // affiliates fill remaining slots. Both are idempotent — safe to re-run.
@@ -35412,6 +35414,32 @@ function userHasFirAccess(cid) {
   return Array.isArray(list) ? list.length > 0 : !!list;
 }
 
+/* Who to talk to about a FIR, from the WF FIR Management sheets. Sources are
+   walked most-specific first — the supplementary POC workbook, then the
+   sub-division Event Directors, then the division ED — and the first entry
+   for a CID wins, so somebody listed both as a POC and as their division's
+   ED shows once, under the narrower scope. */
+function firPointsOfContact(fir) {
+  const d = firManagementState.data;
+  if (!fir || !d) return [];
+  const out = new Map();
+  const add = (name, cid, scope) => {
+    const n = Number(cid);
+    if (!n || out.has(n)) return;
+    out.set(n, { cid: n, name: String(name || '').trim(), scope: String(scope || '').trim() });
+  };
+  for (const r of (d.pocRows || [])) {
+    if (r.fir === fir) add(r.eventDirector, r.cid, r.subDivision || r.region);
+  }
+  for (const r of (d.subDivisions || [])) {
+    if ((r.firs || []).includes(fir)) add(r.eventDirector, r.cid, r.subDivision || r.division);
+  }
+  for (const r of (d.divisions || [])) {
+    if ((r.firs || []).includes(fir)) add(r.eventDirector, r.cid, r.division);
+  }
+  return [...out.values()];
+}
+
 // ── WF ATC: VATCAN Codes — list every WF sector with its VATCAN event_id ──
 // Gated on (admin OR WF_ATC role) — the page-visibility key is also honoured
 // so admins can still hide the page entirely via the admin Page Visibility
@@ -35557,9 +35585,14 @@ app.get('/sector-planning', requirePageEnabled('sector-planning'), async (req, r
   // Refresh the out-of-sync badge count so it's accurate on this page (and the
   // sidebar) for admins.
   if (isAdmin) await refreshSectorPlanOutOfSyncCount();
+  // Same for the "needs your response" badge — otherwise the sidebar on this
+  // very page could still be showing a count the user just cleared.
+  await refreshSectorPlanActions();
 
   let owned = new Set();
   let participations = [];
+  let plansByWf = {};
+  let openIssuesByPlanId = {};
   if (cid) {
     owned = await getUserOwnedFirs(cid);
     if (owned.size) {
@@ -35620,13 +35653,17 @@ app.get('/sector-planning', requirePageEnabled('sector-planning'), async (req, r
       // transit FIRs derived from the schedule placeholder route can be
       // misleading before agreement.
       const wfs = participations.map(p => p.wf);
-      const plansByWf = {};
       if (wfs.length) {
         const plans = await prisma.sectorPlan.findMany({
-          where: { wf: { in: wfs }, eventId: activeEventId || undefined },
-          select: { wf: true, depRouteSuggestion: true, arrRouteSuggestion: true }
+          where: { wf: { in: wfs }, eventId: activeEventId || undefined }
         }).catch(() => []);
         plans.forEach(p => { plansByWf[p.wf] = p; });
+        const issueCounts = await prisma.sectorPlanIssue.groupBy({
+          by: ['sectorPlanId'],
+          where: { sectorPlanId: { in: plans.map(p => p.id) }, status: { not: 'RESOLVED' } },
+          _count: { _all: true }
+        }).catch(() => []);
+        issueCounts.forEach(g => { openIssuesByPlanId[g.sectorPlanId] = g._count?._all || 0; });
       }
       participations = participations.filter(p => {
         const hasDepArr = p.roles.some(r => r.startsWith('Departure') || r.startsWith('Arrival'));
@@ -35642,7 +35679,26 @@ app.get('/sector-planning', requirePageEnabled('sector-planning'), async (req, r
   const noGrants = cid && owned.size === 0;
   const noMatches = owned.size > 0 && participations.length === 0;
 
+  // What this viewer specifically has to answer on each sector. Only the sides
+  // they hold count — an enroute manager isn't being asked to agree a route.
+  const actionsFor = (s) => {
+    const plan = plansByWf[s.wf];
+    if (!plan) return [];
+    const pending = sectorPlanPendingActions(plan, s.from, s.to, openIssuesByPlanId[plan.id] || 0);
+    const items = [];
+    if (s.roles.some(r => r.startsWith('Departure'))) items.push(...pending.dep);
+    if (s.roles.some(r => r.startsWith('Arrival'))) items.push(...pending.arr);
+    return [...new Set(items)];
+  };
+
   const pillsHtml = participations.map(s => {
+    const actions = actionsFor(s);
+    const alertIcon = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:1px;"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>';
+    const actionsHtml = actions.length ? `
+      <div class="sp-pill-actions">
+        <div class="sp-pill-actions-title">Needs your response</div>
+        ${actions.map(t => `<div class="sp-pill-action">${alertIcon}<span>${t}</span></div>`).join('')}
+      </div>` : '';
     const roleChips = s.roles.map(r => {
       const isDep = r.startsWith('Departure');
       const isArr = r.startsWith('Arrival');
@@ -35650,13 +35706,14 @@ app.get('/sector-planning', requirePageEnabled('sector-planning'), async (req, r
       const bg = isDep ? 'rgba(129,140,248,0.14)' : isArr ? 'rgba(244,114,182,0.14)' : 'rgba(148,163,184,0.12)';
       return `<span style="display:inline-flex;align-items:center;padding:2px 7px;background:${bg};color:${color};border:1px solid ${color};border-radius:4px;font-size:10px;font-weight:700;letter-spacing:0.04em;">${r}</span>`;
     }).join('');
-    return `<a href="/sector-planning/${encodeURIComponent(s.wf)}" class="sp-pill" style="display:flex;flex-direction:column;gap:8px;padding:14px 16px;background:var(--panel);border:1px solid var(--border);border-radius:10px;text-decoration:none;color:var(--text);min-width:260px;flex:1 1 260px;max-width:340px;transition:border-color .15s, transform .15s;">
+    return `<a href="/sector-planning/${encodeURIComponent(s.wf)}" class="sp-pill${actions.length ? ' needs-action' : ''}" style="display:flex;flex-direction:column;gap:8px;padding:14px 16px;background:var(--panel);border:1px solid var(--border);border-radius:10px;text-decoration:none;color:var(--text);min-width:260px;flex:1 1 260px;max-width:340px;transition:border-color .15s, transform .15s;">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
-        <span style="font-weight:800;font-size:15px;color:var(--accent);">${s.wf}</span>
+        <span style="display:inline-flex;align-items:center;gap:6px;font-weight:800;font-size:15px;color:var(--accent);">${s.wf}${actions.length ? `<span class="sp-pill-badge" title="${actions.length} item${actions.length === 1 ? '' : 's'} waiting on you">${actions.length}</span>` : ''}</span>
         <span style="font-size:11px;color:var(--muted);">${s.date || ''}</span>
       </div>
       <div style="font-family:monospace;font-size:13px;color:var(--text);">${s.from} <span style="color:var(--muted);">→</span> ${s.to}</div>
       <div style="display:flex;flex-wrap:wrap;gap:4px;">${roleChips}</div>
+      ${actionsHtml}
     </a>`;
   }).join('');
 
@@ -35668,6 +35725,25 @@ app.get('/sector-planning', requirePageEnabled('sector-planning'), async (req, r
     <style>
       .sp-pill:hover { border-color: var(--accent) !important; transform: translateY(-1px); }
       .sp-empty { padding:48px 16px;text-align:center;color:var(--muted);border:1px dashed var(--border);border-radius:10px; }
+      .sp-pill.needs-action { border-color: rgba(245,158,11,0.45) !important; }
+      .sp-pill.needs-action:hover { border-color: #f59e0b !important; }
+      .sp-pill-badge {
+        display:inline-flex; align-items:center; justify-content:center;
+        min-width:18px; height:18px; padding:0 6px; border-radius:999px;
+        background:#f59e0b; color:#1f1300; font-size:11px; font-weight:700; line-height:1;
+      }
+      .sp-pill-actions {
+        margin-top:2px; padding:8px 10px; border-radius:8px;
+        background:rgba(245,158,11,0.08); border:1px solid rgba(245,158,11,0.3);
+        display:flex; flex-direction:column; gap:5px;
+      }
+      .sp-pill-actions-title {
+        font-size:9px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:#f59e0b;
+      }
+      .sp-pill-action {
+        display:flex; align-items:flex-start; gap:6px;
+        font-size:11px; line-height:1.4; color:#fde68a;
+      }
     </style>
 
     <section class="card card-full">
@@ -35855,6 +35931,124 @@ async function refreshSectorPlanOutOfSyncCount() {
   } catch (e) {}
 }
 setInterval(() => { refreshSectorPlanOutOfSyncCount(); }, 45000);
+
+/* ── Sector Planning: "needs your response" ────────────────────────────────
+   A sector is waiting on someone when the *other* side has put something on
+   the table that only they can answer — a proposed route, a proposed split,
+   a flow request — or when an enroute FIR has raised an issue against a route
+   both sides already agreed. Things a side simply hasn't done yet (no route
+   proposed at all) are deliberately not counted: at the start of planning
+   that would badge every sector and mean nothing.
+
+   Returned per side so callers can show only the list matching the role(s)
+   the viewer actually holds on that sector. Conditions mirror the prompts on
+   the detail page, so a badge always corresponds to a visible control. */
+function sectorPlanPendingActions(plan, fromIcao, toIcao, openIssues = 0) {
+  const dep = [];
+  const arr = [];
+  if (!plan) return { dep, arr };
+
+  const cmp = compareRoutes(plan.depRouteSuggestion, plan.arrRouteSuggestion);
+  if (cmp.status !== 'GREEN') {
+    if (plan.arrRouteSuggestion) dep.push(`${toIcao} has proposed a route`);
+    if (plan.depRouteSuggestion) arr.push(`${fromIcao} has proposed a route`);
+  }
+  if (!plan.splitAgreed) {
+    if (plan.arrSplitRoute) dep.push(`${toIcao} has suggested a route split`);
+    if (plan.depSplitRoute) arr.push(`${fromIcao} has suggested a route split`);
+  }
+  // Only the arrival requests a flow and only the departure can set one, so
+  // this stays pending until departure has confirmed a type — and a rate too,
+  // where the chosen type needs one.
+  const depFlowConfirmed = !!plan.depFlowType
+    && (plan.depFlowType === 'NONE' || (plan.depFlowRate != null && plan.depFlowRate > 0));
+  if ((plan.arrFlowReason || plan.arrFlowRequest) && !depFlowConfirmed) {
+    dep.push(`${toIcao} has requested a flow restriction`);
+  }
+  if (openIssues > 0) {
+    const label = `${openIssues} open route issue${openIssues === 1 ? '' : 's'} raised`;
+    dep.push(label);
+    arr.push(label);
+  }
+  return { dep, arr };
+}
+
+// Per-CID count of sectors awaiting that user's response, so the sidebar
+// (rendered synchronously) can badge Sector Planning without a DB hit on every
+// page render. Same pattern as firAccessCids / sectorPlanOutOfSyncCount.
+let sectorPlanActionsByCid = new Map();
+function sectorPlanActionCount(cid) {
+  if (!cid) return 0;
+  return sectorPlanActionsByCid.get(Number(cid)) || 0;
+}
+
+async function refreshSectorPlanActions() {
+  try {
+    const eventId = activeEventId || null;
+    if (!eventId || !adminSheetCache.length) { sectorPlanActionsByCid = new Map(); return; }
+    const [plans, grants, issueCounts] = await Promise.all([
+      prisma.sectorPlan.findMany({ where: { eventId } }).catch(() => []),
+      prisma.firEventAccess.findMany().catch(() => []),
+      prisma.sectorPlanIssue.groupBy({
+        by: ['sectorPlanId'],
+        where: { status: { not: 'RESOLVED' } },
+        _count: { _all: true }
+      }).catch(() => [])
+    ]);
+    if (!plans.length) { sectorPlanActionsByCid = new Map(); return; }
+
+    const openByPlanId = {};
+    issueCounts.forEach(g => { openByPlanId[g.sectorPlanId] = g._count?._all || 0; });
+
+    // FIR → the CIDs holding it, expanding DIVISION grants and folding in the
+    // WF FIR Management sheet — the same set getUserOwnedFirs builds per user,
+    // inverted so one pass covers everybody.
+    const allFirs = await buildFirAnalysis().catch(() => []);
+    const firsByDivision = {};
+    allFirs.forEach(f => {
+      const d = f.division || '';
+      if (!firsByDivision[d]) firsByDivision[d] = new Set();
+      firsByDivision[d].add(f.fir);
+    });
+    const firToCids = {};
+    const addFirCid = (fir, c) => {
+      const n = Number(c);
+      if (!fir || !n) return;
+      if (!firToCids[fir]) firToCids[fir] = new Set();
+      firToCids[fir].add(n);
+    };
+    for (const g of grants) {
+      if (g.scope === 'FIR') addFirCid(g.value, g.cid);
+      else if (g.scope === 'DIVISION' && firsByDivision[g.value]) {
+        firsByDivision[g.value].forEach(f => addFirCid(f, g.cid));
+      }
+    }
+    for (const [c, list] of Object.entries(firManagementState.data?.cidToFirs || {})) {
+      (Array.isArray(list) ? list : [...list]).forEach(f => addFirCid(f, c));
+    }
+
+    // A user holding both sides of the same sector still only sees it once.
+    const wfsByCid = {};
+    const bump = (fir, wf) => {
+      for (const c of (firToCids[fir] || [])) {
+        if (!wfsByCid[c]) wfsByCid[c] = new Set();
+        wfsByCid[c].add(wf);
+      }
+    };
+    for (const plan of plans) {
+      const row = adminSheetCache.find(r => r?.number === plan.wf);
+      if (!row) continue;
+      const pending = sectorPlanPendingActions(plan, row.from, row.to, openByPlanId[plan.id] || 0);
+      if (pending.dep.length) bump(await resolveAirportFir(row.from), plan.wf);
+      if (pending.arr.length) bump(await resolveAirportFir(row.to), plan.wf);
+    }
+
+    const next = new Map();
+    for (const [c, wfs] of Object.entries(wfsByCid)) next.set(Number(c), wfs.size);
+    sectorPlanActionsByCid = next;
+  } catch (e) {}
+}
+setInterval(() => { refreshSectorPlanActions(); }, 45000);
 
 // ============================================================
 // Sector Planning — Admin Overview
@@ -36893,14 +37087,41 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
         border-right: 5px solid transparent;
         border-top: 5px solid #f59e0b;
       }
-      /* Override legacy .sp-map-card { height: 260px } so the grid can stretch
-         the map card to the row height (matches the tallest column). */
+      /* Left column: a fixed-height map with the contacts card underneath, so
+         the leftover row height goes into something useful rather than empty
+         ocean at the bottom of the map. */
+      .sp-top-mapcol { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+      /* Contacts hug their content; the map takes every remaining pixel. */
       .sp-top-map.sp-map-card {
-        min-width: 0; height: 100% !important; min-height: 320px;
+        min-width: 0; flex: 1 1 auto; height: auto !important; min-height: 220px;
         display: flex; flex-direction: column;
         padding: 0 !important; overflow: hidden;
       }
-      .sp-top-map #spMap { flex: 1 1 auto; width: 100%; height: 100%; min-height: 320px; }
+      .sp-top-map #spMap { flex: 1 1 auto; width: 100%; height: 100%; min-height: 0; }
+
+      .sp-poc-card { flex: 0 0 auto; padding: 10px 14px !important; }
+      .sp-poc-card h3 { margin: 0 0 6px; font-size: 13px; }
+      .sp-poc-sides { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px 14px; }
+      .sp-poc-side { padding-left: 8px; border-left: 2px solid var(--border); min-width: 0; }
+      .sp-poc-side.dep { border-left-color: #818cf8; }
+      .sp-poc-side.arr { border-left-color: #f472b6; }
+      .sp-poc-head { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; flex-wrap: wrap; }
+      .sp-poc-role {
+        font-size: 9px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+        padding: 2px 6px; border-radius: 4px;
+      }
+      .sp-poc-side.dep .sp-poc-role { color: #818cf8; background: rgba(129,140,248,0.14); border: 1px solid #818cf8; }
+      .sp-poc-side.arr .sp-poc-role { color: #f472b6; background: rgba(244,114,182,0.14); border: 1px solid #f472b6; }
+      .sp-poc-icao { font-family: monospace; font-size: 13px; font-weight: 700; color: var(--text); }
+      .sp-poc-fir { font-size: 10px; color: var(--muted); font-family: monospace; }
+      .sp-poc-person { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; line-height: 1.5; }
+      .sp-poc-name { font-size: 12.5px; color: var(--text); }
+      .sp-poc-cid { font-family: monospace; font-size: 11px; color: var(--muted); }
+      .sp-poc-scope {
+        font-size: 9px; letter-spacing: 0.04em; text-transform: uppercase;
+        color: var(--muted); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px;
+      }
+      .sp-poc-none { font-size: 11.5px; color: var(--muted); font-style: italic; }
       .sp-checklist-stack { display: flex !important; flex-direction: column; gap: 8px; flex: 1 1 auto; }
 
       /* 3-col top row: Map · Checklist · Enroute FIRs */
@@ -36913,11 +37134,11 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
       .sp-top-grid > .card { display: flex; flex-direction: column; min-width: 0; }
       @media (max-width: 1100px) {
         .sp-top-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
-        .sp-top-grid > .sp-top-map { grid-column: 1 / -1; }
+        .sp-top-grid > .sp-top-mapcol { grid-column: 1 / -1; }
       }
       @media (max-width: 720px) {
         .sp-top-grid { grid-template-columns: 1fr; }
-        .sp-top-grid > .sp-top-map { grid-column: 1; }
+        .sp-top-grid > .sp-top-mapcol { grid-column: 1; }
       }
       /* Middle column stacks the overview above the readiness checklist, so
          it is the grid item rather than either card. */
@@ -37179,9 +37400,36 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
     })() : ''}
 
     <div class="sp-top-grid">
-      <section class="card sp-map-card sp-top-map">
-        <div id="spMap"></div>
-      </section>
+      <div class="sp-top-mapcol">
+        <section class="card sp-map-card sp-top-map">
+          <div id="spMap"></div>
+        </section>
+
+        <section class="card sp-poc-card">
+          <h3>Points of Contact</h3>
+          <div class="sp-poc-sides">
+          ${[{ label: 'Departure', icao: fromIcao, fir: depFir, cls: 'dep' },
+             { label: 'Arrival',   icao: toIcao,   fir: arrFir, cls: 'arr' }].map(side => {
+            const people = firPointsOfContact(side.fir);
+            return `
+            <div class="sp-poc-side ${side.cls}">
+              <div class="sp-poc-head">
+                <span class="sp-poc-role">${side.label}</span>
+                <span class="sp-poc-icao">${side.icao}</span>
+                ${side.fir ? `<span class="sp-poc-fir">${side.fir}</span>` : ''}
+              </div>
+              ${people.length ? people.map(p => `
+                <div class="sp-poc-person">
+                  <span class="sp-poc-name">${(p.name || 'CID ' + p.cid).replace(/</g, '&lt;')}</span>
+                  ${p.name ? `<span class="sp-poc-cid">${p.cid}</span>` : ''}
+                  ${p.scope ? `<span class="sp-poc-scope">${p.scope.replace(/</g, '&lt;')}</span>` : ''}
+                </div>`).join('')
+              : `<div class="sp-poc-none">No contact listed${side.fir ? ' for ' + side.fir : ''}</div>`}
+            </div>`;
+          }).join('')}
+          </div>
+        </section>
+      </div>
 
       <div class="sp-top-col">
       <section class="card sp-overview-card">

@@ -5177,6 +5177,13 @@ html[data-map-theme="light"] .ac-label {
 .nav-badge.hidden {
   display: none;
 }
+
+/* Amber — something is waiting on this user, as opposed to the red
+   admin "needs syncing" count. Both can sit on the same nav item. */
+.nav-badge.action {
+  background: #f59e0b;
+  color: #1f1300;
+}
 /* ===== AVAILABLE SCENERY ===== */
 
 .scenery-table {
