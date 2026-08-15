@@ -421,7 +421,19 @@
       "Bash(grep -n '\\\\${\\\\|`')",
       "Bash(awk 'NR>=40021 && NR<=40740' index.js)",
       "Bash(awk 'NR>=40739 && NR<=40800' index.js)",
-      "Bash(awk 'NR<42063' index.js)"
+      "Bash(awk 'NR<42063' index.js)",
+      "Bash(awk 'NR>=40640 && NR<=40740' index.js)",
+      "Bash(awk 'NR>=36355 && NR<=36600' index.js)",
+      "Bash(awk 'NR>=36495 && NR<=36560' index.js)",
+      "Bash(awk 'NR>=36495 && NR<=36620 {printf \"%d: %s\\\\n\", NR, $0}' index.js)",
+      "Bash(awk 'NF>=3 && $1+0>11 && $1+0<21 && $2+0>-56 && $2+0<-24 {print $1, $2, $3, $4}' data/navdata/earth_fix.dat)",
+      "Bash(awk 'NF>=3 && $1+0>11 && $1+0<20 && $2+0>-59 && $2+0<-37 {print $1, $2, $3}' data/navdata/earth_fix.dat)",
+      "Bash(node \"C:/Users/Fraser/AppData/Local/Temp/claude/c--dev-WorldFlight-Planning/943bd8e0-dc87-4b34-b5be-0f1ce0b8c5c5/scratchpad/preview2620.mjs\")",
+      "Bash(sed -e \"s/const ROUTE = \\\\['KEDMI', 'BOXIT', 'OPADO', 'XUVIT', 'SESAT'\\\\];/const ROUTE = ['SONEB','ARPEG','LOMKI','TEKNO','NARKA'];/\" -e \"s/\\\\['TBPB', 'GVAC'\\\\]/['EHAM','LROP']/\" -e \"s/apByIcao\\\\.TBPB/apByIcao.EHAM/g\" -e \"s/apByIcao\\\\.GVAC/apByIcao.LROP/g\" -e \"s/'TBPB'/'EHAM'/\" -e \"s/'GVAC'/'LROP'/\" -e \"s/TBPB '/EHAM '/\" preview2620.mjs)",
+      "Bash(node preview2633.mjs)",
+      "Bash(node \"C:/Users/Fraser/AppData/Local/Temp/claude/c--dev-WorldFlight-Planning/943bd8e0-dc87-4b34-b5be-0f1ce0b8c5c5/scratchpad/apply2633.mjs\")",
+      "Bash(awk 'NR>=38140 && NR<=38165' index.js)",
+      "Bash(node \"C:/Users/Fraser/AppData/Local/Temp/claude/c--dev-WorldFlight-Planning/943bd8e0-dc87-4b34-b5be-0f1ce0b8c5c5/scratchpad/apply2633.mjs\" --revert)"
     ]
   }
 }

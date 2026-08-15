@@ -7042,6 +7042,11 @@ async function loadScheduleFromDb(eventId) {
     const arrSplit = (plan.arrSplitRoute || '').trim();
     const proposedRoute2 = depSplit || arrSplit;
     const staffing_route2 = published2 ? rawRoute2 : stripSidStar(proposedRoute2, r.from, r.to);
+    // Who put the split on the table, and whether it is agreed yet — so the
+    // staffing pages can show a proposed split without passing it off as filed.
+    const split_state = published2 ? 'finalised' : (proposedRoute2 ? 'proposed' : 'none');
+    const split_proposed_by = depSplit ? r.from : (arrSplit ? r.to : '');
+    const split_pct = plan.depSplitPct != null ? plan.depSplitPct : null;
 
     return {
       number: r.number,
@@ -7061,6 +7066,9 @@ async function loadScheduleFromDb(eventId) {
       staffing_route2,
       route_state,
       proposed_by,
+      split_state,
+      split_proposed_by,
+      split_pct,
       is_wf_challenge: r.isWfChallenge === true
     };
   });
@@ -30960,6 +30968,9 @@ async function _buildFirAnalysisInner() {
         // split. atcRoute2 stays published-only, since that one is shown as
         // the filed ATC route.
         staffingRoute2: leg.staffing_route2 || '',
+        splitState: leg.split_state || 'none',
+        splitProposedBy: leg.split_proposed_by || '',
+        splitPct: leg.split_pct != null ? leg.split_pct : null,
         // Which of the sector's routes brings traffic through this FIR.
         // Unioned in the merge pass when both do.
         routes: [seg.route || 'A'],
@@ -35617,6 +35628,8 @@ app.get('/sector-planning', requirePageEnabled('sector-planning'), async (req, r
   let participations = [];
   let plansByWf = {};
   let openIssuesByPlanId = {};
+  let myIssuePlanIds = new Set();
+  let myIssuesByPlanId = {};
   if (cid) {
     owned = await getUserOwnedFirs(cid);
     if (owned.size) {
@@ -35688,6 +35701,15 @@ app.get('/sector-planning', requirePageEnabled('sector-planning'), async (req, r
           _count: { _all: true }
         }).catch(() => []);
         issueCounts.forEach(g => { openIssuesByPlanId[g.sectorPlanId] = g._count?._all || 0; });
+        const mine = await prisma.sectorPlanIssue.findMany({
+          where: { sectorPlanId: { in: plans.map(p => p.id) }, raisedByCid: cid },
+          select: { id: true, sectorPlanId: true, raisedByCid: true, status: true, resolvedAt: true, replies: true }
+        }).catch(() => []);
+        mine.forEach(i => {
+          myIssuePlanIds.add(i.sectorPlanId);
+          if (!myIssuesByPlanId[i.sectorPlanId]) myIssuesByPlanId[i.sectorPlanId] = [];
+          myIssuesByPlanId[i.sectorPlanId].push(i);
+        });
       }
       participations = participations.filter(p => {
         const hasDepArr = p.roles.some(r => r.startsWith('Departure') || r.startsWith('Arrival'));
@@ -35709,9 +35731,21 @@ app.get('/sector-planning', requirePageEnabled('sector-planning'), async (req, r
     const plan = plansByWf[s.wf];
     if (!plan) return [];
     const pending = sectorPlanPendingActions(plan, s.from, s.to, openIssuesByPlanId[plan.id] || 0);
+    const hasDep = s.roles.some(r => r.startsWith('Departure'));
+    const hasArr = s.roles.some(r => r.startsWith('Arrival'));
+    const hasEnroute = s.roles.some(r => r.startsWith('Enroute'));
     const items = [];
-    if (s.roles.some(r => r.startsWith('Departure'))) items.push(...pending.dep);
-    if (s.roles.some(r => r.startsWith('Arrival'))) items.push(...pending.arr);
+    if (hasDep) items.push(...pending.dep);
+    if (hasArr) items.push(...pending.arr);
+    // Enroute review is only news to someone not already running a side of
+    // this sector, and only until they've actually raised something.
+    if (hasEnroute && !hasDep && !hasArr && !myIssuePlanIds.has(plan.id)) {
+      items.push(...pending.enroute);
+    }
+    // Replies and resolutions come back to whoever raised the issue.
+    for (const iss of (myIssuesByPlanId[plan.id] || [])) {
+      items.push(...sectorPlanIssueFeedback(iss, s.from, s.to));
+    }
     return [...new Set(items)];
   };
 
@@ -35970,12 +36004,17 @@ setInterval(() => { refreshSectorPlanOutOfSyncCount(); }, 45000);
 function sectorPlanPendingActions(plan, fromIcao, toIcao, openIssues = 0) {
   const dep = [];
   const arr = [];
-  if (!plan) return { dep, arr };
+  const enroute = [];
+  if (!plan) return { dep, arr, enroute };
 
   const cmp = compareRoutes(plan.depRouteSuggestion, plan.arrRouteSuggestion);
   if (cmp.status !== 'GREEN') {
     if (plan.arrRouteSuggestion) dep.push(`${toIcao} has proposed a route`);
     if (plan.depRouteSuggestion) arr.push(`${fromIcao} has proposed a route`);
+  } else {
+    // Both sides have settled, which is the point the enroute FIRs are invited
+    // in — canRaiseIssue on the detail page turns on at exactly this moment.
+    enroute.push('Route agreed — raise any enroute concerns');
   }
   if (!plan.splitAgreed) {
     if (plan.arrSplitRoute) dep.push(`${toIcao} has suggested a route split`);
@@ -35994,7 +36033,29 @@ function sectorPlanPendingActions(plan, fromIcao, toIcao, openIssues = 0) {
     dep.push(label);
     arr.push(label);
   }
-  return { dep, arr };
+  return { dep, arr, enroute };
+}
+
+/* What the person who raised a route issue hears back. The thread is one-way
+   — only the dep/arr teams and WF organisers can reply — so there is no
+   "they answered back" action to clear the notice on. A reply therefore
+   stands while the issue is open, and the resolved notice ages out after a
+   fortnight so long-finished sectors stop nagging. */
+const ISSUE_RESOLVED_NOTICE_DAYS = 14;
+function sectorPlanIssueFeedback(issue, fromIcao, toIcao) {
+  if (!issue) return [];
+  if (issue.status === 'RESOLVED') {
+    const at = issue.resolvedAt ? new Date(issue.resolvedAt).getTime() : 0;
+    if (!at || Date.now() - at > ISSUE_RESOLVED_NOTICE_DAYS * 86400000) return [];
+    return ['Your route issue has been resolved'];
+  }
+  let replies = [];
+  try { replies = JSON.parse(issue.replies || '[]') || []; } catch { replies = []; }
+  const theirs = replies.filter(r => Number(r.cid) !== Number(issue.raisedByCid));
+  if (!theirs.length) return [];
+  const side = theirs[theirs.length - 1].side;
+  const who = side === 'DEP' ? fromIcao : side === 'ARR' ? toIcao : 'A WF organiser';
+  return [`${who} replied to your route issue`];
 }
 
 // Per-CID count of sectors awaiting that user's response, so the sidebar
@@ -36010,29 +36071,48 @@ async function refreshSectorPlanActions() {
   try {
     const eventId = activeEventId || null;
     if (!eventId || !adminSheetCache.length) { sectorPlanActionsByCid = new Map(); return; }
-    const [plans, grants, issueCounts] = await Promise.all([
+    const [plans, grants, issueCounts, issueRaisers] = await Promise.all([
       prisma.sectorPlan.findMany({ where: { eventId } }).catch(() => []),
       prisma.firEventAccess.findMany().catch(() => []),
       prisma.sectorPlanIssue.groupBy({
         by: ['sectorPlanId'],
         where: { status: { not: 'RESOLVED' } },
         _count: { _all: true }
+      }).catch(() => []),
+      prisma.sectorPlanIssue.findMany({
+        select: { id: true, sectorPlanId: true, raisedByCid: true, status: true, resolvedAt: true, replies: true }
       }).catch(() => [])
     ]);
     if (!plans.length) { sectorPlanActionsByCid = new Map(); return; }
 
     const openByPlanId = {};
     issueCounts.forEach(g => { openByPlanId[g.sectorPlanId] = g._count?._all || 0; });
+    // Someone who has already raised something on a sector has clearly looked
+    // at it, so stop telling them to.
+    const raisedByPlanId = {};
+    const issuesByPlanId = {};
+    issueRaisers.forEach(i => {
+      if (!raisedByPlanId[i.sectorPlanId]) raisedByPlanId[i.sectorPlanId] = new Set();
+      raisedByPlanId[i.sectorPlanId].add(Number(i.raisedByCid));
+      if (!issuesByPlanId[i.sectorPlanId]) issuesByPlanId[i.sectorPlanId] = [];
+      issuesByPlanId[i.sectorPlanId].push(i);
+    });
 
     // FIR → the CIDs holding it, expanding DIVISION grants and folding in the
     // WF FIR Management sheet — the same set getUserOwnedFirs builds per user,
     // inverted so one pass covers everybody.
     const allFirs = await buildFirAnalysis().catch(() => []);
     const firsByDivision = {};
+    const firsByWf = {};
     allFirs.forEach(f => {
       const d = f.division || '';
       if (!firsByDivision[d]) firsByDivision[d] = new Set();
       firsByDivision[d].add(f.fir);
+      for (const lg of (f.legs || [])) {
+        if (!lg.wf) continue;
+        if (!firsByWf[lg.wf]) firsByWf[lg.wf] = new Set();
+        firsByWf[lg.wf].add(f.fir);
+      }
     });
     const firToCids = {};
     const addFirCid = (fir, c) => {
@@ -36063,8 +36143,39 @@ async function refreshSectorPlanActions() {
       const row = adminSheetCache.find(r => r?.number === plan.wf);
       if (!row) continue;
       const pending = sectorPlanPendingActions(plan, row.from, row.to, openByPlanId[plan.id] || 0);
-      if (pending.dep.length) bump(await resolveAirportFir(row.from), plan.wf);
-      if (pending.arr.length) bump(await resolveAirportFir(row.to), plan.wf);
+      const depFir = await resolveAirportFir(row.from);
+      const arrFir = await resolveAirportFir(row.to);
+      if (pending.dep.length) bump(depFir, plan.wf);
+      if (pending.arr.length) bump(arrFir, plan.wf);
+
+      // Whoever raised an issue here hears back when it is answered or closed,
+      // regardless of which FIRs they hold.
+      for (const iss of (issuesByPlanId[plan.id] || [])) {
+        if (!sectorPlanIssueFeedback(iss, row.from, row.to).length) continue;
+        const c = Number(iss.raisedByCid);
+        if (!c) continue;
+        if (!wfsByCid[c]) wfsByCid[c] = new Set();
+        wfsByCid[c].add(plan.wf);
+      }
+
+      if (!pending.enroute.length) continue;
+
+      // Enroute review is only news to someone who isn't already running this
+      // sector. A division ED who owns the departure or arrival FIR knows the
+      // route is agreed — they agreed it — so telling them again for every
+      // sector crossing their own airspace is pure noise.
+      const depOwners = firToCids[depFir] || new Set();
+      const arrOwners = firToCids[arrFir] || new Set();
+      const alreadyRaised = raisedByPlanId[plan.id] || new Set();
+      for (const fir of (firsByWf[plan.wf] || [])) {
+        if (fir === depFir || fir === arrFir) continue;
+        for (const c of (firToCids[fir] || [])) {
+          if (depOwners.has(c) || arrOwners.has(c)) continue;
+          if (alreadyRaised.has(c)) continue;
+          if (!wfsByCid[c]) wfsByCid[c] = new Set();
+          wfsByCid[c].add(plan.wf);
+        }
+      }
     }
 
     const next = new Map();
@@ -36161,6 +36272,90 @@ app.get('/sector-planning/admin', requireAdmin, async (req, res) => {
     const people = [...set].map(c => (coverageNames[c] ? `${coverageNames[c]} (${c})` : `CID ${c}`));
     return { count: set.size, label: `${fir}:\n${people.join('\n')}` };
   };
+
+  /* ── Enroute Discord announcement ──────────────────────────────────────
+     Discord can't be posted to by us (not our server), so the admin copies a
+     ready-made message. Recipients are the transit-FIR managers who are NOT
+     already running either end of the sector — the same suppression the
+     in-app notification uses, so a division ED who agreed the route isn't
+     pinged again for every sector crossing their own airspace.
+
+     A mention only actually pings when it carries the Discord snowflake, so
+     DiscordLink wins; the handle from the FIR Management sheet is a readable
+     fallback, and anyone with neither is listed separately to chase. */
+  const discordLinks = await prisma.discordLink.findMany({ select: { cid: true, discordId: true } }).catch(() => []);
+  const discordIdByCid = {};
+  discordLinks.forEach(l => { discordIdByCid[Number(l.cid)] = l.discordId; });
+  const discordHandleByCid = {};
+  const sheetNameByCid = {};
+  {
+    const fm = firManagementState.data || {};
+    for (const r of [...(fm.pocRows || []), ...(fm.subDivisions || []), ...(fm.divisions || [])]) {
+      if (!r.cid) continue;
+      if (r.eventDirector && !sheetNameByCid[r.cid]) sheetNameByCid[r.cid] = r.eventDirector;
+      const h = String(r.discord || '').trim().replace(/^@/, '');
+      if (h && h !== '-' && !discordHandleByCid[r.cid]) discordHandleByCid[r.cid] = h;
+    }
+  }
+  const firsByWf = {};
+  allFirsForCoverage.forEach(f => {
+    for (const lg of (f.legs || [])) {
+      if (!lg.wf) continue;
+      if (!firsByWf[lg.wf]) firsByWf[lg.wf] = new Set();
+      firsByWf[lg.wf].add(f.fir);
+    }
+  });
+  const enrouteRecipients = (wf, fromIcao, toIcao) => {
+    const depFir = firByIcao[fromIcao];
+    const arrFir = firByIcao[toIcao];
+    const depOwners = firToCids[depFir] || new Set();
+    const arrOwners = firToCids[arrFir] || new Set();
+    const out = new Map();
+    for (const fir of (firsByWf[wf] || [])) {
+      if (fir === depFir || fir === arrFir) continue;
+      for (const c of (firToCids[fir] || [])) {
+        if (depOwners.has(c) || arrOwners.has(c)) continue;
+        if (!out.has(c)) out.set(c, { cid: c, firs: [] });
+        out.get(c).firs.push(fir);
+      }
+    }
+    return [...out.values()];
+  };
+  const buildDiscordTemplate = (s) => {
+    const people = enrouteRecipients(s.wf, s.from, s.to).map(p => ({
+      cid: p.cid,
+      firs: p.firs.sort(),
+      name: coverageNames[p.cid] || sheetNameByCid[p.cid] || '',
+      handle: discordHandleByCid[p.cid] || ''
+    })).sort((a, b) => (a.handle || a.name || '').localeCompare(b.handle || b.name || ''));
+
+    // The mentions are typed by hand in Discord — pasted text never pings —
+    // so the post itself carries no @names and the handles are listed beside
+    // it for the admin to type.
+    const firs = [...new Set(people.flatMap(p => p.firs))].sort();
+    const text = [
+      `## ✈️ Sector ${s.wf} — ${s.from} → ${s.to}`,
+      s.date ? `-# ${s.date}` : '',
+      '',
+      `The ATC route for this sector has been **finalised** by the departure and arrival teams.`,
+      '',
+      `You're being notified because this route will **transit your FIR**.`,
+      '',
+      firs.length ? `**Enroute FIRs affected:** ${firs.join(' · ')}` : '',
+      '',
+      `📋 Open the sector: ${WF_SITE_URL}/sector-planning`,
+      '',
+      `Got a concern? Open the sector from your list, then use the **"We have an issue with this route"** button in the **Route Issues** section at the bottom of the page.`
+    ].filter((l, i, a) => !(l === '' && a[i - 1] === '')).join('\n').trim();
+
+    return {
+      text,
+      people,
+      total: people.length,
+      withHandle: people.filter(p => p.handle).length
+    };
+  };
+  const discordTemplates = {};
 
   const FLOW_LABELS = { 'NONE': 'No Restrictions', 'BOOKING_REQUIRED': 'Booking Required', 'TIME_SLOT_REQUIRED': 'Bookings with Connect Times' };
   const FLOW_TYPE_MAP = { 'BOOKING_REQUIRED': 'BOOKING_ONLY', 'TIME_SLOT_REQUIRED': 'SLOTTED', 'NONE': 'NONE' };
@@ -36267,6 +36462,18 @@ app.get('/sector-planning/admin', requireAdmin, async (req, res) => {
     }
     const depCov = coverageFor(s.from);
     const arrCov = coverageFor(s.to);
+    // Only offered once the route is agreed — that is the thing being announced.
+    let discordBtn = '';
+    if (s.routeAgreed) {
+      const tpl = buildDiscordTemplate(s);
+      discordTemplates[s.wf] = tpl;
+      const badge = tpl.total
+        ? '<span style="margin-left:4px;opacity:0.8;">' + tpl.total + '</span>'
+        : '';
+      discordBtn = '<div style="margin-top:4px;"><button type="button" class="action-btn sp-discord-btn" data-wf="' + s.wf + '"'
+        + ' title="Enroute user Discord template — ' + (tpl.total ? tpl.total + ' enroute manager' + (tpl.total === 1 ? '' : 's') + ' not already on this sector' : 'no enroute managers to notify') + '"'
+        + ' style="font-size:10px;padding:3px 8px;background:rgba(88,101,242,0.15);color:#a5b4fc;border:1px solid rgba(88,101,242,0.45);white-space:nowrap;">Enroute Discord' + badge + '</button></div>';
+    }
     return `<tr${syncRowStyle}>
       <td style="font-weight:700;"><a href="/sector-planning/${encodeURIComponent(s.wf)}" style="color:var(--accent);text-decoration:none;">${s.wf}</a></td>
       <td style="font-family:monospace;font-size:12px;">${s.from} → ${s.to}</td>
@@ -36283,7 +36490,7 @@ app.get('/sector-planning/admin', requireAdmin, async (req, res) => {
         </div>
         <span style="font-size:10px;color:${readyColor};margin-left:4px;">${readyPct}%</span>
       </td>
-      <td style="text-align:center;">${finBtn}</td>
+      <td style="text-align:center;">${finBtn}${discordBtn}</td>
     </tr>${diffRow}`;
   }).join('');
 
@@ -36329,7 +36536,95 @@ app.get('/sector-planning/admin', requireAdmin, async (req, res) => {
       </div>
     </section>
 
+    <div id="spDiscordModal" class="modal hidden">
+      <div class="modal-backdrop"></div>
+      <div class="modal-dialog" style="width:620px;max-width:94vw;padding:22px;">
+        <h3 style="margin:0 0 4px;">Enroute User Discord Template</h3>
+        <p id="spDiscordSub" style="color:var(--muted);font-size:12px;margin:0 0 14px;line-height:1.5;"></p>
+
+        <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:6px;">
+          <span style="font-size:10px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:#a5b4fc;">1 · Mention these people</span>
+          <span style="font-size:10px;color:var(--muted);">type each @ in Discord so it pings</span>
+        </div>
+        <div id="spDiscordNames" style="max-height:150px;overflow-y:auto;padding:8px 10px;background:var(--panel2);border:1px solid rgba(88,101,242,0.35);border-radius:8px;margin-bottom:14px;"></div>
+
+        <div style="font-size:10px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:#a5b4fc;margin-bottom:6px;">2 · Paste this below them</div>
+        <textarea id="spDiscordText" readonly style="width:100%;height:180px;box-sizing:border-box;padding:12px;background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:monospace;font-size:12px;line-height:1.6;resize:vertical;"></textarea>
+
+        <div class="modal-actions" style="margin-top:14px;">
+          <button type="button" class="modal-btn modal-btn-cancel" id="spDiscordClose">Close</button>
+          <button type="button" class="modal-btn modal-btn-submit" id="spDiscordCopy">Copy message</button>
+        </div>
+      </div>
+    </div>
+
     <script>
+      var SP_DISCORD = ${JSON.stringify(discordTemplates).replace(/</g, '\\u003c')};
+      (function() {
+        var modal = document.getElementById('spDiscordModal');
+        if (!modal) return;
+        var textEl = document.getElementById('spDiscordText');
+        var subEl = document.getElementById('spDiscordSub');
+        var namesEl = document.getElementById('spDiscordNames');
+        var copyBtn = document.getElementById('spDiscordCopy');
+        function close() { modal.classList.add('hidden'); }
+        document.querySelectorAll('.sp-discord-btn').forEach(function(btn) {
+          btn.addEventListener('click', function() {
+            var tpl = SP_DISCORD[btn.dataset.wf];
+            if (!tpl) return;
+            textEl.value = tpl.text;
+            subEl.textContent = tpl.total === 0
+              ? 'Nobody to notify — every FIR this route crosses is run by the departure or arrival team.'
+              : tpl.total + ' enroute manager' + (tpl.total === 1 ? '' : 's') + ' cross this sector without running either end of it.';
+
+            namesEl.innerHTML = '';
+            if (!tpl.people.length) {
+              var none = document.createElement('div');
+              none.style.cssText = 'font-size:12px;color:var(--muted);font-style:italic;';
+              none.textContent = 'No enroute managers to mention.';
+              namesEl.appendChild(none);
+            }
+            tpl.people.forEach(function(p) {
+              var row = document.createElement('div');
+              row.style.cssText = 'display:flex;align-items:baseline;gap:8px;padding:3px 0;font-size:12px;flex-wrap:wrap;';
+              var h = document.createElement('span');
+              if (p.handle) {
+                h.style.cssText = 'font-family:monospace;font-weight:700;color:#c7d2fe;';
+                h.textContent = '@' + p.handle;
+              } else {
+                // No handle on file — name them so they can be chased another way.
+                h.style.cssText = 'font-family:monospace;color:#fbbf24;';
+                h.textContent = 'no discord on file';
+              }
+              row.appendChild(h);
+              var who = document.createElement('span');
+              who.style.cssText = 'color:var(--muted);';
+              who.textContent = (p.name ? p.name + ' · ' : '') + p.cid;
+              row.appendChild(who);
+              var firs = document.createElement('span');
+              firs.style.cssText = 'font-family:monospace;font-size:10px;color:var(--muted);border:1px solid var(--border);border-radius:4px;padding:1px 5px;';
+              firs.textContent = p.firs.join(' ');
+              row.appendChild(firs);
+              namesEl.appendChild(row);
+            });
+
+            copyBtn.textContent = 'Copy message';
+            modal.classList.remove('hidden');
+          });
+        });
+        document.getElementById('spDiscordClose').addEventListener('click', close);
+        modal.querySelector('.modal-backdrop').addEventListener('click', close);
+        document.addEventListener('keydown', function(e) {
+          if (!modal.classList.contains('hidden') && e.key === 'Escape') close();
+        });
+        copyBtn.addEventListener('click', function() {
+          textEl.select();
+          var done = function() { copyBtn.textContent = 'Copied'; setTimeout(function() { copyBtn.textContent = 'Copy message'; }, 1500); };
+          if (navigator.clipboard) navigator.clipboard.writeText(textEl.value).then(done, function() { document.execCommand('copy'); done(); });
+          else { document.execCommand('copy'); done(); }
+        });
+      })();
+
       document.querySelectorAll('.sp-finalise-btn').forEach(function(btn) {
         btn.addEventListener('click', async function() {
           var wf = btn.dataset.wf;
@@ -40172,10 +40467,10 @@ app.get('/airspace/by-sector', requirePageEnabled('airspace'), requireStaffingAc
         border-radius: 4px; font-size: 10px; font-weight: 700; letter-spacing: 0.04em;
       }
       .fir-route-a  { color: #7dd3fc; background: rgba(56,189,248,0.12); border: 1px solid rgba(56,189,248,0.3); }
-      .fir-route-b  { color: #fcd34d; background: rgba(245,158,11,0.14); border: 1px solid rgba(245,158,11,0.38); }
-      .fir-route-ab { color: #d8b4fe; background: rgba(168,85,247,0.14); border: 1px solid rgba(168,85,247,0.35); }
-      tr.is-route-b > td { background: rgba(245,158,11,0.05); }
-      tr.is-route-b .staff-window { color: #fbbf24; }
+      .fir-route-b  { color: #f0abfc; background: rgba(232,121,249,0.14); border: 1px solid rgba(232,121,249,0.38); }
+      .fir-route-ab { color: #5eead4; background: rgba(45,212,191,0.12); border: 1px solid rgba(45,212,191,0.32); }
+      tr.is-route-b > td { background: rgba(232,121,249,0.05); }
+      tr.is-route-b .staff-window { color: #f0abfc; }
 
       .show-route-btn {
         display: inline-flex; align-items: center; gap: 6px;
@@ -40470,7 +40765,10 @@ app.get('/airspace/by-sector', requirePageEnabled('airspace'), requireStaffingAc
                       routeMapInstance.fitBounds(allCoords, { padding: [30, 30], maxZoom: 6 });
                       return;
                     }
-                    var B_LINE = '#fbbf24';
+                    // Route A is amber when proposed, so Route B has to sit
+                    // well clear of amber — and of the green/blue/orange FIR
+                    // boundaries — in both of Route A's states.
+                    var B_LINE = '#e879f9';
                     var bCoords = bData.points.map(function(p) { return [p.lat, p.lon]; });
                     var bLine = L.polyline(bCoords, { color: B_LINE, weight: 3, opacity: 0.85, dashArray: '8, 6' }).addTo(routeMapInstance);
                     if (L.polylineDecorator) {
@@ -40566,7 +40864,11 @@ app.get('/airspace/by-sector', requirePageEnabled('airspace'), requireStaffingAc
         actionsEl.innerHTML = (first.atcRoute && first.atcRoute !== '-')
           ? '<button type="button" class="show-route-btn" data-route="'
               + String(first.atcRoute).replace(/&/g, '&amp;').replace(/"/g, '&quot;')
-              + '" data-route2="' + (first.atcRoute2 && first.atcRoute2 !== '-' ? String(first.atcRoute2).replace(/&/g, '&amp;').replace(/"/g, '&quot;') : '') + '"'
+              + '" data-route2="' + (first.staffingRoute2 && first.staffingRoute2 !== '-' ? String(first.staffingRoute2).replace(/&/g, '&amp;').replace(/"/g, '&quot;') : '') + '"'
+              + ' data-route-state="' + (first.route_state || 'none') + '"'
+              + ' data-split-state="' + (first.splitState || 'none') + '"'
+              + ' data-split-by="' + (first.splitProposedBy || '') + '"'
+              + (first.splitPct != null ? ' data-split-pct="' + first.splitPct + '"' : '')
               + ' style="font-size:13px;padding:8px 14px;">Show ATC Route</button>'
           : '';
 
@@ -40694,28 +40996,55 @@ app.get('/airspace/by-sector', requirePageEnabled('airspace'), requireStaffingAc
         var closeActionBtn = document.getElementById('routeModalCloseAction');
         var backdrop = modal.querySelector('.route-modal-backdrop');
 
-        function open(route, route2, splitPct) {
+        // Route A and Route B use the same colours as the map lines, so the
+        // modal and the map name the same thing the same way.
+        var MODAL_A = '#ffffff';
+        var MODAL_B = '#e879f9';
+        function routeLabel(text, color, pct) {
+          var el = document.createElement('div');
+          el.style.cssText = 'display:flex;align-items:center;gap:8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:' + color + ';font-family:inherit;margin-bottom:6px;';
+          var swatch = document.createElement('span');
+          swatch.style.cssText = 'display:inline-block;width:16px;border-top:2px ' + (color === MODAL_B ? 'dashed' : 'solid') + ' ' + color + ';';
+          el.appendChild(swatch);
+          var txt = document.createElement('span');
+          txt.textContent = text;
+          el.appendChild(txt);
+          if (pct != null) {
+            var b = document.createElement('span');
+            b.style.cssText = 'font-size:10px;padding:1px 6px;border-radius:4px;background:rgba(56,189,248,0.12);color:var(--accent);border:1px solid rgba(56,189,248,0.3);letter-spacing:0;text-transform:none;';
+            b.textContent = pct + '%';
+            el.appendChild(b);
+          }
+          return el;
+        }
+
+        function open(route, route2, splitPct, splitState, splitBy, routeState) {
           body.textContent = '';
           body.innerHTML = '';
+          // Route A is drawn amber on the map while it is only proposed, so the
+          // swatch here follows suit rather than always showing the filed white.
+          MODAL_A = routeState === 'proposed' ? '#f59e0b' : '#ffffff';
+          // A split that hasn't been agreed is flagged, so nobody reads Route B
+          // as a filed route.
+          if (route2 && splitState === 'proposed') {
+            var note = document.createElement('div');
+            note.style.cssText = 'margin-bottom:12px;padding:8px 10px;border-radius:6px;background:rgba(245,158,11,0.10);border:1px solid rgba(245,158,11,0.4);color:#fbbf24;font-size:12px;font-weight:600;font-family:inherit;';
+            note.textContent = '⚠ ' + (splitBy || 'One side') + ' has proposed a route split — not yet agreed';
+            body.appendChild(note);
+          }
           if (route) {
-            if (route2) {
-              var lbl1 = document.createElement('div');
-              lbl1.style.cssText = 'display:flex;align-items:center;gap:8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--accent);font-family:inherit;margin-bottom:6px;';
-              lbl1.textContent = 'Primary Route';
-              if (splitPct != null) { var b1 = document.createElement('span'); b1.style.cssText = 'font-size:10px;padding:1px 6px;border-radius:4px;background:rgba(56,189,248,0.12);color:var(--accent);border:1px solid rgba(56,189,248,0.3);letter-spacing:0;text-transform:none;'; b1.textContent = splitPct + '%'; lbl1.appendChild(b1); }
-              body.appendChild(lbl1);
-            }
+            if (route2) body.appendChild(routeLabel('Route A', MODAL_A, splitPct));
             var r1 = document.createElement('span');
             r1.textContent = route;
             body.appendChild(r1);
           }
           if (route2) {
-            var sep = document.createElement('div');
-            sep.style.cssText = 'display:flex;align-items:center;gap:8px;margin:12px 0 8px;padding-top:10px;border-top:1px solid var(--border);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--accent);font-family:inherit;';
-            sep.textContent = 'Secondary Route';
-            if (splitPct != null) { var b2 = document.createElement('span'); b2.style.cssText = 'font-size:10px;padding:1px 6px;border-radius:4px;background:rgba(56,189,248,0.12);color:var(--accent);border:1px solid rgba(56,189,248,0.3);letter-spacing:0;text-transform:none;'; b2.textContent = (100 - splitPct) + '%'; sep.appendChild(b2); }
-            body.appendChild(sep);
+            var wrap = document.createElement('div');
+            wrap.style.cssText = 'margin:12px 0 0;padding-top:10px;border-top:1px solid var(--border);';
+            body.appendChild(wrap);
+            body.appendChild(routeLabel('Route B', MODAL_B, splitPct != null ? (100 - splitPct) : null));
             var r2 = document.createElement('span');
+            r2.style.color = MODAL_B;
             r2.textContent = route2;
             body.appendChild(r2);
           }
@@ -40727,7 +41056,14 @@ app.get('/airspace/by-sector', requirePageEnabled('airspace'), requireStaffingAc
           var btn = e.target.closest('.show-route-btn');
           if (btn) {
             var pct = btn.getAttribute('data-split-pct');
-            open(btn.getAttribute('data-route') || '', btn.getAttribute('data-route2') || '', pct != null ? Number(pct) : null);
+            open(
+              btn.getAttribute('data-route') || '',
+              btn.getAttribute('data-route2') || '',
+              pct != null ? Number(pct) : null,
+              btn.getAttribute('data-split-state') || 'none',
+              btn.getAttribute('data-split-by') || '',
+              btn.getAttribute('data-route-state') || 'none'
+            );
           }
         });
         closeBtn.addEventListener('click', close);
