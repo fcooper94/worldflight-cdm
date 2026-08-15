@@ -36394,6 +36394,39 @@ app.get('/sector-planning/admin', requireAdmin, async (req, res) => {
     const hasSplit = !!(plan.depSplitRoute || plan.arrSplitRoute);
     const splitAgreed = !!plan.splitAgreed;
 
+    // Status: determine what we're waiting on
+    let statusText = '';
+    let statusCls = 'muted';
+    if (sync.finalised) {
+      statusText = 'Finalised';
+      statusCls = 'success';
+    } else if (sync.outOfSync) {
+      statusText = 'Out of sync';
+      statusCls = 'warning';
+    } else if (sync.routeAgreed && sync.flowSet) {
+      statusText = 'Ready to finalise';
+      statusCls = 'success';
+    } else if (sync.routeAgreed && !sync.flowSet) {
+      statusText = 'Waiting: Dep flow';
+      statusCls = 'warning';
+    } else {
+      const depHas = !!(plan.depRouteSuggestion || '').trim();
+      const arrHas = !!(plan.arrRouteSuggestion || '').trim();
+      if (!depHas && !arrHas) {
+        statusText = 'No route proposed';
+        statusCls = 'muted';
+      } else if (depHas && !arrHas) {
+        statusText = 'Waiting: Arr route';
+        statusCls = 'warning';
+      } else if (!depHas && arrHas) {
+        statusText = 'Waiting: Dep route';
+        statusCls = 'warning';
+      } else {
+        statusText = 'Routes differ';
+        statusCls = 'danger';
+      }
+    }
+
     return { wf: r.number, from: r.from, to: r.to, date: r.date_utc || '',
       routeAgreed: sync.routeAgreed, flowSet: sync.flowSet, depScenery, arrScenery, depDocs, arrDocs,
       hasSplit, splitAgreed, finalised: sync.finalised, routeSynced: sync.routeSynced, outOfSync: sync.outOfSync, agreedRoute: sync.agreedRoute,
@@ -36403,7 +36436,8 @@ app.get('/sector-planning/admin', requireAdmin, async (req, res) => {
       flowType: plan.depFlowType || '', flowRate: plan.depFlowRate,
       flowLabel: FLOW_LABELS[plan.depFlowType] || plan.depFlowType || '—',
       liveFlowType: FLOW_TYPE_REV[sync.liveFlowType] || sync.liveFlowType,
-      liveFlowRate: sync.liveFlowRate };
+      liveFlowRate: sync.liveFlowRate,
+      statusText, statusCls };
   });
 
   const totalSectors = sectorRows.length;
@@ -36475,7 +36509,7 @@ app.get('/sector-planning/admin', requireAdmin, async (req, res) => {
           + '<div style="color:var(--success);">' + (s.flowLabel || 'None') + (s.flowRate ? ' · ' + s.flowRate + ' planes/hr' : '') + '</div></div>'
           + '</div>';
       }
-      diffRow = '<tr style="background:rgba(245,158,11,0.04);"><td colspan="11" style="padding:6px 12px 10px;border-bottom:2px solid var(--warning);">'
+      diffRow = '<tr style="background:rgba(245,158,11,0.04);"><td colspan="12" style="padding:6px 12px 10px;border-bottom:2px solid var(--warning);">'
         + diffHtml + '</td></tr>';
     }
     const depCov = coverageFor(s.from);
@@ -36496,6 +36530,7 @@ app.get('/sector-planning/admin', requireAdmin, async (req, res) => {
       <td style="font-weight:700;"><a href="/sector-planning/${encodeURIComponent(s.wf)}" style="color:var(--accent);text-decoration:none;">${s.wf}</a></td>
       <td style="font-family:monospace;font-size:12px;">${s.from} → ${s.to}</td>
       <td style="font-size:11px;">${s.date}</td>
+      <td style="text-align:left;"><span style="font-size:11px;font-weight:600;color:var(--${s.statusCls});">${s.statusText}</span></td>
       <td style="text-align:center;"><span style="cursor:help;" title="${escapeHtml(depCov.label)}">${depCov.count ? tick : cross}</span></td>
       <td style="text-align:center;"><span style="cursor:help;" title="${escapeHtml(arrCov.label)}">${arrCov.count ? tick : cross}</span></td>
       <td style="text-align:center;">${s.routeAgreed ? tick : cross}</td>
@@ -36537,6 +36572,7 @@ app.get('/sector-planning/admin', requireAdmin, async (req, res) => {
               <th>Sector</th>
               <th>Route</th>
               <th>Date</th>
+              <th>Status</th>
               <th>Dep Access</th>
               <th>Arr Access</th>
               <th>Route Agreed</th>
