@@ -35457,11 +35457,29 @@ function userHasFirAccess(cid) {
 function firPointsOfContact(fir) {
   const d = firManagementState.data;
   if (!fir || !d) return [];
+  // Contact details often sit on a different row from the one that matched the
+  // FIR — the POC workbook carries a name and CID but no discord or email — so
+  // gather them per CID across every source before matching.
+  const detail = {};
+  for (const r of [...(d.divisions || []), ...(d.subDivisions || []), ...(d.pocRows || [])]) {
+    if (!r.cid) continue;
+    const t = detail[r.cid] || (detail[r.cid] = { discord: '', email: '' });
+    const dc = String(r.discord || '').trim().replace(/^@/, '');
+    const em = String(r.email || '').trim();
+    if (dc && dc !== '-' && !t.discord) t.discord = dc;
+    if (em && em !== '-' && !t.email) t.email = em;
+  }
   const out = new Map();
   const add = (name, cid, scope) => {
     const n = Number(cid);
     if (!n || out.has(n)) return;
-    out.set(n, { cid: n, name: String(name || '').trim(), scope: String(scope || '').trim() });
+    out.set(n, {
+      cid: n,
+      name: String(name || '').trim(),
+      scope: String(scope || '').trim(),
+      discord: detail[n]?.discord || '',
+      email: detail[n]?.email || ''
+    });
   };
   for (const r of (d.pocRows || [])) {
     if (r.fir === fir) add(r.eventDirector, r.cid, r.subDivision || r.region);
@@ -37433,7 +37451,16 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
       .sp-poc-side.arr .sp-poc-role { color: #f472b6; background: rgba(244,114,182,0.14); border: 1px solid #f472b6; }
       .sp-poc-icao { font-family: monospace; font-size: 13px; font-weight: 700; color: var(--text); }
       .sp-poc-fir { font-size: 10px; color: var(--muted); font-family: monospace; }
-      .sp-poc-person { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; line-height: 1.5; }
+      .sp-poc-person + .sp-poc-person { margin-top: 7px; }
+      .sp-poc-person-top { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; line-height: 1.5; }
+      .sp-poc-contact { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 2px; }
+      .sp-poc-discord {
+        font-family: monospace; font-size: 10.5px; color: #a5b4fc;
+        background: rgba(88,101,242,0.14); border: 1px solid rgba(88,101,242,0.35);
+        border-radius: 4px; padding: 1px 5px;
+      }
+      .sp-poc-email { font-size: 10.5px; color: var(--muted); text-decoration: none; border-bottom: 1px dotted var(--border); word-break: break-all; }
+      .sp-poc-email:hover { color: var(--accent); border-bottom-color: var(--accent); }
       .sp-poc-name { font-size: 12.5px; color: var(--text); }
       .sp-poc-cid { font-family: monospace; font-size: 11px; color: var(--muted); }
       .sp-poc-scope {
@@ -37739,9 +37766,15 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
               </div>
               ${people.length ? people.map(p => `
                 <div class="sp-poc-person">
-                  <span class="sp-poc-name">${(p.name || 'CID ' + p.cid).replace(/</g, '&lt;')}</span>
-                  ${p.name ? `<span class="sp-poc-cid">${p.cid}</span>` : ''}
-                  ${p.scope ? `<span class="sp-poc-scope">${p.scope.replace(/</g, '&lt;')}</span>` : ''}
+                  <div class="sp-poc-person-top">
+                    <span class="sp-poc-name">${escapeHtml(p.name || 'CID ' + p.cid)}</span>
+                    ${p.name ? `<span class="sp-poc-cid">${p.cid}</span>` : ''}
+                    ${p.scope ? `<span class="sp-poc-scope">${escapeHtml(p.scope)}</span>` : ''}
+                  </div>
+                  ${(p.discord || p.email) ? `<div class="sp-poc-contact">
+                    ${p.discord ? `<span class="sp-poc-discord" title="Discord">@${escapeHtml(p.discord)}</span>` : ''}
+                    ${p.email ? `<a class="sp-poc-email" href="mailto:${escapeHtml(p.email)}" title="Email ${escapeHtml(p.email)}">${escapeHtml(p.email)}</a>` : ''}
+                  </div>` : ''}
                 </div>`).join('')
               : `<div class="sp-poc-none">No contact listed${side.fir ? ' for ' + side.fir : ''}</div>`}
             </div>`;
