@@ -413,7 +413,15 @@
       "Bash(node \"C:/Users/Fraser/AppData/Local/Temp/claude/c--dev-WorldFlight-Planning/943bd8e0-dc87-4b34-b5be-0f1ce0b8c5c5/scratchpad/actions.mjs\")",
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000/sector-planning)",
       "Bash(curl -s http://localhost:3000/)",
-      "Bash(netstat -ano)"
+      "Bash(netstat -ano)",
+      "Bash(awk 'NR>=39909 && NR<=40500' index.js)",
+      "Bash(awk 'NR>=40016 && NR<=40140' index.js)",
+      "Bash(awk 'NR>=40016 && NR<=40660' index.js)",
+      "Bash(awk 'NR>=40424 && NR<=40482' index.js)",
+      "Bash(grep -n '\\\\${\\\\|`')",
+      "Bash(awk 'NR>=40021 && NR<=40740' index.js)",
+      "Bash(awk 'NR>=40739 && NR<=40800' index.js)",
+      "Bash(awk 'NR<42063' index.js)"
     ]
   }
 }

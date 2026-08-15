@@ -30,6 +30,11 @@ export default function renderLayout({
     return false; // 'hidden' or false (legacy boolean)
   };
 
+  // Staffing Overview renders full ATC routes, so it is limited to the people
+  // who staff the event. Mirrors requireStaffingAccess on the server — both
+  // flags already fold in admin.
+  const canSeeStaffing = isWfAtc || hasFirAccess;
+
   // Lucide-style line icons. fill=none, stroke=currentColor so they pick up nav-item colours.
   const svg = (paths) => `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${paths}</svg>`;
   const icons = {
@@ -103,13 +108,13 @@ export default function renderLayout({
       </a>
     </div>` : ''}
 
-    ${pv('atc') || pv('airspace') || (pv('sector-planning') && hasFirAccess) ? `<div class="nav-section">
+    ${pv('atc') || (pv('airspace') && canSeeStaffing) || (pv('sector-planning') && hasFirAccess) ? `<div class="nav-section">
       <div class="nav-title">Planning</div>
       ${pv('atc') ? `<a href="/atc" class="nav-item" data-tooltip="WF Flow Control">
         <span class="icon">${icons.headphones}</span>
         <span class="label">WF Flow Control</span>
       </a>` : ''}
-      ${pv('airspace') ? `<a href="/airspace" class="nav-item" data-tooltip="Staffing Overview">
+      ${pv('airspace') && canSeeStaffing ? `<a href="/airspace" class="nav-item" data-tooltip="Staffing Overview">
         <span class="icon">${icons.globe}</span>
         <span class="label">Staffing Overview</span>
       </a>` : ''}

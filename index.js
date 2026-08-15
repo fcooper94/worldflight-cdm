@@ -2194,6 +2194,18 @@ function requireWfAtcOrAdmin(req, res, next) {
   return renderForbidden(req, res, 'This page is for WF ATC role holders only.');
 }
 
+/* Staffing Overview is for the people who actually staff the event: WF ATC
+   role holders and anyone holding a FIR permission. The FIR grant does NOT
+   have to be for the active event — userHasFirAccess is backed by every
+   FirEventAccess row plus the WF FIR Management sheet, unfiltered by event.
+   Gating matters here because these pages render full ATC routes. */
+function requireStaffingAccess(req, res, next) {
+  const cid = Number(req.session?.user?.data?.cid);
+  if (!cid) return renderForbidden(req, res, 'Sign in required — Staffing Overview is for WF ATC role holders and users with FIR access.');
+  if (isAdminUser(cid) || isWfAtc(cid) || userHasFirAccess(cid)) return next();
+  return renderForbidden(req, res, 'Staffing Overview is only available to WF ATC role holders and users with FIR access.');
+}
+
 /* ===== WF AFFILIATE MEMBERSHIP ===== */
 const affiliateCids = new Set();
 const affiliateOwnerCids = new Set(); // CIDs that own >=1 Affiliate with hasMembers=true
@@ -30943,6 +30955,11 @@ async function _buildFirAnalysisInner() {
         arrTime: leg.arr_time_utc || '',
         atcRoute: leg.staffing_route || '',
         atcRoute2: leg.atc_route2 || '',
+        // The Route B the staffing rows below are actually derived from —
+        // the published atc_route2 when there is one, otherwise the proposed
+        // split. atcRoute2 stays published-only, since that one is shown as
+        // the filed ATC route.
+        staffingRoute2: leg.staffing_route2 || '',
         // Which of the sector's routes brings traffic through this FIR.
         // Unioned in the merge pass when both do.
         routes: [seg.route || 'A'],
@@ -31101,6 +31118,13 @@ async function _buildFirAnalysisInner() {
 }
 
 app.get('/api/airspace-management', async (req, res) => {
+  // This feeds the Staffing Overview pages and returns each leg's ATC route,
+  // so it carries the same restriction. Gating the page alone would be
+  // cosmetic while the routes stayed fetchable from here.
+  const cid = Number(req.session?.user?.data?.cid);
+  if (!cid || !(isAdminUser(cid) || isWfAtc(cid) || userHasFirAccess(cid))) {
+    return res.status(403).json({ error: 'WF ATC role or FIR access required' });
+  }
   try {
     const allFirs = await buildFirAnalysis();
     const fir = (req.query.fir || '').toUpperCase().trim();
@@ -39906,7 +39930,7 @@ app.get('/api/sector-plan/:wf/wind-adjustment', requireLogin, async (req, res) =
   }
 });
 
-app.get('/airspace', requirePageEnabled('airspace'), async (req, res) => {
+app.get('/airspace', requirePageEnabled('airspace'), requireStaffingAccess, async (req, res) => {
   const user = req.session?.user?.data || null;
   const cid = Number(user?.cid) || null;
   const isAdmin = isAdminUser(cid);
@@ -40013,7 +40037,7 @@ app.get('/airspace', requirePageEnabled('airspace'), async (req, res) => {
 
 // By-Sector view: schedule rows with the FIRs each leg transits as clickable
 // badges that deep-link into /airspace/by-area?fir=XXX.
-app.get('/airspace/by-sector', requirePageEnabled('airspace'), async (req, res) => {
+app.get('/airspace/by-sector', requirePageEnabled('airspace'), requireStaffingAccess, async (req, res) => {
   const user = req.session?.user?.data || null;
   const cid = Number(user?.cid) || null;
   const isAdmin = isAdminUser(cid);
@@ -40140,6 +40164,18 @@ app.get('/airspace/by-sector', requirePageEnabled('airspace'), async (req, res) 
         cursor: pointer; font-weight: 600;
       }
       .fir-view-btn:hover { background: rgba(56,189,248,0.2); }
+
+      /* Route A / B / A+B tags — same palette as Sector Planning so a split
+         reads identically on both pages. */
+      .fir-route {
+        display: inline-block; margin-left: 6px; padding: 1px 6px;
+        border-radius: 4px; font-size: 10px; font-weight: 700; letter-spacing: 0.04em;
+      }
+      .fir-route-a  { color: #7dd3fc; background: rgba(56,189,248,0.12); border: 1px solid rgba(56,189,248,0.3); }
+      .fir-route-b  { color: #fcd34d; background: rgba(245,158,11,0.14); border: 1px solid rgba(245,158,11,0.38); }
+      .fir-route-ab { color: #d8b4fe; background: rgba(168,85,247,0.14); border: 1px solid rgba(168,85,247,0.35); }
+      tr.is-route-b > td { background: rgba(245,158,11,0.05); }
+      tr.is-route-b .staff-window { color: #fbbf24; }
 
       .show-route-btn {
         display: inline-flex; align-items: center; gap: 6px;
@@ -40420,8 +40456,54 @@ app.get('/airspace/by-sector', requirePageEnabled('airspace'), async (req, res) 
                     .addTo(routeMapInstance);
                 });
 
-                // Fit to whole route (so users see Dep, transit, and Arr)
-                routeMapInstance.fitBounds(allCoords, { padding: [30, 30], maxZoom: 6 });
+                // Route B, when this sector splits its traffic. Amber and
+                // dashed, matching the split treatment on Sector Planning.
+                var routeB = (leg && leg.staffingRoute2) ? String(leg.staffingRoute2).trim() : '';
+                if (!routeB) {
+                  routeMapInstance.fitBounds(allCoords, { padding: [30, 30], maxZoom: 6 });
+                  return;
+                }
+                fetch('/api/resolve-route?from=' + leg.from + '&to=' + leg.to + '&route=' + encodeURIComponent(routeB) + '&depTime=&blockTime=')
+                  .then(function(r) { return r.json(); })
+                  .then(function(bData) {
+                    if (!bData.points || bData.points.length < 2) {
+                      routeMapInstance.fitBounds(allCoords, { padding: [30, 30], maxZoom: 6 });
+                      return;
+                    }
+                    var B_LINE = '#fbbf24';
+                    var bCoords = bData.points.map(function(p) { return [p.lat, p.lon]; });
+                    var bLine = L.polyline(bCoords, { color: B_LINE, weight: 3, opacity: 0.85, dashArray: '8, 6' }).addTo(routeMapInstance);
+                    if (L.polylineDecorator) {
+                      L.polylineDecorator(bLine, {
+                        patterns: [{
+                          offset: 30, endOffset: 30, repeat: '80px',
+                          symbol: L.Symbol.arrowHead({ pixelSize: 9, polygon: false, pathOptions: { color: B_LINE, weight: 2, opacity: 0.85 } })
+                        }]
+                      }).addTo(routeMapInstance);
+                    }
+                    bData.points.forEach(function(p, i) {
+                      if (!p.name || i === 0 || i === bData.points.length - 1) return;
+                      if (/^(DCT|N\\d)/.test(p.name)) return;
+                      L.circleMarker([p.lat, p.lon], { radius: 3, color: B_LINE, fillColor: B_LINE, fillOpacity: 0.9, weight: 1 })
+                        .bindTooltip(p.name, { permanent: true, direction: 'top', className: 'wpt-label', offset: [0, -4] })
+                        .addTo(routeMapInstance);
+                    });
+                    // Legend, so the two lines are readable without guessing.
+                    var legend = L.control({ position: 'bottomleft' });
+                    legend.onAdd = function() {
+                      var div = L.DomUtil.create('div');
+                      div.style.cssText = 'background:rgba(15,23,42,0.9);border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:10px;line-height:1.6;color:#e2e8f0;';
+                      div.innerHTML =
+                        '<div><span style="display:inline-block;width:16px;border-top:2px ' + (isProposed ? 'dashed' : 'solid') + ' ' + ROUTE_LINE + ';vertical-align:middle;margin-right:5px;"></span>Route A</div>'
+                        + '<div><span style="display:inline-block;width:16px;border-top:2px dashed ' + B_LINE + ';vertical-align:middle;margin-right:5px;"></span>Route B</div>';
+                      return div;
+                    };
+                    legend.addTo(routeMapInstance);
+                    routeMapInstance.fitBounds(allCoords.concat(bCoords), { padding: [30, 30], maxZoom: 6 });
+                  })
+                  .catch(function() {
+                    routeMapInstance.fitBounds(allCoords, { padding: [30, 30], maxZoom: 6 });
+                  });
               })
               .catch(function() {
                 if (transitLayers.length) {
@@ -40459,6 +40541,9 @@ app.get('/airspace/by-sector', requirePageEnabled('airspace'), async (req, res) 
         section.hidden = false;
 
         var first = legs[0];
+        // True once this sector actually splits its traffic, i.e. some FIR is
+        // reached via Route B. Drives the A / B / A+B tags in the table.
+        var sectorHasSplit = legs.some(function(l) { return (l.routes || []).indexOf('B') !== -1; });
         document.getElementById('sectorDetailTitle').textContent = wf + ' — ' + first.from + ' → ' + first.to;
         var metaText = (first.date || '') + ' · ' + legs.length + ' FIR' + (legs.length !== 1 ? 's' : '') + ' transited';
         var metaEl = document.getElementById('sectorDetailMeta');
@@ -40533,10 +40618,23 @@ app.get('/airspace/by-sector', requirePageEnabled('airspace'), async (req, res) 
             + ';color:' + firColor
             + ';border:1px solid ' + hexToRgba(firColor, 0.45)
             + ';cursor:pointer;';
-          html += '<tr>'
+          // Which of the sector's routes brings traffic through this FIR.
+          // Only worth showing once a split exists — otherwise every FIR is
+          // trivially Route A.
+          var rts = l.routes || ['A'];
+          var routeTag = '';
+          if (sectorHasSplit) {
+            routeTag = rts.length > 1
+              ? ' <span class="fir-route fir-route-ab">A+B</span>'
+              : (rts[0] === 'B'
+                  ? ' <span class="fir-route fir-route-b">B</span>'
+                  : ' <span class="fir-route fir-route-a">A</span>');
+          }
+          var rowClass = (sectorHasSplit && rts.length === 1 && rts[0] === 'B') ? ' class="is-route-b"' : '';
+          html += '<tr' + rowClass + '>'
             + '<td style="border-left:3px solid ' + firColor + ';padding-left:10px;">'
               + '<span class="fir-badge fir-badge-link" data-view-fir="' + l._fir + '" style="' + badgeStyle + '">'
-              + displayFir(l._fir) + '</span></td>'
+              + displayFir(l._fir) + '</span>' + routeTag + '</td>'
             + '<td class="staff-window">' + (l.staffStart && l.staffEnd ? l.staffStart + ' – ' + l.staffEnd : '-') + combinedIcon(l.combinedWith) + '</td>'
             + '<td class="staff-window" style="color:var(--muted);">' + (l.staffStartLocal && l.staffEndLocal ? l.staffStartLocal + ' – ' + l.staffEndLocal : '-') + '</td>'
             + '<td>' + formatDuration(l.staffMins) + '</td>'
@@ -40657,7 +40755,7 @@ app.get('/airspace/by-sector', requirePageEnabled('airspace'), async (req, res) 
   }));
 });
 
-app.get('/airspace/by-area', requirePageEnabled('airspace'), async (req, res) => {
+app.get('/airspace/by-area', requirePageEnabled('airspace'), requireStaffingAccess, async (req, res) => {
   const user = req.session?.user?.data || null;
   const cid = Number(user?.cid) || null;
   const isAdmin = isAdminUser(cid);
