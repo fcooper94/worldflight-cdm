@@ -8,6 +8,7 @@ export default function renderLayout({
   isWfAtc = false,
   hasFirAccess = false,
   sectorPlanOutOfSync = 0,
+  openAtcRequestCount = 0,
   sectorPlanActions = 0,
   canManageAffiliateMembers = false,
   canManageTeamMembers = false,
@@ -129,12 +130,16 @@ export default function renderLayout({
       </a>` : ''}
     </div>` : ''}
 
-    ${isWfAtc && pv('vatcan-codes') ? `<div class="nav-section">
+    ${isWfAtc && (pv('vatcan-codes') || pv('requested-atc')) ? `<div class="nav-section">
       <div class="nav-title">WF ATC</div>
-      <a href="/wf-atc/vatcan-codes" class="nav-item" data-tooltip="VATCAN Codes">
+      ${pv('vatcan-codes') ? `<a href="/wf-atc/vatcan-codes" class="nav-item" data-tooltip="VATCAN Codes">
         <span class="icon">${icons.headphones}</span>
         <span class="label">VATCAN Codes</span>
-      </a>
+      </a>` : ''}
+      ${pv('requested-atc') ? `<a href="/wf-atc/requested" class="nav-item" data-tooltip="Requested ATC">
+        <span class="icon">${icons.clipboard}</span>
+        <span class="label">Requested ATC${openAtcRequestCount > 0 ? ` <span class="nav-badge action" title="${openAtcRequestCount} open request${openAtcRequestCount === 1 ? '' : 's'}">${openAtcRequestCount}</span>` : ''}</span>
+      </a>` : ''}
     </div>` : ''}
 
     ${isTeamMember ? `

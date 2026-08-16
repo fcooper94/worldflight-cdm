@@ -473,6 +473,7 @@ function renderLayout(opts) {
     isWfAtc: cid ? (isWfAtc(cid) || isAdminUser(cid)) : false,
     hasFirAccess: cid ? (userHasFirAccess(cid) || isAdminUser(cid)) : false,
     sectorPlanOutOfSync: (cid && isAdminUser(cid)) ? sectorPlanOutOfSyncCount : 0,
+    openAtcRequestCount: (cid && (isAdminUser(cid) || isWfAtc(cid))) ? openAtcRequestCount : 0,
     sectorPlanActions: cid ? sectorPlanActionCount(cid) : 0,
     canManageAffiliateMembers: cid ? canManageAffiliateMembers(cid) : false,
     canManageTeamMembers: cid ? canManageTeamMembers(cid) : false,
@@ -845,6 +846,14 @@ function isPageVisibleTo(key, isAdminUserFlag) {
   if (mode === 'visible') return true;
   if (mode === 'admin-only' && isAdminUserFlag) return true;
   return false;
+}
+
+// ===== OPEN ATC REQUEST COUNT =====
+let openAtcRequestCount = 0;
+async function refreshOpenAtcRequestCount() {
+  openAtcRequestCount = await prisma.atcRequest?.count({
+    where: { status: 'waiting', eventId: activeEventId || undefined }
+  }).catch(() => 0) || 0;
 }
 
 // ===== SITE BANNER =====
@@ -3270,6 +3279,7 @@ async function bootstrap() {
   await loadSiteBanner();
   await loadSiteGate();
   await loadMasterUsers();
+  await refreshOpenAtcRequestCount();
   await loadTeamMembers();
   await loadAffiliates();
   await loadWfAtcMembers();
@@ -32139,7 +32149,8 @@ app.get('/admin/settings', requireAdmin, async (req, res) => {
         { key: 'airspace',        label: 'Staffing Overview', icon: '🌐', desc: 'FIR staffing requirements and timelines' },
         { key: 'sector-planning', label: 'Sector Planning',   icon: '📋', desc: 'Per-user sector list. Shows WF sectors the user is participating in (Dep/Arr/Enroute) based on their FIR Events Access grants.' },
         { key: 'vatcan-codes',    label: 'VATCAN Codes',      icon: '🎧', desc: 'Per-sector VATCAN booking-plugin event IDs (under sidebar "WF ATC" category). Controllers paste these into the VATCAN plugin to see live slot data.' },
-        { key: 'request-atc',    label: 'Request ATC',       icon: '📡', desc: 'FIR managers can request WF ATC (HitSquad) support for sectors where local coverage is unavailable.' }
+        { key: 'request-atc',    label: 'Request ATC',       icon: '📡', desc: 'FIR managers can request WF ATC (HitSquad) support for sectors where local coverage is unavailable.' },
+        { key: 'requested-atc',  label: 'Requested ATC',     icon: '📡', desc: 'WF ATC members view and claim ATC support requests from FIR managers.' }
       ]
     },
     {
@@ -36135,6 +36146,7 @@ app.post('/api/request-atc', requireLogin, async (req, res) => {
         requestedBy: cid
       }
     });
+    refreshOpenAtcRequestCount();
     res.json({ success: true });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -36150,6 +36162,7 @@ app.post('/api/request-atc/:id/cancel', requireLogin, async (req, res) => {
     if (!row) return res.status(404).json({ error: 'Request not found' });
     if (row.requestedBy !== cid && !isAdminUser(cid)) return res.status(403).json({ error: 'Not your request' });
     await prisma.atcRequest.update({ where: { id }, data: { status: 'cancelled' } });
+    refreshOpenAtcRequestCount();
     res.json({ success: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -36163,6 +36176,202 @@ app.delete('/api/request-atc/:id', requireLogin, async (req, res) => {
     if (!row) return res.status(404).json({ error: 'Request not found' });
     if (row.requestedBy !== cid && !isAdminUser(cid)) return res.status(403).json({ error: 'Not your request' });
     await prisma.atcRequest.delete({ where: { id } });
+    refreshOpenAtcRequestCount();
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Requested ATC (WF ATC view) ────────────────────────────────────────
+app.get('/wf-atc/requested', requirePageEnabled('requested-atc'), requireLogin, async (req, res) => {
+  const user = req.session?.user?.data || null;
+  const cid = Number(user?.cid) || null;
+  const isAdmin = isAdminUser(cid);
+  if (!cid || !(isAdmin || isWfAtc(cid))) {
+    return renderForbidden(req, res, 'This page is only available to WF ATC members.');
+  }
+
+  const requests = await prisma.atcRequest?.findMany({
+    where: { eventId: activeEventId || undefined },
+    orderBy: { createdAt: 'desc' }
+  }).catch(() => []) || [];
+
+  // Resolve names for requesters and accepters
+  const allCids = [...new Set([...requests.map(r => r.requestedBy), ...requests.filter(r => r.acceptedBy).map(r => r.acceptedBy)])];
+  const users = allCids.length ? await prisma.user.findMany({
+    where: { cid: { in: allCids } }, select: { cid: true, name: true }
+  }).catch(() => []) : [];
+  const nameOf = {};
+  users.forEach(u => { if (u.name) nameOf[u.cid] = u.name; });
+
+  const posLabels = { aerodrome: 'Aerodrome', approach: 'APP/DEP/TMA', ctr: 'CTR/Center' };
+
+  const openReqs = requests.filter(r => r.status === 'waiting');
+  const myAccepted = requests.filter(r => r.status === 'accepted' && r.acceptedBy === cid);
+  const allAccepted = requests.filter(r => r.status === 'accepted');
+
+  function buildRow(r, opts) {
+    const showClaim = opts?.claim;
+    const showAcceptedBy = opts?.acceptedBy;
+    const showDrop = opts?.drop;
+    const expandable = opts?.expand !== false;
+    const cs = JSON.parse(r.callsigns || '[]');
+    const csEntries = cs.map(c => typeof c === 'string' ? { callsign: c } : c);
+    const csText = csEntries.map(c => c.callsign).join(', ');
+    const timesText = csEntries.map(c => c.timeFrom && c.timeTo ? c.timeFrom + '-' + c.timeTo + 'z' : '').filter(Boolean).join(', ') || '\u2014';
+    const sched = (adminSheetCache || []).find(s => s.number === r.sectorNumber);
+    const date = sched ? sched.date_utc : '';
+    const colCount = 7 + (showAcceptedBy ? 1 : 0) + (showClaim || showDrop ? 1 : 0);
+
+    let actionCell = '';
+    if (showClaim) actionCell = '<td><button type="button" class="action-btn primary ra-claim-btn" data-id="' + r.id + '" style="font-size:10px;padding:3px 12px;">Claim</button></td>';
+    else if (showDrop) actionCell = '<td><button type="button" class="action-btn ra-drop-btn" data-id="' + r.id + '" style="font-size:10px;padding:3px 12px;background:rgba(239,68,68,0.1);color:#f87171;border-color:#f87171;">Drop</button></td>';
+
+    let html = '<tr class="' + (expandable ? 'ra-expandable-row' : '') + '" data-id="' + r.id + '">'
+      + '<td style="font-weight:700;color:var(--accent);">' + escapeHtml(r.sectorNumber) + '</td>'
+      + '<td style="font-size:11px;">' + escapeHtml(r.fromIcao) + ' \u2192 ' + escapeHtml(r.toIcao) + '</td>'
+      + '<td style="font-size:11px;">' + escapeHtml(date) + '</td>'
+      + '<td style="font-size:11px;">' + escapeHtml(posLabels[r.positionType] || r.positionType) + '</td>'
+      + '<td><span style="font-family:monospace;font-size:12px;">' + escapeHtml(csText) + '</span></td>'
+      + '<td style="font-size:11px;">' + escapeHtml(timesText) + '</td>'
+      + '<td style="font-size:11px;color:var(--muted);">' + escapeHtml(nameOf[r.requestedBy] || String(r.requestedBy)) + '</td>'
+      + (showAcceptedBy ? '<td style="font-size:11px;color:var(--success);">' + escapeHtml(nameOf[r.acceptedBy] || String(r.acceptedBy || '')) + '</td>' : '')
+      + actionCell
+      + '</tr>';
+
+    if (expandable) {
+      html += '<tr class="ra-detail-row hidden" data-detail-for="' + r.id + '">'
+        + '<td colspan="' + colCount + '" style="padding:8px 16px;background:var(--panel2);border-bottom:2px solid var(--border);">'
+        + '<div style="display:flex;flex-direction:column;gap:6px;font-size:12px;">'
+        + (r.notes ? '<div><strong style="color:var(--muted);">Notes:</strong> ' + escapeHtml(r.notes) + '</div>' : '')
+        + (r.sectorFileUrl ? '<div><strong style="color:var(--muted);">Controller Pack:</strong> <a href="' + escapeHtml(r.sectorFileUrl) + '" target="_blank" rel="noopener" style="color:var(--accent);">' + escapeHtml(r.sectorFileUrl) + ' \u2197</a></div>' : '')
+        + '<div style="display:flex;flex-wrap:wrap;gap:6px;">' + csEntries.map(c =>
+            '<span style="padding:3px 8px;background:var(--panel);border:1px solid var(--border);border-radius:4px;font-family:monospace;font-size:11px;">'
+            + escapeHtml(c.callsign) + (c.timeFrom ? ' ' + c.timeFrom + '-' + (c.timeTo || '?') + 'z' : '')
+            + '</span>'
+          ).join('') + '</div>'
+        + '</div></td></tr>';
+    }
+    return html;
+  }
+
+  function buildTable(rows, headers) {
+    if (!rows.length) return '<p style="color:var(--muted);font-size:13px;">None.</p>';
+    return '<div class="ot-table-wrap"><table class="ot-table" style="font-size:12px;">'
+      + '<thead><tr>' + headers.map(h => '<th>' + h + '</th>').join('') + '</tr></thead>'
+      + '<tbody>' + rows.join('') + '</tbody></table></div>';
+  }
+
+  const openHeaders = ['Sector', 'Route', 'Date', 'Type', 'Callsign(s)', 'Times (UTC)', 'Requested By', ''];
+  const myHeaders = ['Sector', 'Route', 'Date', 'Type', 'Callsign(s)', 'Times (UTC)', 'Requested By'];
+  const allHeaders = ['Sector', 'Route', 'Date', 'Type', 'Callsign(s)', 'Times (UTC)', 'Requested By', 'Claimed By'];
+
+  const content = `
+    <style>
+      .ra-expandable-row { cursor:pointer; }
+      .ra-expandable-row:hover td { background:var(--panel2); }
+      .ra-detail-row.hidden { display:none; }
+    </style>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start;margin-bottom:20px;">
+      <section class="card" style="padding:20px;">
+        <h2 style="margin:0 0 16px;color:var(--accent);font-size:18px;">Open ATC Requests</h2>
+        ${buildTable(openReqs.map(r => buildRow(r, { claim: true, expand: true })), openHeaders)}
+      </section>
+
+      <section class="card" style="padding:20px;">
+        <h2 style="margin:0 0 16px;color:var(--accent);font-size:18px;">My Accepted ATC</h2>
+        ${buildTable(myAccepted.map(r => buildRow(r, { drop: true, expand: true })), [...myHeaders, ''])}
+      </section>
+    </div>
+
+    <section class="card" style="padding:20px;">
+      <h2 style="margin:0 0 16px;color:var(--accent);font-size:18px;">All Accepted Requests</h2>
+      ${buildTable(allAccepted.map(r => buildRow(r, { acceptedBy: true, expand: false })), allHeaders)}
+    </section>
+
+    <script>
+    (function() {
+      // Expand/collapse detail rows
+      document.addEventListener('click', function(e) {
+        var row = e.target.closest('.ra-expandable-row');
+        if (row && !e.target.closest('.ra-claim-btn')) {
+          var id = row.dataset.id;
+          var detail = document.querySelector('[data-detail-for="' + id + '"]');
+          if (detail) detail.classList.toggle('hidden');
+        }
+      });
+
+      // Claim button
+      document.addEventListener('click', async function(e) {
+        var btn = e.target.closest('.ra-claim-btn');
+        if (btn) {
+          btn.disabled = true;
+          btn.textContent = 'Claiming...';
+          try {
+            var r = await fetch('/api/request-atc/' + btn.dataset.id + '/claim', {
+              method: 'POST', credentials: 'same-origin'
+            });
+            if (r.ok) location.reload();
+            else { var d = await r.json().catch(function() { return {}; }); alert(d.error || 'Failed'); btn.disabled = false; btn.textContent = 'Claim'; }
+          } catch (err) { btn.disabled = false; btn.textContent = 'Claim'; }
+          return;
+        }
+
+        // Drop button
+        var dropBtn = e.target.closest('.ra-drop-btn');
+        if (dropBtn) {
+          dropBtn.disabled = true;
+          dropBtn.textContent = 'Dropping...';
+          try {
+            var r = await fetch('/api/request-atc/' + dropBtn.dataset.id + '/drop', {
+              method: 'POST', credentials: 'same-origin'
+            });
+            if (r.ok) location.reload();
+            else { var d = await r.json().catch(function() { return {}; }); alert(d.error || 'Failed'); dropBtn.disabled = false; dropBtn.textContent = 'Drop'; }
+          } catch (err) { dropBtn.disabled = false; dropBtn.textContent = 'Drop'; }
+        }
+      });
+    })();
+    </script>
+  `;
+
+  res.send(renderLayout({ title: 'Requested ATC', user, isAdmin, content, layoutClass: 'dashboard-full' }));
+});
+
+// Claim an ATC request
+app.post('/api/request-atc/:id/claim', requireLogin, async (req, res) => {
+  const cid = Number(req.session?.user?.data?.cid);
+  const id = Number(req.params.id);
+  if (!cid || !(isAdminUser(cid) || isWfAtc(cid))) {
+    return res.status(403).json({ error: 'WF ATC access required' });
+  }
+  try {
+    const row = await prisma.atcRequest.findUnique({ where: { id } });
+    if (!row) return res.status(404).json({ error: 'Request not found' });
+    if (row.status !== 'waiting') return res.status(400).json({ error: 'Request is not open' });
+    await prisma.atcRequest.update({
+      where: { id },
+      data: { status: 'accepted', acceptedBy: cid, acceptedAt: new Date() }
+    });
+    refreshOpenAtcRequestCount();
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Drop a claimed ATC request (return to waiting)
+app.post('/api/request-atc/:id/drop', requireLogin, async (req, res) => {
+  const cid = Number(req.session?.user?.data?.cid);
+  const id = Number(req.params.id);
+  try {
+    const row = await prisma.atcRequest.findUnique({ where: { id } });
+    if (!row) return res.status(404).json({ error: 'Request not found' });
+    if (row.status !== 'accepted') return res.status(400).json({ error: 'Request is not accepted' });
+    if (row.acceptedBy !== cid && !isAdminUser(cid)) return res.status(403).json({ error: 'Not your claim' });
+    await prisma.atcRequest.update({
+      where: { id },
+      data: { status: 'waiting', acceptedBy: null, acceptedAt: null }
+    });
+    refreshOpenAtcRequestCount();
     res.json({ success: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
