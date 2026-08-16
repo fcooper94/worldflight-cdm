@@ -311,7 +311,7 @@ export default function renderLayout({
     </div>
     ` : ''}
     ${maintenanceBanner.enabled && maintenanceBanner.text && user ? `
-    <div class="site-banner maintenance-banner" style="position:relative;top:auto;z-index:auto;background:rgba(245,158,11,0.12);border-bottom:1px solid rgba(245,158,11,0.3);">
+    <div class="site-banner maintenance-banner" style="position:relative;top:auto;z-index:auto;background:#1a1400;border-bottom:1px solid rgba(245,158,11,0.3);">
       <span class="site-banner-text" style="color:#f59e0b;">\u26a0 ${maintenanceBanner.text}</span>
     </div>
     ` : ''}
