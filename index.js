@@ -38467,7 +38467,7 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
       </section><!-- /sp-top-checklist-card -->
       </div><!-- /sp-top-col -->
 
-      <section class="card sp-firs-card">
+      <section class="card sp-firs-card" id="spFirsCard">
         <div class="sp-firs-head">
           <h3>Enroute FIRs</h3>
           <a href="/airspace/by-sector?wf=${encodeURIComponent(wf)}" target="_blank" rel="noopener" class="sp-firs-overview-btn" title="Open the full Staffing Overview view for this sector">↗ Staffing Overview</a>
@@ -38969,6 +38969,48 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
         el.textContent = text;
         el.style.color = ok ? '#4ade80' : '#f87171';
         setTimeout(function() { el.textContent = ''; el.style.color = ''; }, 3000);
+        if (ok) spRefreshFirs();
+      }
+
+      // Refresh the Enroute FIRs card after any route/flow change
+      async function spRefreshFirs() {
+        try {
+          var r = await fetch('/api/sector-plan/' + encodeURIComponent(window.SP.wf) + '/firs');
+          if (!r.ok) return;
+          var data = await r.json();
+          var card = document.getElementById('spFirsCard');
+          if (!card || !data.firs) return;
+          var head = card.querySelector('.sp-firs-head');
+          if (!head) return;
+          var html = '';
+          if (data.firs.length) {
+            html = '<div>';
+            data.firs.forEach(function(fl) {
+              var tag = fl.fir === window.SP.depFir ? ' <span class="div" style="color:#fbbf24;background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.35);">DEP</span>'
+                      : fl.fir === window.SP.arrFir ? ' <span class="div" style="color:#fbcfe8;background:rgba(244,114,182,0.12);border:1px solid rgba(244,114,182,0.35);">ARR</span>'
+                      : '';
+              var win = fl.staffStart && fl.staffEnd ? '<span class="utc">' + fl.staffStart + '\\u2013' + fl.staffEnd + 'z</span>' : '';
+              var lcl = fl.staffStartLocal && fl.staffEndLocal ? '<span class="lcl">' + fl.staffStartLocal + '\\u2013' + fl.staffEndLocal + ' local</span>' : '';
+              html += '<div class="sp-fir-row">'
+                + '<span class="name">' + fl.fir + tag + '</span>'
+                + '<span class="div">' + (fl.division || '') + '</span>'
+                + '<span class="win">' + win + lcl + '</span>'
+                + '</div>';
+            });
+            html += '</div>';
+          } else {
+            html = '<div class="sp-fir-empty">No FIRs found for this sector yet.</div>';
+          }
+          // Replace everything after the header
+          var existing = card.querySelector('.sp-firs-head ~ div, .sp-firs-head ~ .sp-fir-empty');
+          var container = head.nextElementSibling;
+          while (container && container !== head) {
+            var next = container.nextElementSibling;
+            if (container.tagName !== 'DIV' || !container.classList.contains('sp-firs-head')) container.remove();
+            container = next;
+          }
+          head.insertAdjacentHTML('afterend', html);
+        } catch (e) {}
       }
 
       // Force route textareas to uppercase as the user types
@@ -40229,6 +40271,33 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
     content,
     layoutClass: 'dashboard-full'
   }));
+});
+
+// Lightweight API: return transited FIRs for a sector (used by the detail page to refresh after saves)
+app.get('/api/sector-plan/:wf/firs', async (req, res) => {
+  const wf = String(req.params.wf || '').toUpperCase();
+  const sched = (adminSheetCache || []).find(r => r.number === wf);
+  if (!sched) return res.status(404).json({ error: 'Sector not found' });
+  try {
+    clearFirAnalysisCache();
+    const allFirs = await buildFirAnalysis();
+    const legs = [];
+    for (const f of allFirs) {
+      for (const lg of (f.legs || [])) {
+        if (lg.wf !== wf) continue;
+        legs.push({
+          fir: f.fir, division: f.division || '',
+          staffStart: lg.staffStart || null, staffEnd: lg.staffEnd || null,
+          staffStartLocal: lg.staffStartLocal || null, staffEndLocal: lg.staffEndLocal || null,
+          routes: lg.routes || ['A']
+        });
+      }
+    }
+    legs.sort((a, b) => (a.staffStart || '').localeCompare(b.staffStart || ''));
+    res.json({ wf, from: sched.from, to: sched.to, firs: legs });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 app.post('/api/sector-plan/:wf/route', requireLogin, async (req, res) => {
