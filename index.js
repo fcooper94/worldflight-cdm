@@ -35729,11 +35729,13 @@ app.get('/request-atc', requirePageEnabled('request-atc'), async (req, res) => {
   const allScheduleRows = adminSheetCache || [];
   const showSchedule = isPageVisibleTo('schedule', isAdmin);
 
-  // Filter sectors to only those where user's FIR covers dep or arr airport
+  // Filter sectors to only those where user's FIR covers dep, arr, or enroute
   let scheduleRows = allScheduleRows;
+  const sectorRole = {}; // wfNumber -> 'dep-arr' | 'enroute-only'
   if (!isAdmin) {
     const ownedFirs = await getUserOwnedFirs(cid);
     if (ownedFirs.size) {
+      // Dep/arr check via airport coordinates
       const airportIcaos = [...new Set(allScheduleRows.flatMap(r => [r.from, r.to]))];
       const airports = await prisma.airport.findMany({
         where: { icao: { in: airportIcaos } },
@@ -35743,9 +35745,27 @@ app.get('/request-atc', requirePageEnabled('request-atc'), async (req, res) => {
       airports.forEach(a => {
         if (a.lat != null && a.lon != null) aptFir[a.icao] = resolveSurfaceFirForPoint(a.lat, a.lon);
       });
-      scheduleRows = allScheduleRows.filter(r =>
-        ownedFirs.has(aptFir[r.from]) || ownedFirs.has(aptFir[r.to])
-      );
+
+      // Enroute check via FIR analysis (transited FIRs per sector)
+      const allFirs = await buildFirAnalysis().catch(() => []);
+      const firsByWf = {};
+      allFirs.forEach(f => {
+        for (const lg of (f.legs || [])) {
+          if (!lg.wf) continue;
+          if (!firsByWf[lg.wf]) firsByWf[lg.wf] = new Set();
+          firsByWf[lg.wf].add(f.fir);
+        }
+      });
+
+      scheduleRows = allScheduleRows.filter(r => {
+        const isDepArr = ownedFirs.has(aptFir[r.from]) || ownedFirs.has(aptFir[r.to]);
+        if (isDepArr) { sectorRole[r.number] = 'dep-arr'; return true; }
+        // Check enroute — exclude dep/arr FIRs
+        const enrouteFirs = [...(firsByWf[r.number] || [])].filter(f => f !== aptFir[r.from] && f !== aptFir[r.to]);
+        const isEnroute = enrouteFirs.some(f => ownedFirs.has(f));
+        if (isEnroute) { sectorRole[r.number] = 'enroute-only'; return true; }
+        return false;
+      });
     }
   }
 
@@ -35769,7 +35789,7 @@ app.get('/request-atc', requirePageEnabled('request-atc'), async (req, res) => {
   const sectorPillsHtml = !showSchedule ? '<p style="color:var(--muted);">Schedule not yet available.</p>' :
     '<div style="display:flex;flex-wrap:wrap;gap:8px;" id="sectorPills">'
     + scheduleRows.map(r =>
-      '<button type="button" class="ra-sector-pill" data-wf="' + escapeHtml(r.number) + '" data-from="' + escapeHtml(r.from) + '" data-to="' + escapeHtml(r.to) + '">'
+      '<button type="button" class="ra-sector-pill" data-wf="' + escapeHtml(r.number) + '" data-from="' + escapeHtml(r.from) + '" data-to="' + escapeHtml(r.to) + '" data-role="' + (sectorRole[r.number] || 'dep-arr') + '">'
       + '<span style="font-weight:700;color:var(--accent);">' + escapeHtml(r.number) + '</span>'
       + '<span style="font-size:11px;color:var(--muted);">' + escapeHtml(r.from) + ' → ' + escapeHtml(r.to) + '</span>'
       + '</button>'
@@ -35890,7 +35910,16 @@ app.get('/request-atc', requirePageEnabled('request-atc'), async (req, res) => {
         selectedWf = pill.dataset.wf;
         selectedFrom = pill.dataset.from;
         selectedTo = pill.dataset.to;
+        var role = pill.dataset.role || 'dep-arr';
         document.getElementById('raSelectedSector').textContent = selectedWf + ' — ' + selectedFrom + ' → ' + selectedTo;
+        // Show/hide position pills based on dep-arr vs enroute-only
+        document.querySelectorAll('.ra-pos-pill').forEach(function(p) {
+          if (role === 'enroute-only') {
+            p.style.display = p.dataset.pos === 'ctr' ? '' : 'none';
+          } else {
+            p.style.display = '';
+          }
+        });
         document.getElementById('raStep1').classList.remove('active');
         document.getElementById('raStep2').classList.add('active');
       });
