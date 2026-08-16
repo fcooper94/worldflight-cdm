@@ -303,14 +303,18 @@ export default function renderLayout({
   </div>
   ` : ''}
 
-  ${siteBanner.enabled && siteBanner.text ? `
-  <div class="site-banner">
-    <span class="site-banner-text">${siteBanner.text}</span>
-  </div>
-  ` : ''}
-  ${maintenanceBanner.enabled && maintenanceBanner.text && user ? `
-  <div class="site-banner maintenance-banner" style="background:rgba(245,158,11,0.12);border-bottom:1px solid rgba(245,158,11,0.3);">
-    <span class="site-banner-text" style="color:#f59e0b;">⚠ ${maintenanceBanner.text}</span>
+  ${(siteBanner.enabled && siteBanner.text) || (maintenanceBanner.enabled && maintenanceBanner.text && user) ? `
+  <div style="position:sticky;top:0;z-index:1100;">
+    ${siteBanner.enabled && siteBanner.text ? `
+    <div class="site-banner" style="position:relative;top:auto;z-index:auto;">
+      <span class="site-banner-text">${siteBanner.text}</span>
+    </div>
+    ` : ''}
+    ${maintenanceBanner.enabled && maintenanceBanner.text && user ? `
+    <div class="site-banner maintenance-banner" style="position:relative;top:auto;z-index:auto;background:rgba(245,158,11,0.12);border-bottom:1px solid rgba(245,158,11,0.3);">
+      <span class="site-banner-text" style="color:#f59e0b;">\u26a0 ${maintenanceBanner.text}</span>
+    </div>
+    ` : ''}
   </div>
   ` : ''}
 

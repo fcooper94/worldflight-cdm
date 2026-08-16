@@ -35783,7 +35783,7 @@ app.get('/request-atc', requirePageEnabled('request-atc'), async (req, res) => {
   const nameOf = {};
   requesterUsers.forEach(u => { if (u.name) nameOf[u.cid] = u.name; });
 
-  const posLabels = { aerodrome: 'Aerodrome (DEL/GND/TWR)', approach: 'Approach / Departure / TMA', ctr: 'CTR / Centre' };
+  const posLabels = { aerodrome: 'Aerodrome (DEL/GND/TWR)', approach: 'Approach / Departure / TMA', ctr: 'CTR / Center (Enroute)' };
 
   // Sector pills for the form
   const sectorPillsHtml = !showSchedule ? '<p style="color:var(--muted);">Schedule not yet available.</p>' :
@@ -35798,18 +35798,34 @@ app.get('/request-atc', requirePageEnabled('request-atc'), async (req, res) => {
 
   // Existing requests list
   const requestsHtml = requests.length ? requests.map(r => {
-    const cs = JSON.parse(r.callsigns || '[]');
-    const statusCls = r.status === 'accepted' ? 'success' : r.status === 'declined' ? 'danger' : 'warning';
-    const statusLabel = r.status === 'accepted' ? 'Accepted' : r.status === 'declined' ? 'Declined' : 'Waiting for ATC';
-    return '<div class="ra-request-card">'
+    const csRaw = JSON.parse(r.callsigns || '[]');
+    // Support both old format (string[]) and new format ({callsign, timeFrom, timeTo}[])
+    const csEntries = csRaw.map(c => typeof c === 'string' ? { callsign: c } : c);
+    const isCancelled = r.status === 'cancelled';
+    const statusCls = r.status === 'accepted' ? 'success' : isCancelled ? 'danger' : 'warning';
+    const statusLabel = r.status === 'accepted' ? 'Accepted' : isCancelled ? 'Cancelled' : 'Waiting for ATC';
+    const canManage = Number(r.requestedBy) === cid || isAdmin;
+    return '<div class="ra-request-card' + (isCancelled ? ' ra-cancelled' : '') + '" data-req-id="' + r.id + '">'
       + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">'
-      + '<span style="font-weight:700;color:var(--accent);">' + escapeHtml(r.sectorNumber) + ' <span style="color:var(--muted);font-weight:400;">' + escapeHtml(r.fromIcao) + ' → ' + escapeHtml(r.toIcao) + '</span></span>'
+      + '<span style="font-weight:700;color:var(--accent);">' + escapeHtml(r.sectorNumber) + ' <span style="color:var(--muted);font-weight:400;">' + escapeHtml(r.fromIcao) + ' \u2192 ' + escapeHtml(r.toIcao) + '</span></span>'
       + '<span class="ra-status ra-status-' + statusCls + '">' + statusLabel + '</span>'
       + '</div>'
-      + '<div style="font-size:12px;color:var(--muted);margin-bottom:4px;">' + escapeHtml(posLabels[r.positionType] || r.positionType) + '</div>'
-      + '<div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px;">' + cs.map(c => '<span class="ra-cs-chip">' + escapeHtml(c) + '</span>').join('') + '</div>'
+      + '<div style="font-size:12px;color:var(--muted);margin-bottom:6px;">' + escapeHtml(posLabels[r.positionType] || r.positionType) + '</div>'
+      + '<div style="display:flex;flex-direction:column;gap:4px;margin-bottom:6px;">' + csEntries.map(c =>
+        '<div style="display:flex;align-items:center;gap:8px;">'
+        + '<span class="ra-cs-chip">' + escapeHtml(c.callsign || '') + '</span>'
+        + (c.timeFrom || c.timeTo ? '<span style="font-size:11px;color:var(--muted);">' + escapeHtml(c.timeFrom || '?') + ' \u2013 ' + escapeHtml(c.timeTo || '?') + ' UTC</span>' : '')
+        + '</div>'
+      ).join('') + '</div>'
+      + (r.sectorFileUrl ? '<div style="font-size:12px;margin-bottom:6px;"><a href="' + escapeHtml(r.sectorFileUrl) + '" target="_blank" rel="noopener" style="color:var(--accent);">Sector File / Controller Pack \u2197</a></div>' : '')
       + (r.notes ? '<div style="font-size:12px;color:var(--text);background:var(--panel2);padding:6px 10px;border-radius:6px;margin-bottom:6px;">' + escapeHtml(r.notes) + '</div>' : '')
-      + '<div style="font-size:11px;color:var(--muted);">Requested by ' + escapeHtml(nameOf[r.requestedBy] || String(r.requestedBy)) + ' · ' + new Date(r.createdAt).toISOString().slice(0, 10) + '</div>'
+      + '<div style="display:flex;justify-content:space-between;align-items:center;">'
+      + '<span style="font-size:11px;color:var(--muted);">Requested by ' + escapeHtml(nameOf[r.requestedBy] || String(r.requestedBy)) + ' \u00b7 ' + new Date(r.createdAt).toISOString().slice(0, 10) + '</span>'
+      + (canManage && !isCancelled ? '<div style="display:flex;gap:6px;">'
+        + '<button type="button" class="action-btn ra-cancel-btn" data-id="' + r.id + '" style="font-size:10px;padding:3px 10px;background:rgba(245,158,11,0.1);color:#f59e0b;border-color:#f59e0b;">ATC No Longer Required</button>'
+        + '</div>' : '')
+      + (canManage && isCancelled ? '<button type="button" class="action-btn ra-delete-btn" data-id="' + r.id + '" style="font-size:10px;padding:3px 10px;background:rgba(239,68,68,0.1);color:#f87171;border-color:#f87171;">Delete</button>' : '')
+      + '</div>'
       + '</div>';
   }).join('') : '<p style="color:var(--muted);font-size:13px;">No requests submitted yet.</p>';
 
@@ -35843,6 +35859,7 @@ app.get('/request-atc', requirePageEnabled('request-atc'), async (req, res) => {
         font-family:monospace;font-size:12px;font-weight:600;padding:3px 10px;
         background:var(--panel2);border:1px solid var(--border);border-radius:4px;color:var(--text);
       }
+      .ra-cancelled { opacity:0.5; }
       .ra-cs-row { display:flex;align-items:center;gap:6px;margin-bottom:6px; }
       .ra-cs-row input { flex:1;max-width:160px; }
       #raForm .ra-step { display:none; }
@@ -35866,22 +35883,31 @@ app.get('/request-atc', requirePageEnabled('request-atc'), async (req, res) => {
             <div style="display:flex;flex-wrap:wrap;gap:8px;">
               <button type="button" class="ra-pos-pill" data-pos="aerodrome">Aerodrome<br><span style="font-size:10px;color:var(--muted);">DEL / GND / TWR</span></button>
               <button type="button" class="ra-pos-pill" data-pos="approach">Approach / Departure<br><span style="font-size:10px;color:var(--muted);">APP / DEP / TMA</span></button>
-              <button type="button" class="ra-pos-pill" data-pos="ctr">CTR / Centre<br><span style="font-size:10px;color:var(--muted);">Enroute</span></button>
+              <button type="button" class="ra-pos-pill" data-pos="ctr">CTR / Center<br><span style="font-size:10px;color:var(--muted);">Enroute</span></button>
             </div>
           </div>
 
           <div class="ra-step" id="raStep3">
             <div id="raSelectedInfo" style="font-size:13px;color:var(--accent);font-weight:700;margin-bottom:12px;"></div>
-            <label style="font-size:13px;font-weight:700;margin-bottom:8px;display:block;">Requested callsign(s)</label>
+            <label style="font-size:13px;font-weight:700;margin-bottom:4px;display:block;">Requested position(s)</label>
+            <p style="font-size:11px;color:var(--muted);margin:0 0 8px;">Add each callsign you need staffed, with the UTC time window.</p>
             <div id="raCallsignList">
-              <div class="ra-cs-row">
-                <input type="text" class="ra-cs-input" maxlength="15" placeholder="e.g. YSSY_TWR" style="padding:8px 10px;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:monospace;text-transform:uppercase;" />
+              <div class="ra-cs-row" style="flex-wrap:wrap;">
+                <input type="text" class="ra-cs-input" maxlength="15" placeholder="Callsign" style="width:130px;padding:8px 10px;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:monospace;text-transform:uppercase;" />
+                <input type="time" class="ra-time-from" style="padding:6px 8px;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:12px;" />
+                <span style="color:var(--muted);font-size:12px;">to</span>
+                <input type="time" class="ra-time-to" style="padding:6px 8px;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:12px;" />
+                <span style="font-size:11px;color:var(--muted);">UTC</span>
                 <button type="button" class="action-btn ra-cs-add" style="font-size:14px;padding:4px 10px;font-weight:700;">+</button>
               </div>
             </div>
 
-            <label style="font-size:13px;font-weight:700;margin:16px 0 8px;display:block;">Notes</label>
-            <textarea id="raNotes" rows="3" maxlength="500" placeholder="Please add any specific requirements, preferred times, or instructions for the ATC team." style="width:100%;box-sizing:border-box;resize:vertical;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-family:inherit;font-size:13px;"></textarea>
+            <label style="font-size:13px;font-weight:700;margin:16px 0 4px;display:block;">Sector File / Controller Pack</label>
+            <p style="font-size:11px;color:var(--muted);margin:0 0 6px;">Where possible, please supply a link to the sector file or controller pack.</p>
+            <input type="url" id="raSectorFile" maxlength="300" placeholder="https://..." style="width:100%;box-sizing:border-box;padding:8px 10px;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:13px;text-transform:none;text-align:left;" />
+
+            <label style="font-size:13px;font-weight:700;margin:16px 0 4px;display:block;">Notes</label>
+            <textarea id="raNotes" rows="3" maxlength="500" placeholder="Please add any specific requirements or instructions for the ATC team." style="width:100%;box-sizing:border-box;resize:vertical;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-family:inherit;font-size:13px;"></textarea>
 
             <div style="display:flex;align-items:center;gap:12px;margin-top:16px;">
               <button type="submit" class="action-btn primary" id="raSubmitBtn" style="padding:8px 20px;">Submit Request</button>
@@ -35944,8 +35970,13 @@ app.get('/request-atc', requirePageEnabled('request-atc'), async (req, res) => {
           var list = document.getElementById('raCallsignList');
           var row = document.createElement('div');
           row.className = 'ra-cs-row';
-          row.innerHTML = '<input type="text" class="ra-cs-input" maxlength="15" placeholder="e.g. YSSY_APP" style="padding:8px 10px;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:monospace;text-transform:uppercase;" />'
-            + '<button type="button" class="action-btn" style="font-size:12px;padding:4px 8px;background:rgba(239,68,68,0.1);color:#f87171;border-color:#f87171;" onclick="this.parentElement.remove()">×</button>';
+          row.style.flexWrap = 'wrap';
+          row.innerHTML = '<input type="text" class="ra-cs-input" maxlength="15" placeholder="Callsign" style="width:130px;padding:8px 10px;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:monospace;text-transform:uppercase;" />'
+            + '<input type="time" class="ra-time-from" style="padding:6px 8px;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:12px;" />'
+            + '<span style="color:var(--muted);font-size:12px;">to</span>'
+            + '<input type="time" class="ra-time-to" style="padding:6px 8px;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:12px;" />'
+            + '<span style="font-size:11px;color:var(--muted);">UTC</span>'
+            + '<button type="button" class="action-btn" style="font-size:12px;padding:4px 8px;background:rgba(239,68,68,0.1);color:#f87171;border-color:#f87171;" onclick="this.parentElement.remove()">\u00d7</button>';
           list.appendChild(row);
           row.querySelector('input').focus();
         }
@@ -35955,9 +35986,12 @@ app.get('/request-atc', requirePageEnabled('request-atc'), async (req, res) => {
       document.getElementById('raForm').addEventListener('submit', async function(e) {
         e.preventDefault();
         var callsigns = [];
-        document.querySelectorAll('.ra-cs-input').forEach(function(inp) {
-          var v = inp.value.trim().toUpperCase();
-          if (v) callsigns.push(v);
+        document.querySelectorAll('.ra-cs-row').forEach(function(row) {
+          var cs = row.querySelector('.ra-cs-input');
+          var tf = row.querySelector('.ra-time-from');
+          var tt = row.querySelector('.ra-time-to');
+          var v = cs ? cs.value.trim().toUpperCase() : '';
+          if (v) callsigns.push({ callsign: v, timeFrom: tf ? tf.value : '', timeTo: tt ? tt.value : '' });
         });
         if (!selectedWf || !selectedPos) return;
         if (!callsigns.length) { alert('Please enter at least one callsign.'); return; }
@@ -35976,6 +36010,7 @@ app.get('/request-atc', requirePageEnabled('request-atc'), async (req, res) => {
               toIcao: selectedTo,
               positionType: selectedPos,
               callsigns: callsigns,
+              sectorFileUrl: document.getElementById('raSectorFile').value.trim() || null,
               notes: document.getElementById('raNotes').value.trim() || null
             })
           });
@@ -36000,6 +36035,63 @@ app.get('/request-atc', requirePageEnabled('request-atc'), async (req, res) => {
           btn.textContent = 'Submit Request';
         }
       });
+      // Cancel / Delete request handlers
+      document.addEventListener('click', async function(e) {
+        var cancelBtn = e.target.closest('.ra-cancel-btn');
+        if (cancelBtn) {
+          var ok = await new Promise(function(resolve) {
+            var ov = document.createElement('div');
+            ov.className = 'modal'; ov.style.zIndex = '20001';
+            ov.innerHTML = '<div class="modal-backdrop"></div>'
+              + '<div class="modal-dialog" style="width:400px;padding:24px;text-align:center;">'
+              + '<h3 style="margin:0 0 8px;color:var(--warning);">ATC No Longer Required?</h3>'
+              + '<p style="color:var(--muted);font-size:13px;margin:0 0 20px;">This will mark the request as cancelled. You can delete it afterwards.</p>'
+              + '<div style="display:flex;gap:10px;justify-content:center;">'
+              + '<button class="action-btn" id="raCancelNo" style="min-width:80px;">Keep</button>'
+              + '<button class="action-btn" id="raCancelYes" style="min-width:120px;background:rgba(245,158,11,0.15);color:#f59e0b;border-color:#f59e0b;">Confirm</button>'
+              + '</div></div>';
+            document.body.appendChild(ov);
+            function close(v) { ov.remove(); resolve(v); }
+            ov.querySelector('.modal-backdrop').addEventListener('click', function() { close(false); });
+            document.getElementById('raCancelNo').addEventListener('click', function() { close(false); });
+            document.getElementById('raCancelYes').addEventListener('click', function() { close(true); });
+          });
+          if (!ok) return;
+          cancelBtn.disabled = true; cancelBtn.textContent = '...';
+          try {
+            var r = await fetch('/api/request-atc/' + cancelBtn.dataset.id + '/cancel', { method: 'POST', credentials: 'same-origin' });
+            if (r.ok) location.reload();
+            else { cancelBtn.disabled = false; cancelBtn.textContent = 'ATC No Longer Required'; }
+          } catch (err) { cancelBtn.disabled = false; cancelBtn.textContent = 'ATC No Longer Required'; }
+        }
+        var delBtn = e.target.closest('.ra-delete-btn');
+        if (delBtn) {
+          var ok2 = await new Promise(function(resolve) {
+            var ov = document.createElement('div');
+            ov.className = 'modal'; ov.style.zIndex = '20001';
+            ov.innerHTML = '<div class="modal-backdrop"></div>'
+              + '<div class="modal-dialog" style="width:380px;padding:24px;text-align:center;">'
+              + '<h3 style="margin:0 0 8px;color:#f87171;">Delete Request?</h3>'
+              + '<p style="color:var(--muted);font-size:13px;margin:0 0 20px;">This will permanently remove the request. This cannot be undone.</p>'
+              + '<div style="display:flex;gap:10px;justify-content:center;">'
+              + '<button class="action-btn" id="raDelNo" style="min-width:80px;">Keep</button>'
+              + '<button class="action-btn" id="raDelYes" style="min-width:100px;background:rgba(239,68,68,0.15);color:#f87171;border-color:#f87171;">Delete</button>'
+              + '</div></div>';
+            document.body.appendChild(ov);
+            function close(v) { ov.remove(); resolve(v); }
+            ov.querySelector('.modal-backdrop').addEventListener('click', function() { close(false); });
+            document.getElementById('raDelNo').addEventListener('click', function() { close(false); });
+            document.getElementById('raDelYes').addEventListener('click', function() { close(true); });
+          });
+          if (!ok2) return;
+          delBtn.disabled = true;
+          try {
+            var r = await fetch('/api/request-atc/' + delBtn.dataset.id, { method: 'DELETE', credentials: 'same-origin' });
+            if (r.ok) location.reload();
+            else { delBtn.disabled = false; }
+          } catch (err) { delBtn.disabled = false; }
+        }
+      });
     })();
     </script>
   `;
@@ -36013,7 +36105,7 @@ app.post('/api/request-atc', requireLogin, async (req, res) => {
   if (!cid || !(isAdminUser(cid) || userHasFirAccess(cid))) {
     return res.status(403).json({ error: 'FIR Events Access required' });
   }
-  const { sectorNumber, fromIcao, toIcao, positionType, callsigns, notes } = req.body || {};
+  const { sectorNumber, fromIcao, toIcao, positionType, callsigns, sectorFileUrl, notes } = req.body || {};
   if (!sectorNumber || !fromIcao || !toIcao || !positionType) {
     return res.status(400).json({ error: 'Missing required fields' });
   }
@@ -36023,6 +36115,12 @@ app.post('/api/request-atc', requireLogin, async (req, res) => {
   const validPos = ['aerodrome', 'approach', 'ctr'];
   if (!validPos.includes(positionType)) return res.status(400).json({ error: 'Invalid position type' });
 
+  // Sanitize callsigns — support both string[] and {callsign, timeFrom, timeTo}[]
+  const csData = callsigns.map(c => {
+    if (typeof c === 'string') return { callsign: c.trim().toUpperCase() };
+    return { callsign: String(c.callsign || '').trim().toUpperCase(), timeFrom: String(c.timeFrom || '').trim(), timeTo: String(c.timeTo || '').trim() };
+  }).filter(c => c.callsign);
+
   try {
     await prisma.atcRequest.create({
       data: {
@@ -36031,7 +36129,8 @@ app.post('/api/request-atc', requireLogin, async (req, res) => {
         fromIcao: String(fromIcao).trim().toUpperCase(),
         toIcao: String(toIcao).trim().toUpperCase(),
         positionType,
-        callsigns: JSON.stringify(callsigns.map(c => String(c).trim().toUpperCase()).filter(Boolean)),
+        callsigns: JSON.stringify(csData),
+        sectorFileUrl: sectorFileUrl ? String(sectorFileUrl).trim().slice(0, 300) : null,
         notes: notes ? String(notes).trim().slice(0, 500) : null,
         requestedBy: cid
       }
@@ -36040,6 +36139,32 @@ app.post('/api/request-atc', requireLogin, async (req, res) => {
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
+});
+
+// Cancel ATC request (mark as no longer required)
+app.post('/api/request-atc/:id/cancel', requireLogin, async (req, res) => {
+  const cid = Number(req.session?.user?.data?.cid);
+  const id = Number(req.params.id);
+  try {
+    const row = await prisma.atcRequest.findUnique({ where: { id } });
+    if (!row) return res.status(404).json({ error: 'Request not found' });
+    if (row.requestedBy !== cid && !isAdminUser(cid)) return res.status(403).json({ error: 'Not your request' });
+    await prisma.atcRequest.update({ where: { id }, data: { status: 'cancelled' } });
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Delete ATC request permanently
+app.delete('/api/request-atc/:id', requireLogin, async (req, res) => {
+  const cid = Number(req.session?.user?.data?.cid);
+  const id = Number(req.params.id);
+  try {
+    const row = await prisma.atcRequest.findUnique({ where: { id } });
+    if (!row) return res.status(404).json({ error: 'Request not found' });
+    if (row.requestedBy !== cid && !isAdminUser(cid)) return res.status(403).json({ error: 'Not your request' });
+    await prisma.atcRequest.delete({ where: { id } });
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.get('/sector-planning', requirePageEnabled('sector-planning'), async (req, res) => {

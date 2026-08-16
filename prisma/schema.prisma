@@ -578,10 +578,11 @@ model AtcRequest {
   fromIcao       String
   toIcao         String
   positionType   String   // 'aerodrome', 'approach', 'ctr'
-  callsigns      String   // JSON array of requested callsigns
+  callsigns      String   // JSON array: [{callsign, timeFrom, timeTo}]
   notes          String?
+  sectorFileUrl  String?  // link to sector file or controller pack
   requestedBy    Int      // CID of FIR manager
-  status         String   @default("waiting") // 'waiting', 'accepted', 'declined'
+  status         String   @default("waiting") // 'waiting', 'accepted', 'cancelled'
   acceptedBy     Int?     // CID of WF ATC who accepts
   acceptedAt     DateTime?
   createdAt      DateTime @default(now())

@@ -572,6 +572,7 @@ model AtcRequest {
   positionType   String
   callsigns      String
   notes          String?
+  sectorFileUrl  String?
   requestedBy    Int
   status         String   @default("waiting")
   acceptedBy     Int?
