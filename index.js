@@ -6883,8 +6883,14 @@ socket.on('createBookingOnly', async ({ sector, callsign: enteredCid, teamBookin
 
   function emitConnectionCounts() {
     const totalConnections = io.engine.clientsCount || 0;
-    const loggedInUsers = Object.values(connectedUsers);
-    const guestCount = Math.max(0, totalConnections - loggedInUsers.length);
+    const allRegistered = Object.values(connectedUsers);
+    const seen = new Set();
+    const loggedInUsers = allRegistered.filter(u => {
+      if (!u.cid || seen.has(u.cid)) return false;
+      seen.add(u.cid);
+      return true;
+    });
+    const guestCount = Math.max(0, totalConnections - allRegistered.length);
     io.emit('connectedUsersUpdate', { users: loggedInUsers, guests: guestCount, total: totalConnections });
   }
 
