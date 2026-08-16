@@ -1291,20 +1291,70 @@ ${isAdmin ? `
     name: '${user?.personal?.name_full || 'Unknown'}'
   });
 
+  var allConnected = { users: [], guests: 0 };
   sock.on('connectedUsersUpdate', function(data) {
     var users = data.users || [];
     var guests = data.guests || 0;
+    allConnected = { users: users, guests: guests };
     var parts = [];
-    if (users.length) {
-      parts.push(users.map(function(u) {
-        return '<span class="cu-entry"><span class="cu-dot"></span>' + u.cid + ' — ' + (u.name || 'Unknown') + '</span>';
+    var shown = users.slice(0, 3);
+    var extra = users.length - shown.length;
+    if (shown.length) {
+      parts.push(shown.map(function(u) {
+        return '<span class="cu-entry"><span class="cu-dot"></span>' + u.cid + ' \\u2014 ' + (u.name || 'Unknown') + '</span>';
       }).join(''));
     }
-    if (guests > 0) {
-      parts.push('<span class="cu-entry" style="color:var(--muted);"><span class="cu-dot" style="background:var(--muted);"></span>' + guests + ' guest' + (guests !== 1 ? 's' : '') + '</span>');
+    var moreCount = extra + guests;
+    if (moreCount > 0) {
+      var moreLabel = '';
+      if (extra > 0 && guests > 0) moreLabel = '& ' + moreCount + ' more';
+      else if (extra > 0) moreLabel = '& ' + extra + ' more';
+      else moreLabel = guests + ' guest' + (guests !== 1 ? 's' : '');
+      parts.push('<span class="cu-entry cu-more" style="color:var(--accent);cursor:pointer;"><span class="cu-dot" style="background:var(--muted);"></span>' + moreLabel + '</span>');
+    } else if (!shown.length) {
+      parts.push('<span class="label" style="color:var(--muted);font-size:11px;">No users online</span>');
     }
-    container.innerHTML = parts.length ? parts.join('') : '<span class="label" style="color:var(--muted);font-size:11px;">No users online</span>';
+    container.innerHTML = parts.join('');
+    var moreBtn = container.querySelector('.cu-more');
+    if (moreBtn) moreBtn.addEventListener('click', openConnectedModal);
   });
+
+  function openConnectedModal() {
+    var existing = document.getElementById('connectedUsersModal');
+    if (existing) existing.remove();
+    var ov = document.createElement('div');
+    ov.id = 'connectedUsersModal';
+    ov.className = 'modal';
+    ov.style.zIndex = '20001';
+    var rows = allConnected.users.map(function(u) {
+      return '<tr><td style="padding:6px 12px;"><span class="cu-dot" style="display:inline-block;"></span></td>'
+        + '<td style="padding:6px 12px;font-weight:600;">' + (u.name || 'Unknown') + '</td>'
+        + '<td style="padding:6px 12px;color:var(--muted);font-family:monospace;font-size:12px;">' + u.cid + '</td></tr>';
+    }).join('');
+    if (allConnected.guests > 0) {
+      rows += '<tr><td style="padding:6px 12px;"><span class="cu-dot" style="display:inline-block;background:var(--muted);"></span></td>'
+        + '<td colspan="2" style="padding:6px 12px;color:var(--muted);">' + allConnected.guests + ' guest' + (allConnected.guests !== 1 ? 's' : '') + ' (not logged in)</td></tr>';
+    }
+    ov.innerHTML = '<div class="modal-backdrop"></div>'
+      + '<div class="modal-dialog" style="width:420px;padding:24px;max-height:80vh;overflow-y:auto;">'
+      + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">'
+      + '<h3 style="margin:0;color:var(--accent);font-size:16px;">Connected Users (' + (allConnected.users.length + allConnected.guests) + ')</h3>'
+      + '<button type="button" id="cuModalClose" style="background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;padding:0 4px;">&times;</button>'
+      + '</div>'
+      + '<table style="width:100%;border-collapse:collapse;">' + rows + '</table>'
+      + '</div>';
+    document.body.appendChild(ov);
+    ov.querySelector('.modal-backdrop').addEventListener('click', function() { ov.remove(); });
+    document.getElementById('cuModalClose').addEventListener('click', function() { ov.remove(); });
+  }
+})();
+</script>
+` : ''}
+${!isAdmin && user?.cid ? `
+<script>
+(function() {
+  var sock = typeof io !== 'undefined' ? io({ query: { icao: '' } }) : null;
+  if (sock) sock.emit('registerUser', { cid: '${user.cid}', name: '${(user.personal?.name_full || 'Unknown').replace(/'/g, "\\'")}' });
 })();
 </script>
 ` : ''}
