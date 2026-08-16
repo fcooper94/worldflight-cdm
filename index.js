@@ -35726,8 +35726,28 @@ app.get('/request-atc', requirePageEnabled('request-atc'), async (req, res) => {
     return renderForbidden(req, res, 'This page is only available to users with FIR Events Access.');
   }
 
-  const scheduleRows = adminSheetCache || [];
+  const allScheduleRows = adminSheetCache || [];
   const showSchedule = isPageVisibleTo('schedule', isAdmin);
+
+  // Filter sectors to only those where user's FIR covers dep or arr airport
+  let scheduleRows = allScheduleRows;
+  if (!isAdmin) {
+    const ownedFirs = await getUserOwnedFirs(cid);
+    if (ownedFirs.size) {
+      const airportIcaos = [...new Set(allScheduleRows.flatMap(r => [r.from, r.to]))];
+      const airports = await prisma.airport.findMany({
+        where: { icao: { in: airportIcaos } },
+        select: { icao: true, lat: true, lon: true }
+      }).catch(() => []);
+      const aptFir = {};
+      airports.forEach(a => {
+        if (a.lat != null && a.lon != null) aptFir[a.icao] = resolveSurfaceFirForPoint(a.lat, a.lon);
+      });
+      scheduleRows = allScheduleRows.filter(r =>
+        ownedFirs.has(aptFir[r.from]) || ownedFirs.has(aptFir[r.to])
+      );
+    }
+  }
 
   // Load existing requests for this user's FIRs
   const requests = await prisma.atcRequest?.findMany({
