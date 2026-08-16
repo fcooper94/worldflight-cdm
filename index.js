@@ -17309,7 +17309,7 @@ app.post('/api/scenery/submit', requireLogin, async (req, res) => {
         url,
         type,
         submittedBy: String(req.session.user.data.name || req.session.user.data.cid),
-        approved: false
+        approved: isAdminUser(Number(req.session.user.data.cid))
       }
     });
 
