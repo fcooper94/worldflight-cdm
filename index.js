@@ -1611,13 +1611,30 @@ async function canEditDocumentation(cid, icao) {
   const cidInt = Number(cid);
   if (!Number.isFinite(cidInt)) return false;
 
+  // Explicit documentation permission rules
   const rules = await prisma.documentationPermission.findMany({
     where: { cid: cidInt }
   });
+  if (rules.some(r => matchesIcaoPattern(r.pattern.toUpperCase(), icao.toUpperCase()))) return true;
 
-  return rules.some(r =>
-    matchesIcaoPattern(r.pattern.toUpperCase(), icao.toUpperCase())
-  );
+  // FIR access: if the user has FIR access covering this airport, they can upload
+  if (userHasFirAccess(cidInt)) {
+    try {
+      const apt = await prisma.airport.findFirst({
+        where: { icao: icao.toUpperCase() },
+        select: { lat: true, lon: true }
+      });
+      if (apt && apt.lat != null && apt.lon != null) {
+        const airportFir = resolveSurfaceFirForPoint(apt.lat, apt.lon);
+        if (airportFir) {
+          const owned = await getUserOwnedFirs(cidInt);
+          if (owned.has(airportFir)) return true;
+        }
+      }
+    } catch {}
+  }
+
+  return false;
 }
 
 
