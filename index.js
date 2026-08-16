@@ -466,6 +466,7 @@ function renderLayout(opts) {
     ...opts,
     pageVisibility,
     siteBanner,
+    maintenanceBanner,
     isMaster: cid ? isMasterUser(cid) : false,
     isTeamMember: cid ? isTeamMember(cid) : false,
     isAffiliate: cid ? isAffiliate(cid) : false,
@@ -848,13 +849,18 @@ function isPageVisibleTo(key, isAdminUserFlag) {
 
 // ===== SITE BANNER =====
 const siteBanner = { enabled: false, text: '' };
+const maintenanceBanner = { enabled: false, text: '' };
 
 async function loadSiteBanner() {
   const enabledRow = await prisma.siteSetting.findUnique({ where: { key: 'banner-enabled' } });
   const textRow = await prisma.siteSetting.findUnique({ where: { key: 'banner-text' } });
   siteBanner.enabled = enabledRow?.value === 'true';
   siteBanner.text = textRow?.value || '';
-  console.log('[BANNER] Loaded:', siteBanner);
+  const mEnabledRow = await prisma.siteSetting.findUnique({ where: { key: 'maintenance-banner-enabled' } });
+  const mTextRow = await prisma.siteSetting.findUnique({ where: { key: 'maintenance-banner-text' } });
+  maintenanceBanner.enabled = mEnabledRow?.value === 'true';
+  maintenanceBanner.text = mTextRow?.value || '';
+  console.log('[BANNER] Loaded:', siteBanner, maintenanceBanner);
 }
 
 function requirePageEnabled(pageKey) {
@@ -32235,6 +32241,32 @@ app.get('/admin/settings', requireAdmin, async (req, res) => {
         <input type="text" id="bannerTextInput" value="${(siteBanner.text || '').replace(/"/g, '&quot;')}" placeholder="Enter banner message..." style="flex:1;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:var(--panel2);color:var(--text);font-size:14px;" />
         <button id="bannerTextSave" class="action-btn primary" style="white-space:nowrap;">Save</button>
       </div>
+
+      <div style="margin-top:16px;border-top:1px solid var(--border);padding-top:16px;">
+        <div class="settings-row">
+          <div class="settings-row-info">
+            <span class="settings-row-icon">⚠️</span>
+            <div>
+              <div class="settings-row-label">Maintenance Banner</div>
+              <div class="settings-row-desc">Yellow/orange notice bar for maintenance or important site updates.</div>
+            </div>
+          </div>
+          <div class="settings-row-controls">
+            <span class="vis-pill ${maintenanceBanner.enabled ? 'vis-on' : 'vis-off'}" id="mBannerPill">
+              ${maintenanceBanner.enabled ? 'Visible' : 'Hidden'}
+            </span>
+            <label class="toggle-switch">
+              <input type="checkbox" id="mBannerToggle" ${maintenanceBanner.enabled ? 'checked' : ''} />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+        </div>
+        <div style="margin-top:12px;display:flex;gap:8px;align-items:center;">
+          <label style="font-size:12px;color:var(--muted);white-space:nowrap;">Maintenance Text</label>
+          <input type="text" id="mBannerTextInput" value="${(maintenanceBanner.text || '').replace(/"/g, '&quot;')}" placeholder="e.g. Site maintenance in progress — some features may be temporarily unavailable." style="flex:1;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:var(--panel2);color:var(--text);font-size:14px;" />
+          <button id="mBannerTextSave" class="action-btn primary" style="white-space:nowrap;">Save</button>
+        </div>
+      </div>
     </section>
 
     <section class="card card-full">
@@ -32492,7 +32524,41 @@ app.get('/admin/settings', requireAdmin, async (req, res) => {
         });
         if (res.ok) {
           this.textContent = 'Saved!';
-          setTimeout(() => { this.textContent = 'Save Text'; }, 1500);
+          setTimeout(() => { this.textContent = 'Save'; }, 1500);
+        } else {
+          alert('Failed to save');
+        }
+      });
+
+      // Maintenance banner toggle
+      document.getElementById('mBannerToggle').addEventListener('change', async function() {
+        const enabled = this.checked;
+        const pill = document.getElementById('mBannerPill');
+        const res = await fetch('/api/admin/banner', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ key: 'maintenance-banner-enabled', value: String(enabled) })
+        });
+        if (res.ok) {
+          pill.textContent = enabled ? 'Visible' : 'Hidden';
+          pill.className = 'vis-pill ' + (enabled ? 'vis-on' : 'vis-off');
+        } else {
+          this.checked = !enabled;
+          alert('Failed to update');
+        }
+      });
+
+      // Maintenance banner text save
+      document.getElementById('mBannerTextSave').addEventListener('click', async function() {
+        const text = document.getElementById('mBannerTextInput').value.trim();
+        const res = await fetch('/api/admin/banner', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ key: 'maintenance-banner-text', value: text })
+        });
+        if (res.ok) {
+          this.textContent = 'Saved!';
+          setTimeout(() => { this.textContent = 'Save'; }, 1500);
         } else {
           alert('Failed to save');
         }
@@ -32523,7 +32589,8 @@ app.post('/api/admin/site-gate', requireAdmin, async (req, res) => {
 
 app.post('/api/admin/banner', requireAdmin, async (req, res) => {
   const { key, value } = req.body;
-  if (!['banner-enabled', 'banner-text'].includes(key) || typeof value !== 'string') {
+  const validKeys = ['banner-enabled', 'banner-text', 'maintenance-banner-enabled', 'maintenance-banner-text'];
+  if (!validKeys.includes(key) || typeof value !== 'string') {
     return res.status(400).json({ error: 'Invalid key or value' });
   }
 
@@ -32535,6 +32602,8 @@ app.post('/api/admin/banner', requireAdmin, async (req, res) => {
 
   if (key === 'banner-enabled') siteBanner.enabled = value === 'true';
   if (key === 'banner-text') siteBanner.text = value;
+  if (key === 'maintenance-banner-enabled') maintenanceBanner.enabled = value === 'true';
+  if (key === 'maintenance-banner-text') maintenanceBanner.text = value;
 
   res.json({ success: true });
 });

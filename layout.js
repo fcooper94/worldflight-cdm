@@ -17,6 +17,7 @@ export default function renderLayout({
   pageVisibility = {},
   hideSidebar = false,
   siteBanner = { enabled: false, text: '' },
+  maintenanceBanner = { enabled: false, text: '' },
   loginOverlay = false,
   activeEvent = null
 }) {
@@ -305,6 +306,11 @@ export default function renderLayout({
   ${siteBanner.enabled && siteBanner.text ? `
   <div class="site-banner">
     <span class="site-banner-text">${siteBanner.text}</span>
+  </div>
+  ` : ''}
+  ${maintenanceBanner.enabled && maintenanceBanner.text && user ? `
+  <div class="site-banner maintenance-banner" style="background:rgba(245,158,11,0.12);border-bottom:1px solid rgba(245,158,11,0.3);">
+    <span class="site-banner-text" style="color:#f59e0b;">⚠ ${maintenanceBanner.text}</span>
   </div>
   ` : ''}
 
