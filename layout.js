@@ -108,7 +108,7 @@ export default function renderLayout({
       </a>
     </div>` : ''}
 
-    ${pv('atc') || (pv('airspace') && canSeeStaffing) || (pv('sector-planning') && hasFirAccess) ? `<div class="nav-section">
+    ${pv('atc') || (pv('airspace') && canSeeStaffing) || (pv('sector-planning') && hasFirAccess) || (pv('request-atc') && hasFirAccess) ? `<div class="nav-section">
       <div class="nav-title">Planning</div>
       ${pv('atc') ? `<a href="/atc" class="nav-item" data-tooltip="WF Flow Control">
         <span class="icon">${icons.headphones}</span>
@@ -117,6 +117,10 @@ export default function renderLayout({
       ${pv('airspace') && canSeeStaffing ? `<a href="/airspace" class="nav-item" data-tooltip="Staffing Overview">
         <span class="icon">${icons.globe}</span>
         <span class="label">Staffing Overview</span>
+      </a>` : ''}
+      ${pv('request-atc') && hasFirAccess ? `<a href="/request-atc" class="nav-item" data-tooltip="Request ATC">
+        <span class="icon">${icons.headphones}</span>
+        <span class="label">Request ATC</span>
       </a>` : ''}
       ${pv('sector-planning') && hasFirAccess ? `<a href="/sector-planning" class="nav-item" data-tooltip="Sector Planning">
         <span class="icon">${icons.clipboard}</span>

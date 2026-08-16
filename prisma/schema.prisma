@@ -570,3 +570,22 @@ model RosterAssignment {
   @@unique([entityType, entityName, sectorNumber, role])
   @@index([entityType, entityName])
 }
+
+model AtcRequest {
+  id             Int      @id @default(autoincrement())
+  eventId        Int?
+  sectorNumber   String
+  fromIcao       String
+  toIcao         String
+  positionType   String   // 'aerodrome', 'approach', 'ctr'
+  callsigns      String   // JSON array of requested callsigns
+  notes          String?
+  requestedBy    Int      // CID of FIR manager
+  status         String   @default("waiting") // 'waiting', 'accepted', 'declined'
+  acceptedBy     Int?     // CID of WF ATC who accepts
+  acceptedAt     DateTime?
+  createdAt      DateTime @default(now())
+
+  @@index([eventId])
+  @@index([sectorNumber])
+}

@@ -562,3 +562,22 @@ model RosterAssignment {
   @@unique([entityType, entityName, sectorNumber, role])
   @@index([entityType, entityName])
 }
+
+model AtcRequest {
+  id             Int      @id @default(autoincrement())
+  eventId        Int?
+  sectorNumber   String
+  fromIcao       String
+  toIcao         String
+  positionType   String
+  callsigns      String
+  notes          String?
+  requestedBy    Int
+  status         String   @default("waiting")
+  acceptedBy     Int?
+  acceptedAt     DateTime?
+  createdAt      DateTime @default(now())
+
+  @@index([eventId])
+  @@index([sectorNumber])
+}

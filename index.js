@@ -32132,7 +32132,8 @@ app.get('/admin/settings', requireAdmin, async (req, res) => {
         { key: 'who-we-are',      label: 'Teams & Affiliates',  icon: '👥', desc: 'Public "Who are we?" page listing Official Teams and WF Affiliates with photos, descriptions and websites (/teams).' },
         { key: 'airspace',        label: 'Staffing Overview', icon: '🌐', desc: 'FIR staffing requirements and timelines' },
         { key: 'sector-planning', label: 'Sector Planning',   icon: '📋', desc: 'Per-user sector list. Shows WF sectors the user is participating in (Dep/Arr/Enroute) based on their FIR Events Access grants.' },
-        { key: 'vatcan-codes',    label: 'VATCAN Codes',      icon: '🎧', desc: 'Per-sector VATCAN booking-plugin event IDs (under sidebar "WF ATC" category). Controllers paste these into the VATCAN plugin to see live slot data.' }
+        { key: 'vatcan-codes',    label: 'VATCAN Codes',      icon: '🎧', desc: 'Per-sector VATCAN booking-plugin event IDs (under sidebar "WF ATC" category). Controllers paste these into the VATCAN plugin to see live slot data.' },
+        { key: 'request-atc',    label: 'Request ATC',       icon: '📡', desc: 'FIR managers can request WF ATC (HitSquad) support for sectors where local coverage is unavailable.' }
       ]
     },
     {
@@ -35645,6 +35646,282 @@ app.get('/wf-atc/vatcan-codes', requirePageEnabled('vatcan-codes'), requireWfAtc
     content,
     layoutClass: 'dashboard-full'
   }));
+});
+
+// ── Request ATC (HitSquad) ─────────────────────────────────────────────
+app.get('/request-atc', requirePageEnabled('request-atc'), async (req, res) => {
+  const user = req.session?.user?.data || null;
+  const cid = Number(user?.cid) || null;
+  const isAdmin = isAdminUser(cid);
+  if (!cid || !(isAdmin || userHasFirAccess(cid))) {
+    return renderForbidden(req, res, 'This page is only available to users with FIR Events Access.');
+  }
+
+  const scheduleRows = adminSheetCache || [];
+  const showSchedule = isPageVisibleTo('schedule', isAdmin);
+
+  // Load existing requests for this user's FIRs
+  const requests = await prisma.atcRequest?.findMany({
+    where: { eventId: activeEventId || undefined },
+    orderBy: { createdAt: 'desc' }
+  }).catch(() => []) || [];
+
+  // Resolve requester names
+  const requesterCids = [...new Set(requests.map(r => r.requestedBy))];
+  const requesterUsers = requesterCids.length ? await prisma.user.findMany({
+    where: { cid: { in: requesterCids } }, select: { cid: true, name: true }
+  }).catch(() => []) : [];
+  const nameOf = {};
+  requesterUsers.forEach(u => { if (u.name) nameOf[u.cid] = u.name; });
+
+  const posLabels = { aerodrome: 'Aerodrome (DEL/GND/TWR)', approach: 'Approach / Departure / TMA', ctr: 'CTR / Centre' };
+
+  // Sector pills for the form
+  const sectorPillsHtml = !showSchedule ? '<p style="color:var(--muted);">Schedule not yet available.</p>' :
+    '<div style="display:flex;flex-wrap:wrap;gap:8px;" id="sectorPills">'
+    + scheduleRows.map(r =>
+      '<button type="button" class="ra-sector-pill" data-wf="' + escapeHtml(r.number) + '" data-from="' + escapeHtml(r.from) + '" data-to="' + escapeHtml(r.to) + '">'
+      + '<span style="font-weight:700;color:var(--accent);">' + escapeHtml(r.number) + '</span>'
+      + '<span style="font-size:11px;color:var(--muted);">' + escapeHtml(r.from) + ' → ' + escapeHtml(r.to) + '</span>'
+      + '</button>'
+    ).join('')
+    + '</div>';
+
+  // Existing requests list
+  const requestsHtml = requests.length ? requests.map(r => {
+    const cs = JSON.parse(r.callsigns || '[]');
+    const statusCls = r.status === 'accepted' ? 'success' : r.status === 'declined' ? 'danger' : 'warning';
+    const statusLabel = r.status === 'accepted' ? 'Accepted' : r.status === 'declined' ? 'Declined' : 'Waiting for ATC';
+    return '<div class="ra-request-card">'
+      + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">'
+      + '<span style="font-weight:700;color:var(--accent);">' + escapeHtml(r.sectorNumber) + ' <span style="color:var(--muted);font-weight:400;">' + escapeHtml(r.fromIcao) + ' → ' + escapeHtml(r.toIcao) + '</span></span>'
+      + '<span class="ra-status ra-status-' + statusCls + '">' + statusLabel + '</span>'
+      + '</div>'
+      + '<div style="font-size:12px;color:var(--muted);margin-bottom:4px;">' + escapeHtml(posLabels[r.positionType] || r.positionType) + '</div>'
+      + '<div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px;">' + cs.map(c => '<span class="ra-cs-chip">' + escapeHtml(c) + '</span>').join('') + '</div>'
+      + (r.notes ? '<div style="font-size:12px;color:var(--text);background:var(--panel2);padding:6px 10px;border-radius:6px;margin-bottom:6px;">' + escapeHtml(r.notes) + '</div>' : '')
+      + '<div style="font-size:11px;color:var(--muted);">Requested by ' + escapeHtml(nameOf[r.requestedBy] || String(r.requestedBy)) + ' · ' + new Date(r.createdAt).toISOString().slice(0, 10) + '</div>'
+      + '</div>';
+  }).join('') : '<p style="color:var(--muted);font-size:13px;">No requests submitted yet.</p>';
+
+  const content = `
+    <style>
+      .ra-sector-pill {
+        display:flex;flex-direction:column;gap:2px;padding:10px 14px;background:var(--panel);
+        border:1px solid var(--border);border-radius:8px;cursor:pointer;text-align:left;
+        font-family:inherit;color:var(--text);transition:border-color .15s,transform .15s;
+      }
+      .ra-sector-pill:hover { border-color:var(--accent);transform:translateY(-1px); }
+      .ra-sector-pill.selected { border-color:var(--accent);background:rgba(56,189,248,0.08);box-shadow:0 0 0 2px rgba(56,189,248,0.2); }
+      .ra-pos-pill {
+        display:inline-flex;align-items:center;gap:6px;padding:10px 16px;background:var(--panel);
+        border:1px solid var(--border);border-radius:8px;cursor:pointer;font-size:13px;
+        font-family:inherit;color:var(--text);transition:border-color .15s;
+      }
+      .ra-pos-pill:hover { border-color:var(--accent); }
+      .ra-pos-pill.selected { border-color:var(--accent);background:rgba(56,189,248,0.08);box-shadow:0 0 0 2px rgba(56,189,248,0.2); }
+      .ra-request-card {
+        padding:14px 16px;background:var(--panel);border:1px solid var(--border);
+        border-radius:10px;margin-bottom:10px;
+      }
+      .ra-status {
+        font-size:11px;font-weight:700;padding:3px 10px;border-radius:999px;text-transform:uppercase;letter-spacing:0.04em;
+      }
+      .ra-status-warning { background:rgba(245,158,11,0.15);color:#f59e0b; }
+      .ra-status-success { background:rgba(74,222,128,0.15);color:#4ade80; }
+      .ra-status-danger { background:rgba(239,68,68,0.15);color:#f87171; }
+      .ra-cs-chip {
+        font-family:monospace;font-size:12px;font-weight:600;padding:3px 10px;
+        background:var(--panel2);border:1px solid var(--border);border-radius:4px;color:var(--text);
+      }
+      .ra-cs-row { display:flex;align-items:center;gap:6px;margin-bottom:6px; }
+      .ra-cs-row input { flex:1;max-width:160px; }
+      #raForm .ra-step { display:none; }
+      #raForm .ra-step.active { display:block; }
+    </style>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start;">
+      <section class="card" style="padding:20px;">
+        <h2 style="margin:0 0 4px;color:var(--accent);font-size:18px;">Request ATC Support</h2>
+        <p style="color:var(--muted);font-size:12px;margin:0 0 16px;">Request WF ATC (HitSquad) coverage for sectors where local ATC is unavailable.</p>
+
+        <form id="raForm">
+          <div class="ra-step active" id="raStep1">
+            <label style="font-size:13px;font-weight:700;margin-bottom:10px;display:block;">Which sector do you require support for?</label>
+            ${sectorPillsHtml}
+          </div>
+
+          <div class="ra-step" id="raStep2">
+            <div id="raSelectedSector" style="font-size:14px;font-weight:700;color:var(--accent);margin-bottom:12px;"></div>
+            <label style="font-size:13px;font-weight:700;margin-bottom:10px;display:block;">What type of position?</label>
+            <div style="display:flex;flex-wrap:wrap;gap:8px;">
+              <button type="button" class="ra-pos-pill" data-pos="aerodrome">Aerodrome<br><span style="font-size:10px;color:var(--muted);">DEL / GND / TWR</span></button>
+              <button type="button" class="ra-pos-pill" data-pos="approach">Approach / Departure<br><span style="font-size:10px;color:var(--muted);">APP / DEP / TMA</span></button>
+              <button type="button" class="ra-pos-pill" data-pos="ctr">CTR / Centre<br><span style="font-size:10px;color:var(--muted);">Enroute</span></button>
+            </div>
+          </div>
+
+          <div class="ra-step" id="raStep3">
+            <div id="raSelectedInfo" style="font-size:13px;color:var(--accent);font-weight:700;margin-bottom:12px;"></div>
+            <label style="font-size:13px;font-weight:700;margin-bottom:8px;display:block;">Requested callsign(s)</label>
+            <div id="raCallsignList">
+              <div class="ra-cs-row">
+                <input type="text" class="ra-cs-input" maxlength="15" placeholder="e.g. YSSY_TWR" style="padding:8px 10px;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:monospace;text-transform:uppercase;" />
+                <button type="button" class="action-btn ra-cs-add" style="font-size:14px;padding:4px 10px;font-weight:700;">+</button>
+              </div>
+            </div>
+
+            <label style="font-size:13px;font-weight:700;margin:16px 0 8px;display:block;">Notes</label>
+            <textarea id="raNotes" rows="3" maxlength="500" placeholder="Please add any specific requirements, preferred times, or instructions for the ATC team." style="width:100%;box-sizing:border-box;resize:vertical;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-family:inherit;font-size:13px;"></textarea>
+
+            <div style="display:flex;align-items:center;gap:12px;margin-top:16px;">
+              <button type="submit" class="action-btn primary" id="raSubmitBtn" style="padding:8px 20px;">Submit Request</button>
+              <span id="raMsg" style="font-size:12px;display:none;"></span>
+            </div>
+          </div>
+        </form>
+      </section>
+
+      <section class="card" style="padding:20px;">
+        <h2 style="margin:0 0 16px;color:var(--accent);font-size:18px;">Existing Requests</h2>
+        ${requestsHtml}
+      </section>
+    </div>
+
+    <script>
+    (function() {
+      var selectedWf = null, selectedFrom = null, selectedTo = null, selectedPos = null;
+
+      // Step 1: Sector selection
+      document.getElementById('sectorPills')?.addEventListener('click', function(e) {
+        var pill = e.target.closest('.ra-sector-pill');
+        if (!pill) return;
+        document.querySelectorAll('.ra-sector-pill').forEach(function(p) { p.classList.remove('selected'); });
+        pill.classList.add('selected');
+        selectedWf = pill.dataset.wf;
+        selectedFrom = pill.dataset.from;
+        selectedTo = pill.dataset.to;
+        document.getElementById('raSelectedSector').textContent = selectedWf + ' — ' + selectedFrom + ' → ' + selectedTo;
+        document.getElementById('raStep1').classList.remove('active');
+        document.getElementById('raStep2').classList.add('active');
+      });
+
+      // Step 2: Position type
+      document.querySelectorAll('.ra-pos-pill').forEach(function(pill) {
+        pill.addEventListener('click', function() {
+          document.querySelectorAll('.ra-pos-pill').forEach(function(p) { p.classList.remove('selected'); });
+          pill.classList.add('selected');
+          selectedPos = pill.dataset.pos;
+          document.getElementById('raSelectedInfo').textContent = selectedWf + ' — ' + selectedFrom + ' → ' + selectedTo + ' · ' + pill.textContent.split('\\n')[0].trim();
+          document.getElementById('raStep2').classList.remove('active');
+          document.getElementById('raStep3').classList.add('active');
+          var firstInput = document.querySelector('.ra-cs-input');
+          if (firstInput) firstInput.focus();
+        });
+      });
+
+      // Add callsign row
+      document.addEventListener('click', function(e) {
+        if (e.target.closest('.ra-cs-add')) {
+          var list = document.getElementById('raCallsignList');
+          var row = document.createElement('div');
+          row.className = 'ra-cs-row';
+          row.innerHTML = '<input type="text" class="ra-cs-input" maxlength="15" placeholder="e.g. YSSY_APP" style="padding:8px 10px;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:monospace;text-transform:uppercase;" />'
+            + '<button type="button" class="action-btn" style="font-size:12px;padding:4px 8px;background:rgba(239,68,68,0.1);color:#f87171;border-color:#f87171;" onclick="this.parentElement.remove()">×</button>';
+          list.appendChild(row);
+          row.querySelector('input').focus();
+        }
+      });
+
+      // Submit
+      document.getElementById('raForm').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        var callsigns = [];
+        document.querySelectorAll('.ra-cs-input').forEach(function(inp) {
+          var v = inp.value.trim().toUpperCase();
+          if (v) callsigns.push(v);
+        });
+        if (!selectedWf || !selectedPos) return;
+        if (!callsigns.length) { alert('Please enter at least one callsign.'); return; }
+        var msg = document.getElementById('raMsg');
+        var btn = document.getElementById('raSubmitBtn');
+        btn.disabled = true;
+        btn.textContent = 'Submitting...';
+        try {
+          var r = await fetch('/api/request-atc', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify({
+              sectorNumber: selectedWf,
+              fromIcao: selectedFrom,
+              toIcao: selectedTo,
+              positionType: selectedPos,
+              callsigns: callsigns,
+              notes: document.getElementById('raNotes').value.trim() || null
+            })
+          });
+          var d = await r.json().catch(function() { return {}; });
+          if (r.ok) {
+            msg.textContent = 'Request submitted!';
+            msg.style.color = '#4ade80';
+            msg.style.display = '';
+            setTimeout(function() { location.reload(); }, 800);
+          } else {
+            msg.textContent = d.error || 'Failed to submit';
+            msg.style.color = '#f87171';
+            msg.style.display = '';
+            btn.disabled = false;
+            btn.textContent = 'Submit Request';
+          }
+        } catch (err) {
+          msg.textContent = 'Failed to submit';
+          msg.style.color = '#f87171';
+          msg.style.display = '';
+          btn.disabled = false;
+          btn.textContent = 'Submit Request';
+        }
+      });
+    })();
+    </script>
+  `;
+
+  res.send(renderLayout({ title: 'Request ATC', user, isAdmin, content, layoutClass: 'dashboard-full' }));
+});
+
+// API: submit ATC request
+app.post('/api/request-atc', requireLogin, async (req, res) => {
+  const cid = Number(req.session?.user?.data?.cid);
+  if (!cid || !(isAdminUser(cid) || userHasFirAccess(cid))) {
+    return res.status(403).json({ error: 'FIR Events Access required' });
+  }
+  const { sectorNumber, fromIcao, toIcao, positionType, callsigns, notes } = req.body || {};
+  if (!sectorNumber || !fromIcao || !toIcao || !positionType) {
+    return res.status(400).json({ error: 'Missing required fields' });
+  }
+  if (!Array.isArray(callsigns) || !callsigns.length) {
+    return res.status(400).json({ error: 'At least one callsign is required' });
+  }
+  const validPos = ['aerodrome', 'approach', 'ctr'];
+  if (!validPos.includes(positionType)) return res.status(400).json({ error: 'Invalid position type' });
+
+  try {
+    await prisma.atcRequest.create({
+      data: {
+        eventId: activeEventId || null,
+        sectorNumber: String(sectorNumber).trim().toUpperCase(),
+        fromIcao: String(fromIcao).trim().toUpperCase(),
+        toIcao: String(toIcao).trim().toUpperCase(),
+        positionType,
+        callsigns: JSON.stringify(callsigns.map(c => String(c).trim().toUpperCase()).filter(Boolean)),
+        notes: notes ? String(notes).trim().slice(0, 500) : null,
+        requestedBy: cid
+      }
+    });
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 app.get('/sector-planning', requirePageEnabled('sector-planning'), async (req, res) => {
