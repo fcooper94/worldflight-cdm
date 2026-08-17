@@ -2239,6 +2239,100 @@ function isWfAtc(cid) {
   return !!cid && wfAtcCids.has(Number(cid));
 }
 
+// Sync WF ATC app roles → Discord roles. Runs hourly + on demand.
+async function syncWfAtcDiscordRoles({ dryRun = false } = {}) {
+  if (!discordConfigured()) return { error: 'Discord not configured' };
+  const log = [];
+
+  const [members, prefs, links, snap] = await Promise.all([
+    prisma.userAdditionalRole.findMany({ where: { role: 'WF_ATC' } }),
+    prisma.atcNotifyPreference?.findMany().catch(() => []) || [],
+    prisma.discordLink.findMany(),
+    getGuildSnapshot({ force: true })
+  ]);
+
+  if (!snap) return { error: 'Could not fetch guild snapshot' };
+
+  const prefByCid = {};
+  prefs.forEach(p => { prefByCid[p.cid] = p; });
+  const linkByCid = {};
+  links.forEach(l => { linkByCid[l.cid] = l.discordId; });
+  const appCids = new Set(members.map(m => m.cid));
+
+  // All notification-related role IDs
+  const allNotifyRoleIds = new Set([
+    DISCORD_WF_ATC_ROLE_ID,
+    ATC_NOTIFY_ROLES.all, ATC_NOTIFY_ROLES.allTimes,
+    ATC_NOTIFY_ROLES.aerodrome, ATC_NOTIFY_ROLES.approach, ATC_NOTIFY_ROLES.ctr,
+    ...ATC_NOTIFY_ROLES.bands
+  ]);
+
+  // Build desired roles per Discord member
+  const desiredByDiscordId = {};
+  for (const m of members) {
+    const discordId = linkByCid[m.cid];
+    if (!discordId) continue;
+    const pref = prefByCid[m.cid] || { enabled: true, allHours: true, hours: '111111', allPositions: true, aerodrome: true, approach: true, ctr: true };
+    const roles = new Set();
+    roles.add(DISCORD_WF_ATC_ROLE_ID);
+    if (pref.enabled !== false) {
+      // Position roles
+      if (pref.allPositions !== false) { roles.add(ATC_NOTIFY_ROLES.all); }
+      else {
+        if (pref.aerodrome) roles.add(ATC_NOTIFY_ROLES.aerodrome);
+        if (pref.approach) roles.add(ATC_NOTIFY_ROLES.approach);
+        if (pref.ctr) roles.add(ATC_NOTIFY_ROLES.ctr);
+      }
+      // Time roles
+      if (pref.allHours !== false) { roles.add(ATC_NOTIFY_ROLES.allTimes); }
+      else {
+        const h = pref.hours || '111111';
+        for (let i = 0; i < 6; i++) { if (h[i] === '1') roles.add(ATC_NOTIFY_ROLES.bands[i]); }
+      }
+    }
+    desiredByDiscordId[discordId] = roles;
+  }
+
+  let added = 0, removed = 0, skipped = 0;
+
+  // Process each guild member that has any WF ATC notification role
+  for (const gm of snap.members) {
+    const currentRoles = new Set((gm.roleNames || []).map(name => {
+      const role = snap.roles.find(r => r.name === name);
+      return role ? role.id : null;
+    }).filter(Boolean));
+    const currentNotify = [...currentRoles].filter(id => allNotifyRoleIds.has(id));
+    const desired = desiredByDiscordId[gm.id] || new Set();
+
+    // Add missing roles
+    for (const roleId of desired) {
+      if (!currentRoles.has(roleId)) {
+        log.push('ADD ' + gm.nickname + ' (' + gm.id + ') role ' + roleId);
+        if (!dryRun) await addRoleToMember(gm.id, roleId).catch(() => {});
+        added++;
+      }
+    }
+
+    // Remove roles that shouldn't be there
+    for (const roleId of currentNotify) {
+      if (!desired.has(roleId)) {
+        log.push('REMOVE ' + gm.nickname + ' (' + gm.id + ') role ' + roleId);
+        if (!dryRun) await removeRoleFromMember(gm.id, roleId).catch(() => {});
+        removed++;
+      }
+    }
+
+    if (!desired.size && !currentNotify.length) skipped++;
+  }
+
+  const summary = { dryRun, members: members.length, linked: Object.keys(desiredByDiscordId).length, added, removed, skipped, log };
+  console.log('[WF-ATC-SYNC] ' + (dryRun ? 'DRY RUN' : 'LIVE') + ': ' + added + ' added, ' + removed + ' removed, ' + members.length + ' members');
+  return summary;
+}
+
+// Hourly sync
+setInterval(() => { syncWfAtcDiscordRoles().catch(e => console.error('[WF-ATC-SYNC] hourly failed:', e.message)); }, 60 * 60 * 1000);
+
 function requireWfAtcOrAdmin(req, res, next) {
   const cid = Number(req.session?.user?.data?.cid);
   if (!cid) return renderForbidden(req, res, 'Sign in required.');
@@ -32837,6 +32931,7 @@ app.get('/admin/wf-atc', requireAdmin, async (req, res) => {
         <div style="display:flex;gap:8px;align-items:center;">
           <input type="number" id="wfAtcAddCid" inputmode="numeric" placeholder="CID" style="width:120px;padding:6px 10px;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:13px;text-align:center;" />
           <button type="button" id="wfAtcAddBtn" class="action-btn primary" style="font-size:12px;padding:6px 14px;">Add Member</button>
+          <button type="button" id="wfAtcSyncBtn" class="action-btn" style="font-size:12px;padding:6px 14px;">Sync Discord Now</button>
           <span id="wfAtcMsg" style="font-size:12px;display:none;"></span>
         </div>
       </div>
@@ -32868,6 +32963,18 @@ app.get('/admin/wf-atc', requireAdmin, async (req, res) => {
         msg.style.display = '';
         if (ok) setTimeout(function() { msg.style.display = 'none'; }, 2000);
       }
+
+      document.getElementById('wfAtcSyncBtn').addEventListener('click', async function() {
+        this.disabled = true; this.textContent = 'Syncing...';
+        try {
+          var r = await fetch('/admin/api/wf-atc/sync', { method: 'POST', credentials: 'same-origin' });
+          var d = await r.json();
+          if (r.ok) {
+            showMsg('Synced! ' + (d.added || 0) + ' added, ' + (d.removed || 0) + ' removed', true);
+          } else { showMsg(d.error || 'Sync failed', false); }
+        } catch (e) { showMsg('Sync failed', false); }
+        this.disabled = false; this.textContent = 'Sync Discord Now';
+      });
 
       document.getElementById('wfAtcAddBtn').addEventListener('click', async function() {
         var cidInput = document.getElementById('wfAtcAddCid');
@@ -33016,6 +33123,14 @@ app.delete('/admin/api/wf-atc/:cid', requireAdmin, async (req, res) => {
     }
 
     res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Sync WF ATC Discord roles now
+app.post('/admin/api/wf-atc/sync', requireAdmin, async (req, res) => {
+  try {
+    const result = await syncWfAtcDiscordRoles();
+    res.json(result);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
