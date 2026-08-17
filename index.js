@@ -39058,6 +39058,7 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
               ${canEditDep ? '<button type="button" id="spFlowRateSave" class="action-btn primary" style="font-size:11px;padding:3px 10px;">Save</button>' : ''}
             </div>
             <div id="spFlowRateMsg" style="font-size:10px;color:var(--muted);margin-top:4px;"></div>
+            <div id="spFlowRateWarn" style="display:none;font-size:11px;color:#f87171;margin-top:6px;line-height:1.5;">Please consider carefully the adverse effects on the WF schedule if the flow rate is less than 30 planes/hr.</div>
             <div id="spFlowRateTotal" style="font-size:12px;color:var(--text);margin-top:6px;padding-top:6px;border-top:1px dashed var(--border);"></div>
           </div>
           </div>
@@ -39802,6 +39803,17 @@ app.get('/sector-planning/:wf', requirePageEnabled('sector-planning'), async (re
           } else spSetMsg(msg, res.data.error || 'Failed', false);
         });
       });
+
+      var rateWarn = document.getElementById('spFlowRateWarn');
+      var rateInput = document.getElementById('spFlowRate');
+      if (rateInput && rateWarn) {
+        function checkRateWarn() {
+          var v = Number(rateInput.value);
+          rateWarn.style.display = (v > 0 && v < 30) ? '' : 'none';
+        }
+        rateInput.addEventListener('input', checkRateWarn);
+        checkRateWarn();
+      }
 
       var rateSave = document.getElementById('spFlowRateSave');
       if (rateSave) rateSave.addEventListener('click', async function() {
