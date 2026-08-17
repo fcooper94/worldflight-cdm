@@ -570,7 +570,10 @@ model AtcRequest {
   fromIcao       String
   toIcao         String
   positionType   String
-  callsigns      String
+  callsign       String   @default("")
+  callsigns      String?
+  timeFrom       String?
+  timeTo         String?
   notes          String?
   sectorFileUrl  String?
   requestedBy    Int

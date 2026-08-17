@@ -35884,35 +35884,54 @@ app.get('/request-atc', requirePageEnabled('request-atc'), async (req, res) => {
     ).join('')
     + '</div>';
 
-  // Existing requests list
-  const requestsHtml = requests.length ? requests.map(r => {
-    const csRaw = JSON.parse(r.callsigns || '[]');
-    // Support both old format (string[]) and new format ({callsign, timeFrom, timeTo}[])
-    const csEntries = csRaw.map(c => typeof c === 'string' ? { callsign: c } : c);
-    const isCancelled = r.status === 'cancelled';
-    const statusCls = r.status === 'accepted' ? 'success' : isCancelled ? 'danger' : 'warning';
-    const statusLabel = r.status === 'accepted' ? 'Accepted' : isCancelled ? 'Cancelled' : 'Waiting for ATC';
-    const canManage = Number(r.requestedBy) === cid || isAdmin;
-    return '<div class="ra-request-card' + (isCancelled ? ' ra-cancelled' : '') + '" data-req-id="' + r.id + '">'
+  // Existing requests — group by sector for coverage status
+  // Also resolve accepter names
+  const accepterCids = [...new Set(requests.filter(r => r.acceptedBy).map(r => r.acceptedBy))];
+  if (accepterCids.length) {
+    const au = await prisma.user.findMany({ where: { cid: { in: accepterCids } }, select: { cid: true, name: true } }).catch(() => []);
+    au.forEach(u => { if (u.name) nameOf[u.cid] = u.name; });
+  }
+
+  const sectorGroups = {};
+  requests.forEach(r => {
+    const key = r.sectorNumber;
+    if (!sectorGroups[key]) sectorGroups[key] = [];
+    sectorGroups[key].push(r);
+  });
+
+  const requestsHtml = Object.keys(sectorGroups).length ? Object.entries(sectorGroups).map(([sector, reqs]) => {
+    const first = reqs[0];
+    const activeReqs = reqs.filter(r => r.status !== 'cancelled');
+    const acceptedCount = activeReqs.filter(r => r.status === 'accepted').length;
+    const totalActive = activeReqs.length;
+    const coverageLabel = totalActive === 0 ? 'No Requests' : acceptedCount === totalActive ? 'Fully Covered' : acceptedCount > 0 ? 'Partially Covered' : 'Waiting for ATC';
+    const coverageCls = acceptedCount === totalActive && totalActive > 0 ? 'success' : acceptedCount > 0 ? 'warning' : 'warning';
+    const canManage = Number(first.requestedBy) === cid || isAdmin;
+
+    return '<div class="ra-request-card">'
       + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">'
-      + '<span style="font-weight:700;color:var(--accent);">' + escapeHtml(r.sectorNumber) + ' <span style="color:var(--muted);font-weight:400;">' + escapeHtml(r.fromIcao) + ' \u2192 ' + escapeHtml(r.toIcao) + '</span></span>'
-      + '<span class="ra-status ra-status-' + statusCls + '">' + statusLabel + '</span>'
+      + '<span style="font-weight:700;color:var(--accent);">' + escapeHtml(sector) + ' <span style="color:var(--muted);font-weight:400;">' + escapeHtml(first.fromIcao) + ' \u2192 ' + escapeHtml(first.toIcao) + '</span></span>'
+      + '<span class="ra-status ra-status-' + coverageCls + '">' + coverageLabel + '</span>'
       + '</div>'
-      + '<div style="font-size:12px;color:var(--muted);margin-bottom:6px;">' + escapeHtml(posLabels[r.positionType] || r.positionType) + '</div>'
-      + '<div style="display:flex;flex-direction:column;gap:4px;margin-bottom:6px;">' + csEntries.map(c =>
-        '<div style="display:flex;align-items:center;gap:8px;">'
-        + '<span class="ra-cs-chip">' + escapeHtml(c.callsign || '') + '</span>'
-        + (c.timeFrom || c.timeTo ? '<span style="font-size:11px;color:var(--muted);">' + escapeHtml(c.timeFrom || '?') + ' \u2013 ' + escapeHtml(c.timeTo || '?') + ' UTC</span>' : '')
-        + '</div>'
-      ).join('') + '</div>'
-      + (r.sectorFileUrl ? '<div style="font-size:12px;margin-bottom:6px;"><a href="' + escapeHtml(r.sectorFileUrl) + '" target="_blank" rel="noopener" style="color:var(--accent);">Sector File / Controller Pack \u2197</a></div>' : '')
-      + (r.notes ? '<div style="font-size:12px;color:var(--text);background:var(--panel2);padding:6px 10px;border-radius:6px;margin-bottom:6px;">' + escapeHtml(r.notes) + '</div>' : '')
+      + '<div style="font-size:12px;color:var(--muted);margin-bottom:8px;">' + escapeHtml(posLabels[first.positionType] || first.positionType) + '</div>'
+      + '<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px;">' + reqs.map(r => {
+        const isCancelled = r.status === 'cancelled';
+        const cs = r.callsign || '';
+        const timeStr = r.timeFrom && r.timeTo ? r.timeFrom + ' \u2013 ' + r.timeTo + ' UTC' : '';
+        const acceptedName = r.acceptedBy ? (nameOf[r.acceptedBy] || String(r.acceptedBy)) + ' \u00b7 ' + r.acceptedBy : '';
+        return '<div style="display:flex;align-items:center;gap:8px;' + (isCancelled ? 'opacity:0.4;' : '') + '">'
+          + '<span class="ra-cs-chip">' + escapeHtml(cs) + '</span>'
+          + (timeStr ? '<span style="font-size:11px;color:var(--muted);">' + escapeHtml(timeStr) + '</span>' : '')
+          + (r.status === 'accepted' ? '<span style="font-size:11px;color:#4ade80;font-weight:600;">\u2713 ' + escapeHtml(acceptedName) + '</span>' : '')
+          + (isCancelled ? '<span style="font-size:10px;color:var(--muted);">Cancelled</span>' : '')
+          + (canManage && !isCancelled && r.status !== 'accepted' ? '' : '')
+          + '</div>';
+      }).join('') + '</div>'
+      + (first.sectorFileUrl ? '<div style="font-size:12px;margin-bottom:6px;"><a href="' + escapeHtml(first.sectorFileUrl) + '" target="_blank" rel="noopener" style="color:var(--accent);">Sector File / Controller Pack \u2197</a></div>' : '')
+      + (first.notes ? '<div style="font-size:12px;color:var(--text);background:var(--panel2);padding:6px 10px;border-radius:6px;margin-bottom:6px;">' + escapeHtml(first.notes) + '</div>' : '')
       + '<div style="display:flex;justify-content:space-between;align-items:center;">'
-      + '<span style="font-size:11px;color:var(--muted);">Requested by ' + escapeHtml(nameOf[r.requestedBy] || String(r.requestedBy)) + ' \u00b7 ' + new Date(r.createdAt).toISOString().slice(0, 10) + '</span>'
-      + (canManage && !isCancelled ? '<div style="display:flex;gap:6px;">'
-        + '<button type="button" class="action-btn ra-cancel-btn" data-id="' + r.id + '" style="font-size:10px;padding:3px 10px;background:rgba(245,158,11,0.1);color:#f59e0b;border-color:#f59e0b;">ATC No Longer Required</button>'
-        + '</div>' : '')
-      + (canManage && isCancelled ? '<button type="button" class="action-btn ra-delete-btn" data-id="' + r.id + '" style="font-size:10px;padding:3px 10px;background:rgba(239,68,68,0.1);color:#f87171;border-color:#f87171;">Delete</button>' : '')
+      + '<span style="font-size:11px;color:var(--muted);">Requested by ' + escapeHtml(nameOf[first.requestedBy] || String(first.requestedBy)) + ' \u00b7 ' + new Date(first.createdAt).toISOString().slice(0, 10) + '</span>'
+      + (canManage && activeReqs.some(r => r.status === 'waiting') ? '<button type="button" class="action-btn ra-cancel-btn" data-id="' + activeReqs.filter(r => r.status === 'waiting').map(r => r.id).join(',') + '" style="font-size:10px;padding:3px 10px;background:rgba(245,158,11,0.1);color:#f59e0b;border-color:#f59e0b;">ATC No Longer Required</button>' : '')
       + '</div>'
       + '</div>';
   }).join('') : '<p style="color:var(--muted);font-size:13px;">No requests submitted yet.</p>';
@@ -36147,7 +36166,11 @@ app.get('/request-atc', requirePageEnabled('request-atc'), async (req, res) => {
           if (!ok) return;
           cancelBtn.disabled = true; cancelBtn.textContent = '...';
           try {
-            var r = await fetch('/api/request-atc/' + cancelBtn.dataset.id + '/cancel', { method: 'POST', credentials: 'same-origin' });
+            var ids = cancelBtn.dataset.id.split(',');
+            for (var ii = 0; ii < ids.length; ii++) {
+              await fetch('/api/request-atc/' + ids[ii] + '/cancel', { method: 'POST', credentials: 'same-origin' });
+            }
+            var r = { ok: true };
             if (r.ok) location.reload();
             else { cancelBtn.disabled = false; cancelBtn.textContent = 'ATC No Longer Required'; }
           } catch (err) { cancelBtn.disabled = false; cancelBtn.textContent = 'ATC No Longer Required'; }
@@ -36210,19 +36233,24 @@ app.post('/api/request-atc', requireLogin, async (req, res) => {
   }).filter(c => c.callsign);
 
   try {
-    await prisma.atcRequest.create({
-      data: {
-        eventId: activeEventId || null,
-        sectorNumber: String(sectorNumber).trim().toUpperCase(),
-        fromIcao: String(fromIcao).trim().toUpperCase(),
-        toIcao: String(toIcao).trim().toUpperCase(),
-        positionType,
-        callsigns: JSON.stringify(csData),
-        sectorFileUrl: sectorFileUrl ? String(sectorFileUrl).trim().slice(0, 300) : null,
-        notes: notes ? String(notes).trim().slice(0, 500) : null,
-        requestedBy: cid
-      }
-    });
+    // Create one row per callsign so each can be claimed independently
+    for (const cs of csData) {
+      await prisma.atcRequest.create({
+        data: {
+          eventId: activeEventId || null,
+          sectorNumber: String(sectorNumber).trim().toUpperCase(),
+          fromIcao: String(fromIcao).trim().toUpperCase(),
+          toIcao: String(toIcao).trim().toUpperCase(),
+          positionType,
+          callsign: cs.callsign,
+          timeFrom: cs.timeFrom || null,
+          timeTo: cs.timeTo || null,
+          sectorFileUrl: sectorFileUrl ? String(sectorFileUrl).trim().slice(0, 300) : null,
+          notes: notes ? String(notes).trim().slice(0, 500) : null,
+          requestedBy: cid
+        }
+      });
+    }
     refreshOpenAtcRequestCount();
     res.json({ success: true });
   } catch (e) {
@@ -36291,13 +36319,11 @@ app.get('/wf-atc/requested', requirePageEnabled('requested-atc'), requireLogin, 
     const showAcceptedBy = opts?.acceptedBy;
     const showDrop = opts?.drop;
     const expandable = opts?.expand !== false;
-    const cs = JSON.parse(r.callsigns || '[]');
-    const csEntries = cs.map(c => typeof c === 'string' ? { callsign: c } : c);
-    const csText = csEntries.map(c => c.callsign).join(', ');
-    const timesText = csEntries.map(c => c.timeFrom && c.timeTo ? c.timeFrom + '-' + c.timeTo + 'z' : '').filter(Boolean).join(', ') || '\u2014';
+    const cs = r.callsign || '';
+    const timesText = r.timeFrom && r.timeTo ? r.timeFrom + '-' + r.timeTo + 'z' : '\u2014';
     const sched = (adminSheetCache || []).find(s => s.number === r.sectorNumber);
     const date = sched ? sched.date_utc : '';
-    const colCount = 6 + (showAcceptedBy ? 1 : 0) + (showClaim || showDrop ? 1 : 0);
+    const colCount = 6 + (showAcceptedBy ? 2 : 0) + (showClaim || showDrop ? 1 : 0);
 
     let actionCell = '';
     if (showClaim) actionCell = '<td><button type="button" class="action-btn ra-claim-btn" data-id="' + r.id + '" style="font-size:10px;padding:3px 12px;background:rgba(74,222,128,0.15);color:#4ade80;border-color:#4ade80;">Claim</button></td>';
@@ -36308,9 +36334,10 @@ app.get('/wf-atc/requested', requirePageEnabled('requested-atc'), requireLogin, 
       + '<td style="font-size:11px;">' + escapeHtml(r.fromIcao) + ' \u2192 ' + escapeHtml(r.toIcao) + '</td>'
       + '<td style="font-size:11px;">' + escapeHtml(date) + '</td>'
       + '<td style="font-size:11px;">' + escapeHtml(posLabels[r.positionType] || r.positionType) + '</td>'
-      + '<td><span style="font-family:monospace;font-size:12px;">' + escapeHtml(csText) + '</span></td>'
+      + '<td><span style="font-family:monospace;font-size:12px;font-weight:600;">' + escapeHtml(cs) + '</span></td>'
       + '<td style="font-size:11px;">' + escapeHtml(timesText) + '</td>'
-      + (showAcceptedBy ? '<td style="font-size:11px;color:var(--success);">' + escapeHtml(nameOf[r.acceptedBy] || String(r.acceptedBy || '')) + '</td>' : '')
+      + (showAcceptedBy ? '<td style="font-size:11px;color:var(--success);">' + (r.acceptedBy ? escapeHtml(nameOf[r.acceptedBy] || String(r.acceptedBy)) : '') + '</td>'
+        + '<td style="font-size:11px;color:var(--muted);">' + (r.acceptedBy ? String(r.acceptedBy) : '') + '</td>' : '')
       + actionCell
       + '</tr>';
 
@@ -36321,11 +36348,6 @@ app.get('/wf-atc/requested', requirePageEnabled('requested-atc'), requireLogin, 
         + '<div><strong style="color:var(--muted);">Requested by:</strong> ' + escapeHtml(nameOf[r.requestedBy] || String(r.requestedBy)) + '</div>'
         + (r.notes ? '<div><strong style="color:var(--muted);">Notes:</strong> ' + escapeHtml(r.notes) + '</div>' : '')
         + (r.sectorFileUrl ? '<div><strong style="color:var(--muted);">Controller Pack:</strong> <a href="' + escapeHtml(r.sectorFileUrl) + '" target="_blank" rel="noopener" style="color:var(--accent);">' + escapeHtml(r.sectorFileUrl) + ' \u2197</a></div>' : '')
-        + '<div style="display:flex;flex-wrap:wrap;gap:6px;">' + csEntries.map(c =>
-            '<span style="padding:3px 8px;background:var(--panel);border:1px solid var(--border);border-radius:4px;font-family:monospace;font-size:11px;">'
-            + escapeHtml(c.callsign) + (c.timeFrom ? ' ' + c.timeFrom + '-' + (c.timeTo || '?') + 'z' : '')
-            + '</span>'
-          ).join('') + '</div>'
         + '</div></td></tr>';
     }
     return html;
@@ -36338,9 +36360,9 @@ app.get('/wf-atc/requested', requirePageEnabled('requested-atc'), requireLogin, 
       + '<tbody>' + rows.join('') + '</tbody></table></div>';
   }
 
-  const openHeaders = ['Sector', 'Route', 'Date', 'Type', 'Callsign(s)', 'Times (UTC)', ''];
-  const myHeaders = ['Sector', 'Route', 'Date', 'Type', 'Callsign(s)', 'Times (UTC)', ''];
-  const allHeaders = ['Sector', 'Route', 'Date', 'Type', 'Callsign(s)', 'Times (UTC)', 'Claimed By'];
+  const openHeaders = ['Sector', 'Route', 'Date', 'Type', 'Callsign', 'Times (UTC)', ''];
+  const myHeaders = ['Sector', 'Route', 'Date', 'Type', 'Callsign', 'Times (UTC)', ''];
+  const allHeaders = ['Sector', 'Route', 'Date', 'Type', 'Callsign', 'Times (UTC)', 'Claimed By', 'CID'];
 
   const content = `
     <style>

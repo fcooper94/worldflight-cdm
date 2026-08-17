@@ -578,7 +578,10 @@ model AtcRequest {
   fromIcao       String
   toIcao         String
   positionType   String   // 'aerodrome', 'approach', 'ctr'
-  callsigns      String   // JSON array: [{callsign, timeFrom, timeTo}]
+  callsign       String   // single callsign per request
+  callsigns      String?  // deprecated — kept for migration
+  timeFrom       String?  // UTC HH:MM
+  timeTo         String?  // UTC HH:MM
   notes          String?
   sectorFileUrl  String?  // link to sector file or controller pack
   requestedBy    Int      // CID of FIR manager
