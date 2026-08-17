@@ -22172,7 +22172,7 @@ app.get('/team/hq', requireLogin, async (req, res) => {
               <span class="aff-member-count">${members.length} ${members.length === 1 ? 'member' : 'members'}</span>
             </div>
           </div>
-          ${(isMainHolder || canManageTeamMembers(cid)) && members.length > 1 ? `
+          ${(isMainHolder || canManageTeamMembers(cid)) ? `
           <div style="position:absolute;top:16px;right:16px;">
             <label id="rosterToggleWrap" style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:10px 16px;border-radius:8px;border:1px solid ${primary?.rosterEnabled ? 'rgba(56,189,248,0.3)' : 'var(--border)'};background:${primary?.rosterEnabled ? 'rgba(56,189,248,0.06)' : 'var(--panel2)'};transition:all 0.15s;">
               <div style="position:relative;width:38px;height:20px;">
