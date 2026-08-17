@@ -578,7 +578,7 @@ model AtcRequest {
   fromIcao       String
   toIcao         String
   positionType   String   // 'aerodrome', 'approach', 'ctr'
-  callsign       String   // single callsign per request
+  callsign       String   @default("") // single callsign per request
   callsigns      String?  // deprecated — kept for migration
   timeFrom       String?  // UTC HH:MM
   timeTo         String?  // UTC HH:MM
@@ -592,4 +592,17 @@ model AtcRequest {
 
   @@index([eventId])
   @@index([sectorNumber])
+}
+
+model AtcNotifyPreference {
+  id          Int      @id @default(autoincrement())
+  cid         Int      @unique
+  enabled     Boolean  @default(true)
+  allHours    Boolean  @default(true)
+  hours       String   @default("111111") // 6 chars for 4hr bands: 00-04, 04-08, 08-12, 12-16, 16-20, 20-24
+  allPositions Boolean @default(true)
+  aerodrome   Boolean  @default(true)
+  approach    Boolean  @default(true)
+  ctr         Boolean  @default(true)
+  updatedAt   DateTime @default(now())
 }

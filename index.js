@@ -456,7 +456,26 @@ import _renderLayout from './layout.js';
 import { getAirportGround, detectStandOccupancy } from './lib/osm-ground.mjs';
 import { fetchAndParseFirManagement } from './lib/fir-management.mjs';
 import { vatcanIsEnabled, vatcanCreateEvent, vatcanQueueSectorPush, vatcanPushSectorNow, vatcanGetLastResult, vatcanAllLastResults } from './lib/vatcan-bookings.mjs';
-import { discordConfigured, getGuildSnapshot, invalidateGuildCache } from './lib/discord-api.mjs';
+import { discordConfigured, getGuildSnapshot, invalidateGuildCache, sendChannelMessage, addRoleToMember, removeRoleFromMember } from './lib/discord-api.mjs';
+
+// Discord WF ATC master role (the one that grants app access)
+const DISCORD_WF_ATC_ROLE_ID = '862721310953701416';
+
+// Discord role IDs for ATC request notification filtering
+const ATC_NOTIFY_ROLES = {
+  all:       '1539036284457189517',
+  aerodrome: '1539036285107310746',
+  approach:  '1539036286055096441',
+  ctr:       '1539036287061856297',
+  bands: [
+    '1539036288269951008', // 00-04z
+    '1539036289007886467', // 04-08z
+    '1539036289473585163', // 08-12z
+    '1539036290048335963', // 12-16z
+    '1539036290505379944', // 16-20z
+    '1539036292145221683'  // 20-24z
+  ]
+};
 import { parseCidFromNickname, parseNameFromNickname, desiredRolesByCid, computeRoleDiff, buildApplyPlan, isDiffSafeToApply, removalsEnabled } from './lib/discord-roles.mjs';
 import { runDiscordRoleSync, discordSyncState, discordSyncStatusText } from './lib/discord-sync.mjs';
 function renderLayout(opts) {
@@ -23745,6 +23764,7 @@ app.get('/admin/control-panel', requireAdmin, async (req, res) => {
     { key: 'settings', title: 'Page Visibility', desc: 'Control page visibility for pilots and controllers.', icon: adminIcons.settings, href: '/admin/settings', badge: null },
     { key: 'airac', title: 'AIRAC Data', desc: 'Upload and manage navigation data (waypoints, airways) for route planning.', icon: adminIcons.compass, href: '/admin/airac', badge: airacAlert ? '!' : null },
     { key: 'test-pilots', title: 'Test Pilot Data', desc: 'Generate fake pilot departures at WF airports for testing.', icon: adminIcons.flask, href: '/admin/test-pilots', badge: null },
+    { key: 'wf-atc-admin', title: 'WF ATC Team', desc: 'Manage the WorldFlight ATC team — add/remove members and view notification preferences.', icon: adminIcons.headphones, href: '/admin/wf-atc', badge: null },
     { key: 'controller-pack', title: 'Controller Pack', desc: 'Generate EuroScope controller pack files for WorldFlight airports.', icon: adminIcons.headphones, href: '/admin/controller-pack', badge: null },
     { key: 'wf-challenge', title: 'WF Challenge Scoring', desc: 'Enter flypast scores and manage the live WF Challenge scoreboard.', icon: adminIcons.star, href: '/admin/wf-challenge', badge: null }
   ];
@@ -32770,6 +32790,235 @@ app.post('/admin/api/test-pilots/toggle', requireAdmin, express.json(), async (r
 });
 
 /* ===== ADMIN: CONTROLLER PACK ===== */
+// ── Admin: WF ATC Team ──────────────────────────────────────────────────
+app.get('/admin/wf-atc', requireAdmin, async (req, res) => {
+  const user = req.session.user.data;
+  const isAdmin = true;
+
+  const [members, prefs, links, users] = await Promise.all([
+    prisma.userAdditionalRole.findMany({ where: { role: 'WF_ATC' } }),
+    prisma.atcNotifyPreference?.findMany().catch(() => []) || [],
+    prisma.discordLink.findMany(),
+    prisma.user.findMany({ select: { cid: true, name: true } })
+  ]);
+
+  const nameOf = {};
+  users.forEach(u => { if (u.name) nameOf[u.cid] = u.name; });
+  const discordOf = {};
+  links.forEach(l => { discordOf[l.cid] = l.discordId; });
+  const prefOf = {};
+  prefs.forEach(p => { prefOf[p.cid] = p; });
+
+  const bandLabels = ['00-04z', '04-08z', '08-12z', '12-16z', '16-20z', '20-24z'];
+
+  const tableRows = members.map(m => {
+    const pref = prefOf[m.cid] || {};
+    const hasDiscord = !!discordOf[m.cid];
+    const notifyStatus = pref.enabled === false ? 'Off' : (pref.allPositions !== false ? 'All' : [pref.aerodrome ? 'Aero' : '', pref.approach ? 'App' : '', pref.ctr ? 'Ctr' : ''].filter(Boolean).join('/') || 'None');
+    const timeStatus = pref.enabled === false ? '' : (pref.allHours !== false ? 'All hours' : bandLabels.filter((_, i) => (pref.hours || '111111')[i] === '1').join(', ') || 'None');
+    return '<tr>'
+      + '<td style="font-weight:600;">' + escapeHtml(nameOf[m.cid] || '') + '</td>'
+      + '<td style="font-family:monospace;">' + m.cid + '</td>'
+      + '<td>' + (hasDiscord ? '<span style="color:#4ade80;">Linked</span>' : '<span style="display:flex;align-items:center;gap:6px;"><span style="color:var(--muted);">Not linked</span><button type="button" class="action-btn wfatc-link-btn" data-cid="' + m.cid + '" style="font-size:10px;padding:2px 8px;">Link</button></span>') + '</td>'
+      + '<td style="font-size:11px;">' + notifyStatus + '</td>'
+      + '<td style="font-size:11px;color:var(--muted);">' + timeStatus + '</td>'
+      + '<td><button type="button" class="action-btn wfatc-remove" data-cid="' + m.cid + '" style="font-size:10px;padding:2px 8px;background:rgba(239,68,68,0.1);color:#f87171;border-color:#f87171;">Remove</button></td>'
+      + '</tr>';
+  }).join('');
+
+  const content = `
+    <section class="card card-full" style="padding:20px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+        <div>
+          <h2 style="margin:0 0 4px;color:var(--accent);">WF ATC Team</h2>
+          <p style="color:var(--muted);font-size:13px;margin:0;">${members.length} member${members.length !== 1 ? 's' : ''} \u2014 app role is the master, Discord role syncs automatically.</p>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <input type="number" id="wfAtcAddCid" inputmode="numeric" placeholder="CID" style="width:120px;padding:6px 10px;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:13px;text-align:center;" />
+          <button type="button" id="wfAtcAddBtn" class="action-btn primary" style="font-size:12px;padding:6px 14px;">Add Member</button>
+          <span id="wfAtcMsg" style="font-size:12px;display:none;"></span>
+        </div>
+      </div>
+
+      ${members.length ? `
+      <div class="ot-table-wrap">
+        <table class="ot-table" style="font-size:13px;">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>CID</th>
+              <th>Discord</th>
+              <th>Notify Positions</th>
+              <th>Notify Times</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>${tableRows}</tbody>
+        </table>
+      </div>` : '<p style="color:var(--muted);">No WF ATC members yet. Add a CID above.</p>'}
+    </section>
+
+    <script>
+    (function() {
+      var msg = document.getElementById('wfAtcMsg');
+      function showMsg(text, ok) {
+        msg.textContent = text;
+        msg.style.color = ok ? '#4ade80' : '#f87171';
+        msg.style.display = '';
+        if (ok) setTimeout(function() { msg.style.display = 'none'; }, 2000);
+      }
+
+      document.getElementById('wfAtcAddBtn').addEventListener('click', async function() {
+        var cidInput = document.getElementById('wfAtcAddCid');
+        var cid = cidInput.value.trim();
+        if (!cid || !/^\\d+$/.test(cid)) { showMsg('Enter a valid CID', false); return; }
+        this.disabled = true;
+        try {
+          var r = await fetch('/admin/api/wf-atc', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify({ cid: Number(cid) })
+          });
+          if (r.ok) location.reload();
+          else { var d = await r.json().catch(function() { return {}; }); showMsg(d.error || 'Failed', false); }
+        } catch (e) { showMsg('Failed', false); }
+        this.disabled = false;
+      });
+
+      document.addEventListener('click', async function(e) {
+        // Link Discord
+        var linkBtn = e.target.closest('.wfatc-link-btn');
+        if (linkBtn) {
+          var linkCid = linkBtn.dataset.cid;
+          var ov = document.createElement('div');
+          ov.className = 'modal'; ov.style.zIndex = '20001';
+          ov.innerHTML = '<div class="modal-backdrop"></div>'
+            + '<div class="modal-dialog" style="width:400px;padding:24px;text-align:left;">'
+            + '<h3 style="margin:0 0 12px;color:var(--accent);text-align:center;">Link Discord Account</h3>'
+            + '<p style="color:var(--muted);font-size:12px;margin:0 0 12px;">Search for the Discord member to link to CID ' + linkCid + '.</p>'
+            + '<input type="text" id="wfAtcDiscordSearch" placeholder="Type Discord username..." style="width:100%;box-sizing:border-box;padding:8px 12px;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:13px;margin-bottom:8px;" />'
+            + '<div id="wfAtcDiscordResults" style="max-height:200px;overflow-y:auto;"></div>'
+            + '<div style="text-align:right;margin-top:12px;"><button class="action-btn" id="wfAtcLinkCancel">Cancel</button></div>'
+            + '</div>';
+          document.body.appendChild(ov);
+          ov.querySelector('.modal-backdrop').addEventListener('click', function() { ov.remove(); });
+          document.getElementById('wfAtcLinkCancel').addEventListener('click', function() { ov.remove(); });
+
+          var searchInput = document.getElementById('wfAtcDiscordSearch');
+          var resultsDiv = document.getElementById('wfAtcDiscordResults');
+          var debounce = null;
+          searchInput.focus();
+          searchInput.addEventListener('input', function() {
+            clearTimeout(debounce);
+            debounce = setTimeout(async function() {
+              var q = searchInput.value.trim();
+              if (q.length < 2) { resultsDiv.innerHTML = ''; return; }
+              try {
+                var r = await fetch('/admin/api/discord/members?q=' + encodeURIComponent(q), { credentials: 'same-origin' });
+                var data = await r.json();
+                var members = data.results || data.members || data || [];
+                if (!members.length) { resultsDiv.innerHTML = '<p style="color:var(--muted);font-size:12px;">No members found.</p>'; return; }
+                resultsDiv.innerHTML = members.slice(0, 10).map(function(m) {
+                  var name = m.nick || m.displayName || m.username || m.id;
+                  return '<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 8px;border-bottom:1px solid var(--border);cursor:pointer;" class="wfatc-discord-pick" data-discord-id="' + (m.discordId || m.id) + '">'
+                    + '<span style="font-size:13px;">' + name + '</span>'
+                    + '<button type="button" class="action-btn primary" style="font-size:10px;padding:2px 10px;">Select</button>'
+                    + '</div>';
+                }).join('');
+              } catch (err) { resultsDiv.innerHTML = '<p style="color:#f87171;font-size:12px;">Search failed.</p>'; }
+            }, 300);
+          });
+
+          resultsDiv.addEventListener('click', async function(ev) {
+            var pick = ev.target.closest('.wfatc-discord-pick');
+            if (!pick) return;
+            var discordId = pick.dataset.discordId;
+            try {
+              var r = await fetch('/admin/api/discord/link', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'same-origin',
+                body: JSON.stringify({ cid: Number(linkCid), discordId: discordId })
+              });
+              if (r.ok) { ov.remove(); location.reload(); }
+              else { var d = await r.json().catch(function() { return {}; }); alert(d.error || 'Failed to link'); }
+            } catch (err) { alert('Failed to link'); }
+          });
+          return;
+        }
+
+        // Remove member
+        var btn = e.target.closest('.wfatc-remove');
+        if (!btn) return;
+        if (!confirm('Remove CID ' + btn.dataset.cid + ' from WF ATC?')) return;
+        btn.disabled = true;
+        try {
+          var r = await fetch('/admin/api/wf-atc/' + btn.dataset.cid, {
+            method: 'DELETE', credentials: 'same-origin'
+          });
+          if (r.ok) location.reload();
+          else { btn.disabled = false; }
+        } catch (e) { btn.disabled = false; }
+      });
+    })();
+    </script>
+  `;
+
+  res.send(renderLayout({ title: 'WF ATC Team', user, isAdmin, content, layoutClass: 'dashboard-full' }));
+});
+
+// Add WF ATC member
+app.post('/admin/api/wf-atc', requireAdmin, async (req, res) => {
+  const targetCid = Number(req.body?.cid);
+  if (!Number.isFinite(targetCid) || targetCid <= 0) return res.status(400).json({ error: 'Invalid CID' });
+  try {
+    await prisma.userAdditionalRole.upsert({
+      where: { cid_role: { cid: targetCid, role: 'WF_ATC' } },
+      update: {},
+      create: { cid: targetCid, role: 'WF_ATC' }
+    });
+    wfAtcCids.add(targetCid);
+
+    // Sync Discord role
+    const link = await prisma.discordLink.findUnique({ where: { cid: targetCid } }).catch(() => null);
+    if (link?.discordId && discordConfigured()) {
+      addRoleToMember(link.discordId, DISCORD_WF_ATC_ROLE_ID).catch(e => console.error('[WF-ATC] Discord role add failed:', e.message));
+      // Also give them WF ATC All + all time bands by default
+      addRoleToMember(link.discordId, ATC_NOTIFY_ROLES.all).catch(() => {});
+      for (const bandId of ATC_NOTIFY_ROLES.bands) {
+        addRoleToMember(link.discordId, bandId).catch(() => {});
+      }
+    }
+
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Remove WF ATC member
+app.delete('/admin/api/wf-atc/:cid', requireAdmin, async (req, res) => {
+  const targetCid = Number(req.params.cid);
+  try {
+    await prisma.userAdditionalRole.deleteMany({ where: { cid: targetCid, role: 'WF_ATC' } });
+    wfAtcCids.delete(targetCid);
+
+    // Remove Discord roles
+    const link = await prisma.discordLink.findUnique({ where: { cid: targetCid } }).catch(() => null);
+    if (link?.discordId && discordConfigured()) {
+      removeRoleFromMember(link.discordId, DISCORD_WF_ATC_ROLE_ID).catch(() => {});
+      removeRoleFromMember(link.discordId, ATC_NOTIFY_ROLES.all).catch(() => {});
+      removeRoleFromMember(link.discordId, ATC_NOTIFY_ROLES.aerodrome).catch(() => {});
+      removeRoleFromMember(link.discordId, ATC_NOTIFY_ROLES.approach).catch(() => {});
+      removeRoleFromMember(link.discordId, ATC_NOTIFY_ROLES.ctr).catch(() => {});
+      for (const bandId of ATC_NOTIFY_ROLES.bands) {
+        removeRoleFromMember(link.discordId, bandId).catch(() => {});
+      }
+    }
+
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 app.get('/admin/controller-pack', requireAdmin, async (req, res) => {
   const user = req.session.user.data;
   const isAdmin = isAdminUser(user.cid);
@@ -36255,10 +36504,119 @@ app.post('/api/request-atc', requireLogin, async (req, res) => {
       });
     }
     refreshOpenAtcRequestCount();
+
+    // Discord notification — one per callsign
+    try {
+      const requesterName = user?.personal?.name_full || String(cid);
+      const sched = (adminSheetCache || []).find(r => r.number === String(sectorNumber).toUpperCase());
+      const dateStr = sched?.date_utc || '';
+
+      for (const cs of csData) {
+        // Determine which roles to ping
+        const posRoleId = ATC_NOTIFY_ROLES[positionType] || ATC_NOTIFY_ROLES.all;
+        let timeBandIdx = -1;
+        if (cs.timeFrom) {
+          const h = parseInt(cs.timeFrom.split(':')[0], 10);
+          if (!isNaN(h)) timeBandIdx = Math.floor(h / 4);
+        }
+        const pings = ['<@&' + ATC_NOTIFY_ROLES.all + '>', '<@&' + posRoleId + '>'];
+        if (timeBandIdx >= 0 && timeBandIdx < 6) pings.push('<@&' + ATC_NOTIFY_ROLES.bands[timeBandIdx] + '>');
+        const uniquePings = [...new Set(pings)].join(' ');
+
+        const embed = {
+          title: '\u2708\ufe0f  ATC Support Requested',
+          color: 0x38bdf8,
+          fields: [
+            { name: 'Sector', value: String(sectorNumber).toUpperCase(), inline: true },
+            { name: 'Route', value: String(fromIcao).toUpperCase() + ' \u2192 ' + String(toIcao).toUpperCase(), inline: true },
+            { name: 'Date', value: dateStr || 'TBC', inline: true },
+            { name: 'Callsign', value: cs.callsign, inline: true },
+            { name: 'Time (UTC)', value: cs.timeFrom && cs.timeTo ? cs.timeFrom + ' \u2013 ' + cs.timeTo + 'z' : 'No specific time', inline: true },
+            ...(notes ? [{ name: 'Notes', value: String(notes).trim().slice(0, 200), inline: false }] : []),
+            { name: 'Requested by', value: requesterName + ' (' + cid + ')', inline: false }
+          ],
+          footer: { text: 'WorldFlight Planning Portal' },
+          timestamp: new Date().toISOString()
+        };
+
+        const payload = {
+          content: uniquePings,
+          embeds: [embed],
+          components: [{
+            type: 1,
+            components: [{
+              type: 2,
+              style: 5,
+              label: 'Click for Details',
+              url: 'https://planning.worldflight.center/wf-atc/requested',
+              emoji: { name: '\ud83d\udcdd' }
+            }]
+          }]
+        };
+
+        sendChannelMessage('wf-atc-requests', payload).catch(e => console.error('[DISCORD] ATC request notification failed:', e.message));
+      }
+    } catch (discErr) { console.error('[DISCORD] ATC request notification failed:', discErr.message); }
+
     res.json({ success: true });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
+});
+
+// Save ATC notification preferences
+app.post('/api/atc-notify-prefs', requireLogin, async (req, res) => {
+  const cid = Number(req.session?.user?.data?.cid);
+  if (!cid) return res.status(401).json({ error: 'Not logged in' });
+  const { enabled, allHours, hours, allPositions, aerodrome, approach, ctr } = req.body || {};
+  const hoursStr = typeof hours === 'string' && hours.length === 6 && /^[01]+$/.test(hours) ? hours : '111111';
+  try {
+    const prefs = {
+      enabled: !!enabled, allHours: !!allHours, hours: hoursStr,
+      allPositions: allPositions !== false, aerodrome: aerodrome !== false,
+      approach: approach !== false, ctr: ctr !== false
+    };
+    await prisma.atcNotifyPreference.upsert({
+      where: { cid },
+      update: { ...prefs, updatedAt: new Date() },
+      create: { cid, ...prefs }
+    });
+
+    // Sync Discord roles based on preferences
+    const discordLink = await prisma.discordLink.findUnique({ where: { cid } }).catch(() => null);
+    if (discordLink?.discordId && discordConfigured()) {
+      const memberId = discordLink.discordId;
+      const add = (roleId) => addRoleToMember(memberId, roleId).catch(() => {});
+      const remove = (roleId) => removeRoleFromMember(memberId, roleId).catch(() => {});
+
+      // Position roles
+      if (prefs.enabled && prefs.allPositions) {
+        await add(ATC_NOTIFY_ROLES.all);
+        await remove(ATC_NOTIFY_ROLES.aerodrome);
+        await remove(ATC_NOTIFY_ROLES.approach);
+        await remove(ATC_NOTIFY_ROLES.ctr);
+      } else if (prefs.enabled) {
+        await remove(ATC_NOTIFY_ROLES.all);
+        await (prefs.aerodrome ? add : remove)(ATC_NOTIFY_ROLES.aerodrome);
+        await (prefs.approach ? add : remove)(ATC_NOTIFY_ROLES.approach);
+        await (prefs.ctr ? add : remove)(ATC_NOTIFY_ROLES.ctr);
+      } else {
+        // Disabled — remove all
+        await remove(ATC_NOTIFY_ROLES.all);
+        await remove(ATC_NOTIFY_ROLES.aerodrome);
+        await remove(ATC_NOTIFY_ROLES.approach);
+        await remove(ATC_NOTIFY_ROLES.ctr);
+      }
+
+      // Time band roles
+      for (let i = 0; i < 6; i++) {
+        const shouldHave = prefs.enabled && (prefs.allHours || hoursStr[i] === '1');
+        await (shouldHave ? add : remove)(ATC_NOTIFY_ROLES.bands[i]);
+      }
+    }
+
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // Cancel ATC request (mark as no longer required)
@@ -36297,6 +36655,9 @@ app.get('/wf-atc/requested', requirePageEnabled('requested-atc'), requireLogin, 
   if (!cid || !(isAdmin || isWfAtc(cid))) {
     return renderForbidden(req, res, 'This page is only available to WF ATC members.');
   }
+
+  // Load notification preferences
+  const notifyPref = await prisma.atcNotifyPreference?.findUnique({ where: { cid } }).catch(() => null) || { enabled: true, allHours: true, hours: '111111', allPositions: true, aerodrome: true, approach: true, ctr: true };
 
   const requests = await prisma.atcRequest?.findMany({
     where: { eventId: activeEventId || undefined },
@@ -36373,6 +36734,67 @@ app.get('/wf-atc/requested', requirePageEnabled('requested-atc'), requireLogin, 
       .ra-detail-row.hidden { display:none; }
     </style>
 
+    <section class="card" style="padding:16px 20px;margin-bottom:20px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+          <span style="font-size:14px;font-weight:700;">Discord Notifications</span>
+        </div>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+          <input type="checkbox" id="notifyEnabled" ${notifyPref.enabled ? 'checked' : ''} style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer;" />
+          <span style="font-size:12px;">Notify me when ATC is requested</span>
+        </label>
+      </div>
+      <div id="notifyOptions" style="margin-top:12px;${notifyPref.enabled ? '' : 'display:none;'}">
+        <div style="display:flex;align-items:center;gap:16px;margin-bottom:10px;">
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+            <input type="radio" name="notifyScope" value="all" ${notifyPref.allHours ? 'checked' : ''} style="accent-color:var(--accent);" />
+            <span style="font-size:12px;">All requests</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+            <input type="radio" name="notifyScope" value="hours" ${!notifyPref.allHours ? 'checked' : ''} style="accent-color:var(--accent);" />
+            <span style="font-size:12px;">Only requests covering these UTC hours</span>
+          </label>
+        </div>
+        <div id="notifyHoursGrid" style="display:${notifyPref.allHours ? 'none' : 'flex'};flex-wrap:wrap;gap:6px;">
+          ${['00-04z','04-08z','08-12z','12-16z','16-20z','20-24z'].map((label, i) => {
+            const on = (notifyPref.hours || '111111')[i] === '1';
+            return '<button type="button" class="notify-hour-btn' + (on ? ' on' : '') + '" data-hour="' + i + '" style="padding:8px 16px;font-size:12px;font-weight:600;border-radius:6px;border:1px solid ' + (on ? 'rgba(74,222,128,0.4)' : 'rgba(239,68,68,0.3)') + ';background:' + (on ? 'rgba(74,222,128,0.12)' : 'rgba(239,68,68,0.08)') + ';color:' + (on ? '#4ade80' : '#f87171') + ';cursor:pointer;font-family:monospace;text-align:center;">' + label + '</button>';
+          }).join('')}
+        </div>
+        <p id="notifyHoursHint" style="display:${notifyPref.allHours ? 'none' : 'block'};font-size:11px;color:var(--muted);margin:6px 0 0;">You will only be notified about ATC requests where the requested coverage time falls within these hours.</p>
+
+        <div style="border-top:1px solid var(--border);margin-top:12px;padding-top:12px;">
+          <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+            <span style="font-size:12px;font-weight:600;">Positions:</span>
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+              <input type="radio" name="notifyPosScope" value="all" ${notifyPref.allPositions ? 'checked' : ''} style="accent-color:var(--accent);" />
+              <span style="font-size:12px;">All positions</span>
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+              <input type="radio" name="notifyPosScope" value="select" ${!notifyPref.allPositions ? 'checked' : ''} style="accent-color:var(--accent);" />
+              <span style="font-size:12px;">Only these:</span>
+            </label>
+            <div id="notifyPosChecks" style="display:${notifyPref.allPositions ? 'none' : 'flex'};gap:12px;">
+              <label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:12px;">
+                <input type="checkbox" id="notifyPosAerodrome" ${notifyPref.aerodrome ? 'checked' : ''} style="accent-color:var(--accent);" /> Aerodrome
+              </label>
+              <label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:12px;">
+                <input type="checkbox" id="notifyPosApproach" ${notifyPref.approach ? 'checked' : ''} style="accent-color:var(--accent);" /> Approach / Departure
+              </label>
+              <label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:12px;">
+                <input type="checkbox" id="notifyPosCtr" ${notifyPref.ctr ? 'checked' : ''} style="accent-color:var(--accent);" /> Center
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div style="margin-top:8px;display:flex;align-items:center;gap:10px;">
+          <span id="notifySaveMsg" style="font-size:11px;display:none;"></span>
+        </div>
+      </div>
+    </section>
+
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start;margin-bottom:20px;">
       <section class="card" style="padding:20px;">
         <h2 style="margin:0 0 16px;color:var(--accent);font-size:18px;">Open ATC Requests</h2>
@@ -36432,6 +36854,91 @@ app.get('/wf-atc/requested', requirePageEnabled('requested-atc'), requireLogin, 
           } catch (err) { dropBtn.disabled = false; dropBtn.textContent = 'Drop'; }
         }
       });
+      // Notification preferences
+      var notifyEnabled = document.getElementById('notifyEnabled');
+      var notifyOptions = document.getElementById('notifyOptions');
+      var hoursGrid = document.getElementById('notifyHoursGrid');
+      var notifyMsg = document.getElementById('notifySaveMsg');
+
+      function getNotifyState() {
+        var enabled = notifyEnabled.checked;
+        var allHours = document.querySelector('input[name="notifyScope"][value="all"]').checked;
+        var hours = '';
+        document.querySelectorAll('.notify-hour-btn').forEach(function(btn) {
+          hours += btn.classList.contains('on') ? '1' : '0';
+        });
+        var allPositions = document.querySelector('input[name="notifyPosScope"][value="all"]').checked;
+        return {
+          enabled: enabled, allHours: allHours, hours: hours,
+          allPositions: allPositions,
+          aerodrome: document.getElementById('notifyPosAerodrome').checked,
+          approach: document.getElementById('notifyPosApproach').checked,
+          ctr: document.getElementById('notifyPosCtr').checked
+        };
+      }
+
+      async function saveNotifyPrefs() {
+        var state = getNotifyState();
+        notifyMsg.textContent = 'Saving...';
+        notifyMsg.style.color = 'var(--muted)';
+        notifyMsg.style.display = '';
+        try {
+          var r = await fetch('/api/atc-notify-prefs', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify(state)
+          });
+          if (r.ok) {
+            notifyMsg.textContent = 'Saved!';
+            notifyMsg.style.color = '#4ade80';
+            setTimeout(function() { notifyMsg.style.display = 'none'; }, 2000);
+          } else {
+            notifyMsg.textContent = 'Failed';
+            notifyMsg.style.color = '#f87171';
+          }
+        } catch (err) {
+          notifyMsg.textContent = 'Failed';
+          notifyMsg.style.color = '#f87171';
+        }
+      }
+
+      notifyEnabled.addEventListener('change', function() {
+        notifyOptions.style.display = this.checked ? '' : 'none';
+        saveNotifyPrefs();
+      });
+
+      var notifyHint = document.getElementById('notifyHoursHint');
+      document.querySelectorAll('input[name="notifyScope"]').forEach(function(radio) {
+        radio.addEventListener('change', function() {
+          var isHours = this.value === 'hours';
+          hoursGrid.style.display = isHours ? 'flex' : 'none';
+          if (notifyHint) notifyHint.style.display = isHours ? 'block' : 'none';
+          saveNotifyPrefs();
+        });
+      });
+
+      // Position scope toggle
+      var posChecks = document.getElementById('notifyPosChecks');
+      document.querySelectorAll('input[name="notifyPosScope"]').forEach(function(radio) {
+        radio.addEventListener('change', function() {
+          posChecks.style.display = this.value === 'select' ? 'flex' : 'none';
+          saveNotifyPrefs();
+        });
+      });
+      ['notifyPosAerodrome', 'notifyPosApproach', 'notifyPosCtr'].forEach(function(id) {
+        document.getElementById(id).addEventListener('change', saveNotifyPrefs);
+      });
+
+      document.querySelectorAll('.notify-hour-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          var on = btn.classList.toggle('on');
+          btn.style.background = on ? 'rgba(74,222,128,0.12)' : 'rgba(239,68,68,0.08)';
+          btn.style.borderColor = on ? 'rgba(74,222,128,0.4)' : 'rgba(239,68,68,0.3)';
+          btn.style.color = on ? '#4ade80' : '#f87171';
+          saveNotifyPrefs();
+        });
+      });
     })();
     </script>
   `;
@@ -36455,6 +36962,21 @@ app.post('/api/request-atc/:id/claim', requireLogin, async (req, res) => {
       data: { status: 'accepted', acceptedBy: cid, acceptedAt: new Date() }
     });
     refreshOpenAtcRequestCount();
+
+    // Discord notification — claimed
+    try {
+      const claimerName = req.session?.user?.data?.personal?.name_full || String(cid);
+      const sched = (adminSheetCache || []).find(s => s.number === row.sectorNumber);
+      const embed = {
+        color: 0x4ade80,
+        description: '\u2705 **' + escapeHtml(claimerName) + '** will cover **' + escapeHtml(row.callsign || '') + '** on ' + escapeHtml(row.sectorNumber) + ' (' + escapeHtml(row.fromIcao) + ' \u2192 ' + escapeHtml(row.toIcao) + ')'
+          + (row.timeFrom && row.timeTo ? '\n\u23f0 ' + row.timeFrom + ' \u2013 ' + row.timeTo + 'z' : ''),
+        footer: { text: 'WorldFlight Planning Portal' },
+        timestamp: new Date().toISOString()
+      };
+      sendChannelMessage('wf-atc-requests', { embeds: [embed] }).catch(e => console.error('[DISCORD] ATC claim notification failed:', e.message));
+    } catch (discErr) { console.error('[DISCORD] ATC claim notification failed:', discErr.message); }
+
     res.json({ success: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
