@@ -35461,7 +35461,39 @@ async function resolveAirportFir(icao) {
     if (!ap) { airportFirCache.set(icao, null); return null; }
     // Surface-aware resolution (minFL 0, smallest polygon wins); fall back to
     // the old first-match behaviour only if nothing ground-level contains it.
-    const result = resolveSurfaceFirForPoint(ap.lat, ap.lon) || (getFirsForPoint(ap.lat, ap.lon)[0] || null);
+    let result = resolveSurfaceFirForPoint(ap.lat, ap.lon) || (getFirsForPoint(ap.lat, ap.lon)[0] || null);
+    // Fallback for US airports: ICAO prefix K → FIR is KZ** (e.g. KSLC → KZLC).
+    // The US FIR boundaries are sometimes missing from the geojson. Use the
+    // ARTCC lookup table as a last resort.
+    if (!result && /^K[A-Z]{3}$/.test(icao)) {
+      // US airport FIR boundaries sometimes have gaps. Map major airports
+      // to their ARTCC FIR code as a reliable fallback.
+      const artccMap = {
+        'KZAB': ['KPHX','KABQ','KTUS','KELP','KLBB'],
+        'KZAU': ['KORD','KMDW','KMKE','KSDF'],
+        'KZBW': ['KBOS','KPVD','KBDL','KPWM'],
+        'KZDC': ['KIAD','KBWI','KRDU','KRIC','KDCA'],
+        'KZDV': ['KDEN','KCOS','KASE'],
+        'KZFW': ['KDFW','KSAT','KAUS','KIAH'],
+        'KZHU': ['KHOU','KMSY','KLIT'],
+        'KZID': ['KCVG','KDAY','KIND','KCMH'],
+        'KZJX': ['KJAX','KMCO','KTPA'],
+        'KZKC': ['KMCI','KSTL','KICT','KTUL','KOKC'],
+        'KZLA': ['KLAX','KSAN','KLAS','KONT'],
+        'KZLC': ['KSLC','KBOI','KBIL'],
+        'KZMA': ['KMIA','KFLL','KPBI'],
+        'KZME': ['KMEM','KBNA','KBHM'],
+        'KZMP': ['KMSP','KFAR','KDLH'],
+        'KZNY': ['KJFK','KEWR','KLGA','KTEB'],
+        'KZOA': ['KSFO','KSJC','KOAK'],
+        'KZOB': ['KCLE','KPIT','KBUF','KDTW'],
+        'KZSE': ['KSEA','KPDX','KGEG'],
+        'KZTL': ['KATL','KCLT','KGSP']
+      };
+      for (const [fir, airports] of Object.entries(artccMap)) {
+        if (airports.includes(icao)) { result = fir; break; }
+      }
+    }
     airportFirCache.set(icao, result);
     return result;
   } catch (e) { return null; }
@@ -35513,6 +35545,42 @@ async function getUserOwnedFirs(cid) {
     if (!firsByDivision[d]) firsByDivision[d] = new Set();
     firsByDivision[d].add(f.fir);
   });
+
+  // For DIVISION grants, also resolve FIRs from schedule airports so that
+  // destinations not yet on a transited route still appear. This ensures
+  // e.g. VATUSA covers KZLC (KSLC) even before the route is agreed.
+  const divisionGrants = grants.filter(g => g.scope === 'DIVISION');
+  if (divisionGrants.length && adminSheetCache?.length) {
+    const schedIcaos = [...new Set(adminSheetCache.flatMap(r => [r.from, r.to]))];
+    for (const icao of schedIcaos) {
+      const fir = await resolveAirportFir(icao);
+      if (!fir) continue;
+      // Determine which division this FIR belongs to by checking if any
+      // existing FIR analysis entry shares the same division, or by using
+      // the ICAO prefix convention (K* = VATUSA, C* = VATCAN, etc.)
+      const firEntry = firs.find(f => f.fir === fir);
+      if (firEntry?.division) {
+        if (!firsByDivision[firEntry.division]) firsByDivision[firEntry.division] = new Set();
+        firsByDivision[firEntry.division].add(fir);
+      } else {
+        // Fallback: map common ICAO prefixes to VATSIM divisions
+        const prefixMap = {
+          'K': 'VATUSA', 'PA': 'VATUSA', 'PH': 'VATUSA',
+          'C': 'VATCAN',
+          'EG': 'VATSIM UK', 'EI': 'VATSIM UK',
+          'L': 'VATEUD'
+        };
+        for (const [prefix, div] of Object.entries(prefixMap)) {
+          if (icao.startsWith(prefix)) {
+            if (!firsByDivision[div]) firsByDivision[div] = new Set();
+            firsByDivision[div].add(fir);
+            break;
+          }
+        }
+      }
+    }
+  }
+
   const owned = new Set();
   for (const g of grants) {
     if (g.scope === 'FIR') owned.add(g.value);
