@@ -36323,7 +36323,7 @@ app.get('/wf-atc/requested', requirePageEnabled('requested-atc'), requireLogin, 
     const timesText = r.timeFrom && r.timeTo ? r.timeFrom + '-' + r.timeTo + 'z' : '\u2014';
     const sched = (adminSheetCache || []).find(s => s.number === r.sectorNumber);
     const date = sched ? sched.date_utc : '';
-    const colCount = 6 + (showAcceptedBy ? 2 : 0) + (showClaim || showDrop ? 1 : 0);
+    const colCount = 5 + (showAcceptedBy ? 2 : 0) + (showClaim || showDrop ? 1 : 0);
 
     let actionCell = '';
     if (showClaim) actionCell = '<td><button type="button" class="action-btn ra-claim-btn" data-id="' + r.id + '" style="font-size:10px;padding:3px 12px;background:rgba(74,222,128,0.15);color:#4ade80;border-color:#4ade80;">Claim</button></td>';
@@ -36333,7 +36333,6 @@ app.get('/wf-atc/requested', requirePageEnabled('requested-atc'), requireLogin, 
       + '<td style="font-weight:700;color:var(--accent);">' + escapeHtml(r.sectorNumber) + '</td>'
       + '<td style="font-size:11px;">' + escapeHtml(r.fromIcao) + ' \u2192 ' + escapeHtml(r.toIcao) + '</td>'
       + '<td style="font-size:11px;">' + escapeHtml(date) + '</td>'
-      + '<td style="font-size:11px;">' + escapeHtml(posLabels[r.positionType] || r.positionType) + '</td>'
       + '<td><span style="font-family:monospace;font-size:12px;font-weight:600;">' + escapeHtml(cs) + '</span></td>'
       + '<td style="font-size:11px;">' + escapeHtml(timesText) + '</td>'
       + (showAcceptedBy ? '<td style="font-size:11px;color:var(--success);">' + (r.acceptedBy ? escapeHtml(nameOf[r.acceptedBy] || String(r.acceptedBy)) : '') + '</td>'
@@ -36360,9 +36359,9 @@ app.get('/wf-atc/requested', requirePageEnabled('requested-atc'), requireLogin, 
       + '<tbody>' + rows.join('') + '</tbody></table></div>';
   }
 
-  const openHeaders = ['Sector', 'Route', 'Date', 'Type', 'Callsign', 'Times (UTC)', ''];
-  const myHeaders = ['Sector', 'Route', 'Date', 'Type', 'Callsign', 'Times (UTC)', ''];
-  const allHeaders = ['Sector', 'Route', 'Date', 'Type', 'Callsign', 'Times (UTC)', 'Claimed By', 'CID'];
+  const openHeaders = ['Sector', 'Route', 'Date', 'Callsign', 'Times (UTC)', ''];
+  const myHeaders = ['Sector', 'Route', 'Date', 'Callsign', 'Times (UTC)', ''];
+  const allHeaders = ['Sector', 'Route', 'Date', 'Callsign', 'Times (UTC)', 'Claimed By', 'CID'];
 
   const content = `
     <style>
