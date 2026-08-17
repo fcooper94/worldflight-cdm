@@ -36297,10 +36297,10 @@ app.get('/wf-atc/requested', requirePageEnabled('requested-atc'), requireLogin, 
     const timesText = csEntries.map(c => c.timeFrom && c.timeTo ? c.timeFrom + '-' + c.timeTo + 'z' : '').filter(Boolean).join(', ') || '\u2014';
     const sched = (adminSheetCache || []).find(s => s.number === r.sectorNumber);
     const date = sched ? sched.date_utc : '';
-    const colCount = 7 + (showAcceptedBy ? 1 : 0) + (showClaim || showDrop ? 1 : 0);
+    const colCount = 6 + (showAcceptedBy ? 1 : 0) + (showClaim || showDrop ? 1 : 0);
 
     let actionCell = '';
-    if (showClaim) actionCell = '<td><button type="button" class="action-btn primary ra-claim-btn" data-id="' + r.id + '" style="font-size:10px;padding:3px 12px;">Claim</button></td>';
+    if (showClaim) actionCell = '<td><button type="button" class="action-btn ra-claim-btn" data-id="' + r.id + '" style="font-size:10px;padding:3px 12px;background:rgba(74,222,128,0.15);color:#4ade80;border-color:#4ade80;">Claim</button></td>';
     else if (showDrop) actionCell = '<td><button type="button" class="action-btn ra-drop-btn" data-id="' + r.id + '" style="font-size:10px;padding:3px 12px;background:rgba(239,68,68,0.1);color:#f87171;border-color:#f87171;">Drop</button></td>';
 
     let html = '<tr class="' + (expandable ? 'ra-expandable-row' : '') + '" data-id="' + r.id + '">'
@@ -36310,7 +36310,6 @@ app.get('/wf-atc/requested', requirePageEnabled('requested-atc'), requireLogin, 
       + '<td style="font-size:11px;">' + escapeHtml(posLabels[r.positionType] || r.positionType) + '</td>'
       + '<td><span style="font-family:monospace;font-size:12px;">' + escapeHtml(csText) + '</span></td>'
       + '<td style="font-size:11px;">' + escapeHtml(timesText) + '</td>'
-      + '<td style="font-size:11px;color:var(--muted);">' + escapeHtml(nameOf[r.requestedBy] || String(r.requestedBy)) + '</td>'
       + (showAcceptedBy ? '<td style="font-size:11px;color:var(--success);">' + escapeHtml(nameOf[r.acceptedBy] || String(r.acceptedBy || '')) + '</td>' : '')
       + actionCell
       + '</tr>';
@@ -36319,6 +36318,7 @@ app.get('/wf-atc/requested', requirePageEnabled('requested-atc'), requireLogin, 
       html += '<tr class="ra-detail-row hidden" data-detail-for="' + r.id + '">'
         + '<td colspan="' + colCount + '" style="padding:8px 16px;background:var(--panel2);border-bottom:2px solid var(--border);">'
         + '<div style="display:flex;flex-direction:column;gap:6px;font-size:12px;">'
+        + '<div><strong style="color:var(--muted);">Requested by:</strong> ' + escapeHtml(nameOf[r.requestedBy] || String(r.requestedBy)) + '</div>'
         + (r.notes ? '<div><strong style="color:var(--muted);">Notes:</strong> ' + escapeHtml(r.notes) + '</div>' : '')
         + (r.sectorFileUrl ? '<div><strong style="color:var(--muted);">Controller Pack:</strong> <a href="' + escapeHtml(r.sectorFileUrl) + '" target="_blank" rel="noopener" style="color:var(--accent);">' + escapeHtml(r.sectorFileUrl) + ' \u2197</a></div>' : '')
         + '<div style="display:flex;flex-wrap:wrap;gap:6px;">' + csEntries.map(c =>
@@ -36338,9 +36338,9 @@ app.get('/wf-atc/requested', requirePageEnabled('requested-atc'), requireLogin, 
       + '<tbody>' + rows.join('') + '</tbody></table></div>';
   }
 
-  const openHeaders = ['Sector', 'Route', 'Date', 'Type', 'Callsign(s)', 'Times (UTC)', 'Requested By', ''];
-  const myHeaders = ['Sector', 'Route', 'Date', 'Type', 'Callsign(s)', 'Times (UTC)', 'Requested By'];
-  const allHeaders = ['Sector', 'Route', 'Date', 'Type', 'Callsign(s)', 'Times (UTC)', 'Requested By', 'Claimed By'];
+  const openHeaders = ['Sector', 'Route', 'Date', 'Type', 'Callsign(s)', 'Times (UTC)', ''];
+  const myHeaders = ['Sector', 'Route', 'Date', 'Type', 'Callsign(s)', 'Times (UTC)', ''];
+  const allHeaders = ['Sector', 'Route', 'Date', 'Type', 'Callsign(s)', 'Times (UTC)', 'Claimed By'];
 
   const content = `
     <style>
