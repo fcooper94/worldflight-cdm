@@ -467,6 +467,7 @@ const ATC_NOTIFY_ROLES = {
   aerodrome: '1539036285107310746',
   approach:  '1539036286055096441',
   ctr:       '1539036287061856297',
+  allTimes:  '1539047630062092368',
   bands: [
     '1539036288269951008', // 00-04z
     '1539036289007886467', // 04-08z
@@ -27144,7 +27145,7 @@ app.get('/admin/api/discord/members', requireAdmin, async (req, res) => {
     ]);
     const linkedByDiscordId = new Map((links || []).map(l => [String(l.discordId), Number(l.cid)]));
     const members = snap.members
-      .filter(m => !q || String(m.nickname || '').toLowerCase().includes(q))
+      .filter(m => !q || String(m.nickname || m.id).toLowerCase().includes(q))
       .sort((a, b) => String(a.nickname).localeCompare(String(b.nickname)))
       .slice(0, 50)
       .map(m => ({
@@ -32920,7 +32921,7 @@ app.get('/admin/wf-atc', requireAdmin, async (req, res) => {
                 var members = data.results || data.members || data || [];
                 if (!members.length) { resultsDiv.innerHTML = '<p style="color:var(--muted);font-size:12px;">No members found.</p>'; return; }
                 resultsDiv.innerHTML = members.slice(0, 10).map(function(m) {
-                  var name = m.nick || m.displayName || m.username || m.id;
+                  var name = m.nickname || m.nick || m.displayName || m.username || m.id;
                   return '<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 8px;border-bottom:1px solid var(--border);cursor:pointer;" class="wfatc-discord-pick" data-discord-id="' + (m.discordId || m.id) + '">'
                     + '<span style="font-size:13px;">' + name + '</span>'
                     + '<button type="button" class="action-btn primary" style="font-size:10px;padding:2px 10px;">Select</button>'
@@ -32984,11 +32985,9 @@ app.post('/admin/api/wf-atc', requireAdmin, async (req, res) => {
     const link = await prisma.discordLink.findUnique({ where: { cid: targetCid } }).catch(() => null);
     if (link?.discordId && discordConfigured()) {
       addRoleToMember(link.discordId, DISCORD_WF_ATC_ROLE_ID).catch(e => console.error('[WF-ATC] Discord role add failed:', e.message));
-      // Also give them WF ATC All + all time bands by default
+      // Also give them WF ATC All + All Times by default
       addRoleToMember(link.discordId, ATC_NOTIFY_ROLES.all).catch(() => {});
-      for (const bandId of ATC_NOTIFY_ROLES.bands) {
-        addRoleToMember(link.discordId, bandId).catch(() => {});
-      }
+      addRoleToMember(link.discordId, ATC_NOTIFY_ROLES.allTimes).catch(() => {});
     }
 
     res.json({ success: true });
@@ -33007,6 +33006,7 @@ app.delete('/admin/api/wf-atc/:cid', requireAdmin, async (req, res) => {
     if (link?.discordId && discordConfigured()) {
       removeRoleFromMember(link.discordId, DISCORD_WF_ATC_ROLE_ID).catch(() => {});
       removeRoleFromMember(link.discordId, ATC_NOTIFY_ROLES.all).catch(() => {});
+      removeRoleFromMember(link.discordId, ATC_NOTIFY_ROLES.allTimes).catch(() => {});
       removeRoleFromMember(link.discordId, ATC_NOTIFY_ROLES.aerodrome).catch(() => {});
       removeRoleFromMember(link.discordId, ATC_NOTIFY_ROLES.approach).catch(() => {});
       removeRoleFromMember(link.discordId, ATC_NOTIFY_ROLES.ctr).catch(() => {});
@@ -36519,7 +36519,7 @@ app.post('/api/request-atc', requireLogin, async (req, res) => {
           const h = parseInt(cs.timeFrom.split(':')[0], 10);
           if (!isNaN(h)) timeBandIdx = Math.floor(h / 4);
         }
-        const pings = ['<@&' + ATC_NOTIFY_ROLES.all + '>', '<@&' + posRoleId + '>'];
+        const pings = ['<@&' + ATC_NOTIFY_ROLES.all + '>', '<@&' + posRoleId + '>', '<@&' + ATC_NOTIFY_ROLES.allTimes + '>'];
         if (timeBandIdx >= 0 && timeBandIdx < 6) pings.push('<@&' + ATC_NOTIFY_ROLES.bands[timeBandIdx] + '>');
         const uniquePings = [...new Set(pings)].join(' ');
 
@@ -36608,10 +36608,18 @@ app.post('/api/atc-notify-prefs', requireLogin, async (req, res) => {
         await remove(ATC_NOTIFY_ROLES.ctr);
       }
 
-      // Time band roles
-      for (let i = 0; i < 6; i++) {
-        const shouldHave = prefs.enabled && (prefs.allHours || hoursStr[i] === '1');
-        await (shouldHave ? add : remove)(ATC_NOTIFY_ROLES.bands[i]);
+      // Time roles
+      if (prefs.enabled && prefs.allHours) {
+        await add(ATC_NOTIFY_ROLES.allTimes);
+        for (const bandId of ATC_NOTIFY_ROLES.bands) await remove(bandId);
+      } else if (prefs.enabled) {
+        await remove(ATC_NOTIFY_ROLES.allTimes);
+        for (let i = 0; i < 6; i++) {
+          await (hoursStr[i] === '1' ? add : remove)(ATC_NOTIFY_ROLES.bands[i]);
+        }
+      } else {
+        await remove(ATC_NOTIFY_ROLES.allTimes);
+        for (const bandId of ATC_NOTIFY_ROLES.bands) await remove(bandId);
       }
     }
 
