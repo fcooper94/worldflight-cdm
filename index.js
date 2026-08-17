@@ -35932,6 +35932,7 @@ app.get('/request-atc', requirePageEnabled('request-atc'), async (req, res) => {
       + '<div style="display:flex;justify-content:space-between;align-items:center;">'
       + '<span style="font-size:11px;color:var(--muted);">Requested by ' + escapeHtml(nameOf[first.requestedBy] || String(first.requestedBy)) + ' \u00b7 ' + new Date(first.createdAt).toISOString().slice(0, 10) + '</span>'
       + (canManage && activeReqs.some(r => r.status === 'waiting') ? '<button type="button" class="action-btn ra-cancel-btn" data-id="' + activeReqs.filter(r => r.status === 'waiting').map(r => r.id).join(',') + '" style="font-size:10px;padding:3px 10px;background:rgba(245,158,11,0.1);color:#f59e0b;border-color:#f59e0b;">ATC No Longer Required</button>' : '')
+      + (canManage && reqs.every(r => r.status === 'cancelled') ? '<button type="button" class="action-btn ra-delete-btn" data-id="' + reqs.map(r => r.id).join(',') + '" style="font-size:10px;padding:3px 10px;background:rgba(239,68,68,0.1);color:#f87171;border-color:#f87171;">Delete</button>' : '')
       + '</div>'
       + '</div>';
   }).join('') : '<p style="color:var(--muted);font-size:13px;">No requests submitted yet.</p>';
@@ -36197,9 +36198,11 @@ app.get('/request-atc', requirePageEnabled('request-atc'), async (req, res) => {
           if (!ok2) return;
           delBtn.disabled = true;
           try {
-            var r = await fetch('/api/request-atc/' + delBtn.dataset.id, { method: 'DELETE', credentials: 'same-origin' });
-            if (r.ok) location.reload();
-            else { delBtn.disabled = false; }
+            var delIds = delBtn.dataset.id.split(',');
+            for (var di = 0; di < delIds.length; di++) {
+              await fetch('/api/request-atc/' + delIds[di], { method: 'DELETE', credentials: 'same-origin' });
+            }
+            location.reload();
           } catch (err) { delBtn.disabled = false; }
         }
       });
