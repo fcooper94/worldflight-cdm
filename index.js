@@ -10469,6 +10469,15 @@ app.get('/sector/:wf/:from/:to', async (req, res) => {
         });
       }
     });
+
+    // Auto-reload when flow type changes for this sector
+    if (typeof io !== 'undefined') {
+      var _sock = io({ query: { icao: '' } });
+      _sock.on('depFlowTypeUpdated', function(data) {
+        var key = '${escapeHtml(fromIcao)}-${escapeHtml(toIcao)}';
+        if (data.sector === key) location.reload();
+      });
+    }
     </script>
   `;
 
