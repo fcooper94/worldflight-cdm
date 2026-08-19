@@ -36265,7 +36265,7 @@ app.get('/request-atc', requirePageEnabled('request-atc'), async (req, res) => {
     sectorGroups[key].push(r);
   });
 
-  const requestsHtml = Object.keys(sectorGroups).length ? Object.entries(sectorGroups).map(([sector, reqs]) => {
+  const requestsHtml = Object.entries(sectorGroups).map(([sector, reqs]) => {
     const first = reqs[0];
     const activeReqs = reqs.filter(r => r.status !== 'cancelled');
     const acceptedCount = activeReqs.filter(r => r.status === 'accepted').length;
@@ -36274,7 +36274,7 @@ app.get('/request-atc', requirePageEnabled('request-atc'), async (req, res) => {
     const coverageCls = acceptedCount === totalActive && totalActive > 0 ? 'success' : acceptedCount > 0 ? 'warning' : 'warning';
     const canManage = Number(first.requestedBy) === cid || isAdmin;
 
-    return '<div class="ra-request-card">'
+    return '<div class="ra-request-card" data-wf="' + escapeHtml(sector) + '" style="display:none;">'
       + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">'
       + '<span style="font-weight:700;color:var(--accent);">' + escapeHtml(sector) + ' <span style="color:var(--muted);font-weight:400;">' + escapeHtml(first.fromIcao) + ' \u2192 ' + escapeHtml(first.toIcao) + '</span></span>'
       + '<span class="ra-status ra-status-' + coverageCls + '">' + coverageLabel + '</span>'
@@ -36301,7 +36301,7 @@ app.get('/request-atc', requirePageEnabled('request-atc'), async (req, res) => {
       + (canManage && reqs.every(r => r.status === 'cancelled') ? '<button type="button" class="action-btn ra-delete-btn" data-id="' + reqs.map(r => r.id).join(',') + '" style="font-size:10px;padding:3px 10px;background:rgba(239,68,68,0.1);color:#f87171;border-color:#f87171;">Delete</button>' : '')
       + '</div>'
       + '</div>';
-  }).join('') : '<p style="color:var(--muted);font-size:13px;">No requests submitted yet.</p>';
+  }).join('');
 
   const content = `
     <style>
@@ -36393,6 +36393,7 @@ app.get('/request-atc', requirePageEnabled('request-atc'), async (req, res) => {
 
       <section class="card" style="padding:20px;">
         <h2 style="margin:0 0 16px;color:var(--accent);font-size:18px;">Existing Requests</h2>
+        <div id="raRequestsEmpty" style="color:var(--muted);font-size:13px;">Choose a sector above to see its existing requests.</div>
         ${requestsHtml}
       </section>
     </div>
@@ -36400,6 +36401,24 @@ app.get('/request-atc', requirePageEnabled('request-atc'), async (req, res) => {
     <script>
     (function() {
       var selectedWf = null, selectedFrom = null, selectedTo = null, selectedPos = null;
+
+      // Existing Requests lists only the chosen sector — the whole event's
+      // requests at once told you nothing about the one you're working on.
+      function raShowRequestsFor(wf) {
+        var any = false;
+        document.querySelectorAll('.ra-request-card').forEach(function(c) {
+          var match = !!wf && c.dataset.wf === wf;
+          c.style.display = match ? '' : 'none';
+          if (match) any = true;
+        });
+        var empty = document.getElementById('raRequestsEmpty');
+        if (!empty) return;
+        if (any) { empty.style.display = 'none'; return; }
+        empty.style.display = '';
+        empty.textContent = wf
+          ? 'No requests for ' + wf + ' yet.'
+          : 'Choose a sector above to see its existing requests.';
+      }
 
       // Step 1: Sector selection
       document.getElementById('sectorPills')?.addEventListener('click', function(e) {
@@ -36410,6 +36429,7 @@ app.get('/request-atc', requirePageEnabled('request-atc'), async (req, res) => {
         selectedWf = pill.dataset.wf;
         selectedFrom = pill.dataset.from;
         selectedTo = pill.dataset.to;
+        raShowRequestsFor(selectedWf);
         var role = pill.dataset.role || 'dep-arr';
         document.getElementById('raSelectedSector').textContent = selectedWf + ' — ' + selectedFrom + ' → ' + selectedTo;
         // Show/hide position pills based on dep-arr vs enroute-only
