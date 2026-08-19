@@ -29,6 +29,8 @@ const TEMPLATE_DIRS = [
   { src: 'Alias', dest: 'Data/Alias' },
   { src: 'Plugin/vSMR', dest: 'Data/Plugin/vSMR' },
   { src: 'Plugin/TopSky', dest: 'Data/Plugin/TopSky' },
+  // Optional — only ships when the DLL has been dropped into templates/.
+  { src: 'Plugin/VATCAN', dest: 'Data/Plugin/VATCAN', optional: true },
 ];
 
 
@@ -52,7 +54,11 @@ function main() {
   for (const dir of TEMPLATE_DIRS) {
     const srcDir = path.join(TEMPLATES_DIR, ...dir.src.split('/'));
     const destDir = path.join(OUTPUT_DIR, ...dir.dest.split('/'));
-    if (!fs.existsSync(srcDir)) { failed.push({ file: dir.src, reason: 'Template dir not found' }); continue; }
+    if (!fs.existsSync(srcDir)) {
+      if (dir.optional) skipped.push({ file: dir.src, reason: 'Optional template not present' });
+      else failed.push({ file: dir.src, reason: 'Template dir not found' });
+      continue;
+    }
     fs.mkdirSync(destDir, { recursive: true });
     const files = fs.readdirSync(srcDir);
     for (const f of files) {

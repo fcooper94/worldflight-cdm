@@ -1719,6 +1719,18 @@ async function main() {
     `Plugins\tPlugin0Display0\tSMR radar display`,
     `Plugins\tPlugin1\t\\..\\Data\\Plugin\\TopSky\\TopSky.dll`,
     `Plugins\tPlugin1Display0\tStandard ES radar screen`,
+    /* VATCAN Slots plugin. The DisplayN line is what EuroScope treats as
+       "allowed to draw" on that screen type, so registering it here means the
+       controller does not have to tick anything after loading the pack.
+       Only emitted when the DLL is actually bundled, since a missing plugin
+       path makes EuroScope complain on every profile load. */
+    ...(fs.existsSync(path.join(__dirname, '..', 'templates', 'Plugin', 'VATCAN', 'VATCANBookings.dll'))
+      ? [
+          `Plugins\tPlugin2\t\\..\\Data\\Plugin\\VATCAN\\VATCANBookings.dll`,
+          `Plugins\tPlugin2Display0\tStandard ES radar screen`,
+          `Plugins\tPlugin2Display1\tSMR radar display`,
+        ]
+      : []),
     `LastSession\tserver\tAUTOMATIC`,
     `LastSession\tcallsign\t- Select profile---->`,
   ];

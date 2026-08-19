@@ -130,8 +130,12 @@ export default function renderLayout({
       </a>` : ''}
     </div>` : ''}
 
-    ${isWfAtc && (pv('vatcan-codes') || pv('requested-atc')) ? `<div class="nav-section">
+    ${isWfAtc && (pv('wf-atc-hub') || pv('vatcan-codes') || pv('requested-atc')) ? `<div class="nav-section">
       <div class="nav-title">WF ATC</div>
+      ${pv('wf-atc-hub') ? `<a href="/wf-atc/hub" class="nav-item" data-tooltip="WF ATC Hub">
+        <span class="icon">${icons.clipboard}</span>
+        <span class="label">WF ATC Hub</span>
+      </a>` : ''}
       ${pv('vatcan-codes') ? `<a href="/wf-atc/vatcan-codes" class="nav-item" data-tooltip="VATCAN Codes">
         <span class="icon">${icons.headphones}</span>
         <span class="label">VATCAN Codes</span>

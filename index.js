@@ -801,7 +801,7 @@ io.use((socket, next) => {
 /* ===== PAGE VISIBILITY (GLOBAL) ===== */
 // Every key the Page Visibility admin panel offers must be listed here, or the
 // save is rejected with a 400 and the toggle silently fails.
-const PAGE_KEYS = ['schedule', 'world-map', 'my-slots', 'atc', 'suggest-airport', 'arrival-info', 'departure-info', 'airspace', 'sector-planning', 'fake-pilots', 'wf-portal-banner', 'flow-restrictions', 'atc-route', 'worldflight-challenge', 'vatcan-codes', 'who-we-are', 'request-atc', 'requested-atc'];
+const PAGE_KEYS = ['schedule', 'world-map', 'my-slots', 'atc', 'suggest-airport', 'arrival-info', 'departure-info', 'airspace', 'sector-planning', 'fake-pilots', 'wf-portal-banner', 'flow-restrictions', 'atc-route', 'worldflight-challenge', 'vatcan-codes', 'who-we-are', 'request-atc', 'requested-atc', 'wf-atc-hub'];
 
 // Per-key default mode used when no DB row exists yet. Most keys default to
 // 'visible'; ATC Route defaults to 'hidden' because routes are typically
@@ -32307,7 +32307,8 @@ app.get('/admin/settings', requireAdmin, async (req, res) => {
         { key: 'sector-planning', label: 'Sector Planning',   icon: '📋', desc: 'Per-user sector list. Shows WF sectors the user is participating in (Dep/Arr/Enroute) based on their FIR Events Access grants.' },
         { key: 'vatcan-codes',    label: 'VATCAN Codes',      icon: '🎧', desc: 'Per-sector VATCAN booking-plugin event IDs (under sidebar "WF ATC" category). Controllers paste these into the VATCAN plugin to see live slot data.' },
         { key: 'request-atc',    label: 'Request ATC',       icon: '📡', desc: 'FIR managers can request WF ATC (HitSquad) support for sectors where local coverage is unavailable.' },
-        { key: 'requested-atc',  label: 'Requested ATC',     icon: '📡', desc: 'WF ATC members view and claim ATC support requests from FIR managers.' }
+        { key: 'requested-atc',  label: 'Requested ATC',     icon: '📡', desc: 'WF ATC members view and claim ATC support requests from FIR managers.' },
+        { key: 'wf-atc-hub',     label: 'WF ATC Hub',       icon: '🎧', desc: 'Per-sector briefing for WF ATC: route map, frequencies, bookings, flow and sector files.' }
       ]
     },
     {
@@ -33163,6 +33164,717 @@ app.delete('/admin/api/wf-atc/:cid', requireAdmin, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+
+
+/* WF ATC Hub — one sector, everything a visiting controller needs. Gated to
+   WF ATC role holders since it exposes routes, bookings and CIDs. */
+app.get('/wf-atc/hub', requirePageEnabled('wf-atc-hub'), requireWfAtcOrAdmin, async (req, res) => {
+  const user = req.session?.user?.data || null;
+  const cid = Number(user?.cid) || null;
+  const isAdmin = isAdminUser(cid);
+
+  const rows = (adminSheetCache || []).filter(r => r?.from && r?.to && r?.number);
+  const preselect = String(req.query.wf || '').toUpperCase();
+
+  const content = `
+    <style>
+      .hub-top { display:grid; grid-template-columns: minmax(0,1.6fr) minmax(0,1fr); gap:14px; align-items:stretch; }
+      @media (max-width: 1000px) { .hub-top { grid-template-columns: 1fr; } }
+      .hub-col { display:flex; flex-direction:column; gap:14px; min-width:0; }
+      .hub-card { background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:14px 16px; }
+      .hub-card h3 { margin:0 0 10px; font-size:13px; color:var(--accent); }
+      .hub-map-card { flex:1 1 auto; min-height:340px; display:flex; }
+      /* Clicking or hovering an FIR polygon otherwise leaves a browser focus
+         rectangle around the whole shape. */
+      #hubMap path:focus, #hubMap path:focus-visible { outline: none; }
+      #hubMap .leaflet-interactive:focus { outline: none; }
+      #hubMap { width:100%; height:100%; min-height:340px; border-radius:8px; overflow:hidden; background:#0b1220; }
+      .hub-route { font-family:monospace; font-size:12.5px; line-height:1.7; word-break:break-word; color:var(--text); }
+      .hub-freq { width:100%; border-collapse:collapse; font-size:12px; }
+      .hub-freq td { padding:3px 6px; border-bottom:1px solid var(--border); }
+      .hub-freq tr:last-child td { border-bottom:0; }
+      .hub-pos { display:inline-block; min-width:44px; text-align:center; font-size:10px; font-weight:700;
+                 border-radius:4px; padding:1px 5px; background:rgba(129,140,248,0.15); color:#a5b4fc; }
+      .hub-cs { font-family:monospace; font-weight:600; }
+      .hub-hz { font-family:monospace; color:#4ade80; text-align:right; }
+      .hub-flow { display:flex; align-items:baseline; gap:8px; flex-wrap:wrap; }
+      .hub-pill { font-size:11px; font-weight:700; padding:3px 10px; border-radius:999px; text-transform:uppercase; letter-spacing:0.04em; }
+      .hub-book { width:100%; border-collapse:collapse; font-size:12px; }
+      .hub-book th { text-align:left; font-size:10px; text-transform:uppercase; letter-spacing:0.05em; color:var(--muted);
+                     padding:6px; border-bottom:2px solid var(--border); }
+      .hub-book td { padding:5px 6px; border-bottom:1px solid var(--border); }
+      .hub-empty { color:var(--muted); font-size:12px; font-style:italic; }
+      .hub-org { display:inline-block; font-size:10px; font-weight:700; letter-spacing:0.04em;
+                 border-radius:4px; padding:1px 7px; white-space:nowrap; }
+      .hub-org-team { color:#4ade80; background:rgba(74,222,128,0.14); border:1px solid rgba(74,222,128,0.4); }
+      .hub-org-aff  { color:#38bdf8; background:rgba(56,189,248,0.14); border:1px solid rgba(56,189,248,0.4); }
+      .hub-fir { display:flex; align-items:center; gap:8px; padding:4px 0; border-bottom:1px solid var(--border); font-size:12px; }
+      .hub-fir:last-child { border-bottom:0; }
+      .hub-fir-swatch { width:10px; height:10px; border-radius:2px; flex-shrink:0; }
+      .hub-fir-id { font-family:monospace; font-weight:700; }
+      .hub-fir-div { color:var(--muted); font-size:10px; }
+      .hub-fir-win { margin-left:auto; font-family:monospace; color:#7dd3fc; white-space:nowrap; }
+      .hub-vatcan { font-family:monospace; font-size:18px; font-weight:700; color:#4ade80; letter-spacing:0.04em; }
+      .hub-rt { display:inline-block; font-family:monospace; font-size:10px; font-weight:700;
+                border-radius:4px; padding:1px 7px; }
+      .hub-rt-a { color:#7dd3fc; background:rgba(56,189,248,0.14); border:1px solid rgba(56,189,248,0.4); }
+      .hub-rt-b { color:#f0abfc; background:rgba(232,121,249,0.14); border:1px solid rgba(232,121,249,0.4); }
+      .hub-file { display:block; font-size:12px; color:var(--accent); text-decoration:none; padding:3px 0; word-break:break-all; }
+      .hub-file:hover { text-decoration:underline; }
+    </style>
+
+    <section class="card card-full" style="margin-bottom:16px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+        <div>
+          <h2 style="margin:0 0 4px;">WF ATC Hub</h2>
+          <p style="color:var(--muted);margin:0;font-size:13px;">Everything you need to control a sector — route, frequencies, bookings and files.</p>
+        </div>
+        <select id="hubSector" style="min-width:320px;padding:10px 14px;font-size:14px;font-weight:600;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:8px;">
+          <option value="">— Choose a sector —</option>
+          ${rows.map(r => '<option value="' + escapeHtml(r.number) + '"' + (r.number === preselect ? ' selected' : '') + '>'
+            + escapeHtml(r.number) + ' — ' + escapeHtml(r.from) + ' → ' + escapeHtml(r.to)
+            + (r.date_utc ? ' · ' + escapeHtml(r.date_utc) : '') + '</option>').join('')}
+        </select>
+      </div>
+    </section>
+
+    <div id="hubEmpty" class="card card-full" style="padding:56px 24px;text-align:center;color:var(--muted);">
+      Choose a sector above to load its briefing.
+    </div>
+
+    <div id="hubBody" hidden>
+      <div class="hub-top" style="margin-bottom:14px;">
+        <div class="hub-col">
+          <div class="hub-card hub-map-card" style="padding:0;overflow:hidden;"><div id="hubMap"></div></div>
+          <div class="hub-card">
+            <h3>ATC Route</h3>
+            <div id="hubRouteALabel" style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:#7dd3fc;margin-bottom:4px;" hidden></div>
+            <div id="hubRoute" class="hub-route"></div>
+            <div id="hubRoute2Wrap" style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);" hidden>
+              <div id="hubRouteBLabel" style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:#f0abfc;margin-bottom:4px;">Route B</div>
+              <div id="hubRoute2" class="hub-route" style="color:#f0abfc;"></div>
+            </div>
+          </div>
+
+          <div class="hub-card" id="hubBookSection" style="flex:0 0 auto;">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px;">
+              <h3 style="margin:0;">Bookings <span id="hubBookCount" style="color:var(--muted);font-weight:400;"></span></h3>
+              <input type="text" id="hubBookFilter" placeholder="Filter by callsign or CID\u2026" style="min-width:220px;padding:7px 12px;font-size:12px;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;" />
+            </div>
+            <div style="overflow-x:auto;">
+              <table class="hub-book">
+                <thead><tr><th id="hubSlotHead">Slot (UTC)</th><th>Callsign</th><th class="hub-rt-col">Route</th><th>Team/Affiliate</th><th>CID</th><th>Name</th></tr></thead>
+                <tbody id="hubBookBody"></tbody>
+              </table>
+            </div>
+            <div id="hubBookEmpty" class="hub-empty" style="margin-top:8px;"></div>
+          </div>
+        </div>
+
+        <div class="hub-col">
+          <div class="hub-card">
+            <h3>Flow Restrictions</h3>
+            <div id="hubFlow" class="hub-flow"></div>
+          </div>
+          <div class="hub-card">
+            <h3 id="hubFreqDepTitle">Departure Frequencies</h3>
+            <table class="hub-freq"><tbody id="hubFreqDep"></tbody></table>
+          </div>
+          <div class="hub-card">
+            <h3 id="hubFreqArrTitle">Arrival Frequencies</h3>
+            <table class="hub-freq"><tbody id="hubFreqArr"></tbody></table>
+          </div>
+          <div class="hub-card">
+            <h3>Enroute FIRs <span style="color:var(--muted);font-weight:400;font-size:11px;" id="hubFirCount"></span></h3>
+            <div id="hubFirs"></div>
+          </div>
+          <div class="hub-card">
+            <h3>Sector Files</h3>
+            <div id="hubFiles"></div>
+          </div>
+          <div class="hub-card">
+            <h3>VATCAN Bookings Plugin</h3>
+            <div id="hubVatcan"></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <script>
+    (function() {
+      var sel = document.getElementById('hubSector');
+      var body = document.getElementById('hubBody');
+      var empty = document.getElementById('hubEmpty');
+      var map = null, layers = [];
+      var allBookings = [];
+
+      var FLOW_LABEL = { NONE: 'No Restrictions', BOOKING_ONLY: 'Booking Required', SLOTTED: 'Bookings with Connect Times' };
+
+      function freqRows(tbody, list) {
+        tbody.innerHTML = '';
+        if (!list.length) {
+          var tr = document.createElement('tr');
+          tr.innerHTML = '<td colspan="3" class="hub-empty">No published frequencies.</td>';
+          tbody.appendChild(tr);
+          return;
+        }
+        list.forEach(function(f) {
+          var tr = document.createElement('tr');
+          var pos = document.createElement('td');
+          pos.style.width = '52px';
+          pos.innerHTML = '<span class="hub-pos">' + (f.type || '—') + '</span>';
+          var cs = document.createElement('td');
+          cs.className = 'hub-cs';
+          cs.textContent = f.callsign;
+          var hz = document.createElement('td');
+          hz.className = 'hub-hz';
+          hz.textContent = f.freq;
+          tr.appendChild(pos); tr.appendChild(cs); tr.appendChild(hz);
+          tbody.appendChild(tr);
+        });
+      }
+
+      function renderBookings() {
+        var q = (document.getElementById('hubBookFilter').value || '').trim().toUpperCase();
+        var list = q ? allBookings.filter(function(b) {
+          return (b.callsign || '').toUpperCase().indexOf(q) !== -1 || String(b.cid).indexOf(q) !== -1;
+        }) : allBookings;
+        var tb = document.getElementById('hubBookBody');
+        tb.innerHTML = '';
+        list.forEach(function(b) {
+          var tr = document.createElement('tr');
+          [b.slot || '—', b.callsign || '—'].forEach(function(v) {
+            var td = document.createElement('td');
+            td.style.fontFamily = 'monospace';
+            td.textContent = v;
+            tr.appendChild(td);
+          });
+          var rt = document.createElement('td');
+          rt.className = 'hub-rt-col';
+          var rc = document.createElement('span');
+          rc.className = 'hub-rt ' + (b.route === 'B' ? 'hub-rt-b' : 'hub-rt-a');
+          rc.textContent = b.route === 'B' ? 'B' : 'A';
+          rt.appendChild(rc);
+          tr.appendChild(rt);
+          var org = document.createElement('td');
+          if (b.kind === 'team' || b.kind === 'affiliate') {
+            var chip = document.createElement('span');
+            chip.className = 'hub-org ' + (b.kind === 'team' ? 'hub-org-team' : 'hub-org-aff');
+            chip.textContent = b.kind === 'team' ? 'WF Team' : 'WF Affiliate';
+            if (b.org) chip.title = b.org;
+            org.appendChild(chip);
+          } else {
+            org.textContent = '';
+          }
+          tr.appendChild(org);
+          [String(b.cid), b.name || ''].forEach(function(v, i) {
+            var td = document.createElement('td');
+            if (i === 0) td.style.color = 'var(--muted)';
+            td.textContent = v;
+            tr.appendChild(td);
+          });
+          if (!window._hubShowRoute) rt.style.display = 'none';
+          tb.appendChild(tr);
+        });
+        document.getElementById('hubBookCount').textContent = '(' + list.length + (q ? ' of ' + allBookings.length : '') + ')';
+        document.getElementById('hubBookEmpty').textContent = list.length ? ''
+          : (allBookings.length ? 'Nothing matches that filter.' : 'No bookings on this sector yet.');
+      }
+      document.getElementById('hubBookFilter').addEventListener('input', renderBookings);
+
+      // Palette shared by the FIR polygons and the list beside them, so a
+      // colour on the map always points at exactly one row.
+      var FIR_PAL = ['#f59e0b','#ef4444','#22c55e','#3b82f6','#a855f7','#ec4899','#14b8a6','#f97316','#06b6d4','#eab308','#8b5cf6','#10b981'];
+      var firGeo = null;
+      function hexToRgba(hex, a) {
+        var n = parseInt(hex.slice(1), 16);
+        return 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + a + ')';
+      }
+      function drawFirs(d, colorByFir) {
+        if (!firGeo || !map) return;
+        (d.firs || []).forEach(function(f) {
+          var feat = firGeo[f.fir];
+          if (!feat) return;
+          var c = colorByFir[f.fir];
+          var lyr = L.geoJSON(feat, { style: { color: c, weight: 2, fillColor: hexToRgba(c, 0.16), fillOpacity: 0.28 } }).addTo(map);
+          lyr.bindTooltip(f.fir + (f.division ? ' \u00b7 ' + f.division : '')
+            + (f.staffStart ? ' \u2014 staff ' + f.staffStart + '\u2013' + f.staffEnd + 'z' : ''), { sticky: true });
+          layers.push(lyr);
+        });
+      }
+
+      function drawMap(d) {
+        if (!map) {
+          map = L.map('hubMap', { zoomControl: true, worldCopyJump: true }).setView([30, 0], 2);
+          wfAddTileLayer(map, { maxZoom: 10 });
+        }
+        layers.forEach(function(l) {
+          try { if (typeof l.remove === 'function' && !l._leaflet_id) l.remove(); else map.removeLayer(l); }
+          catch (e) { try { l.remove(); } catch (e2) {} }
+        });
+        layers = [];
+        fetch('/api/resolve-route?from=' + d.from + '&to=' + d.to + '&route=' + encodeURIComponent(d.atcRoute || '') + '&depTime=&blockTime=')
+          .then(function(r) { return r.json(); })
+          .then(function(rd) {
+            var pts = (rd.points || []).map(function(p) { return [p.lat, p.lon]; });
+            if (pts.length < 2) return;
+            drawFirs(d, d._colorByFir || {});
+            var line = L.polyline(pts, { color: '#38bdf8', weight: 3, opacity: 0.9 }).addTo(map);
+            layers.push(line);
+            [[pts[0], d.from], [pts[pts.length - 1], d.to]].forEach(function(pair) {
+              var m = L.circleMarker(pair[0], { radius: 5, color: '#0f172a', fillColor: '#fff', fillOpacity: 1, weight: 2 })
+                .bindTooltip(pair[1], { permanent: true, direction: 'top', className: 'wpt-label' }).addTo(map);
+              layers.push(m);
+            });
+
+            // Route B when the sector splits its traffic — fuchsia and dashed,
+            // matching the Staffing Overview so a split reads the same on both.
+            if (!d.atcRoute2) {
+              map.fitBounds(pts, { padding: [28, 28], maxZoom: 7 });
+              setTimeout(function() { map.invalidateSize(); }, 60);
+              return;
+            }
+            fetch('/api/resolve-route?from=' + d.from + '&to=' + d.to + '&route=' + encodeURIComponent(d.atcRoute2) + '&depTime=&blockTime=')
+              .then(function(r2) { return r2.json(); })
+              .then(function(rd2) {
+                var pts2 = (rd2.points || []).map(function(p) { return [p.lat, p.lon]; });
+                if (pts2.length >= 2) {
+                  var lineB = L.polyline(pts2, { color: '#e879f9', weight: 3, opacity: 0.9, dashArray: '8, 6' }).addTo(map);
+                  layers.push(lineB);
+                  var legend = L.control({ position: 'bottomleft' });
+                  legend.onAdd = function() {
+                    var div = L.DomUtil.create('div');
+                    div.style.cssText = 'background:rgba(15,23,42,0.9);border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:10px;line-height:1.6;color:#e2e8f0;';
+                    div.innerHTML = '<div><span style="display:inline-block;width:16px;border-top:2px solid #38bdf8;vertical-align:middle;margin-right:5px;"></span>Route A</div>'
+                      + '<div><span style="display:inline-block;width:16px;border-top:2px dashed #e879f9;vertical-align:middle;margin-right:5px;"></span>Route B</div>';
+                    return div;
+                  };
+                  legend.addTo(map);
+                  layers.push(legend);
+                  map.fitBounds(pts.concat(pts2), { padding: [28, 28], maxZoom: 7 });
+                } else {
+                  map.fitBounds(pts, { padding: [28, 28], maxZoom: 7 });
+                }
+                setTimeout(function() { map.invalidateSize(); }, 60);
+              })
+              .catch(function() {
+                map.fitBounds(pts, { padding: [28, 28], maxZoom: 7 });
+              });
+          }).catch(function() {});
+      }
+
+      async function load(wf) {
+        if (!wf) { body.hidden = true; empty.hidden = false; empty.textContent = 'Choose a sector above to load its briefing.'; return; }
+        empty.textContent = 'Loading ' + wf + '…';
+        empty.hidden = false;
+        body.hidden = true;
+        try {
+          var r = await fetch('/api/wf-atc/hub/' + encodeURIComponent(wf), { credentials: 'same-origin' });
+          if (!r.ok) { empty.textContent = 'Could not load ' + wf + '.'; return; }
+          var d = await r.json();
+
+          document.getElementById('hubRoute').textContent = d.atcRoute || 'No ATC route filed for this sector yet.';
+          var w2 = document.getElementById('hubRoute2Wrap');
+          var aLbl = document.getElementById('hubRouteALabel');
+          // Only worth labelling A once there is a B to tell it apart from.
+          if (d.atcRoute2) {
+            var pctA = d.splitPct == null ? null : d.splitPct;
+            aLbl.hidden = false;
+            aLbl.textContent = 'Route A' + (pctA == null ? '' : ' \u00b7 ' + pctA + '%');
+            w2.hidden = false;
+            document.getElementById('hubRouteBLabel').textContent =
+              'Route B' + (pctA == null ? '' : ' \u00b7 ' + (100 - pctA) + '%');
+            document.getElementById('hubRoute2').textContent = d.atcRoute2;
+          } else {
+            aLbl.hidden = true;
+            w2.hidden = true;
+          }
+
+          var flow = document.getElementById('hubFlow');
+          var isNone = !d.flow.type || d.flow.type === 'NONE';
+          flow.innerHTML = '<span class="hub-pill" style="background:' + (isNone ? 'rgba(74,222,128,0.15);color:#4ade80' : 'rgba(245,158,11,0.15);color:#f59e0b') + ';">'
+            + (FLOW_LABEL[d.flow.type] || d.flow.type || 'No Restrictions') + '</span>'
+            + (d.flow.rate ? '<span style="font-size:12px;color:var(--text);">' + d.flow.rate + ' per hour</span>' : '')
+            + '<span style="font-size:11px;color:var(--muted);">' + d.from + ' → ' + d.to + (d.date ? ' · ' + d.date : '') + (d.depTime ? ' · dep ' + d.depTime + 'z' : '') + '</span>';
+
+          // Without a flow restriction there is nothing to book, so the whole
+          // bookings section would only ever be an empty table.
+          document.getElementById('hubBookSection').hidden = isNone;
+          // Hiding the bookings frees vertical space and the map grows into
+          // it, which Leaflet only notices if told.
+          setTimeout(function() { if (map) map.invalidateSize(); }, 80);
+          // Slotted sectors give each booking a connect time rather than a
+          // departure slot, so the column says what the number actually is.
+          document.getElementById('hubSlotHead').textContent =
+            d.flow.type === 'SLOTTED' ? 'Connect Time' : 'Slot (UTC)';
+          // The Route column is noise unless the sector actually has two routes.
+          var showRt = !!d.atcRoute2;
+          document.querySelectorAll('.hub-rt-col').forEach(function(el) { el.style.display = showRt ? '' : 'none'; });
+          window._hubShowRoute = showRt;
+
+          document.getElementById('hubFreqDepTitle').textContent = 'Departure Frequencies — ' + d.from;
+          document.getElementById('hubFreqArrTitle').textContent = 'Arrival Frequencies — ' + d.to;
+          freqRows(document.getElementById('hubFreqDep'), d.frequencies[d.from] || []);
+          freqRows(document.getElementById('hubFreqArr'), d.frequencies[d.to] || []);
+
+          // FIR list. Colour is assigned here and reused by the map polygons.
+          var colorByFir = {};
+          (d.firs || []).forEach(function(f) {
+            if (!colorByFir[f.fir]) colorByFir[f.fir] = FIR_PAL[Object.keys(colorByFir).length % FIR_PAL.length];
+          });
+          d._colorByFir = colorByFir;
+          var firBox = document.getElementById('hubFirs');
+          firBox.innerHTML = '';
+          document.getElementById('hubFirCount').textContent = (d.firs || []).length ? '(' + d.firs.length + ')' : '';
+          if (!(d.firs || []).length) {
+            firBox.innerHTML = '<span class="hub-empty">No FIRs resolved \u2014 the sector needs an ATC route first.</span>';
+          } else {
+            d.firs.forEach(function(f) {
+              var row = document.createElement('div');
+              row.className = 'hub-fir';
+              var sw = document.createElement('span');
+              sw.className = 'hub-fir-swatch';
+              sw.style.background = colorByFir[f.fir];
+              row.appendChild(sw);
+              var id = document.createElement('span');
+              id.className = 'hub-fir-id';
+              id.textContent = f.fir;
+              row.appendChild(id);
+              if (f.division) {
+                var dv = document.createElement('span');
+                dv.className = 'hub-fir-div';
+                dv.textContent = f.division;
+                row.appendChild(dv);
+              }
+              var win = document.createElement('span');
+              win.className = 'hub-fir-win';
+              win.textContent = f.staffStart && f.staffEnd ? f.staffStart + '\u2013' + f.staffEnd + 'z' : '';
+              row.appendChild(win);
+              firBox.appendChild(row);
+            });
+          }
+
+          // VATCAN plugin id — the value controllers paste into the plugin.
+          var vc = document.getElementById('hubVatcan');
+          vc.innerHTML = '';
+          if (d.vatcan && d.vatcan.eventId) {
+            var idEl = document.createElement('div');
+            idEl.className = 'hub-vatcan';
+            idEl.textContent = d.vatcan.eventId;
+            vc.appendChild(idEl);
+            var hint = document.createElement('div');
+            hint.style.cssText = 'font-size:11px;color:var(--muted);margin:2px 0 6px;';
+            hint.textContent = 'Paste this event ID into the VATCAN bookings plugin.';
+            vc.appendChild(hint);
+            var dl = document.createElement('a');
+            dl.className = 'hub-file';
+            dl.href = 'https://github.com/VatsimCanada/Slots-Plugin/releases';
+            dl.target = '_blank'; dl.rel = 'noopener';
+            dl.textContent = '\u2b07 Download the Slots plugin';
+            vc.appendChild(dl);
+          } else {
+            vc.innerHTML = '<span class="hub-empty">Not seeded to VATCAN yet.</span>';
+          }
+
+          var files = document.getElementById('hubFiles');
+          files.innerHTML = '';
+          (d.sectorFiles || []).forEach(function(f) {
+            var a = document.createElement('a');
+            a.className = 'hub-file'; a.href = f.url; a.target = '_blank'; a.rel = 'noopener';
+            a.textContent = '↗ ' + f.url;
+            files.appendChild(a);
+            var s = document.createElement('div');
+            s.style.cssText = 'font-size:10px;color:var(--muted);margin:-2px 0 6px;';
+            s.textContent = f.label;
+            files.appendChild(s);
+          });
+          if (d.pack) {
+            var p = document.createElement('a');
+            p.className = 'hub-file'; p.href = d.pack.url;
+            p.textContent = '⬇ ' + d.pack.file + (d.pack.sizeMb ? '  (' + d.pack.sizeMb + ' MB)' : '');
+            files.appendChild(p);
+            var ps = document.createElement('div');
+            ps.style.cssText = 'font-size:10px;color:var(--muted);margin:-2px 0 6px;';
+            ps.textContent = (d.pack.full ? 'Full WorldFlight controller pack — every leg' : 'Partial pack — not every leg')
+              + (d.pack.builtAt ? ' · built ' + d.pack.builtAt.slice(0, 16).replace('T', ' ') + 'z' : '');
+            files.appendChild(ps);
+          }
+          if (!files.children.length) files.innerHTML = '<span class="hub-empty">No sector files supplied yet.</span>';
+
+          allBookings = d.bookings || [];
+          document.getElementById('hubBookFilter').value = '';
+          renderBookings();
+
+          empty.hidden = true;
+          body.hidden = false;
+          drawMap(d);
+        } catch (e) {
+          empty.textContent = 'Could not load ' + wf + '.';
+        }
+      }
+
+      // One fetch for the page; polygons are reused as sectors are switched.
+      fetch('/api/fir-merged.geojson')
+        .then(function(r) { return r.json(); })
+        .then(function(gj) {
+          firGeo = {};
+          (gj.features || []).forEach(function(f) { if (f.properties && f.properties.id) firGeo[f.properties.id] = f; });
+        })
+        .catch(function() { firGeo = {}; });
+
+      sel.addEventListener('change', function() {
+        var wf = sel.value;
+        history.replaceState(null, '', wf ? '?wf=' + encodeURIComponent(wf) : location.pathname);
+        load(wf);
+      });
+      if (sel.value) load(sel.value);
+    })();
+    </script>
+  `;
+
+  res.send(renderLayout({ title: 'WF ATC Hub', user, isAdmin, content, layoutClass: 'dashboard-full' }));
+});
+
+/* ── WF ATC Hub ────────────────────────────────────────────────────────────
+   Everything a visiting controller needs for one sector in a single payload:
+   route, flow, frequencies, bookings and sector-file links. */
+
+// afv_stations.csv is 15k rows of "VATSIM callsign,frequency" — parsed once.
+let afvStations = null;
+function loadAfvStations() {
+  if (afvStations) return afvStations;
+  afvStations = [];
+  try {
+    const p = path.join(__dirname, 'data', 'afv_stations.csv');
+    const lines = fs.readFileSync(p, 'utf-8').split(/\r?\n/);
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
+      const c = line.lastIndexOf(',');
+      if (c < 1) continue;
+      const callsign = line.slice(0, c).trim().replace(/^\uFEFF/, '');
+      const freq = line.slice(c + 1).trim();
+      if (callsign && freq) afvStations.push({ callsign, freq });
+    }
+  } catch (e) { console.warn('[WF-ATC-HUB] afv_stations.csv unreadable:', e.message); }
+  return afvStations;
+}
+
+/* VATSIM names US and Alaskan positions off the 3-letter identifier — PADQ is
+   ADQ_TWR, not PADQ_TWR — so those get a second prefix to match on. */
+function afvPrefixesFor(icao) {
+  /* VATSIM names positions off a national short code rather than the ICAO:
+       US / Alaska (K*, P*)  drop one letter — PADQ is ADQ_TWR, KSLC is SLC_*
+       Australia   (Y*)      drop two      — YBAS is AS_TWR, YSSY is SY_*
+     Everywhere else, Canada included, uses the full ICAO (CYVR_1_APP).
+     Trying every form for every airport would drag in unrelated stations —
+     VVDN would collect DN_*, CYKA would collect Karratha KA_* — so each
+     country gets exactly its own form, with the full ICAO as a fallback. */
+  if (icao.length !== 4) return [icao];
+  if (/^[KP]/.test(icao)) return [icao.slice(1), icao];
+  if (/^Y/.test(icao)) return [icao.slice(2), icao];
+  return [icao];
+}
+
+const ATC_POS_RANK = { DEL: 1, CLD: 1, GND: 2, RMP: 2, TWR: 3, DEP: 4, APP: 5, TMA: 5, CTR: 6, FSS: 7, ATIS: 0 };
+function atcPosSuffix(callsign) {
+  const m = /_([A-Z]{3})$/.exec(callsign);
+  return m ? m[1] : '';
+}
+
+/* Of two callsigns for the same position on the same frequency, the plainer
+   one wins: CYVR_DEL over CYVR_1_DEL, WSSS_DEL over WSSS__DEL and WSSS_I_DEL.
+   Fewest segments first, then shortest, then alphabetical. */
+function afvPlainness(callsign) {
+  const segs = callsign.split('_').filter(Boolean).length;
+  return [segs, callsign.length, callsign];
+}
+function afvIsPlainer(a, b) {
+  const [as, al, at] = afvPlainness(a);
+  const [bs, bl, bt] = afvPlainness(b);
+  return as - bs || al - bl || at.localeCompare(bt);
+}
+
+function hubFrequenciesFor(icao) {
+  const prefixes = afvPrefixesFor(icao);
+  const seen = new Set();
+  const matched = [];
+  for (const st of loadAfvStations()) {
+    if (!prefixes.some(p => st.callsign.startsWith(p + '_'))) continue;
+    if (seen.has(st.callsign)) continue;
+    seen.add(st.callsign);
+    matched.push({ callsign: st.callsign, freq: st.freq, type: atcPosSuffix(st.callsign) });
+  }
+  // One entry per position+frequency. The AFV list carries a lot of numbered
+  // splits that share a frequency and are the same position to a pilot.
+  const best = new Map();
+  for (const st of matched) {
+    const key = st.type + '|' + st.freq;
+    const prev = best.get(key);
+    if (!prev || afvIsPlainer(st.callsign, prev.callsign) < 0) best.set(key, st);
+  }
+  const out = [...best.values()];
+  out.sort((a, b) => (ATC_POS_RANK[a.type] ?? 9) - (ATC_POS_RANK[b.type] ?? 9) || a.callsign.localeCompare(b.callsign));
+  return out;
+}
+
+app.get('/api/wf-atc/hub/:wf', requireWfAtcOrAdmin, async (req, res) => {
+  try {
+    const wf = String(req.params.wf || '').toUpperCase();
+    const sched = (adminSheetCache || []).find(r => r?.number === wf);
+    if (!sched) return res.status(404).json({ error: 'Sector not found' });
+
+    const from = sched.from, to = sched.to;
+    const sectorKey = from + '-' + to;
+
+    // Bookings for this sector, newest slot first. Same source the public
+    // slots feed uses, so the two can never disagree.
+    const prefix = sectorKey + '|';
+    const bookings = [];
+    for (const [key, b] of Object.entries(tobtBookingsByKey)) {
+      if (key === b.slotKey) continue;                       // skip raw-slotKey alias
+      if (!b.slotKey || !b.slotKey.startsWith(prefix)) continue;
+      bookings.push({
+        cid: b.cid,
+        callsign: b.callsign || '',
+        slot: (b.tobtTimeUtc && b.tobtTimeUtc !== 'BOOKING_ONLY' && b.tobtTimeUtc !== 'null')
+          ? displayTobt(b.tobtTimeUtc) : '',
+        route: b.assignedRoute === 'B' ? 'B' : 'A'
+      });
+    }
+    bookings.sort((a, b) => (a.slot || 'zz:zz').localeCompare(b.slot || 'zz:zz'));
+    const names = {};
+    const cids = [...new Set(bookings.map(b => Number(b.cid)).filter(Boolean))];
+    if (cids.length) {
+      const us = await prisma.user.findMany({ where: { cid: { in: cids } }, select: { cid: true, name: true } }).catch(() => []);
+      us.forEach(u => { if (u.name && !/^User \d+$/.test(u.name)) names[u.cid] = u.name; });
+    }
+    bookings.forEach(b => { b.name = names[Number(b.cid)] || ''; });
+
+    /* Flag each booking as a WF Team or WF Affiliate. The callsign is the
+       stronger signal because it identifies the aircraft rather than the
+       person flying it; the CID role is a fallback for members booking under
+       something else. */
+    const [teamRows, affRows] = await Promise.all([
+      prisma.officialTeam.findMany({ select: { callsign: true, teamName: true } }).catch(() => []),
+      prisma.affiliate.findMany({ select: { callsign: true, name: true } }).catch(() => [])
+    ]);
+    const teamByCs = new Map();
+    teamRows.forEach(t => { if (t.callsign) teamByCs.set(String(t.callsign).toUpperCase(), t.teamName || t.callsign); });
+    const affByCs = new Map();
+    affRows.forEach(a => { if (a.callsign) affByCs.set(String(a.callsign).toUpperCase(), a.name || a.callsign); });
+    for (const b of bookings) {
+      const cs = String(b.callsign || '').toUpperCase();
+      if (teamByCs.has(cs)) { b.kind = 'team'; b.org = teamByCs.get(cs); }
+      else if (affByCs.has(cs)) { b.kind = 'affiliate'; b.org = affByCs.get(cs); }
+      else if (isTeamMember(b.cid)) { b.kind = 'team'; b.org = ''; }
+      else if (isAffiliate(b.cid)) { b.kind = 'affiliate'; b.org = ''; }
+      else { b.kind = ''; b.org = ''; }
+    }
+
+    // Sector-file links: whatever the requesting FIR supplied, plus our own pack.
+    const reqRows = await prisma.atcRequest?.findMany({
+      where: { sectorNumber: wf, eventId: activeEventId || undefined, NOT: { sectorFileUrl: null } },
+      select: { sectorFileUrl: true, fromIcao: true, toIcao: true, positionType: true }
+    }).catch(() => []) || [];
+    const seenUrl = new Set();
+    const sectorFiles = [];
+    for (const r of reqRows) {
+      const url = String(r.sectorFileUrl || '').trim();
+      if (!url || seenUrl.has(url)) continue;
+      seenUrl.add(url);
+      sectorFiles.push({ url, label: 'Supplied by the requesting FIR' });
+    }
+    // VATCAN booking-plugin event id — controllers paste this into the plugin
+    // to pull the live slot list for the sector.
+    let vatcan = null;
+    try {
+      const row = await prisma.wfScheduleRow.findFirst({
+        where: { number: wf, eventId: activeEventId || undefined },
+        select: { vatcanEventId: true }
+      });
+      vatcan = {
+        eventId: row?.vatcanEventId || null,
+        baseUrl: process.env.VATCAN_BOOKINGS_API_URL || 'https://bookings.vlhtesting.com'
+      };
+    } catch {}
+
+    /* FIRs this sector crosses, with the staffing window for each — the same
+       analysis Sector Planning uses, so the Hub agrees with it. */
+    const firs = [];
+    try {
+      const allFirs = await buildFirAnalysis();
+      for (const f of allFirs) {
+        for (const lg of (f.legs || [])) {
+          if (lg.wf !== wf) continue;
+          firs.push({
+            fir: f.fir,
+            division: f.division || '',
+            staffStart: lg.staffStart || '',
+            staffEnd: lg.staffEnd || '',
+            staffMins: lg.staffMins || 0,
+            routes: lg.routes || ['A']
+          });
+        }
+      }
+      // Transit order, so the list reads the way the flight flies it.
+      firs.sort((a, b) => String(a.staffStart).localeCompare(String(b.staffStart)));
+    } catch (e) { console.warn('[WF-ATC-HUB] FIR analysis unavailable:', e.message); }
+
+    let pack = null;
+    try {
+      const dir = path.join(__dirname, 'Euroscope_Files');
+      const zips = fs.existsSync(dir)
+        ? fs.readdirSync(dir).filter(f => f.endsWith('.zip'))
+            .map(f => ({ f, t: fs.statSync(path.join(dir, f)).mtimeMs, size: fs.statSync(path.join(dir, f)).size }))
+            .sort((a, b) => b.t - a.t)
+        : [];
+      // Prefer the newest full pack — a partial build made from the admin page
+      // would otherwise be newer and get linked instead.
+      const chosen = zips.find(z => /_Full_/i.test(z.f)) || zips[0];
+      if (chosen) pack = {
+        file: chosen.f,
+        url: '/admin/api/controller-pack/download/' + encodeURIComponent(chosen.f),
+        sizeMb: (chosen.size / 1048576).toFixed(1),
+        full: /_Full_/i.test(chosen.f),
+        builtAt: new Date(chosen.t).toISOString()
+      };
+    } catch {}
+
+    res.json({
+      wf,
+      from, to,
+      date: sched.date_utc || '',
+      depTime: sched.dep_time_utc || '',
+      arrTime: sched.arr_time_utc || '',
+      blockTime: sched.block_time || '',
+      // Filed route first, else whatever Sector Planning has proposed, so a
+      // sector still shows something while the two ends are agreeing it.
+      atcRoute: sched.atc_route_raw || sched.atc_route || sched.staffing_route || '',
+      atcRoute2: sched.atc_route_raw2 || sched.atc_route2 || sched.staffing_route2 || '',
+      routeState: sched.route_state || 'none',
+      // Percentage on Route A; Route B takes the remainder.
+      splitPct: sched.split_pct != null ? sched.split_pct : null,
+      flow: {
+        rate: sharedDepFlows[sectorKey] || 0,
+        type: sharedFlowTypes[sectorKey] || 'NONE'
+      },
+      frequencies: { [from]: hubFrequenciesFor(from), [to]: hubFrequenciesFor(to) },
+      bookings,
+      sectorFiles,
+      pack,
+      vatcan,
+      firs,
+      depFir: await resolveAirportFir(from).catch(() => null),
+      arrFir: await resolveAirportFir(to).catch(() => null)
+    });
+  } catch (e) {
+    console.error('[WF-ATC-HUB]', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // Sync WF ATC Discord roles now
 app.post('/admin/api/wf-atc/sync', requireAdmin, async (req, res) => {
   try {
@@ -33374,7 +34086,18 @@ app.post('/admin/api/controller-pack/generate', requireAdmin, express.json(), as
   for (const leg of legs) job.legs[leg.legName] = { status: 'queued', progress: 0, step: '' };
   cpJobs[jobId] = job;
   res.json({ jobId });
+  runControllerPackJob(legs, job)
+    .catch(e => console.error('[CP] job failed:', e.message))
+    .finally(() => setTimeout(() => delete cpJobs[jobId], 600000)); // 10 min expiry
+});
 
+/* Build a controller pack. Split out of the route so the nightly rebuild can
+   run exactly the same pipeline as the admin button. `full` only changes the
+   zip name — a full pack is simply every leg — but the name is what lets the
+   WF ATC Hub link to the complete pack rather than to somebody's one-leg
+   test build. */
+async function runControllerPackJob(legs, job, { full = false } = {}) {
+  {
   const scriptsDir = path.resolve('scripts');
 
   // Bootstrap shared static files before generating
@@ -33449,7 +34172,9 @@ app.post('/admin/api/controller-pack/generate', requireAdmin, express.json(), as
       const archiver = (await import('archiver')).default;
       const now = new Date();
       const dateStr = String(now.getDate()).padStart(2, '0') + '_' + String(now.getMonth() + 1).padStart(2, '0');
-      const zipName = `WorldFlight_Controller_Pack_${dateStr}.zip`;
+      const zipName = full
+        ? `WorldFlight_Controller_Pack_Full_${dateStr}.zip`
+        : `WorldFlight_Controller_Pack_${dateStr}.zip`;
       const zipPath = path.resolve('Euroscope_Files', zipName);
       const output = fs.createWriteStream(zipPath);
       const archive = archiver('zip', { zlib: { level: 5 } });
@@ -33531,7 +34256,46 @@ app.post('/admin/api/controller-pack/generate', requireAdmin, express.json(), as
     }
   }
   job.complete = true;
-  setTimeout(() => delete cpJobs[jobId], 600000); // 10 min expiry
+  }
+}
+
+/* Nightly full controller pack. Runs every leg so the WF ATC Hub always has
+   a complete, current pack to hand out; 04:00z is chosen because it is the
+   quietest part of the WorldFlight day and a full build takes a while. */
+let cpNightlyRunning = false;
+async function rebuildFullControllerPack() {
+  if (cpNightlyRunning) { console.log('[CP] nightly skipped — a build is already running'); return; }
+  const legs = (adminSheetCache || [])
+    .filter(r => r?.from && r?.to && r?.number)
+    .map(r => ({
+      number: r.number,
+      legName: r.number,
+      from: r.from,
+      to: r.to,
+      route: r.atc_route_raw || r.atc_route || ''
+    }));
+  if (!legs.length) { console.log('[CP] nightly skipped — no schedule loaded'); return; }
+  cpNightlyRunning = true;
+  const job = { legs: {}, complete: false };
+  legs.forEach(l => { job.legs[l.legName] = { status: 'queued', progress: 0, step: '' }; });
+  console.log(`[CP] nightly full pack starting — ${legs.length} legs`);
+  try {
+    await runControllerPackJob(legs, job, { full: true });
+    const ok = Object.values(job.legs).filter(l => l.status === 'done').length;
+    console.log(`[CP] nightly full pack finished — ${ok}/${legs.length} legs`);
+  } catch (e) {
+    console.error('[CP] nightly full pack failed:', e.message);
+  } finally {
+    cpNightlyRunning = false;
+  }
+}
+cron.schedule('0 4 * * *', rebuildFullControllerPack, { timezone: 'UTC' });
+
+// Manual trigger for the same full rebuild.
+app.post('/admin/api/controller-pack/rebuild-full', requireAdmin, (req, res) => {
+  if (cpNightlyRunning) return res.status(409).json({ error: 'A full rebuild is already running' });
+  rebuildFullControllerPack();
+  res.json({ ok: true, started: true });
 });
 
 app.get('/admin/api/controller-pack/progress/:jobId', requireAdmin, (req, res) => {
@@ -33540,7 +34304,8 @@ app.get('/admin/api/controller-pack/progress/:jobId', requireAdmin, (req, res) =
   res.json(job);
 });
 
-app.get('/admin/api/controller-pack/download/:filename', requireAdmin, (req, res) => {
+// WF ATC need the pack too — the Hub links straight to it.
+app.get('/admin/api/controller-pack/download/:filename', requireWfAtcOrAdmin, (req, res) => {
   const filename = req.params.filename.replace(/[^a-zA-Z0-9_.\-]/g, '');
   const zipPath = path.resolve('Euroscope_Files', filename);
   if (!fs.existsSync(zipPath)) return res.status(404).send('File not found');
