@@ -585,6 +585,22 @@ model AtcRequest {
   @@index([eventId])
   @@index([sectorNumber])
 }
+// One controller covering part of an AtcRequest's window. A request with no
+// claim rows is either untouched or fully claimed the old way (status +
+// acceptedBy); once anyone part-claims it, these rows are the truth about who
+// covers what and the request's own window stays as originally asked for.
+model AtcRequestClaim {
+  id        Int      @id @default(autoincrement())
+  requestId Int
+  cid       Int
+  timeFrom  String   // UTC HH:MM
+  timeTo    String   // UTC HH:MM
+  claimedAt DateTime @default(now())
+
+  @@index([requestId])
+  @@index([cid])
+}
+
 
 model AtcNotifyPreference {
   id          Int      @id @default(autoincrement())

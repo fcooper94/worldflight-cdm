@@ -2295,40 +2295,63 @@ async function syncWfAtcDiscordRoles({ dryRun = false } = {}) {
     desiredByDiscordId[discordId] = roles;
   }
 
-  let added = 0, removed = 0, skipped = 0;
+  let added = 0, removed = 0, skipped = 0, failed = 0;
+  let firstError = null;
 
   // Process each guild member that has any WF ATC notification role
   for (const gm of snap.members) {
-    const currentRoles = new Set((gm.roleNames || []).map(name => {
-      const role = snap.roles.find(r => r.name === name);
-      return role ? role.id : null;
-    }).filter(Boolean));
+    // Compare on role ids. Mapping names back to ids dropped any role whose
+    // name did not resolve and picked the wrong role when two share a name,
+    // so a member could look like they were missing a role they already had.
+    const currentRoles = new Set(gm.roleIds || []);
     const currentNotify = [...currentRoles].filter(id => allNotifyRoleIds.has(id));
     const desired = desiredByDiscordId[gm.id] || new Set();
 
-    // Add missing roles
+    // Add missing roles. Discord errors were previously swallowed while the
+    // counter still incremented, so a sync that changed nothing at all still
+    // reported "N added" and there was no way to see why.
     for (const roleId of desired) {
-      if (!currentRoles.has(roleId)) {
+      if (currentRoles.has(roleId)) continue;
+      if (dryRun) { log.push('ADD ' + gm.nickname + ' (' + gm.id + ') role ' + roleId); added++; continue; }
+      try {
+        await addRoleToMember(gm.id, roleId);
         log.push('ADD ' + gm.nickname + ' (' + gm.id + ') role ' + roleId);
-        if (!dryRun) await addRoleToMember(gm.id, roleId).catch(() => {});
         added++;
+      } catch (err) {
+        failed++;
+        if (!firstError) firstError = err.message;
+        log.push('FAILED ADD ' + gm.nickname + ' (' + gm.id + ') role ' + roleId + ' — ' + err.message);
       }
     }
 
     // Remove roles that shouldn't be there
     for (const roleId of currentNotify) {
-      if (!desired.has(roleId)) {
+      if (desired.has(roleId)) continue;
+      if (dryRun) { log.push('REMOVE ' + gm.nickname + ' (' + gm.id + ') role ' + roleId); removed++; continue; }
+      try {
+        await removeRoleFromMember(gm.id, roleId);
         log.push('REMOVE ' + gm.nickname + ' (' + gm.id + ') role ' + roleId);
-        if (!dryRun) await removeRoleFromMember(gm.id, roleId).catch(() => {});
         removed++;
+      } catch (err) {
+        failed++;
+        if (!firstError) firstError = err.message;
+        log.push('FAILED REMOVE ' + gm.nickname + ' (' + gm.id + ') role ' + roleId + ' — ' + err.message);
       }
     }
 
     if (!desired.size && !currentNotify.length) skipped++;
   }
 
-  const summary = { dryRun, members: members.length, linked: Object.keys(desiredByDiscordId).length, added, removed, skipped, log };
-  console.log('[WF-ATC-SYNC] ' + (dryRun ? 'DRY RUN' : 'LIVE') + ': ' + added + ' added, ' + removed + ' removed, ' + members.length + ' members');
+  // Roles configured in ATC_NOTIFY_ROLES but absent from the guild can never
+  // be assigned, so name them rather than failing silently per member.
+  const guildRoleIds = new Set((snap.roles || []).map(r => r.id));
+  const missingRoles = [...allNotifyRoleIds].filter(id => !guildRoleIds.has(id));
+  if (missingRoles.length) log.push('ROLE NOT IN GUILD: ' + missingRoles.join(', '));
+
+  const summary = { dryRun, members: members.length, linked: Object.keys(desiredByDiscordId).length, added, removed, skipped, failed, error: firstError, missingRoles, log };
+  console.log('[WF-ATC-SYNC] ' + (dryRun ? 'DRY RUN' : 'LIVE') + ': ' + added + ' added, ' + removed + ' removed, ' + failed + ' failed, ' + members.length + ' members'
+    + (missingRoles.length ? ' | roles missing from guild: ' + missingRoles.join(', ') : '')
+    + (firstError ? ' | first error: ' + firstError : ''));
   return summary;
 }
 
@@ -32972,7 +32995,11 @@ app.get('/admin/wf-atc', requireAdmin, async (req, res) => {
           var r = await fetch('/admin/api/wf-atc/sync', { method: 'POST', credentials: 'same-origin' });
           var d = await r.json();
           if (r.ok) {
-            showMsg('Synced! ' + (d.added || 0) + ' added, ' + (d.removed || 0) + ' removed', true);
+            var okAll = !d.failed && !(d.missingRoles && d.missingRoles.length);
+            var txt = 'Synced! ' + (d.added || 0) + ' added, ' + (d.removed || 0) + ' removed';
+            if (d.failed) txt += ' — ' + d.failed + ' FAILED: ' + (d.error || 'see server log');
+            if (d.missingRoles && d.missingRoles.length) txt += ' — role(s) not in guild: ' + d.missingRoles.join(', ');
+            showMsg(txt, okAll);
           } else { showMsg(d.error || 'Sync failed', false); }
         } catch (e) { showMsg('Sync failed', false); }
         this.disabled = false; this.textContent = 'Sync Discord Now';
@@ -36819,8 +36846,26 @@ app.get('/wf-atc/requested', requirePageEnabled('requested-atc'), requireLogin, 
 
   const posLabels = { aerodrome: 'Aerodrome', approach: 'APP/DEP/TMA', ctr: 'CTR/Center' };
 
+  // Partial claims — several controllers can share one window.
+  const claims = await prisma.atcRequestClaim?.findMany({
+    where: { requestId: { in: requests.map(r => r.id) } },
+    orderBy: { claimedAt: 'asc' }
+  }).catch(() => []) || [];
+  const claimsByReq = {};
+  claims.forEach(c => { (claimsByReq[c.requestId] = claimsByReq[c.requestId] || []).push(c); });
+  const claimCids = [...new Set(claims.map(c => Number(c.cid)))].filter(c => !nameOf[c]);
+  if (claimCids.length) {
+    const cu = await prisma.user.findMany({ where: { cid: { in: claimCids } }, select: { cid: true, name: true } }).catch(() => []);
+    cu.forEach(u => { if (u.name) nameOf[u.cid] = u.name; });
+  }
+  const covFor = (r) => atcCoverage(r, claimsByReq[r.id] || []);
+  const requestById = {};
+  requests.forEach(r => { requestById[r.id] = r; });
+
+  // A part-claimed request stays open until the claims leave no gaps.
   const openReqs = requests.filter(r => r.status === 'waiting');
   const myAccepted = requests.filter(r => r.status === 'accepted' && r.acceptedBy === cid);
+  const myClaims = claims.filter(c => Number(c.cid) === cid && requestById[c.requestId]);
   const allAccepted = requests.filter(r => r.status === 'accepted');
 
   function buildRow(r, opts) {
@@ -36829,21 +36874,47 @@ app.get('/wf-atc/requested', requirePageEnabled('requested-atc'), requireLogin, 
     const showDrop = opts?.drop;
     const expandable = opts?.expand !== false;
     const cs = r.callsign || '';
-    const timesText = r.timeFrom && r.timeTo ? r.timeFrom + '-' + r.timeTo + 'z' : '\u2014';
+    const partial = opts?.partial || null;   // rendering one of my own part-claims
+    const timesText = partial
+      ? partial.timeFrom + '-' + partial.timeTo + 'z'
+      : (r.timeFrom && r.timeTo ? r.timeFrom + '-' + r.timeTo + 'z' : '\u2014');
+    // Who has what, and what is still open. Only meaningful on the open list.
+    const cov = partial ? null : covFor(r);
+    const hasPartial = !!(cov && cov.covered.length);
+    const coverHtml = !hasPartial ? '' :
+      '<div style="margin-top:3px;display:flex;flex-direction:column;gap:2px;">'
+      + cov.covered.map(sp => '<span style="font-size:10px;color:#4ade80;">\u2713 '
+          + escapeHtml(nameOf[sp.cid] || String(sp.cid)) + ' ' + sp.from + '-' + sp.to + 'z</span>').join('')
+      + cov.gaps.map(g => '<span style="font-size:10px;color:#f59e0b;font-weight:600;">\u26a0 '
+          + g.from + '-' + g.to + 'z open</span>').join('')
+      + '</div>';
     const sched = (adminSheetCache || []).find(s => s.number === r.sectorNumber);
     const date = sched ? sched.date_utc : '';
     const colCount = 5 + (showAcceptedBy ? 2 : 0) + (showClaim || showDrop ? 1 : 0);
 
     let actionCell = '';
-    if (showClaim) actionCell = '<td><button type="button" class="action-btn ra-claim-btn" data-id="' + r.id + '" style="font-size:10px;padding:3px 12px;background:rgba(74,222,128,0.15);color:#4ade80;border-color:#4ade80;">Claim</button></td>';
-    else if (showDrop) actionCell = '<td><button type="button" class="action-btn ra-drop-btn" data-id="' + r.id + '" style="font-size:10px;padding:3px 12px;background:rgba(239,68,68,0.1);color:#f87171;border-color:#f87171;">Drop</button></td>';
+    const partBtn = (label) => '<button type="button" class="action-btn ra-partial-btn" data-id="' + r.id
+      + '" data-cs="' + escapeHtml(cs) + '" data-window="' + escapeHtml((r.timeFrom || '') + '-' + (r.timeTo || ''))
+      + '" data-gaps="' + escapeHtml(JSON.stringify((cov?.gaps || []).map(g => [g.from, g.to])))
+      + '" style="font-size:10px;padding:3px 12px;background:rgba(56,189,248,0.12);color:#38bdf8;border-color:#38bdf8;white-space:nowrap;">' + label + '</button>';
+    if (showClaim) {
+      const canSplit = !!atcRequestWindow(r);
+      actionCell = '<td><div style="display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap;">'
+        // Once part of the window is taken, taking "all of it" no longer makes
+        // sense — the only move left is to pick up what is still open.
+        + (hasPartial ? partBtn('Claim Remaining Time')
+            : '<button type="button" class="action-btn ra-claim-btn" data-id="' + r.id + '" style="font-size:10px;padding:3px 12px;background:rgba(74,222,128,0.15);color:#4ade80;border-color:#4ade80;">Claim</button>'
+              + (canSplit ? partBtn('Partly Claim') : ''))
+        + '</div></td>';
+    }
+    else if (showDrop) actionCell = '<td><button type="button" class="action-btn ' + (partial ? 'ra-claim-drop-btn" data-claim-id="' + partial.id : 'ra-drop-btn" data-id="' + r.id) + '" style="font-size:10px;padding:3px 12px;background:rgba(239,68,68,0.1);color:#f87171;border-color:#f87171;">Drop</button></td>';
 
     let html = '<tr class="' + (expandable ? 'ra-expandable-row' : '') + '" data-id="' + r.id + '">'
       + '<td style="font-weight:700;color:var(--accent);">' + escapeHtml(r.sectorNumber) + '</td>'
       + '<td style="font-size:11px;">' + escapeHtml(r.fromIcao) + ' \u2192 ' + escapeHtml(r.toIcao) + '</td>'
       + '<td style="font-size:11px;">' + escapeHtml(date) + '</td>'
       + '<td><span style="font-family:monospace;font-size:12px;font-weight:600;">' + escapeHtml(cs) + '</span></td>'
-      + '<td style="font-size:11px;">' + escapeHtml(timesText) + '</td>'
+      + '<td style="font-size:11px;">' + escapeHtml(timesText) + coverHtml + '</td>'
       + (showAcceptedBy ? '<td style="font-size:11px;color:var(--success);">' + (r.acceptedBy ? escapeHtml(nameOf[r.acceptedBy] || String(r.acceptedBy)) : '') + '</td>'
         + '<td style="font-size:11px;color:var(--muted);">' + (r.acceptedBy ? String(r.acceptedBy) : '') + '</td>' : '')
       + actionCell
@@ -36948,10 +37019,37 @@ app.get('/wf-atc/requested', requirePageEnabled('requested-atc'), requireLogin, 
 
       <section class="card" style="padding:20px;">
         <h2 style="margin:0 0 16px;color:var(--accent);font-size:18px;">My Accepted ATC</h2>
-        ${buildTable(myAccepted.map(r => buildRow(r, { drop: true, expand: true })), [...myHeaders, ''])}
+        ${buildTable(
+          myAccepted.map(r => buildRow(r, { drop: true, expand: true }))
+            .concat(myClaims.map(c => buildRow(requestById[c.requestId], { drop: true, expand: true, partial: c }))),
+          [...myHeaders, ''])}
       </section>
     </div>
 
+
+    <div id="raPartialModal" class="modal hidden">
+      <div class="modal-backdrop"></div>
+      <div class="modal-dialog" style="width:440px;max-width:94vw;padding:22px;">
+        <h3 style="margin:0 0 4px;">Claim part of this position</h3>
+        <p id="raPartialSub" style="color:var(--muted);font-size:12px;margin:0 0 14px;line-height:1.5;"></p>
+        <div id="raPartialGaps" style="margin-bottom:14px;display:flex;flex-direction:column;gap:6px;"></div>
+        <div style="display:flex;gap:12px;align-items:flex-end;">
+          <label style="flex:1;font-size:11px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:var(--muted);">
+            From (UTC)
+            <input type="time" id="raPartialFrom" step="300" style="width:100%;margin-top:4px;padding:8px;background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:monospace;font-size:14px;box-sizing:border-box;" />
+          </label>
+          <label style="flex:1;font-size:11px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:var(--muted);">
+            To (UTC)
+            <input type="time" id="raPartialTo" step="300" style="width:100%;margin-top:4px;padding:8px;background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:monospace;font-size:14px;box-sizing:border-box;" />
+          </label>
+        </div>
+        <div id="raPartialMsg" style="font-size:11px;color:#f87171;margin-top:8px;min-height:14px;"></div>
+        <div class="modal-actions" style="margin-top:12px;">
+          <button type="button" class="modal-btn modal-btn-cancel" id="raPartialCancel">Cancel</button>
+          <button type="button" class="modal-btn modal-btn-submit" id="raPartialSubmit">Claim this time</button>
+        </div>
+      </div>
+    </div>
     <section class="card" style="padding:20px;">
       <h2 style="margin:0 0 16px;color:var(--accent);font-size:18px;">All Accepted Requests</h2>
       ${buildTable(allAccepted.map(r => buildRow(r, { acceptedBy: true, expand: false })), allHeaders)}
@@ -36962,13 +37060,100 @@ app.get('/wf-atc/requested', requirePageEnabled('requested-atc'), requireLogin, 
       // Expand/collapse detail rows
       document.addEventListener('click', function(e) {
         var row = e.target.closest('.ra-expandable-row');
-        if (row && !e.target.closest('.ra-claim-btn')) {
+        if (row && !e.target.closest('.ra-claim-btn, .ra-partial-btn, .ra-drop-btn, .ra-claim-drop-btn')) {
           var id = row.dataset.id;
           var detail = document.querySelector('[data-detail-for="' + id + '"]');
           if (detail) detail.classList.toggle('hidden');
         }
       });
 
+
+      // Partial claim modal — pre-filled with the first gap so the common case
+      // (take everything still open) is one click.
+      (function() {
+        var modal = document.getElementById('raPartialModal');
+        if (!modal) return;
+        var fromEl = document.getElementById('raPartialFrom');
+        var toEl = document.getElementById('raPartialTo');
+        var subEl = document.getElementById('raPartialSub');
+        var gapsEl = document.getElementById('raPartialGaps');
+        var msgEl = document.getElementById('raPartialMsg');
+        var submitBtn = document.getElementById('raPartialSubmit');
+        var currentId = null;
+
+        function close() { modal.classList.add('hidden'); }
+
+        document.addEventListener('click', function(e) {
+          var btn = e.target.closest('.ra-partial-btn');
+          if (!btn) return;
+          e.stopPropagation();
+          currentId = btn.dataset.id;
+          var win = btn.dataset.window || '';
+          var gaps = [];
+          try { gaps = JSON.parse(btn.dataset.gaps || '[]'); } catch (err) { gaps = []; }
+          if (!gaps.length && win.indexOf('-') > 0) gaps = [win.split('-')];
+
+          subEl.textContent = btn.dataset.cs + ' \u00b7 requested ' + win.replace('-', '\u2013') + 'z';
+          gapsEl.innerHTML = '';
+          gaps.forEach(function(g) {
+            var b = document.createElement('button');
+            b.type = 'button';
+            b.style.cssText = 'text-align:left;padding:7px 10px;border-radius:6px;border:1px solid rgba(245,158,11,0.4);background:rgba(245,158,11,0.08);color:#fbbf24;font-size:12px;font-family:inherit;cursor:pointer;';
+            b.textContent = 'Still open: ' + g[0] + '\u2013' + g[1] + 'z  \u2014 click to fill';
+            b.addEventListener('click', function() { fromEl.value = g[0]; toEl.value = g[1]; msgEl.textContent = ''; });
+            gapsEl.appendChild(b);
+          });
+          if (gaps.length) { fromEl.value = gaps[0][0]; toEl.value = gaps[0][1]; }
+          msgEl.textContent = '';
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Claim this time';
+          modal.classList.remove('hidden');
+        });
+
+        document.getElementById('raPartialCancel').addEventListener('click', close);
+        modal.querySelector('.modal-backdrop').addEventListener('click', close);
+        document.addEventListener('keydown', function(e) {
+          if (!modal.classList.contains('hidden') && e.key === 'Escape') close();
+        });
+
+        submitBtn.addEventListener('click', async function() {
+          if (!fromEl.value || !toEl.value) { msgEl.textContent = 'Enter both times.'; return; }
+          submitBtn.disabled = true;
+          submitBtn.textContent = 'Claiming...';
+          try {
+            var r = await fetch('/api/request-atc/' + currentId + '/claim-partial', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'same-origin',
+              body: JSON.stringify({ timeFrom: fromEl.value, timeTo: toEl.value })
+            });
+            if (r.ok) { location.reload(); return; }
+            var d = await r.json().catch(function() { return {}; });
+            msgEl.textContent = d.error || 'Failed';
+          } catch (err) { msgEl.textContent = 'Failed'; }
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Claim this time';
+        });
+      })();
+
+      // Drop just one of my part-claims
+      document.addEventListener('click', async function(e) {
+        var btn = e.target.closest('.ra-claim-drop-btn');
+        if (!btn) return;
+        e.stopPropagation();
+        btn.disabled = true;
+        btn.textContent = 'Dropping...';
+        try {
+          var r = await fetch('/api/request-atc/claim/' + btn.dataset.claimId + '/drop', {
+            method: 'POST', credentials: 'same-origin'
+          });
+          if (r.ok) { location.reload(); return; }
+          var d = await r.json().catch(function() { return {}; });
+          alert(d.error || 'Failed');
+        } catch (err) {}
+        btn.disabled = false;
+        btn.textContent = 'Drop';
+      });
       // Claim button
       document.addEventListener('click', async function(e) {
         var btn = e.target.closest('.ra-claim-btn');
@@ -37091,6 +37276,74 @@ app.get('/wf-atc/requested', requirePageEnabled('requested-atc'), requireLogin, 
   res.send(renderLayout({ title: 'Requested ATC', user, isAdmin, content, layoutClass: 'dashboard-full' }));
 });
 
+/* ── Partial ATC claims ────────────────────────────────────────────────────
+   A request's window can be covered by several controllers. Times are plain
+   UTC "HH:MM" strings and WorldFlight windows routinely cross midnight, so
+   everything is normalised to minutes measured FORWARD FROM the request's own
+   start — 22:00-02:00 becomes 0-240 rather than 1320-120, and a claim at
+   00:30 lands at 150 rather than 30. All comparisons then work on a simple
+   ascending number line. */
+function atcHhmmToMin(t) {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(String(t || '').trim());
+  if (!m) return null;
+  const h = Number(m[1]), mi = Number(m[2]);
+  if (h > 23 || mi > 59) return null;
+  return h * 60 + mi;
+}
+function atcMinToHhmm(v) {
+  const x = ((v % 1440) + 1440) % 1440;
+  return String(Math.floor(x / 60)).padStart(2, '0') + ':' + String(x % 60).padStart(2, '0');
+}
+
+// The request's window on that forward number line. Returns null when the
+// request has no usable times (nothing to part-claim).
+function atcRequestWindow(request) {
+  const start = atcHhmmToMin(request?.timeFrom);
+  const rawEnd = atcHhmmToMin(request?.timeTo);
+  if (start === null || rawEnd === null) return null;
+  let end = rawEnd;
+  if (end <= start) end += 1440;          // crosses midnight
+  return { start, end, startMin: 0, endMin: end - start, base: start };
+}
+// Project an HH:MM onto the window's number line (0 = window start).
+function atcOffsetIn(win, t) {
+  const v = atcHhmmToMin(t);
+  if (v === null || !win) return null;
+  let off = v - win.base;
+  if (off < 0) off += 1440;
+  return off;
+}
+
+/* Merge claim rows into covered blocks and work out what is still open.
+   Returns offsets AND display strings so callers do not repeat the maths. */
+function atcCoverage(request, claims) {
+  const win = atcRequestWindow(request);
+  if (!win) return { win: null, covered: [], gaps: [], fullyCovered: false };
+  const spans = (claims || []).map(c => {
+    const a = atcOffsetIn(win, c.timeFrom);
+    const b = atcOffsetIn(win, c.timeTo);
+    if (a === null || b === null) return null;
+    const end = b <= a ? b + 1440 : b;
+    return { a: Math.max(0, a), b: Math.min(win.endMin, end), cid: Number(c.cid), id: c.id };
+  }).filter(x => x && x.b > x.a).sort((x, y) => x.a - y.a);
+
+  const gaps = [];
+  let cursor = 0;
+  for (const sp of spans) {
+    if (sp.a > cursor) gaps.push({ a: cursor, b: sp.a });
+    cursor = Math.max(cursor, sp.b);
+  }
+  if (cursor < win.endMin) gaps.push({ a: cursor, b: win.endMin });
+
+  const fmt = (o) => atcMinToHhmm(win.base + o);
+  return {
+    win,
+    covered: spans.map(sp => ({ ...sp, from: fmt(sp.a), to: fmt(sp.b) })),
+    gaps: gaps.map(g => ({ ...g, from: fmt(g.a), to: fmt(g.b) })),
+    fullyCovered: gaps.length === 0
+  };
+}
+
 // Claim an ATC request
 app.post('/api/request-atc/:id/claim', requireLogin, async (req, res) => {
   const cid = Number(req.session?.user?.data?.cid);
@@ -37121,6 +37374,122 @@ app.post('/api/request-atc/:id/claim', requireLogin, async (req, res) => {
       };
       sendChannelMessage('wf-atc-requests', { embeds: [embed] }).catch(e => console.error('[DISCORD] ATC claim notification failed:', e.message));
     } catch (discErr) { console.error('[DISCORD] ATC claim notification failed:', discErr.message); }
+
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+/* Claim part of a request's window. The request keeps the window originally
+   asked for; who covers what lives in AtcRequestClaim, and the request only
+   flips to 'accepted' once the claims leave no gaps. */
+app.post('/api/request-atc/:id/claim-partial', requireLogin, async (req, res) => {
+  const cid = Number(req.session?.user?.data?.cid);
+  const id = Number(req.params.id);
+  if (!cid || !(isAdminUser(cid) || isWfAtc(cid))) {
+    return res.status(403).json({ error: 'WF ATC access required' });
+  }
+  try {
+    const row = await prisma.atcRequest.findUnique({ where: { id } });
+    if (!row) return res.status(404).json({ error: 'Request not found' });
+    if (row.status === 'cancelled') return res.status(400).json({ error: 'Request has been cancelled' });
+    if (row.acceptedBy) return res.status(400).json({ error: 'Already fully claimed' });
+
+    const win = atcRequestWindow(row);
+    if (!win) return res.status(400).json({ error: 'This request has no specific time to split' });
+
+    const timeFrom = String(req.body?.timeFrom || '').trim();
+    const timeTo = String(req.body?.timeTo || '').trim();
+    const a = atcOffsetIn(win, timeFrom);
+    const b = atcOffsetIn(win, timeTo);
+    if (a === null || b === null) return res.status(400).json({ error: 'Times must be HH:MM' });
+    const end = b <= a ? b + 1440 : b;
+    if (end <= a) return res.status(400).json({ error: 'End must be after start' });
+    if (a < 0 || end > win.endMin) {
+      return res.status(400).json({ error: 'Must be inside ' + row.timeFrom + '\u2013' + row.timeTo + 'z' });
+    }
+
+    const existing = await prisma.atcRequestClaim.findMany({ where: { requestId: id } });
+    const cov = atcCoverage(row, existing);
+    if (cov.covered.some(sp => a < sp.b && end > sp.a)) {
+      return res.status(400).json({ error: 'That overlaps time somebody already covers' });
+    }
+
+    await prisma.atcRequestClaim.create({ data: { requestId: id, cid, timeFrom, timeTo } });
+
+    const after = atcCoverage(row, existing.concat([{ cid, timeFrom, timeTo }]));
+    if (after.fullyCovered && row.status !== 'accepted') {
+      await prisma.atcRequest.update({ where: { id }, data: { status: 'accepted', acceptedAt: new Date() } });
+    }
+    refreshOpenAtcRequestCount();
+
+    // Discord: say what is covered and, crucially, what still is not.
+    try {
+      const claimerName = req.session?.user?.data?.personal?.name_full || String(cid);
+      const gapsText = after.gaps.map(g => g.from + '\u2013' + g.to + 'z').join(', ');
+      const embed = {
+        color: after.fullyCovered ? 0x4ade80 : 0xf59e0b,
+        description: (after.fullyCovered ? '\u2705 ' : '\u26a0\ufe0f ')
+          + '**' + claimerName + '** has partially covered **' + (row.callsign || '') + '** on '
+          + row.sectorNumber + ' (' + row.fromIcao + ' \u2192 ' + row.toIcao + ')'
+          + '\n\u23f0 Covering ' + timeFrom + '\u2013' + timeTo + 'z'
+          + (after.fullyCovered
+              ? '\n\u2705 This request is now fully covered.'
+              : '\n\u26a0\ufe0f **' + gapsText + ' still needs covering.**'),
+        footer: { text: 'WorldFlight Planning Portal' },
+        timestamp: new Date().toISOString()
+      };
+      const payload = { embeds: [embed] };
+      if (!after.fullyCovered) {
+        const posRoleId = ATC_NOTIFY_ROLES[row.positionType] || ATC_NOTIFY_ROLES.all;
+        const pings = ['<@&' + ATC_NOTIFY_ROLES.all + '>', '<@&' + posRoleId + '>', '<@&' + ATC_NOTIFY_ROLES.allTimes + '>'];
+        const h = parseInt(String(after.gaps[0].from).split(':')[0], 10);
+        if (!isNaN(h)) pings.push('<@&' + ATC_NOTIFY_ROLES.bands[Math.floor(h / 4)] + '>');
+        payload.content = [...new Set(pings)].join(' ');
+        payload.components = [{ type: 1, components: [{ type: 2, style: 5, label: 'Claim Remaining Time', url: WF_SITE_URL + '/wf-atc/requested', emoji: { name: '\ud83d\udcdd' } }] }];
+      }
+      sendChannelMessage('wf-atc-requests', payload).catch(e => console.error('[DISCORD] partial claim notification failed:', e.message));
+    } catch (discErr) { console.error('[DISCORD] partial claim notification failed:', discErr.message); }
+
+    res.json({ success: true, fullyCovered: after.fullyCovered });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Give back one partial claim. Only the holder (or an admin) may.
+app.post('/api/request-atc/claim/:claimId/drop', requireLogin, async (req, res) => {
+  const cid = Number(req.session?.user?.data?.cid);
+  const claimId = Number(req.params.claimId);
+  try {
+    const claim = await prisma.atcRequestClaim.findUnique({ where: { id: claimId } });
+    if (!claim) return res.status(404).json({ error: 'Claim not found' });
+    if (Number(claim.cid) !== cid && !isAdminUser(cid)) return res.status(403).json({ error: 'Not your claim' });
+    const row = await prisma.atcRequest.findUnique({ where: { id: claim.requestId } });
+    await prisma.atcRequestClaim.delete({ where: { id: claimId } });
+    // Giving time back always reopens the request.
+    if (row && row.status === 'accepted') {
+      await prisma.atcRequest.update({ where: { id: row.id }, data: { status: 'waiting', acceptedAt: null } });
+    }
+    refreshOpenAtcRequestCount();
+
+    try {
+      const name = req.session?.user?.data?.personal?.name_full || String(cid);
+      if (row) {
+        const remaining = await prisma.atcRequestClaim.findMany({ where: { requestId: row.id } });
+        const cov = atcCoverage(row, remaining);
+        const posRoleId = ATC_NOTIFY_ROLES[row.positionType] || ATC_NOTIFY_ROLES.all;
+        const pings = ['<@&' + ATC_NOTIFY_ROLES.all + '>', '<@&' + posRoleId + '>', '<@&' + ATC_NOTIFY_ROLES.allTimes + '>'];
+        sendChannelMessage('wf-atc-requests', {
+          content: [...new Set(pings)].join(' '),
+          embeds: [{
+            color: 0xf59e0b,
+            description: '\u26a0\ufe0f **' + name + '** has dropped ' + claim.timeFrom + '\u2013' + claim.timeTo + 'z on **'
+              + (row.callsign || '') + '** (' + row.sectorNumber + ' ' + row.fromIcao + ' \u2192 ' + row.toIcao + ')'
+              + '\n\u26a0\ufe0f **' + (cov.gaps.map(g => g.from + '\u2013' + g.to + 'z').join(', ') || 'The whole window') + ' still needs covering.**',
+            footer: { text: 'WorldFlight Planning Portal' },
+            timestamp: new Date().toISOString()
+          }]
+        }).catch(e => console.error('[DISCORD] partial drop notification failed:', e.message));
+      }
+    } catch (discErr) { console.error('[DISCORD] partial drop notification failed:', discErr.message); }
 
     res.json({ success: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
