@@ -33183,7 +33183,14 @@ app.get('/wf-atc/hub', requirePageEnabled('wf-atc-hub'), requireWfAtcOrAdmin, as
       .hub-col { display:flex; flex-direction:column; gap:14px; min-width:0; }
       .hub-card { background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:14px 16px; }
       .hub-card h3 { margin:0 0 10px; font-size:13px; color:var(--accent); }
-      .hub-map-card { flex:1 1 auto; min-height:340px; display:flex; }
+      /* Map takes a fixed share so the bookings table cannot push the left
+         column past the right one; it only expands when there are no
+         bookings to show. */
+      .hub-map-card { flex:0 0 340px; display:flex; }
+      .hub-col.hub-no-book .hub-map-card { flex:1 1 auto; }
+      #hubBookSection { display:flex; flex-direction:column; min-height:0; }
+      #hubBookScroll { overflow-y:auto; overflow-x:auto; flex:1 1 auto; min-height:120px; max-height:460px; }
+      #hubBookScroll thead th { position:sticky; top:0; background:var(--panel); z-index:1; }
       /* Clicking or hovering an FIR polygon otherwise leaves a browser focus
          rectangle around the whole shape. */
       #hubMap path:focus, #hubMap path:focus-visible { outline: none; }
@@ -33191,6 +33198,9 @@ app.get('/wf-atc/hub', requirePageEnabled('wf-atc-hub'), requireWfAtcOrAdmin, as
       #hubMap { width:100%; height:100%; min-height:340px; border-radius:8px; overflow:hidden; background:#0b1220; }
       .hub-route { font-family:monospace; font-size:12.5px; line-height:1.7; word-break:break-word; color:var(--text); }
       .hub-freq { width:100%; border-collapse:collapse; font-size:12px; }
+      /* Around 15 rows before it scrolls — KSLC alone lists 56 positions. */
+      .hub-freq-wrap { max-height:360px; overflow-y:auto; }
+      .hub-freq-wrap thead th { position:sticky; top:0; background:var(--panel); z-index:1; }
       .hub-freq td { padding:3px 6px; border-bottom:1px solid var(--border); }
       .hub-freq tr:last-child td { border-bottom:0; }
       .hub-pos { display:inline-block; min-width:44px; text-align:center; font-size:10px; font-weight:700;
@@ -33214,7 +33224,17 @@ app.get('/wf-atc/hub', requirePageEnabled('wf-atc-hub'), requireWfAtcOrAdmin, as
       .hub-fir-id { font-family:monospace; font-weight:700; }
       .hub-fir-div { color:var(--muted); font-size:10px; }
       .hub-fir-win { margin-left:auto; font-family:monospace; color:#7dd3fc; white-space:nowrap; }
+      .hub-fir-cs { font-size:10px; color:var(--accent); cursor:pointer; text-decoration:underline; background:none; border:0; padding:0; font-family:inherit; }
+      .hub-fir-cs:hover { color:#7dd3fc; }
       .hub-vatcan { font-family:monospace; font-size:18px; font-weight:700; color:#4ade80; letter-spacing:0.04em; }
+      .hub-req-banner {
+        display:flex; align-items:center; gap:10px; margin-bottom:14px; padding:12px 16px;
+        border-radius:10px; background:rgba(245,158,11,0.10); border:1px solid rgba(245,158,11,0.45);
+        color:#fbbf24; text-decoration:none; font-size:13px; font-weight:600;
+      }
+      /* Beats the display:flex above — otherwise the hidden attribute is
+         ignored and the banner shows empty. */
+      .hub-req-banner[hidden] { display:none; }
       .hub-rt { display:inline-block; font-family:monospace; font-size:10px; font-weight:700;
                 border-radius:4px; padding:1px 7px; }
       .hub-rt-a { color:#7dd3fc; background:rgba(56,189,248,0.14); border:1px solid rgba(56,189,248,0.4); }
@@ -33243,6 +33263,11 @@ app.get('/wf-atc/hub', requirePageEnabled('wf-atc-hub'), requireWfAtcOrAdmin, as
     </div>
 
     <div id="hubBody" hidden>
+      <a id="hubReqBanner" class="hub-req-banner" href="/wf-atc/requested" hidden>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        <span id="hubReqText"></span>
+        <span style="margin-left:auto;font-weight:700;">Click here to view \u2192</span>
+      </a>
       <div class="hub-top" style="margin-bottom:14px;">
         <div class="hub-col">
           <div class="hub-card hub-map-card" style="padding:0;overflow:hidden;"><div id="hubMap"></div></div>
@@ -33256,12 +33281,12 @@ app.get('/wf-atc/hub', requirePageEnabled('wf-atc-hub'), requireWfAtcOrAdmin, as
             </div>
           </div>
 
-          <div class="hub-card" id="hubBookSection" style="flex:0 0 auto;">
+          <div class="hub-card" id="hubBookSection" style="flex:1 1 auto;">
             <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px;">
               <h3 style="margin:0;">Bookings <span id="hubBookCount" style="color:var(--muted);font-weight:400;"></span></h3>
               <input type="text" id="hubBookFilter" placeholder="Filter by callsign or CID\u2026" style="min-width:220px;padding:7px 12px;font-size:12px;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;" />
             </div>
-            <div style="overflow-x:auto;">
+            <div id="hubBookScroll">
               <table class="hub-book">
                 <thead><tr><th id="hubSlotHead">Slot (UTC)</th><th>Callsign</th><th class="hub-rt-col">Route</th><th>Team/Affiliate</th><th>CID</th><th>Name</th></tr></thead>
                 <tbody id="hubBookBody"></tbody>
@@ -33273,22 +33298,6 @@ app.get('/wf-atc/hub', requirePageEnabled('wf-atc-hub'), requireWfAtcOrAdmin, as
 
         <div class="hub-col">
           <div class="hub-card">
-            <h3>Flow Restrictions</h3>
-            <div id="hubFlow" class="hub-flow"></div>
-          </div>
-          <div class="hub-card">
-            <h3 id="hubFreqDepTitle">Departure Frequencies</h3>
-            <table class="hub-freq"><tbody id="hubFreqDep"></tbody></table>
-          </div>
-          <div class="hub-card">
-            <h3 id="hubFreqArrTitle">Arrival Frequencies</h3>
-            <table class="hub-freq"><tbody id="hubFreqArr"></tbody></table>
-          </div>
-          <div class="hub-card">
-            <h3>Enroute FIRs <span style="color:var(--muted);font-weight:400;font-size:11px;" id="hubFirCount"></span></h3>
-            <div id="hubFirs"></div>
-          </div>
-          <div class="hub-card">
             <h3>Sector Files</h3>
             <div id="hubFiles"></div>
           </div>
@@ -33296,9 +33305,40 @@ app.get('/wf-atc/hub', requirePageEnabled('wf-atc-hub'), requireWfAtcOrAdmin, as
             <h3>VATCAN Bookings Plugin</h3>
             <div id="hubVatcan"></div>
           </div>
+          <div class="hub-card">
+            <h3>Flow Restrictions</h3>
+            <div id="hubFlow" class="hub-flow"></div>
+          </div>
+          <div class="hub-card">
+            <h3 id="hubFreqDepTitle">Departure Frequencies</h3>
+            <div class="hub-freq-wrap"><table class="hub-freq"><tbody id="hubFreqDep"></tbody></table></div>
+          </div>
+          <div class="hub-card">
+            <h3 id="hubFreqArrTitle">Arrival Frequencies</h3>
+            <div class="hub-freq-wrap"><table class="hub-freq"><tbody id="hubFreqArr"></tbody></table></div>
+          </div>
+          <div class="hub-card">
+            <h3>Enroute FIRs <span style="color:var(--muted);font-weight:400;font-size:11px;" id="hubFirCount"></span></h3>
+            <div id="hubFirs"></div>
+          </div>
         </div>
       </div>
 
+    </div>
+
+    <div id="hubFirModal" class="modal hidden">
+      <div class="modal-backdrop"></div>
+      <div class="modal-dialog" style="width:460px;max-width:94vw;padding:20px;">
+        <h3 style="margin:0 0 2px;" id="hubFirModalTitle"></h3>
+        <p style="color:var(--muted);font-size:11px;margin:0 0 10px;">Coverage, positions and frequencies for this FIR.</p>
+        <div id="hubFirMapWrap" style="height:200px;border-radius:8px;overflow:hidden;border:1px solid var(--border);background:#0b1220;margin-bottom:12px;">
+          <div id="hubFirMap" style="width:100%;height:100%;"></div>
+        </div>
+        <div id="hubFirModalBody" style="max-height:40vh;overflow-y:auto;"></div>
+        <div class="modal-actions" style="margin-top:14px;">
+          <button type="button" class="modal-btn modal-btn-cancel" id="hubFirModalClose">Close</button>
+        </div>
+      </div>
     </div>
 
     <script>
@@ -33501,6 +33541,8 @@ app.get('/wf-atc/hub', requirePageEnabled('wf-atc-hub'), requireWfAtcOrAdmin, as
           // Without a flow restriction there is nothing to book, so the whole
           // bookings section would only ever be an empty table.
           document.getElementById('hubBookSection').hidden = isNone;
+          // Let the map reclaim the space when the table is not shown.
+          document.querySelectorAll('.hub-col')[0].classList.toggle('hub-no-book', isNone);
           // Hiding the bookings frees vertical space and the map grows into
           // it, which Leaflet only notices if told.
           setTimeout(function() { if (map) map.invalidateSize(); }, 80);
@@ -33517,6 +33559,18 @@ app.get('/wf-atc/hub', requirePageEnabled('wf-atc-hub'), requireWfAtcOrAdmin, as
           document.getElementById('hubFreqArrTitle').textContent = 'Arrival Frequencies — ' + d.to;
           freqRows(document.getElementById('hubFreqDep'), d.frequencies[d.from] || []);
           freqRows(document.getElementById('hubFreqArr'), d.frequencies[d.to] || []);
+
+          // Outstanding ATC requests on this sector — worth flagging up top,
+          // since a controller reading the briefing may be able to cover one.
+          var banner = document.getElementById('hubReqBanner');
+          if (d.openRequests > 0) {
+            document.getElementById('hubReqText').textContent =
+              'There ' + (d.openRequests === 1 ? 'is 1 outstanding WF ATC request' : 'are ' + d.openRequests + ' outstanding WF ATC requests')
+              + ' for this sector.';
+            banner.hidden = false;
+          } else {
+            banner.hidden = true;
+          }
 
           // FIR list. Colour is assigned here and reused by the map polygons.
           var colorByFir = {};
@@ -33547,6 +33601,12 @@ app.get('/wf-atc/hub', requirePageEnabled('wf-atc-hub'), requireWfAtcOrAdmin, as
                 dv.textContent = f.division;
                 row.appendChild(dv);
               }
+              var csBtn = document.createElement('button');
+              csBtn.type = 'button';
+              csBtn.className = 'hub-fir-cs';
+              csBtn.textContent = 'Show callsigns';
+              csBtn.addEventListener('click', function() { showFirCallsigns(f.fir); });
+              row.appendChild(csBtn);
               var win = document.createElement('span');
               win.className = 'hub-fir-win';
               win.textContent = f.staffStart && f.staffEnd ? f.staffStart + '\u2013' + f.staffEnd + 'z' : '';
@@ -33571,8 +33631,12 @@ app.get('/wf-atc/hub', requirePageEnabled('wf-atc-hub'), requireWfAtcOrAdmin, as
             dl.className = 'hub-file';
             dl.href = 'https://github.com/VatsimCanada/Slots-Plugin/releases';
             dl.target = '_blank'; dl.rel = 'noopener';
-            dl.textContent = '\u2b07 Download the Slots plugin';
+            dl.textContent = '\u2193 Download the Slots plugin';
             vc.appendChild(dl);
+            var inc = document.createElement('div');
+            inc.style.cssText = 'font-size:11px;color:var(--muted);margin-top:6px;line-height:1.5;';
+            inc.textContent = 'Already included in the WorldFlight controller pack linked above, loaded and cleared to draw \u2014 you only need this download if you are not using the pack.';
+            vc.appendChild(inc);
           } else {
             vc.innerHTML = '<span class="hub-empty">Not seeded to VATCAN yet.</span>';
           }
@@ -33613,6 +33677,124 @@ app.get('/wf-atc/hub', requirePageEnabled('wf-atc-hub'), requireWfAtcOrAdmin, as
           empty.textContent = 'Could not load ' + wf + '.';
         }
       }
+
+      // FIR callsign modal
+      var firModal = document.getElementById('hubFirModal');
+      function closeFirModal() { firModal.classList.add('hidden'); }
+      document.getElementById('hubFirModalClose').addEventListener('click', closeFirModal);
+      firModal.querySelector('.modal-backdrop').addEventListener('click', closeFirModal);
+      document.addEventListener('keydown', function(e) {
+        if (!firModal.classList.contains('hidden') && e.key === 'Escape') closeFirModal();
+      });
+      // Small coverage map inside the modal. Built lazily and reused; Leaflet
+      // has to be told to re-measure because the container is hidden until the
+      // modal opens, and a map sized while hidden renders as a grey box.
+      var firMap = null, firMapLayers = [], firSectorLayer = {};
+      var SECTOR_PAL = ['#38bdf8','#f59e0b','#22c55e','#a855f7','#ec4899','#14b8a6','#f97316','#eab308','#8b5cf6','#ef4444','#10b981','#0ea5e9'];
+
+      // Which sub-sector a callsign belongs to. WAAF_MS_CTR -> 'MS', which is
+      // the polygon WAAF-MS; WAAF_CTR -> '' , the FIR-wide polygon.
+      function sectorSuffixOf(callsign, fir) {
+        if (callsign.indexOf(fir + '_') !== 0) return null;
+        var parts = callsign.slice(fir.length + 1).split('_');
+        return parts.length < 2 ? '' : parts.slice(0, -1).join('_');
+      }
+
+      function drawFirCoverage(fir, sectors) {
+        var wrap = document.getElementById('hubFirMapWrap');
+        if (!sectors || !sectors.length) { wrap.style.display = 'none'; return; }
+        wrap.style.display = '';
+        if (!firMap) {
+          firMap = L.map('hubFirMap', { zoomControl: false, attributionControl: false, dragging: false,
+                                        scrollWheelZoom: false, doubleClickZoom: false, boxZoom: false, keyboard: false });
+          wfAddTileLayer(firMap, { maxZoom: 8 });
+        }
+        firMapLayers.forEach(function(l) { try { firMap.removeLayer(l); } catch (e) {} });
+        firMapLayers = [];
+        firSectorLayer = {};
+
+        // Largest first so the small sub-sectors stay clickable on top.
+        var ordered = sectors.slice().sort(function(a, b) { return (a.suffix ? 1 : 0) - (b.suffix ? 1 : 0); });
+        var all = [];
+        ordered.forEach(function(sec, i) {
+          var c = SECTOR_PAL[i % SECTOR_PAL.length];
+          var lyr = L.geoJSON({ type: 'Feature', geometry: sec.geometry, properties: {} }, {
+            style: { color: c, weight: sec.suffix ? 2 : 1.5, opacity: sec.suffix ? 0.95 : 0.5,
+                     fillColor: c, fillOpacity: sec.suffix ? 0.18 : 0.05,
+                     dashArray: sec.suffix ? null : '5, 4' }
+          }).addTo(firMap);
+          lyr.bindTooltip(sec.id + (sec.minFL != null ? '  FL' + sec.minFL + '\u2013' + sec.maxFL : ''), { sticky: true });
+          lyr._baseColor = c;
+          firSectorLayer[sec.suffix] = lyr;
+          firMapLayers.push(lyr);
+          all.push(lyr);
+        });
+        setTimeout(function() {
+          firMap.invalidateSize();
+          try { firMap.fitBounds(L.featureGroup(all).getBounds(), { padding: [14, 14], maxZoom: 7 }); } catch (e) {}
+        }, 60);
+      }
+
+      function highlightSector(suffix, on) {
+        var lyr = firSectorLayer[suffix];
+        if (!lyr) return;
+        lyr.setStyle(on
+          ? { weight: 4, opacity: 1, fillOpacity: 0.4 }
+          : { weight: suffix ? 2 : 1.5, opacity: suffix ? 0.95 : 0.5, fillOpacity: suffix ? 0.18 : 0.05 });
+        if (on && lyr.bringToFront) lyr.bringToFront();
+      }
+
+      window.showFirCallsigns = function(fir) {
+        document.getElementById('hubFirModalTitle').textContent = fir;
+        var box = document.getElementById('hubFirModalBody');
+        box.innerHTML = '<span class="hub-empty">Loading\u2026</span>';
+        firModal.classList.remove('hidden');
+        fetch('/api/wf-atc/fir-callsigns/' + encodeURIComponent(fir), { credentials: 'same-origin' })
+          .then(function(r) { return r.json(); })
+          .then(function(d) {
+            box.innerHTML = '';
+            drawFirCoverage(fir, d.sectors);
+            if (!d.positions || !d.positions.length) {
+              box.innerHTML = '<span class="hub-empty">No published positions for this FIR.</span>';
+              return;
+            }
+            var t = document.createElement('table');
+            t.className = 'hub-freq';
+            var tb = document.createElement('tbody');
+            d.positions.forEach(function(pos) {
+              var tr = document.createElement('tr');
+              // Rows that own a polygon light it up on hover.
+              var suffix = sectorSuffixOf(pos.callsign, fir);
+              var hasSector = suffix !== null && firSectorLayer[suffix];
+              if (hasSector) {
+                tr.style.cursor = 'pointer';
+                tr.addEventListener('mouseenter', function() { highlightSector(suffix, true); });
+                tr.addEventListener('mouseleave', function() { highlightSector(suffix, false); });
+              }
+              var a = document.createElement('td');
+              a.style.width = '52px';
+              a.innerHTML = '<span class="hub-pos">' + (pos.type || '\u2014') + '</span>';
+              var b = document.createElement('td');
+              b.className = 'hub-cs';
+              b.textContent = pos.callsign;
+              if (hasSector) {
+                var dot = document.createElement('span');
+                dot.style.cssText = 'display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:6px;vertical-align:middle;background:'
+                  + firSectorLayer[suffix]._baseColor + ';';
+                b.prepend(dot);
+              }
+              if (pos.name) b.title = pos.name;
+              var c = document.createElement('td');
+              c.className = 'hub-hz';
+              c.textContent = pos.freq || '\u2014';
+              tr.appendChild(a); tr.appendChild(b); tr.appendChild(c);
+              tb.appendChild(tr);
+            });
+            t.appendChild(tb);
+            box.appendChild(t);
+          })
+          .catch(function() { box.innerHTML = '<span class="hub-empty">Could not load positions.</span>'; });
+      };
 
       // One fetch for the page; polygons are reused as sectors are switched.
       fetch('/api/fir-merged.geojson')
@@ -33719,6 +33901,80 @@ function hubFrequenciesFor(icao) {
   return out;
 }
 
+/* Enroute positions per FIR. AFV alone is not enough: it lists nothing at all
+   for the Australian sectors, while VATSpy carries them with the frequency
+   embedded in the position name (YARL is "Brisbane (Armidale) 130.9", prefix
+   BN-ARL). So VATSpy supplies the positions and AFV fills in exact callsigns
+   and frequencies wherever it has them. */
+let vatspyFirs = null;
+function loadVatspyFirs() {
+  if (vatspyFirs) return vatspyFirs;
+  vatspyFirs = [];
+  try {
+    const f = path.join(__dirname, 'data', 'VATSPY', 'VATSpy.dat');
+    const lines = fs.readFileSync(f, 'utf-8').split(/\r?\n/);
+    let inFirs = false;
+    for (const raw of lines) {
+      const line = raw.trim();
+      if (!line || line.startsWith(';')) continue;
+      if (line.startsWith('[')) { inFirs = line.toUpperCase() === '[FIRS]'; continue; }
+      if (!inFirs) continue;
+      const c = line.split('|');
+      if (c.length < 4) continue;
+      vatspyFirs.push({ icao: c[0].trim(), name: c[1].trim(), prefix: c[2].trim(), boundary: c[3].trim() });
+    }
+  } catch (e) { console.warn('[WF-ATC-HUB] VATSpy.dat unreadable:', e.message); }
+  return vatspyFirs;
+}
+
+app.get('/api/wf-atc/fir-callsigns/:fir', requireWfAtcOrAdmin, (req, res) => {
+  const fir = String(req.params.fir || '').toUpperCase();
+  if (!/^[A-Z0-9-]{2,8}$/.test(fir)) return res.status(400).json({ error: 'Invalid FIR' });
+
+  // Positions belonging to this FIR, by boundary or by its own code.
+  const positions = loadVatspyFirs().filter(v => v.boundary === fir || v.icao === fir);
+  const bases = new Set([fir]);
+  positions.forEach(v => { if (v.prefix) bases.add(v.prefix); });
+
+  const stations = loadAfvStations();
+  const out = [];
+  const seen = new Set();
+  for (const base of bases) {
+    for (const st of stations) {
+      if (!st.callsign.startsWith(base + '_')) continue;
+      if (seen.has(st.callsign)) continue;
+      seen.add(st.callsign);
+      out.push({ callsign: st.callsign, freq: st.freq, type: atcPosSuffix(st.callsign), source: 'AFV' });
+    }
+  }
+  // Anything AFV does not know about still gets listed from VATSpy, whose
+  // name usually carries the frequency in brackets.
+  for (const v of positions) {
+    const base = v.prefix || v.icao;
+    const guess = base + '_CTR';
+    if (seen.has(guess) || out.some(o => o.callsign.startsWith(base + '_'))) continue;
+    seen.add(guess);
+    const m = /(\d{3}\.\d{1,3})/.exec(v.name);
+    out.push({ callsign: guess, freq: m ? m[1] : '', type: 'CTR', name: v.name, source: 'VATSpy' });
+  }
+  out.sort((a, b) => (ATC_POS_RANK[a.type] ?? 9) - (ATC_POS_RANK[b.type] ?? 9) || a.callsign.localeCompare(b.callsign));
+
+  /* The boundary file keeps each sub-sector as its own polygon, named to match
+     the callsign: WAAF_MS_CTR belongs to WAAF-MS. Sending them lets the modal
+     draw the individual sectors rather than one outline of the whole FIR. */
+  const sectors = firFeatures
+    .filter(f => String(f.properties?.id || '').split('-')[0] === fir)
+    .map(f => ({
+      id: f.properties.id,
+      suffix: String(f.properties.id).slice(fir.length + 1),   // '' for the FIR itself
+      minFL: f.properties.minFL,
+      maxFL: f.properties.maxFL,
+      geometry: f.geometry
+    }));
+
+  res.json({ fir, positions: out, sectors });
+});
+
 app.get('/api/wf-atc/hub/:wf', requireWfAtcOrAdmin, async (req, res) => {
   try {
     const wf = String(req.params.wf || '').toUpperCase();
@@ -33778,6 +34034,13 @@ app.get('/api/wf-atc/hub/:wf', requireWfAtcOrAdmin, async (req, res) => {
       where: { sectorNumber: wf, eventId: activeEventId || undefined, NOT: { sectorFileUrl: null } },
       select: { sectorFileUrl: true, fromIcao: true, toIcao: true, positionType: true }
     }).catch(() => []) || [];
+    let openRequests = 0;
+    try {
+      openRequests = await prisma.atcRequest?.count({
+        where: { sectorNumber: wf, eventId: activeEventId || undefined, status: 'waiting' }
+      }) ?? 0;
+    } catch {}
+
     const seenUrl = new Set();
     const sectorFiles = [];
     for (const r of reqRows) {
@@ -33866,6 +34129,7 @@ app.get('/api/wf-atc/hub/:wf', requireWfAtcOrAdmin, async (req, res) => {
       pack,
       vatcan,
       firs,
+      openRequests,
       depFir: await resolveAirportFir(from).catch(() => null),
       arrFir: await resolveAirportFir(to).catch(() => null)
     });
