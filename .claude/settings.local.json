@@ -433,7 +433,10 @@
       "Bash(node preview2633.mjs)",
       "Bash(node \"C:/Users/Fraser/AppData/Local/Temp/claude/c--dev-WorldFlight-Planning/943bd8e0-dc87-4b34-b5be-0f1ce0b8c5c5/scratchpad/apply2633.mjs\")",
       "Bash(awk 'NR>=38140 && NR<=38165' index.js)",
-      "Bash(node \"C:/Users/Fraser/AppData/Local/Temp/claude/c--dev-WorldFlight-Planning/943bd8e0-dc87-4b34-b5be-0f1ce0b8c5c5/scratchpad/apply2633.mjs\" --revert)"
+      "Bash(node \"C:/Users/Fraser/AppData/Local/Temp/claude/c--dev-WorldFlight-Planning/943bd8e0-dc87-4b34-b5be-0f1ce0b8c5c5/scratchpad/apply2633.mjs\" --revert)",
+      "Bash(node \"C:/Users/Fraser/AppData/Local/Temp/claude/c--dev-WorldFlight-Planning/943bd8e0-dc87-4b34-b5be-0f1ce0b8c5c5/scratchpad/swap.mjs\")",
+      "Bash(awk 'NR>=32450 && NR<=32620' index.js)",
+      "Bash(awk 'NR>=32250 && NR<=32300' index.js)"
     ]
   }
 }

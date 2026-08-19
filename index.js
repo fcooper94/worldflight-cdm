@@ -791,7 +791,9 @@ io.use((socket, next) => {
 
 
 /* ===== PAGE VISIBILITY (GLOBAL) ===== */
-const PAGE_KEYS = ['schedule', 'world-map', 'my-slots', 'atc', 'suggest-airport', 'arrival-info', 'departure-info', 'airspace', 'sector-planning', 'fake-pilots', 'wf-portal-banner', 'flow-restrictions', 'atc-route', 'worldflight-challenge', 'vatcan-codes'];
+// Every key the Page Visibility admin panel offers must be listed here, or the
+// save is rejected with a 400 and the toggle silently fails.
+const PAGE_KEYS = ['schedule', 'world-map', 'my-slots', 'atc', 'suggest-airport', 'arrival-info', 'departure-info', 'airspace', 'sector-planning', 'fake-pilots', 'wf-portal-banner', 'flow-restrictions', 'atc-route', 'worldflight-challenge', 'vatcan-codes', 'who-we-are', 'request-atc', 'requested-atc'];
 
 // Per-key default mode used when no DB row exists yet. Most keys default to
 // 'visible'; ATC Route defaults to 'hidden' because routes are typically
@@ -37118,6 +37120,72 @@ app.post('/api/request-atc/:id/drop', requireLogin, async (req, res) => {
       data: { status: 'waiting', acceptedBy: null, acceptedAt: null }
     });
     refreshOpenAtcRequestCount();
+
+    /* Discord notification — a dropped position is open again, so this goes out
+       with the same role pings and the same detail as a brand new request
+       rather than as a quiet status change. Nobody is watching the page for a
+       claim to silently disappear. */
+    try {
+      const nameFor = async (c) => {
+        if (!c) return '';
+        const u = await prisma.user.findUnique({ where: { cid: Number(c) }, select: { name: true } }).catch(() => null);
+        const n = String(u?.name || '').trim();
+        return (n && !/^User \d+$/.test(n)) ? n : String(c);
+      };
+      const dropperName = req.session?.user?.data?.personal?.name_full || await nameFor(cid);
+      const requesterName = await nameFor(row.requestedBy);
+      // An admin can drop somebody else's claim — say whose cover was dropped.
+      const wasMine = Number(row.acceptedBy) === cid;
+      const heldBy = wasMine ? '' : await nameFor(row.acceptedBy);
+      const lead = wasMine
+        ? '**' + dropperName + '** has dropped this position — it needs covering again.'
+        : '**' + dropperName + '** has dropped **' + heldBy + '**’s cover — this position needs covering again.';
+
+      const sched = (adminSheetCache || []).find(s => s.number === row.sectorNumber);
+      const dateStr = sched?.date_utc || '';
+
+      const posRoleId = ATC_NOTIFY_ROLES[row.positionType] || ATC_NOTIFY_ROLES.all;
+      let timeBandIdx = -1;
+      if (row.timeFrom) {
+        const h = parseInt(String(row.timeFrom).split(':')[0], 10);
+        if (!isNaN(h)) timeBandIdx = Math.floor(h / 4);
+      }
+      const pings = ['<@&' + ATC_NOTIFY_ROLES.all + '>', '<@&' + posRoleId + '>', '<@&' + ATC_NOTIFY_ROLES.allTimes + '>'];
+      if (timeBandIdx >= 0 && timeBandIdx < 6) pings.push('<@&' + ATC_NOTIFY_ROLES.bands[timeBandIdx] + '>');
+
+      const embed = {
+        title: '⚠️  ATC Cover Dropped — Needs Covering',
+        color: 0xf59e0b,
+        description: lead,
+        fields: [
+          { name: 'Sector', value: row.sectorNumber, inline: true },
+          { name: 'Route', value: row.fromIcao + ' → ' + row.toIcao, inline: true },
+          { name: 'Date', value: dateStr || 'TBC', inline: true },
+          { name: 'Callsign', value: row.callsign || '—', inline: true },
+          { name: 'Time (UTC)', value: row.timeFrom && row.timeTo ? row.timeFrom + ' – ' + row.timeTo + 'z' : 'No specific time', inline: true },
+          ...(row.notes ? [{ name: 'Notes', value: String(row.notes).slice(0, 200), inline: false }] : []),
+          { name: 'Requested by', value: requesterName + ' (' + row.requestedBy + ')', inline: false }
+        ],
+        footer: { text: 'WorldFlight Planning Portal' },
+        timestamp: new Date().toISOString()
+      };
+
+      sendChannelMessage('wf-atc-requests', {
+        content: [...new Set(pings)].join(' '),
+        embeds: [embed],
+        components: [{
+          type: 1,
+          components: [{
+            type: 2,
+            style: 5,
+            label: 'Click for Details',
+            url: WF_SITE_URL + '/wf-atc/requested',
+            emoji: { name: '📝' }
+          }]
+        }]
+      }).catch(e => console.error('[DISCORD] ATC drop notification failed:', e.message));
+    } catch (discErr) { console.error('[DISCORD] ATC drop notification failed:', discErr.message); }
+
     res.json({ success: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
