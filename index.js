@@ -33226,6 +33226,8 @@ app.get('/wf-atc/hub', requirePageEnabled('wf-atc-hub'), requireWfAtcOrAdmin, as
       .hub-fir-win { margin-left:auto; font-family:monospace; color:#7dd3fc; white-space:nowrap; }
       .hub-fir-cs { font-size:10px; color:var(--accent); cursor:pointer; text-decoration:underline; background:none; border:0; padding:0; font-family:inherit; }
       .hub-fir-cs:hover { color:#7dd3fc; }
+      .hub-showmap { font-size:9.5px; color:var(--accent); cursor:pointer; text-decoration:underline; background:none; border:0; padding:0 0 0 6px; font-family:inherit; white-space:nowrap; }
+      .hub-showmap:hover { color:#7dd3fc; }
       .hub-vatcan { font-family:monospace; font-size:18px; font-weight:700; color:#4ade80; letter-spacing:0.04em; }
       .hub-req-banner {
         display:flex; align-items:center; gap:10px; margin-bottom:14px; padding:12px 16px;
@@ -33330,7 +33332,7 @@ app.get('/wf-atc/hub', requirePageEnabled('wf-atc-hub'), requireWfAtcOrAdmin, as
       <div class="modal-backdrop"></div>
       <div class="modal-dialog" style="width:460px;max-width:94vw;padding:20px;">
         <h3 style="margin:0 0 2px;" id="hubFirModalTitle"></h3>
-        <p style="color:var(--muted);font-size:11px;margin:0 0 10px;">Coverage, positions and frequencies for this FIR.</p>
+        <p id="hubFirModalSub" style="color:var(--muted);font-size:11px;margin:0 0 10px;"></p>
         <div id="hubFirMapWrap" style="height:200px;border-radius:8px;overflow:hidden;border:1px solid var(--border);background:#0b1220;margin-bottom:12px;">
           <div id="hubFirMap" style="width:100%;height:100%;"></div>
         </div>
@@ -33367,6 +33369,17 @@ app.get('/wf-atc/hub', requirePageEnabled('wf-atc-hub'), requireWfAtcOrAdmin, as
           var cs = document.createElement('td');
           cs.className = 'hub-cs';
           cs.textContent = f.callsign;
+          // Centre positions cover airspace rather than a field, so offer the
+          // coverage map for them.
+          if (f.type === 'CTR' && f.fir) {
+            var mb = document.createElement('button');
+            mb.type = 'button';
+            mb.className = 'hub-showmap';
+            mb.textContent = 'Show on map';
+            mb.title = 'Coverage for ' + f.fir;
+            mb.addEventListener('click', function() { showFirCallsigns(f.fir, true); });
+            cs.appendChild(mb);
+          }
           var hz = document.createElement('td');
           hz.className = 'hub-hz';
           hz.textContent = f.freq;
@@ -33744,8 +33757,18 @@ app.get('/wf-atc/hub', requirePageEnabled('wf-atc-hub'), requireWfAtcOrAdmin, as
         if (on && lyr.bringToFront) lyr.bringToFront();
       }
 
-      window.showFirCallsigns = function(fir) {
+      /* mapOnly is used by the "Show on map" links beside a centre callsign —
+         you already have the frequency in front of you there, so repeating the
+         whole list under the map is noise. */
+      window.showFirCallsigns = function(fir, mapOnly) {
         document.getElementById('hubFirModalTitle').textContent = fir;
+        document.getElementById('hubFirModalSub').textContent = mapOnly
+          ? 'Airspace covered by this FIR.'
+          : 'Coverage, positions and frequencies for this FIR.';
+        var bodyEl = document.getElementById('hubFirModalBody');
+        bodyEl.style.display = mapOnly ? 'none' : '';
+        // A map on its own can afford more room.
+        document.getElementById('hubFirMapWrap').style.height = mapOnly ? '320px' : '200px';
         var box = document.getElementById('hubFirModalBody');
         box.innerHTML = '<span class="hub-empty">Loading\u2026</span>';
         firModal.classList.remove('hidden');
@@ -33754,6 +33777,7 @@ app.get('/wf-atc/hub', requirePageEnabled('wf-atc-hub'), requireWfAtcOrAdmin, as
           .then(function(d) {
             box.innerHTML = '';
             drawFirCoverage(fir, d.sectors);
+            if (mapOnly) return;
             if (!d.positions || !d.positions.length) {
               box.innerHTML = '<span class="hub-empty">No published positions for this FIR.</span>';
               return;
@@ -33845,6 +33869,13 @@ function loadAfvStations() {
 
 /* VATSIM names US and Alaskan positions off the 3-letter identifier — PADQ is
    ADQ_TWR, not PADQ_TWR — so those get a second prefix to match on. */
+/* _GRD entries are a stray AFV convention (CYKA_F_TWR_GRD) that always
+   duplicate a real position on the same frequency — all 88 of them have a
+   non-GRD twin — so they are noise in any list. */
+function afvIsNoise(callsign) {
+  return /_GRD(|_|$)/.test(callsign);
+}
+
 function afvPrefixesFor(icao) {
   /* VATSIM names positions off a national short code rather than the ICAO:
        US / Alaska (K*, P*)  drop one letter — PADQ is ADQ_TWR, KSLC is SLC_*
@@ -33861,7 +33892,9 @@ function afvPrefixesFor(icao) {
 
 const ATC_POS_RANK = { DEL: 1, CLD: 1, GND: 2, RMP: 2, TWR: 3, DEP: 4, APP: 5, TMA: 5, CTR: 6, FSS: 7, ATIS: 0 };
 function atcPosSuffix(callsign) {
-  const m = /_([A-Z]{3})$/.exec(callsign);
+  // Mostly three letters (TWR, GND, APP) but ATIS is four, and there are 638
+  // of those — matching only three left every ATIS row with a blank pill.
+  const m = /_([A-Z]{3,4})$/.exec(callsign);
   return m ? m[1] : '';
 }
 
@@ -33878,15 +33911,41 @@ function afvIsPlainer(a, b) {
   return as - bs || al - bl || at.localeCompare(bt);
 }
 
+/* Callsign prefix -> FIR, from VATSpy's own mapping: "KZLC|Salt Lake City|
+   SLC|KZLC" means SLC_04_CTR belongs to KZLC. Needed because a centre
+   position is named off the centre's identifier, not the FIR's. */
+let vatspyPrefixToFir = null;
+function firForCallsign(callsign) {
+  if (!vatspyPrefixToFir) {
+    vatspyPrefixToFir = new Map();
+    for (const v of loadVatspyFirs()) {
+      const target = v.boundary || v.icao;
+      if (!target) continue;
+      if (v.prefix) vatspyPrefixToFir.set(v.prefix.toUpperCase(), target);
+      if (v.icao) vatspyPrefixToFir.set(v.icao.toUpperCase(), target);
+    }
+  }
+  const base = String(callsign || '').split('_')[0].toUpperCase();
+  return vatspyPrefixToFir.get(base) || null;
+}
+
 function hubFrequenciesFor(icao) {
   const prefixes = afvPrefixesFor(icao);
   const seen = new Set();
   const matched = [];
   for (const st of loadAfvStations()) {
     if (!prefixes.some(p => st.callsign.startsWith(p + '_'))) continue;
+    if (afvIsNoise(st.callsign)) continue;
     if (seen.has(st.callsign)) continue;
     seen.add(st.callsign);
-    matched.push({ callsign: st.callsign, freq: st.freq, type: atcPosSuffix(st.callsign) });
+    const type = atcPosSuffix(st.callsign);
+    matched.push({
+      callsign: st.callsign,
+      freq: st.freq,
+      type,
+      // Only centre positions get a coverage map — the rest are at the field.
+      fir: type === 'CTR' ? firForCallsign(st.callsign) : null
+    });
   }
   // One entry per position+frequency. The AFV list carries a lot of numbered
   // splits that share a frequency and are the same position to a pilot.
@@ -33942,6 +34001,7 @@ app.get('/api/wf-atc/fir-callsigns/:fir', requireWfAtcOrAdmin, (req, res) => {
   for (const base of bases) {
     for (const st of stations) {
       if (!st.callsign.startsWith(base + '_')) continue;
+      if (afvIsNoise(st.callsign)) continue;
       if (seen.has(st.callsign)) continue;
       seen.add(st.callsign);
       out.push({ callsign: st.callsign, freq: st.freq, type: atcPosSuffix(st.callsign), source: 'AFV' });
