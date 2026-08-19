@@ -454,6 +454,14 @@ import tzLookup from 'tz-lookup';
 import polygonClipping from 'polygon-clipping';
 import _renderLayout from './layout.js';
 import { getAirportGround, detectStandOccupancy } from './lib/osm-ground.mjs';
+/* getAirportGround is far quicker given coordinates (bbox instead of an
+   area[icao=] lookup), and we already hold them for every airport. */
+async function groundForIcao(icao, opts = {}) {
+  const ap = await prisma.airport.findUnique({
+    where: { icao }, select: { lat: true, lon: true }
+  }).catch(() => null);
+  return getAirportGround(icao, { ...opts, lat: ap?.lat ?? null, lon: ap?.lon ?? null });
+}
 import { fetchAndParseFirManagement } from './lib/fir-management.mjs';
 import { vatcanIsEnabled, vatcanCreateEvent, vatcanQueueSectorPush, vatcanPushSectorNow, vatcanGetLastResult, vatcanAllLastResults } from './lib/vatcan-bookings.mjs';
 import { discordConfigured, getGuildSnapshot, invalidateGuildCache, sendChannelMessage, addRoleToMember, removeRoleFromMember } from './lib/discord-api.mjs';
@@ -3394,7 +3402,7 @@ async function prefetchGroundForActiveSchedule() {
       const cacheFile = path.join(__dirname, 'data', 'ground', `${icao}.json`);
       const wasCached = fs.existsSync(cacheFile);
       try {
-        await getAirportGround(icao);
+        await groundForIcao(icao);
         if (wasCached) hit++; else fetched++;
       } catch (err) {
         failed++;
@@ -7909,7 +7917,7 @@ app.get('/api/icao/:icao/ground', async (req, res) => {
   try {
     const isAdmin = isAdminUser(Number(req.session?.user?.data?.cid));
     const force = isAdmin && req.query.refresh === '1';
-    const geo = await getAirportGround(icao, { forceRefresh: force });
+    const geo = await groundForIcao(icao, { forceRefresh: force });
     res.set('Cache-Control', 'private, max-age=3600');
     res.json(geo);
   } catch (err) {
@@ -7928,7 +7936,7 @@ app.get('/api/icao/:icao/stand-occupancy', async (req, res) => {
   const icao = String(req.params.icao || '').toUpperCase();
   if (!/^[A-Z]{4}$/.test(icao)) return res.status(400).json({ error: 'Invalid ICAO' });
   try {
-    const geo = await getAirportGround(icao);
+    const geo = await groundForIcao(icao);
     const airport = await prisma.airport.findUnique({ where: { icao }, select: { lat: true, lon: true } });
     if (!airport) return res.json({ occupancy: {}, count: 0 });
 
@@ -33174,7 +33182,12 @@ app.get('/admin/controller-pack', requireAdmin, async (req, res) => {
       legName: r.number,
       from: r.from,
       to: r.to,
-      route: r.atcRoute || ''
+      /* adminSheetCache rows are snake_case, so r.atcRoute was always undefined
+         and every leg was generated with an empty route. atc_route_raw is the
+         route filed on the schedule; atc_route is gated on Sector Planning
+         having published it, which would leave the pack blank until both sides
+         agree. */
+      route: r.atc_route_raw || r.atc_route || ''
     };
   });
 

@@ -11,10 +11,12 @@ const ICAO = process.argv[2] || 'EGLL';
 const OVERPASS_ENDPOINTS = process.env.OVERPASS_URL
   ? [process.env.OVERPASS_URL]
   : [
+      // Fastest first — see the note in lib/osm-ground.mjs. Benchmarked
+      // 2026-08-19; re-measure if fetches start crawling.
+      'https://overpass.openstreetmap.fr/api/interpreter',
+      'https://overpass.private.coffee/api/interpreter',
       'https://overpass-api.de/api/interpreter',
       'https://overpass.kumi.systems/api/interpreter',
-      'https://overpass.private.coffee/api/interpreter',
-      'https://overpass.openstreetmap.fr/api/interpreter',
     ];
 
 const USER_AGENT = 'WorldFlight-Planning/1.0 (+https://planning.worldflight.center)';
@@ -120,11 +122,64 @@ async function fetchOverpass(query) {
   throw new Error(`Overpass failed across ${OVERPASS_ENDPOINTS.length} mirror(s) after ${MAX_RETRIES} attempts. Last errors:\n  - ${errors.slice(-3).join('\n  - ')}`);
 }
 
-async function checkIcaoExistsInOSM(icao) {
-  // Lightweight probe — short server-side budget so an unreachable airport fails fast.
-  const query = `[out:json][timeout:15];(way[icao="${icao}"];relation[icao="${icao}"];node[icao="${icao}"];);out ids;`;
+async function findAirportInOSM(icao) {
+  // Lightweight probe — short server-side budget so an unreachable airport fails
+  // fast. `out center` also hands back a coordinate, which the main query needs
+  // for its bounding box, so this costs no extra round trip.
+  const query = `[out:json][timeout:15];(way[icao="${icao}"];relation[icao="${icao}"];node[icao="${icao}"];);out center;`;
   const data = await fetchOverpass(query);
-  return data.elements && data.elements.length > 0;
+  const els = data.elements || [];
+  if (!els.length) return null;
+  for (const el of els) {
+    const lat = el.lat ?? el.center?.lat;
+    const lon = el.lon ?? el.center?.lon;
+    if (Number.isFinite(lat) && Number.isFinite(lon)) return { lat, lon };
+  }
+  return { lat: null, lon: null };   // present in OSM but no usable centre
+}
+
+// ~9 km either side, so the 18 km box holds even the largest airports.
+const GROUND_BOX_DEG = 0.08;
+function groundBbox(lat, lon) {
+  const dLon = GROUND_BOX_DEG / Math.max(0.15, Math.cos(lat * Math.PI / 180));
+  return [lat - GROUND_BOX_DEG, lon - dLon, lat + GROUND_BOX_DEG, lon + dLon]
+    .map(v => v.toFixed(5)).join(',');
+}
+
+// A box that fits the biggest airport also catches the neighbours, so drop
+// non-aeroway features that sit well away from the airport itself.
+function keepAirportElements(elements) {
+  // Cell roughly 220 m square. A candidate is kept when one of its nodes lands
+  // in a cell that holds aeroway geometry, or in any of the eight neighbours —
+  // so terminals and piers beside a stand survive while the city beyond does
+  // not. A bounding box around the aeroway features is far too generous for
+  // airports embedded in a city: OMDB pulled in 18,376 Dubai buildings.
+  const CELL = 0.002;
+  let latRef = null;
+  for (const el of elements) {
+    if (el.tags && el.tags.aeroway && el.geometry && el.geometry.length) { latRef = el.geometry[0].lat; break; }
+  }
+  if (latRef === null) return elements;              // no aeroway found — keep everything
+  const lonCell = CELL / Math.max(0.15, Math.cos(latRef * Math.PI / 180));
+  const key = (lat, lon) => Math.floor(lat / CELL) + ':' + Math.floor(lon / lonCell);
+
+  const near = new Set();
+  for (const el of elements) {
+    if (!el.tags || !el.tags.aeroway || !el.geometry) continue;
+    for (const n of el.geometry) near.add(key(n.lat, n.lon));
+  }
+  const touches = (n) => {
+    const r = Math.floor(n.lat / CELL), c = Math.floor(n.lon / lonCell);
+    for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
+      if (near.has((r + dr) + ':' + (c + dc))) return true;
+    }
+    return false;
+  };
+  return elements.filter(el => {
+    if (el.tags && el.tags.aeroway) return true;
+    if (!el.geometry || !el.geometry.length) return false;
+    return el.geometry.some(touches);
+  });
 }
 
 function coordToES(lat, lon) {
@@ -151,8 +206,8 @@ async function main() {
   } else {
     // Check if airport exists in OSM first
     console.log('  Checking if ICAO exists in OSM...');
-    const exists = await checkIcaoExistsInOSM(ICAO);
-    if (!exists) {
+    const centre = await findAirportInOSM(ICAO);
+    if (!centre) {
       console.log(`  ${ICAO} not found in OSM database — skipping ground layout`);
       process.exit(2); // Exit code 2 = ICAO not in OSM (skip, not an error)
     }
@@ -160,7 +215,29 @@ async function main() {
     // Query OSM for airport features — 60s server-side budget is enough for 99% of airports.
     // If a specific airport exceeds this, the client retry/rotation will eventually land on a
     // faster mirror or a less-loaded slot.
-    const query = `
+    // Bounding box rather than area[icao=...]: Overpass resolves an ICAO tag
+    // into an area via a separately-built dataset that the public mirrors keep
+    // inconsistently, and it dominates the query cost. Measured on EGLL the
+    // same result came back in 1.3s by bbox against 32s by area, with two of
+    // the four mirrors failing the area form outright.
+    const useBbox = Number.isFinite(centre.lat) && Number.isFinite(centre.lon);
+    const bb = useBbox ? groundBbox(centre.lat, centre.lon) : null;
+    const query = useBbox ? `
+[out:json][timeout:60];
+(
+  way[aeroway=runway](${bb});
+  way[aeroway=taxiway](${bb});
+  way[aeroway=apron](${bb});
+  way[aeroway=terminal](${bb});
+  way[building][building!=no](if:t["aeroway"]!="terminal")(${bb});
+  way[landuse=grass](${bb});
+  way[aeroway=parking_position](${bb});
+  way[aeroway=gate](${bb});
+  relation[aeroway=apron](${bb});
+  relation[building](${bb});
+);
+out body geom;
+` : `
 [out:json][timeout:60];
 area[icao="${ICAO}"]->.airport;
 (
@@ -179,6 +256,12 @@ out body geom;
 `;
 
     data = await fetchOverpass(query);
+    if (useBbox) {
+      const before = (data.elements || []).length;
+      data.elements = keepAirportElements(data.elements || []);
+      const dropped = before - data.elements.length;
+      if (dropped) console.log(`  Filtered out ${dropped} feature(s) outside the airport`);
+    }
     fs.writeFileSync(cachePath, JSON.stringify(data), 'utf-8');
     console.log(`  Got ${data.elements.length} elements from OSM (cached)\n`);
   }

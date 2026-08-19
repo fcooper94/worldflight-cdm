@@ -461,8 +461,23 @@ async function main() {
   const legNum = parseInt(LEG_NAME.replace(/^WF\d{2}/, ''));
   const prevLegName = `${YEAR_PREFIX}${String(legNum - 1).padStart(2, '0')}`;
   const nextLegName = `${YEAR_PREFIX}${String(legNum + 1).padStart(2, '0')}`;
-  const prevLeg = await prisma.wfScheduleRow.findFirst({ where: { number: prevLegName } });
-  const nextLeg = await prisma.wfScheduleRow.findFirst({ where: { number: nextLegName } });
+  /* Scope to one event. Leg numbers repeat across events — WF2611 is both
+     LEMD->KJFK on an older event and UHPP->PADQ on this one — and an unscoped
+     findFirst returned the wrong row, so the pack drew a route across the
+     Atlantic instead of the neighbouring leg. Prefer the event that owns the
+     leg being generated, falling back to whichever event is active. */
+  const thisLeg = await prisma.wfScheduleRow.findFirst({
+    where: { number: LEG_NAME, from: FROM, to: TO }
+  });
+  let scopeEventId = thisLeg?.eventId ?? null;
+  if (scopeEventId == null) {
+    const activeEvent = await prisma.wfEvent.findFirst({ where: { isActive: true }, select: { id: true } });
+    scopeEventId = activeEvent?.id ?? null;
+  }
+  if (scopeEventId == null) console.warn('  WARNING: no event resolved — neighbouring legs may come from the wrong event');
+  const legScope = scopeEventId == null ? {} : { eventId: scopeEventId };
+  const prevLeg = await prisma.wfScheduleRow.findFirst({ where: { number: prevLegName, ...legScope } });
+  const nextLeg = await prisma.wfScheduleRow.findFirst({ where: { number: nextLegName, ...legScope } });
   if (prevLeg) console.log(`  Previous leg: ${prevLegName} (${prevLeg.from} -> ${prevLeg.to})`);
   if (nextLeg) console.log(`  Next leg: ${nextLegName} (${nextLeg.from} -> ${nextLeg.to})`);
 
