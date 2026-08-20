@@ -33400,6 +33400,8 @@ app.get('/wf-atc/hub', requirePageEnabled('wf-atc-hub'), requireWfAtcOrAdmin, as
           </div>
           <div class="hub-cfg-full">
             <label for="hubCfgApp">Approach type</label><select id="hubCfgApp"></select>
+            <input type="text" id="hubCfgAppOther" placeholder="e.g. RNP AR, ILS Z, SURVEILLANCE RADAR"
+                   autocomplete="off" style="margin-top:6px;" hidden />
           </div>
           <div class="hub-cfg-full">
             <label>NOTAMs</label>
@@ -33412,12 +33414,25 @@ app.get('/wf-atc/hub', requirePageEnabled('wf-atc-hub'), requireWfAtcOrAdmin, as
           </div>
         </div>
 
+        <div id="hubCfgStepDone" hidden>
+          <div style="display:flex;gap:10px;align-items:flex-start;padding:12px 14px;border-radius:8px;
+                      background:color-mix(in srgb, #10b981 12%, transparent);
+                      border:1px solid color-mix(in srgb, #10b981 40%, transparent);">
+            <span style="font-size:16px;line-height:1.2;color:#34d399;">&#10003;</span>
+            <div>
+              <div style="font-size:12px;font-weight:700;color:#34d399;margin-bottom:4px;">Saved</div>
+              <div id="hubCfgDoneMsg" style="font-size:12px;line-height:1.55;color:var(--text);"></div>
+            </div>
+          </div>
+        </div>
+
         <div id="hubCfgHint" style="font-size:11px;color:var(--muted);margin-top:8px;min-height:16px;"></div>
         <div class="modal-actions" style="margin-top:14px;">
           <button type="button" class="modal-btn modal-btn-cancel" id="hubCfgCancel">Cancel</button>
           <button type="button" class="modal-btn" id="hubCfgBack" hidden>Back</button>
           <button type="button" class="modal-btn modal-btn-submit" id="hubCfgNext" hidden>Next</button>
           <button type="button" class="modal-btn modal-btn-submit" id="hubCfgSave">Save</button>
+          <button type="button" class="modal-btn modal-btn-submit" id="hubCfgDone" hidden>Done</button>
         </div>
       </div>
     </div>
@@ -33452,7 +33467,7 @@ app.get('/wf-atc/hub', requirePageEnabled('wf-atc-hub'), requireWfAtcOrAdmin, as
       var sel = document.getElementById('hubSector');
       var body = document.getElementById('hubBody');
       var empty = document.getElementById('hubEmpty');
-      var map = null, layers = [];
+      var map = null, layers = [], dateHint = null;
       var allBookings = [];
 
       var FLOW_LABEL = { NONE: 'No Restrictions', BOOKING_ONLY: 'Booking Required', SLOTTED: 'Bookings with Connect Times' };
@@ -33548,13 +33563,39 @@ app.get('/wf-atc/hub', requirePageEnabled('wf-atc-hub'), requireWfAtcOrAdmin, as
         var n = parseInt(hex.slice(1), 16);
         return 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + a + ')';
       }
-      function drawFirs(d, colorByFir) {
+      /* Shift a longitude into the world copy nearest refLon, the same way the
+         Sector Planning map does. /api/resolve-route already hands back a route
+         unwrapped past +/-180 when it crosses the dateline, so UHPP-PADQ sits in
+         a copy the raw FIR polygons are not in -- which is why Anadyr and
+         Anchorage appeared on opposite edges of the world instead of either
+         side of the route. */
+      function unwrapLon(lon, refLon) {
+        while (lon - refLon > 180) lon -= 360;
+        while (refLon - lon > 180) lon += 360;
+        return lon;
+      }
+      function shiftRing(ring, refLon) {
+        return ring.map(function(c) { return [unwrapLon(c[0], refLon), c[1]]; });
+      }
+      function shiftFeature(f, refLon) {
+        var g = f && f.geometry;
+        if (!g) return f;
+        if (g.type === 'Polygon') {
+          return Object.assign({}, f, { geometry: Object.assign({}, g, { coordinates: g.coordinates.map(function(r) { return shiftRing(r, refLon); }) }) });
+        }
+        if (g.type === 'MultiPolygon') {
+          return Object.assign({}, f, { geometry: Object.assign({}, g, { coordinates: g.coordinates.map(function(poly) { return poly.map(function(r) { return shiftRing(r, refLon); }); }) }) });
+        }
+        return f;
+      }
+
+      function drawFirs(d, colorByFir, refLon) {
         if (!firGeo || !map) return;
         (d.firs || []).forEach(function(f) {
           var feat = firGeo[f.fir];
           if (!feat) return;
           var c = colorByFir[f.fir];
-          var lyr = L.geoJSON(feat, { style: { color: c, weight: 2, fillColor: hexToRgba(c, 0.16), fillOpacity: 0.28 } }).addTo(map);
+          var lyr = L.geoJSON(shiftFeature(feat, refLon || 0), { style: { color: c, weight: 2, fillColor: hexToRgba(c, 0.16), fillOpacity: 0.28 } }).addTo(map);
           lyr.bindTooltip(f.fir + (f.division ? ' \u00b7 ' + f.division : '')
             + (f.staffStart ? ' \u2014 staff ' + f.staffStart + '\u2013' + f.staffEnd + 'z' : ''), { sticky: true });
           layers.push(lyr);
@@ -33571,12 +33612,42 @@ app.get('/wf-atc/hub', requirePageEnabled('wf-atc-hub'), requireWfAtcOrAdmin, as
           catch (e) { try { l.remove(); } catch (e2) {} }
         });
         layers = [];
+        /* The map is reused across sectors, so any lock left by a dateline
+           sector has to come off before the next one is drawn. */
+        map.dragging.enable();
+        if (map.touchZoom && map.touchZoom.enable) map.touchZoom.enable();
+        map.setMaxBounds(null);
+        if (dateHint) { try { map.removeControl(dateHint); } catch (e) {} dateHint = null; }
+
         fetch('/api/resolve-route?from=' + d.from + '&to=' + d.to + '&route=' + encodeURIComponent(d.atcRoute || '') + '&depTime=&blockTime=')
           .then(function(r) { return r.json(); })
           .then(function(rd) {
             var pts = (rd.points || []).map(function(p) { return [p.lat, p.lon]; });
             if (pts.length < 2) return;
-            drawFirs(d, d._colorByFir || {});
+
+            // Centre of the route's own longitude span, which is the world copy
+            // the FIR polygons need moving into.
+            var minLon = Infinity, maxLon = -Infinity;
+            pts.forEach(function(p) { if (p[1] < minLon) minLon = p[1]; if (p[1] > maxLon) maxLon = p[1]; });
+            var refLon = (minLon + maxLon) / 2;
+            drawFirs(d, d._colorByFir || {}, refLon);
+
+            /* Panning off the fitted view would leave the shifted copy and land
+               in raw [-180, 180], where the polygons clip. Lock it there and say
+               why, rather than letting the map quietly break. */
+            if (pts.some(function(p) { return p[1] < -180 || p[1] > 180; })) {
+              map.dragging.disable();
+              if (map.touchZoom && map.touchZoom.disable) map.touchZoom.disable();
+              map.setMaxBounds(L.latLngBounds(pts).pad(0.35));
+              dateHint = L.control({ position: 'topright' });
+              dateHint.onAdd = function() {
+                var div = L.DomUtil.create('div');
+                div.style.cssText = 'background:rgba(15,23,42,0.9);border:1px solid rgba(245,158,11,0.4);color:#fbbf24;font-size:11px;padding:4px 8px;border-radius:6px;font-weight:600;';
+                div.textContent = '⚠ Dateline route — panning disabled';
+                return div;
+              };
+              dateHint.addTo(map);
+            }
             var line = L.polyline(pts, { color: '#38bdf8', weight: 3, opacity: 0.9 }).addTo(map);
             layers.push(line);
             [[pts[0], d.from], [pts[pts.length - 1], d.to]].forEach(function(pair) {
@@ -34136,10 +34207,28 @@ app.get('/wf-atc/hub', requirePageEnabled('wf-atc-hub'), requireWfAtcOrAdmin, as
         if (!text) input.focus();
       }
 
+      /* The dropdown covers the common cases; anything else -- RNP AR, ILS Z,
+         surveillance radar -- gets typed instead of us trying to enumerate
+         every approach in the world. */
+      var APP_OTHER = '__other';
+
+      function cfgApproach() {
+        var sel = document.getElementById('hubCfgApp');
+        if (sel.value !== APP_OTHER) return sel.value;
+        return document.getElementById('hubCfgAppOther').value.replace(/\\s+/g, ' ').trim().toUpperCase();
+      }
+
+      function cfgSyncApproach() {
+        var other = document.getElementById('hubCfgApp').value === APP_OTHER;
+        document.getElementById('hubCfgAppOther').hidden = !other;
+        if (other) document.getElementById('hubCfgAppOther').focus();
+        cfgPreview();
+      }
+
       function cfgPreview() {
         var dep = document.getElementById('hubCfgDep').value;
         var arr = document.getElementById('hubCfgArr').value;
-        var app = document.getElementById('hubCfgApp').value;
+        var app = cfgApproach();
         /* [FACILITY] is a vATIS variable, but we already know which airport this
            is, so show it resolved -- the point of a preview is to read like the
            broadcast rather than like the template. */
@@ -34169,6 +34258,9 @@ app.get('/wf-atc/hub', requirePageEnabled('wf-atc-hub'), requireWfAtcOrAdmin, as
         var onFreq = step === 'freq';
         document.getElementById('hubCfgStepFreq').hidden = !onFreq;
         document.getElementById('hubCfgStepCfg').hidden = onFreq;
+        document.getElementById('hubCfgStepDone').hidden = true;
+        document.getElementById('hubCfgDone').hidden = true;
+        document.getElementById('hubCfgCancel').hidden = false;
         document.getElementById('hubCfgSub').textContent = onFreq
           ? 'We have no published ATIS frequency for this airport, and a profile without one will not transmit.'
           : 'Sets what this airport\u2019s ATIS reads out. Everyone who imported the profile picks it up on their next update.';
@@ -34205,12 +34297,29 @@ app.get('/wf-atc/hub', requirePageEnabled('wf-atc-hub'), requireWfAtcOrAdmin, as
             var hasRwy = d.runways && d.runways.length;
             fill(document.getElementById('hubCfgDep'), d.runways, c.depRwy, hasRwy ? 'Not set' : 'No runways on file');
             fill(document.getElementById('hubCfgArr'), d.runways, c.arrRwy, hasRwy ? 'Not set' : 'No runways on file');
-            fill(document.getElementById('hubCfgApp'), d.approaches, c.approach, 'Not stated');
+            var appSel = document.getElementById('hubCfgApp');
+            fill(appSel, d.approaches, c.approach, 'Not stated');
+            var opt = document.createElement('option');
+            opt.value = APP_OTHER;
+            opt.textContent = 'Other...';
+            appSel.appendChild(opt);
+            // A saved approach the dropdown does not offer was typed, so come
+            // back into the same state rather than silently losing it.
+            var known = !c.approach || (d.approaches || []).indexOf(c.approach) !== -1;
+            document.getElementById('hubCfgAppOther').value = known ? '' : c.approach;
+            if (!known) appSel.value = APP_OTHER;
+            document.getElementById('hubCfgAppOther').hidden = known;
             var list = document.getElementById('hubCfgNotams');
             list.innerHTML = '';
             (c.notams || []).forEach(function(n) { cfgAddNotamRow(n); });
             if (!list.children.length) cfgNotamsEmpty();
-            document.getElementById('hubCfgFreq').value = d.frequency || '';
+            /* Nothing published for this airport: offer the event frequency as
+               a starting point rather than an empty box, but leave it as a
+               suggestion the controller confirms or overtypes. */
+            document.getElementById('hubCfgFreq').value = d.frequency || d.eventFreq || '';
+            document.getElementById('hubCfgHint').textContent = (!d.frequency && d.eventFreq)
+              ? 'Suggested: the WorldFlight event ATIS frequency. Change it if your vACC uses another.'
+              : '';
             cfgHasFreq = Boolean(d.frequency);
             document.getElementById('hubCfgFreqLine').innerHTML = '';
             if (d.frequency) {
@@ -34223,12 +34332,23 @@ app.get('/wf-atc/hub', requirePageEnabled('wf-atc-hub'), requireWfAtcOrAdmin, as
           .catch(function() { document.getElementById('hubCfgHint').textContent = 'Could not load this airport.'; });
       };
 
-      function closeCfgModal() { document.getElementById('hubCfgModal').classList.add('hidden'); }
+      /* Refresh on the way out rather than the moment the save returns, so the
+         confirmation is not swept away by the sector reloading underneath it.
+         Dismissing with the backdrop has to refresh too, or the card would sit
+         there showing the state from before the save. */
+      var cfgSaved = false;
+      function closeCfgModal() {
+        document.getElementById('hubCfgModal').classList.add('hidden');
+        if (cfgSaved) { cfgSaved = false; load(sel.value); }
+      }
       document.getElementById('hubCfgCancel').addEventListener('click', closeCfgModal);
+      document.getElementById('hubCfgDone').addEventListener('click', closeCfgModal);
       document.getElementById('hubCfgModal').querySelector('.modal-backdrop').addEventListener('click', closeCfgModal);
-      ['hubCfgDep', 'hubCfgArr', 'hubCfgApp'].forEach(function(id) {
+      ['hubCfgDep', 'hubCfgArr'].forEach(function(id) {
         document.getElementById(id).addEventListener('input', cfgPreview);
       });
+      document.getElementById('hubCfgApp').addEventListener('change', cfgSyncApproach);
+      document.getElementById('hubCfgAppOther').addEventListener('input', cfgPreview);
       document.getElementById('hubCfgAddNotam').addEventListener('click', function() { cfgAddNotamRow(''); });
       document.getElementById('hubCfgBack').addEventListener('click', function() { cfgShowStep('freq'); });
 
@@ -34273,18 +34393,33 @@ app.get('/wf-atc/hub', requirePageEnabled('wf-atc-hub'), requireWfAtcOrAdmin, as
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             depRwy: dep, arrRwy: arr,
-            approach: document.getElementById('hubCfgApp').value,
+            approach: cfgApproach(),
             notams: cfgNotamValues(),
             freq: f || ''
           })
         }).then(function(r) { if (!r.ok) throw new Error(); return r.json(); })
           .then(function() {
             var icao = cfgIcao, download = cfgMode === 'download';
-            closeCfgModal();
+            cfgSaved = true;
             // Saved first: the file is a stub, so the content has to be on the
             // server before it is any use to fetch.
             if (download) window.location = '/api/vATIS/' + vatisSlug(icao) + '.json?download=1';
-            load(sel.value);
+            /* Hold the modal open on a confirmation instead of refreshing
+               straight away. vATIS does not say when it re-checks its update
+               URL, and a profile already loaded will not change under a
+               controller mid-session, so restarting is the one instruction
+               that reliably works. */
+            document.getElementById('hubCfgStepFreq').hidden = true;
+            document.getElementById('hubCfgStepCfg').hidden = true;
+            document.getElementById('hubCfgStepDone').hidden = false;
+            document.getElementById('hubCfgDoneMsg').textContent = download
+              ? 'Your profile is downloading. Import it into vATIS, then open the WF ' + icao + ' profile.'
+              : 'Please restart vATIS and open the WF ' + icao + ' profile to see the changes.';
+            document.getElementById('hubCfgHint').textContent = '';
+            ['hubCfgCancel', 'hubCfgBack', 'hubCfgNext', 'hubCfgSave'].forEach(function(id) {
+              document.getElementById(id).hidden = true;
+            });
+            document.getElementById('hubCfgDone').hidden = false;
           })
           .catch(function() { hint.textContent = 'Could not save \u2014 try again.'; });
       });
@@ -34584,6 +34719,44 @@ function vatisNextSerial(previous) {
   return prev >= today ? prev + 1 : today;
 }
 
+/* OurAirports' published frequencies, reduced to ICAO -> MHz by
+   scripts/extract-atis-frequencies.js. Public domain, so the values can ship
+   inside a downloadable profile. */
+let vatisPublishedFreqs = null;
+function vatisPublishedFreqHz(icao) {
+  if (!vatisPublishedFreqs) {
+    try {
+      vatisPublishedFreqs = JSON.parse(fs.readFileSync(path.join(__dirname, 'data', 'atis-frequencies.json'), 'utf-8'));
+    } catch (err) {
+      console.warn('[vATIS] published ATIS frequencies unavailable:', err.message);
+      vatisPublishedFreqs = {};
+    }
+  }
+  const mhz = parseFloat(vatisPublishedFreqs[icao]);
+  return isNaN(mhz) ? 0 : Math.round(mhz * 1e6);
+}
+
+/* Airports with no usable published ATIS at all -- CYKA, FKKD, HESN and ZKPY
+   have none, and YSSY, YBAS and SKBO broadcast theirs over a navaid, below the
+   VHF band and unusable on VATSIM. A WorldFlight-wide frequency covers those,
+   but it is a setting rather than a constant: it changes between events and
+   nobody should need a deploy to move it. Offered as a suggestion in the
+   configurator, never written into a profile behind a controller's back. */
+const VATIS_EVENT_FREQ_KEY = 'vatis-event-atis-freq';
+
+async function vatisEventFreq() {
+  try {
+    const row = await prisma.siteSetting.findUnique({ where: { key: VATIS_EVENT_FREQ_KEY } });
+    const mhz = parseFloat(row?.value);
+    return isFinite(mhz) && mhz >= 118 && mhz <= 137 ? mhz.toFixed(3) : '';
+  } catch {
+    return '';
+  }
+}
+
+/* AFV first: it is what controllers actually connect on, and a vACC's choice
+   beats the real-world plate where they differ. The published table is the
+   fallback for the airports AFV has never listed. */
 function vatisAtisFrequencyHz(icao) {
   const stations = loadAfvStations();
   for (const prefix of afvPrefixesFor(icao)) {
@@ -34593,7 +34766,7 @@ function vatisAtisFrequencyHz(icao) {
       if (!isNaN(mhz)) return Math.round(mhz * 1e6);
     }
   }
-  return 0;
+  return vatisPublishedFreqHz(icao);
 }
 
 /* AFV knows no ATIS frequency for 26 of the 43 route airports, so the Hub asks
@@ -34817,6 +34990,8 @@ app.get('/api/wf-atc/vatis-config/:icao', requireWfAtcOrAdmin, async (req, res) 
       config: own || vatisReadConfigStore()[icao] || null,
       isOwn: Boolean(own),
       frequency: saved ? (saved.hz / 1e6).toFixed(3) : (vatisAtisFrequencyHz(icao) ? (vatisAtisFrequencyHz(icao) / 1e6).toFixed(3) : ''),
+      // Only for airports with nothing published; the controller still confirms it.
+      eventFreq: await vatisEventFreq(),
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -34840,6 +35015,35 @@ app.post('/api/wf-atc/vatis-config/:icao', requireWfAtcOrAdmin, express.json(), 
     res.json({ ok: true, config: saved, key });
   } catch (err) {
     console.error('[vATIS] config save failed:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/* The frequency suggested for airports with nothing published. Stored rather
+   than hard-coded: it changes between events, and moving it should not need a
+   deploy. Blank disables the suggestion entirely. */
+app.get('/admin/api/vatis/event-frequency', requireAdmin, async (req, res) => {
+  res.json({ freq: await vatisEventFreq() });
+});
+
+app.put('/admin/api/vatis/event-frequency', requireAdmin, express.json(), async (req, res) => {
+  const raw = String(req.body?.freq ?? '').trim();
+  if (raw) {
+    const mhz = parseFloat(raw);
+    if (!isFinite(mhz) || mhz < 118 || mhz > 137) {
+      return res.status(400).json({ error: 'Expected a VHF frequency between 118.000 and 137.000, or blank to clear' });
+    }
+  }
+  try {
+    const value = raw ? parseFloat(raw).toFixed(3) : '';
+    await prisma.siteSetting.upsert({
+      where: { key: VATIS_EVENT_FREQ_KEY },
+      update: { value },
+      create: { key: VATIS_EVENT_FREQ_KEY, value },
+    });
+    console.log('[vATIS] event ATIS frequency set to ' + (value || '(cleared)'));
+    res.json({ ok: true, freq: value });
+  } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });

@@ -1,0 +1,6 @@
+{
+  "_comment": "Hand-verified ATIS frequencies for airports OurAirports either omits or files against a navaid. Merged over the generated table by scripts/extract-atis-frequencies.js, so regenerating from a newer CSV cannot lose them.",
+  "YPKA": "134.550",
+  "VVDN": "128.525",
+  "PANC": "135.500"
+}
