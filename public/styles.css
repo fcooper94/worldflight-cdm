@@ -3359,6 +3359,12 @@ tr:hover .row-actions {
 .hidden {
   display: none !important;
 }
+
+/* Set while a modal is open — see the scroll-lock block in layout.js. */
+body.wf-scroll-locked {
+  overflow: hidden !important;
+}
+
 .status-pill {
   padding: 3px 10px;
   border-radius: 6px;

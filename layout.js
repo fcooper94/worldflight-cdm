@@ -1506,6 +1506,76 @@ ${user ? '' : `
   document.getElementById('loginBackBtn').addEventListener('click', showChoice);
 })();
 </script>
+
+<script>
+/* Freeze the page behind an open modal.
+
+   There are ~50 places that open one, using several different conventions
+   (.modal + .hidden, inline display, .route-modal, dialog). Rather than teach
+   every open/close path to lock scrolling, watch for a full-screen overlay
+   becoming visible and lock the body while any is up. Every modal on the site
+   is a full-screen position:fixed element, so that shape is what we look for
+   rather than any particular class — several are built in JS with nothing but
+   an inline cssText and would be missed by a class selector. Inner cards are
+   not fixed, and fixed chrome like the sidebar does not cover the viewport, so
+   neither trips it. */
+(function () {
+  var LOCK = 'wf-scroll-locked';
+  var SEL = '[class*="modal"], [class*="overlay"], dialog[open]';
+  var pending = false;
+
+  function isFullScreenFixed(el) {
+    // Cheapest test first: display:none and .hidden both give no rects.
+    if (!el.getClientRects().length) return false;
+    var cs = getComputedStyle(el);
+    if (cs.position !== 'fixed' || cs.visibility === 'hidden' || cs.opacity === '0') return false;
+    var r = el.getBoundingClientRect();
+    return r.width >= window.innerWidth * 0.9 && r.height >= window.innerHeight * 0.9;
+  }
+
+  function anyOverlayVisible() {
+    var i;
+    // Modals built in JS get appended to body with no class to match on.
+    var kids = document.body ? document.body.children : [];
+    for (i = 0; i < kids.length; i++) if (isFullScreenFixed(kids[i])) return true;
+    // Markup modals often sit deeper in the page, but do carry a class.
+    var els = document.querySelectorAll(SEL);
+    for (i = 0; i < els.length; i++) if (isFullScreenFixed(els[i])) return true;
+    return false;
+  }
+
+  function sync() {
+    pending = false;
+    var open = anyOverlayVisible();
+    var locked = document.body.classList.contains(LOCK);
+    if (open === locked) return;
+    if (open) {
+      // Hiding the scrollbar reflows the page a few px to the right unless the
+      // width it occupied is handed back as padding.
+      var gap = window.innerWidth - document.documentElement.clientWidth;
+      if (gap > 0) document.body.style.paddingRight = gap + 'px';
+      document.body.classList.add(LOCK);
+    } else {
+      document.body.classList.remove(LOCK);
+      document.body.style.paddingRight = '';
+    }
+  }
+
+  function schedule() {
+    if (pending) return;
+    pending = true;
+    requestAnimationFrame(sync);
+  }
+
+  // Pages push DOM constantly (aircraft markers, bookings, socket updates), so
+  // coalesce to at most one check per frame.
+  new MutationObserver(schedule).observe(document.documentElement, {
+    subtree: true, childList: true,
+    attributes: true, attributeFilter: ['class', 'style', 'hidden', 'open']
+  });
+  schedule();
+})();
+</script>
 `}
 
 </body>

@@ -33334,10 +33334,13 @@ app.get('/wf-atc/hub', requirePageEnabled('wf-atc-hub'), requireWfAtcOrAdmin, as
 
     <div id="hubFirModal" class="modal hidden">
       <div class="modal-backdrop"></div>
-      <div class="modal-dialog" style="width:460px;max-width:94vw;padding:20px;">
+      <!-- Wider than the other modals and capped to the viewport: the map is
+           explorable now, so it earns the room, but must not push the Close
+           button off a short screen. -->
+      <div class="modal-dialog" style="width:640px;max-width:94vw;max-height:92vh;overflow-y:auto;padding:20px;">
         <h3 style="margin:0 0 2px;" id="hubFirModalTitle"></h3>
         <p id="hubFirModalSub" style="color:var(--muted);font-size:11px;margin:0 0 10px;"></p>
-        <div id="hubFirMapWrap" style="height:200px;border-radius:8px;overflow:hidden;border:1px solid var(--border);background:#0b1220;margin-bottom:12px;">
+        <div id="hubFirMapWrap" style="height:min(340px, 38vh);border-radius:8px;overflow:hidden;border:1px solid var(--border);background:#0b1220;margin-bottom:12px;">
           <div id="hubFirMap" style="width:100%;height:100%;"></div>
         </div>
         <div id="hubFirModalBody" style="max-height:40vh;overflow-y:auto;"></div>
@@ -33722,9 +33725,10 @@ app.get('/wf-atc/hub', requirePageEnabled('wf-atc-hub'), requireWfAtcOrAdmin, as
         if (!sectors || !sectors.length) { wrap.style.display = 'none'; return; }
         wrap.style.display = '';
         if (!firMap) {
-          firMap = L.map('hubFirMap', { zoomControl: false, attributionControl: false, dragging: false,
-                                        scrollWheelZoom: false, doubleClickZoom: false, boxZoom: false, keyboard: false });
-          wfAddTileLayer(firMap, { maxZoom: 8 });
+          // Fully interactive: the page behind is scroll-locked while the modal
+          // is up, so the wheel belongs to the map and cannot leak past it.
+          firMap = L.map('hubFirMap', { zoomControl: true, attributionControl: false });
+          wfAddTileLayer(firMap, { maxZoom: 11 });
         }
         firMapLayers.forEach(function(l) { try { firMap.removeLayer(l); } catch (e) {} });
         firMapLayers = [];
@@ -33772,7 +33776,7 @@ app.get('/wf-atc/hub', requirePageEnabled('wf-atc-hub'), requireWfAtcOrAdmin, as
         var bodyEl = document.getElementById('hubFirModalBody');
         bodyEl.style.display = mapOnly ? 'none' : '';
         // A map on its own can afford more room.
-        document.getElementById('hubFirMapWrap').style.height = mapOnly ? '320px' : '200px';
+        document.getElementById('hubFirMapWrap').style.height = mapOnly ? 'min(560px, 62vh)' : 'min(340px, 38vh)';
         var box = document.getElementById('hubFirModalBody');
         box.innerHTML = '<span class="hub-empty">Loading\u2026</span>';
         firModal.classList.remove('hidden');
