@@ -5,7 +5,7 @@ import express from 'express';
 import { PrismaClient } from '@prisma/client';
 import multer from 'multer';
 import { PACK_DIR, PACK_WF_DIR, GROUND_CACHE_DIR, VATIS_DIR, ensurePackDirs } from './lib/paths.mjs';
-import { buildVatisProfile, defaultTemplate as vatisDefaultTemplate, TEMPLATE_SERIAL as VATIS_TEMPLATE_SERIAL } from './lib/vatis-profile.mjs';
+import { buildVatisProfile, defaultTemplate as vatisDefaultTemplate, APPROACH_TYPES as VATIS_APPROACH_TYPES, TEMPLATE_SERIAL as VATIS_TEMPLATE_SERIAL } from './lib/vatis-profile.mjs';
 import path from 'path';
 import crypto from 'crypto';
 import { spawn } from 'child_process';
@@ -33231,6 +33231,35 @@ app.get('/wf-atc/hub', requirePageEnabled('wf-atc-hub'), requireWfAtcOrAdmin, as
       .hub-fir-win { margin-left:auto; font-family:monospace; color:#7dd3fc; white-space:nowrap; }
       .hub-fir-cs { font-size:10px; color:var(--accent); cursor:pointer; text-decoration:underline; background:none; border:0; padding:0; font-family:inherit; }
       .hub-fir-cs:hover { color:#7dd3fc; }
+      .hub-vatis-row { border:1px solid var(--border); border-radius:8px; padding:9px 10px; margin-bottom:8px; background:var(--panel2); }
+      .hub-vatis-head { display:flex; align-items:center; gap:6px; margin-bottom:8px; flex-wrap:wrap; }
+      .hub-vatis-role { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; color:var(--muted); }
+      .hub-vatis-icao { font-size:13px; font-weight:700; letter-spacing:0.02em; }
+      .hub-pill { font-size:10px; padding:2px 8px; border-radius:99px; font-variant-numeric:tabular-nums; white-space:nowrap;
+                  background:color-mix(in srgb, #10b981 18%, transparent); color:#34d399; border:1px solid color-mix(in srgb, #10b981 45%, transparent); }
+      .hub-pill.is-missing { background:color-mix(in srgb, #f59e0b 16%, transparent); color:#fbbf24; border-color:color-mix(in srgb, #f59e0b 45%, transparent); }
+      .hub-pill.is-cfg { background:color-mix(in srgb, #818cf8 18%, transparent); color:#a5b4fc; border-color:color-mix(in srgb, #818cf8 45%, transparent); }
+      .hub-btn-row { display:flex; gap:6px; flex-wrap:wrap; }
+      .hub-btn { display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:600; font-family:inherit;
+                 padding:6px 11px; border-radius:6px; cursor:pointer; border:1px solid var(--border);
+                 background:var(--panel); color:var(--text); text-decoration:none; }
+      .hub-btn:hover { border-color:var(--accent); color:var(--accent); }
+      .hub-btn.is-primary { background:color-mix(in srgb, var(--accent) 16%, transparent); border-color:color-mix(in srgb, var(--accent) 55%, transparent); color:var(--accent); }
+      .hub-btn.is-primary:hover { background:color-mix(in srgb, var(--accent) 26%, transparent); }
+      .hub-cfg-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+      .hub-cfg-grid label, .hub-cfg-full label { display:block; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; color:var(--muted); margin-bottom:4px; }
+      .hub-cfg-full { margin-top:10px; }
+      .hub-cfg-grid select, .hub-cfg-grid input, .hub-cfg-full textarea, .hub-cfg-full input {
+        width:100%; box-sizing:border-box; padding:7px 10px; font-size:12px; font-family:inherit;
+        background:var(--panel2); color:var(--text); border:1px solid var(--border); border-radius:6px; }
+      .hub-cfg-full textarea { min-height:70px; resize:vertical; line-height:1.5; }
+      .hub-notam-list { display:flex; flex-direction:column; gap:6px; }
+      .hub-notam-row { display:flex; gap:6px; align-items:center; }
+      .hub-notam-row input { flex:1; }
+      .hub-notam-del { flex:0 0 auto; width:28px; height:30px; border-radius:6px; cursor:pointer; font-family:inherit; font-size:14px; line-height:1;
+                       background:rgba(239,68,68,0.12); color:#f87171; border:1px solid rgba(239,68,68,0.35); }
+      .hub-notam-del:hover { background:rgba(239,68,68,0.22); }
+      .hub-notam-empty { font-size:11px; color:var(--muted); }
       .hub-lvl { display:flex; flex-direction:column; gap:6px; margin-bottom:8px; }
       .hub-lvl-chips { display:flex; flex-wrap:wrap; gap:4px; }
       .hub-lvl-chip { font-size:10px; padding:3px 8px; border-radius:99px; cursor:pointer; font-family:inherit;
@@ -33348,23 +33377,47 @@ app.get('/wf-atc/hub', requirePageEnabled('wf-atc-hub'), requireWfAtcOrAdmin, as
 
     </div>
 
-    <div id="hubVatisModal" class="modal hidden">
+    <div id="hubCfgModal" class="modal hidden">
       <div class="modal-backdrop"></div>
-      <div class="modal-dialog" style="width:420px;max-width:94vw;padding:20px;">
-        <h3 style="margin:0 0 2px;" id="hubVatisTitle"></h3>
-        <p style="color:var(--muted);font-size:11px;margin:0 0 12px;line-height:1.5;">
-          We have no published ATIS frequency for this airport, and a profile without one will not transmit.
-          Enter the frequency you will use, or take a free one.
-        </p>
-        <div style="display:flex;gap:8px;align-items:center;">
-          <input type="text" id="hubVatisFreq" placeholder="127.180" autocomplete="off"
-                 style="flex:1;padding:8px 12px;font-size:14px;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;font-variant-numeric:tabular-nums;" />
-          <button type="button" class="modal-btn" id="hubVatisRandom">Pick one for me</button>
+      <div class="modal-dialog" style="width:520px;max-width:94vw;max-height:92vh;overflow-y:auto;padding:20px;">
+        <h3 style="margin:0 0 2px;" id="hubCfgTitle"></h3>
+        <p style="color:var(--muted);font-size:11px;margin:0 0 14px;line-height:1.5;" id="hubCfgSub"></p>
+
+        <div id="hubCfgStepFreq" hidden>
+          <label style="display:block;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted);margin-bottom:4px;">ATIS frequency</label>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <input type="text" id="hubCfgFreq" placeholder="127.180" autocomplete="off"
+                   style="flex:1;padding:8px 12px;font-size:14px;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;font-variant-numeric:tabular-nums;" />
+            <button type="button" class="hub-btn" id="hubCfgPick">Pick one for me</button>
+          </div>
         </div>
-        <div id="hubVatisHint" style="font-size:11px;color:var(--muted);margin-top:8px;min-height:16px;"></div>
+
+        <div id="hubCfgStepCfg" hidden>
+          <div id="hubCfgFreqLine" style="font-size:11px;color:var(--muted);margin-bottom:10px;"></div>
+          <div class="hub-cfg-grid">
+            <div><label for="hubCfgDep">Departure runway</label><select id="hubCfgDep"></select></div>
+            <div><label for="hubCfgArr">Arrival runway</label><select id="hubCfgArr"></select></div>
+          </div>
+          <div class="hub-cfg-full">
+            <label for="hubCfgApp">Approach type</label><select id="hubCfgApp"></select>
+          </div>
+          <div class="hub-cfg-full">
+            <label>NOTAMs</label>
+            <div id="hubCfgNotams" class="hub-notam-list"></div>
+            <button type="button" class="hub-btn" id="hubCfgAddNotam" style="margin-top:6px;">+ Add NOTAM</button>
+          </div>
+          <div class="hub-cfg-full">
+            <label>Broadcast preview</label>
+            <pre id="hubCfgPreview" style="margin:0;padding:10px;background:var(--panel2);border:1px solid var(--border);border-radius:6px;font-size:10.5px;line-height:1.6;white-space:pre-wrap;color:var(--muted);"></pre>
+          </div>
+        </div>
+
+        <div id="hubCfgHint" style="font-size:11px;color:var(--muted);margin-top:8px;min-height:16px;"></div>
         <div class="modal-actions" style="margin-top:14px;">
-          <button type="button" class="modal-btn modal-btn-cancel" id="hubVatisCancel">Cancel</button>
-          <button type="button" class="modal-btn modal-btn-submit" id="hubVatisGo">Download</button>
+          <button type="button" class="modal-btn modal-btn-cancel" id="hubCfgCancel">Cancel</button>
+          <button type="button" class="modal-btn" id="hubCfgBack" hidden>Back</button>
+          <button type="button" class="modal-btn modal-btn-submit" id="hubCfgNext" hidden>Next</button>
+          <button type="button" class="modal-btn modal-btn-submit" id="hubCfgSave">Save</button>
         </div>
       </div>
     </div>
@@ -33711,44 +33764,95 @@ app.get('/wf-atc/hub', requirePageEnabled('wf-atc-hub'), requireWfAtcOrAdmin, as
           var va = document.getElementById('hubVatis');
           va.innerHTML = '';
           var vApp = document.createElement('a');
-          vApp.className = 'hub-file';
+          vApp.className = 'hub-btn';
+          vApp.style.marginBottom = '10px';
           vApp.href = 'https://vatis.app/';
           vApp.target = '_blank'; vApp.rel = 'noopener';
-          vApp.textContent = '\u2197 Download vATIS';
+          vApp.textContent = '\u2197 Get vATIS';
           va.appendChild(vApp);
           // Kept for the modal's "pick one for me", which needs to know what is
           // already in use at the field.
           window._hubFreqs = d.frequencies || {};
+          // Profiles are per controller, so downloads carry the viewer's CID.
+          window._hubCid = d.viewerCid || '';
           [['Departure', d.from], ['Arrival', d.to]].forEach(function(pair) {
             var icao = pair[1];
             if (!icao) return;
-            var lab = document.createElement('div');
-            lab.style.cssText = 'font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted);margin:8px 0 2px;';
-            lab.textContent = pair[0] + ' \u2014 ' + icao;
-            va.appendChild(lab);
-            var atis = (d.frequencies && d.frequencies[icao] || []).filter(function(f) { return f.type === 'ATIS'; })[0];
-            if (atis) {
-              var a = document.createElement('a');
-              a.className = 'hub-file';
-              a.href = '/api/vATIS/' + icao + '.json?download=1';
-              a.textContent = '\u2b07 ' + icao + '.json  (' + atis.freq + ')';
-              va.appendChild(a);
-            } else {
-              // No published frequency: ask for one rather than hand out a
-              // profile that cannot transmit.
-              var b = document.createElement('button');
-              b.type = 'button';
-              b.className = 'hub-file';
-              b.style.cssText = 'background:none;border:0;padding:0;font-family:inherit;cursor:pointer;text-align:left;width:100%;';
-              b.textContent = '\u2b07 ' + icao + '.json  (set frequency\u2026)';
-              b.addEventListener('click', function() { openVatisModal(icao); });
-              va.appendChild(b);
+            var v = (d.vatis && d.vatis[icao]) || {};
+
+            var row = document.createElement('div');
+            row.className = 'hub-vatis-row';
+
+            var head = document.createElement('div');
+            head.className = 'hub-vatis-head';
+            var role = document.createElement('span');
+            role.className = 'hub-vatis-role';
+            role.textContent = pair[0];
+            var name = document.createElement('span');
+            name.className = 'hub-vatis-icao';
+            name.textContent = icao;
+            head.appendChild(role);
+            head.appendChild(name);
+
+            // Frequency first, because a profile without one cannot transmit.
+            var freqPill = document.createElement('span');
+            freqPill.className = 'hub-pill' + (v.freq ? '' : ' is-missing');
+            freqPill.textContent = v.freq || 'No frequency';
+            if (v.fromController) freqPill.title = 'Set by a WF ATC controller';
+            head.appendChild(freqPill);
+
+            if (v.configured) {
+              var cfgPill = document.createElement('span');
+              cfgPill.className = 'hub-pill is-cfg';
+              if (!v.own) cfgPill.title = 'Shared default \u2014 configure to make it yours';
+              cfgPill.textContent = (v.depRwy && v.arrRwy && v.depRwy !== v.arrRwy)
+                ? 'DEP ' + v.depRwy + ' / ARR ' + v.arrRwy
+                : 'RWY ' + (v.depRwy || v.arrRwy);
+              if (v.approach) cfgPill.title = 'Expect ' + v.approach + ' approach';
+              head.appendChild(cfgPill);
+              if (v.notams) {
+                var nPill = document.createElement('span');
+                nPill.className = 'hub-pill is-cfg';
+                nPill.textContent = v.notams + ' NOTAM' + (v.notams === 1 ? '' : 's');
+                head.appendChild(nPill);
+              }
             }
+            row.appendChild(head);
+
+            var btns = document.createElement('div');
+            btns.className = 'hub-btn-row';
+
+            if (v.own) {
+              // Configured: the file is ready, so hand it straight over.
+              var dl = document.createElement('a');
+              dl.className = 'hub-btn is-primary';
+              dl.href = '/api/vATIS/' + vatisSlug(icao) + '.json?download=1';
+              dl.textContent = '\u2b07 Download';
+              btns.appendChild(dl);
+
+              var cfgBtn = document.createElement('button');
+              cfgBtn.type = 'button';
+              cfgBtn.className = 'hub-btn';
+              cfgBtn.textContent = '\u2699 Edit ATIS';
+              cfgBtn.addEventListener('click', function() { openVatisConfig(icao, 'edit'); });
+              btns.appendChild(cfgBtn);
+            } else {
+              // Nothing saved for this controller yet, and the server will
+              // refuse the download until there is, so only offer the one path.
+              var setup = document.createElement('button');
+              setup.type = 'button';
+              setup.className = 'hub-btn is-primary';
+              setup.textContent = '\u2699 Configure & download';
+              setup.addEventListener('click', function() { openVatisConfig(icao, 'download'); });
+              btns.appendChild(setup);
+            }
+            row.appendChild(btns);
+            va.appendChild(row);
           });
           var vNote = document.createElement('div');
           vNote.style.cssText = 'font-size:11px;color:var(--muted);margin-top:8px;line-height:1.5;';
-          vNote.textContent = 'Import into vATIS once. Each profile carries an update URL back to this site, '
-            + 'so corrections to frequencies, runways or the closing statement arrive without re-importing.';
+          vNote.textContent = 'Import once. The file is a stub that pulls its content from this site, '
+            + 'so runway, approach and frequency changes made here reach everyone on their next update.';
           va.appendChild(vNote);
 
           var files = document.getElementById('hubFiles');
@@ -33954,86 +34058,235 @@ app.get('/wf-atc/hub', requirePageEnabled('wf-atc-hub'), requireWfAtcOrAdmin, as
       /* mapOnly is used by the "Show on map" links beside a centre callsign —
          you already have the frequency in front of you there, so repeating the
          whole list under the map is noise. */
-      /* Frequencies already in use at the field, so a suggested one does not
-         land on top of the tower. 121.500 is guard and 123.450 is the air-to-air
-         chat frequency; neither is ours to take. */
-      var VATIS_RESERVED = [121.5, 123.45, 122.8, 121.6];
-      var vatisIcao = null;
+      /* One flow for both buttons. Download walks frequency (only when we have
+         none) then the ATIS itself; Edit skips straight to the ATIS. Both end
+         by saving, because everything a controller picks here is served from
+         this site rather than baked into their copy. */
+      var cfgIcao = null;
+      var cfgMode = 'edit';      // 'edit' | 'download'
+      var cfgStep = 'cfg';       // 'freq' | 'cfg'
+      var cfgHasFreq = false;
 
-      function vatisUsedAt(icao) {
+      var VATIS_RESERVED = [121.5, 123.45, 122.8, 121.6];
+
+      function cfgUsedAt(icao) {
         return (window._hubFreqs && window._hubFreqs[icao] || [])
           .map(function(f) { return parseFloat(f.freq); })
           .filter(function(n) { return !isNaN(n); });
       }
 
-      function vatisRandomFreq(icao) {
-        var taken = vatisUsedAt(icao).concat(VATIS_RESERVED);
-        // ATIS sits high in the band in most of the world, so draw from there
-        // rather than the whole 118-137 range.
+      /* Suggested frequencies avoid everything already in use at the field,
+         plus guard and the air-to-air chat frequency, neither of which is ours
+         to take. ATIS sits high in the band in most of the world. */
+      function cfgRandomFreq(icao) {
+        var taken = cfgUsedAt(icao).concat(VATIS_RESERVED);
         var options = [];
         for (var f = 126.000; f <= 136.975; f += 0.025) {
           var v = Math.round(f * 1000) / 1000;
           if (taken.some(function(t) { return Math.abs(t - v) < 0.0125; })) continue;
           options.push(v);
         }
-        if (!options.length) return null;
-        return options[Math.floor(Math.random() * options.length)].toFixed(3);
+        return options.length ? options[Math.floor(Math.random() * options.length)].toFixed(3) : null;
       }
 
-      window.openVatisModal = function(icao) {
-        vatisIcao = icao;
-        document.getElementById('hubVatisTitle').textContent = 'ATIS frequency for ' + icao;
-        document.getElementById('hubVatisFreq').value = '';
-        document.getElementById('hubVatisHint').textContent = '';
-        document.getElementById('hubVatisModal').classList.remove('hidden');
-        setTimeout(function() { document.getElementById('hubVatisFreq').focus(); }, 30);
+      /* ZYHB-1303570 rather than ZYHB: the profile a controller imports follows
+         their own settings, not whatever the last person to touch the airport
+         chose. Falls back to the bare ICAO if we somehow have no CID. */
+      function vatisSlug(icao) {
+        return window._hubCid ? icao + '-' + window._hubCid : icao;
+      }
+
+      function cfgNotamValues() {
+        return [].slice.call(document.querySelectorAll('#hubCfgNotams input'))
+          .map(function(i) { return i.value.replace(/\\s+/g, ' ').trim(); })
+          .filter(Boolean);
+      }
+
+      function cfgNotamsEmpty() {
+        var e = document.createElement('div');
+        e.className = 'hub-notam-empty';
+        e.textContent = 'None. Anything added here is read out in the [NOTAMS] slot.';
+        document.getElementById('hubCfgNotams').appendChild(e);
+      }
+
+      function cfgAddNotamRow(text) {
+        var list = document.getElementById('hubCfgNotams');
+        var empty = list.querySelector('.hub-notam-empty');
+        if (empty) empty.remove();
+        var row = document.createElement('div');
+        row.className = 'hub-notam-row';
+        var input = document.createElement('input');
+        input.type = 'text';
+        input.value = text || '';
+        input.placeholder = 'After landing, vacate at D';
+        input.addEventListener('input', cfgPreview);
+        var del = document.createElement('button');
+        del.type = 'button';
+        del.className = 'hub-notam-del';
+        del.title = 'Delete this NOTAM';
+        del.textContent = '\u00d7';
+        del.addEventListener('click', function() {
+          row.remove();
+          if (!list.children.length) cfgNotamsEmpty();
+          cfgPreview();
+        });
+        row.appendChild(input);
+        row.appendChild(del);
+        list.appendChild(row);
+        if (!text) input.focus();
+      }
+
+      function cfgPreview() {
+        var dep = document.getElementById('hubCfgDep').value;
+        var arr = document.getElementById('hubCfgArr').value;
+        var app = document.getElementById('hubCfgApp').value;
+        /* [FACILITY] is a vATIS variable, but we already know which airport this
+           is, so show it resolved -- the point of a preview is to read like the
+           broadcast rather than like the template. */
+        var L = [(cfgIcao || '[FACILITY]') + ' ATIS [ATIS_CODE].', '[TIME].'];
+        if (dep && arr && dep !== arr) L.push('DEP RWY ^' + dep + '. ARR RWY ^' + arr + '.');
+        else if (dep || arr) L.push('RWY IN USE ^' + (dep || arr) + '.');
+        if (app) L.push('EXPECT ' + app + ' APPROACH.');
+        /* NOTAMs join the airport conditions list from 5 onwards and arrive
+           enabled, so they read out in the [ARPT_COND] slot -- show them
+           expanded there rather than leaving the variable name sitting on its
+           own. */
+        var notams = cfgNotamValues();
+        if (notams.length) {
+          notams.forEach(function(n) {
+            var t = n.toUpperCase();
+            L.push(/[.!?]$/.test(t) ? t : t + '.');
+          });
+        } else {
+          L.push('[ARPT_COND]');
+        }
+        L.push('[NOTAMS]', '[WX].', 'WELCOME TO WORLDFLIGHT.', 'END OF ATIS.');
+        document.getElementById('hubCfgPreview').textContent = L.join('\\n');
+      }
+
+      function cfgShowStep(step) {
+        cfgStep = step;
+        var onFreq = step === 'freq';
+        document.getElementById('hubCfgStepFreq').hidden = !onFreq;
+        document.getElementById('hubCfgStepCfg').hidden = onFreq;
+        document.getElementById('hubCfgSub').textContent = onFreq
+          ? 'We have no published ATIS frequency for this airport, and a profile without one will not transmit.'
+          : 'Sets what this airport\u2019s ATIS reads out. Everyone who imported the profile picks it up on their next update.';
+        document.getElementById('hubCfgBack').hidden = !(onFreq === false && cfgMode === 'download' && !cfgHasFreq);
+        document.getElementById('hubCfgNext').hidden = !onFreq;
+        document.getElementById('hubCfgSave').hidden = onFreq;
+        document.getElementById('hubCfgSave').textContent = cfgMode === 'download' ? 'Save & download' : 'Save';
+        document.getElementById('hubCfgHint').textContent = '';
+        if (onFreq) setTimeout(function() { document.getElementById('hubCfgFreq').focus(); }, 30);
+      }
+
+      window.openVatisConfig = function(icao, mode) {
+        cfgIcao = icao;
+        cfgMode = mode || 'edit';
+        document.getElementById('hubCfgTitle').textContent =
+          (cfgMode === 'download' ? 'Download vATIS profile \u2014 ' : 'ATIS configurator \u2014 ') + icao;
+        document.getElementById('hubCfgModal').classList.remove('hidden');
+        fetch('/api/wf-atc/vatis-config/' + icao, { credentials: 'same-origin' })
+          .then(function(r) { return r.json(); })
+          .then(function(d) {
+            var fill = function(el, values, chosen, blank) {
+              el.innerHTML = '';
+              var o0 = document.createElement('option');
+              o0.value = ''; o0.textContent = blank;
+              el.appendChild(o0);
+              (values || []).forEach(function(v) {
+                var o = document.createElement('option');
+                o.value = v; o.textContent = v;
+                if (v === chosen) o.selected = true;
+                el.appendChild(o);
+              });
+            };
+            var c = d.config || {};
+            var hasRwy = d.runways && d.runways.length;
+            fill(document.getElementById('hubCfgDep'), d.runways, c.depRwy, hasRwy ? 'Not set' : 'No runways on file');
+            fill(document.getElementById('hubCfgArr'), d.runways, c.arrRwy, hasRwy ? 'Not set' : 'No runways on file');
+            fill(document.getElementById('hubCfgApp'), d.approaches, c.approach, 'Not stated');
+            var list = document.getElementById('hubCfgNotams');
+            list.innerHTML = '';
+            (c.notams || []).forEach(function(n) { cfgAddNotamRow(n); });
+            if (!list.children.length) cfgNotamsEmpty();
+            document.getElementById('hubCfgFreq').value = d.frequency || '';
+            cfgHasFreq = Boolean(d.frequency);
+            document.getElementById('hubCfgFreqLine').innerHTML = '';
+            if (d.frequency) {
+              document.getElementById('hubCfgFreqLine').textContent = 'ATIS frequency ' + d.frequency;
+            }
+            cfgPreview();
+            // Only ask for a frequency when we have none and one is needed now.
+            cfgShowStep(cfgMode === 'download' && !cfgHasFreq ? 'freq' : 'cfg');
+          })
+          .catch(function() { document.getElementById('hubCfgHint').textContent = 'Could not load this airport.'; });
       };
 
-      function closeVatisModal() { document.getElementById('hubVatisModal').classList.add('hidden'); }
+      function closeCfgModal() { document.getElementById('hubCfgModal').classList.add('hidden'); }
+      document.getElementById('hubCfgCancel').addEventListener('click', closeCfgModal);
+      document.getElementById('hubCfgModal').querySelector('.modal-backdrop').addEventListener('click', closeCfgModal);
+      ['hubCfgDep', 'hubCfgArr', 'hubCfgApp'].forEach(function(id) {
+        document.getElementById(id).addEventListener('input', cfgPreview);
+      });
+      document.getElementById('hubCfgAddNotam').addEventListener('click', function() { cfgAddNotamRow(''); });
+      document.getElementById('hubCfgBack').addEventListener('click', function() { cfgShowStep('freq'); });
 
-      document.getElementById('hubVatisCancel').addEventListener('click', closeVatisModal);
-      document.getElementById('hubVatisModal').querySelector('.modal-backdrop').addEventListener('click', closeVatisModal);
-
-      document.getElementById('hubVatisRandom').addEventListener('click', function() {
-        var f = vatisRandomFreq(vatisIcao);
-        var hint = document.getElementById('hubVatisHint');
+      document.getElementById('hubCfgPick').addEventListener('click', function() {
+        var f = cfgRandomFreq(cfgIcao);
+        var hint = document.getElementById('hubCfgHint');
         if (!f) { hint.textContent = 'No free frequency to suggest \u2014 enter one manually.'; return; }
-        document.getElementById('hubVatisFreq').value = f;
-        hint.textContent = 'Free at ' + vatisIcao + ' as far as we know. Check it against your vACC before using it.';
+        document.getElementById('hubCfgFreq').value = f;
+        hint.textContent = 'Free at ' + cfgIcao + ' as far as we know. Check it against your vACC before using it.';
       });
 
-      document.getElementById('hubVatisGo').addEventListener('click', function() {
-        var raw = document.getElementById('hubVatisFreq').value.trim();
+      function cfgFreqValid() {
+        var raw = document.getElementById('hubCfgFreq').value.trim();
+        if (!raw) return null;
         var mhz = parseFloat(raw);
-        var hint = document.getElementById('hubVatisHint');
-        if (!isFinite(mhz) || mhz < 118 || mhz > 137) {
-          hint.textContent = 'Enter a VHF frequency between 118.000 and 137.000.';
-          return;
-        }
-        /* Saved before downloading, not baked into the file: what comes down is
-           a stub, so a frequency that only lived in it would vanish the moment
-           vATIS pulled the real profile. */
+        return (isFinite(mhz) && mhz >= 118 && mhz <= 137) ? mhz.toFixed(3) : false;
+      }
+
+      document.getElementById('hubCfgNext').addEventListener('click', function() {
+        var hint = document.getElementById('hubCfgHint');
+        var f = cfgFreqValid();
+        if (!f) { hint.textContent = 'Enter a VHF frequency between 118.000 and 137.000.'; return; }
+        document.getElementById('hubCfgFreqLine').textContent = 'ATIS frequency ' + f;
+        cfgShowStep('cfg');
+      });
+
+      document.getElementById('hubCfgFreq').addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') document.getElementById('hubCfgNext').click();
+      });
+
+      document.getElementById('hubCfgSave').addEventListener('click', function() {
+        var hint = document.getElementById('hubCfgHint');
+        var dep = document.getElementById('hubCfgDep').value;
+        var arr = document.getElementById('hubCfgArr').value;
+        if (!dep && !arr) { hint.textContent = 'Pick a departure or arrival runway.'; return; }
+        var f = cfgFreqValid();
+        if (f === false) { hint.textContent = 'Frequency must be between 118.000 and 137.000.'; return; }
         hint.textContent = 'Saving\u2026';
-        fetch('/api/wf-atc/vatis-frequency/' + vatisIcao, {
+        fetch('/api/wf-atc/vatis-config/' + cfgIcao, {
           method: 'POST',
           credentials: 'same-origin',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ freq: mhz.toFixed(3) })
-        }).then(function(r) {
-          if (!r.ok) throw new Error('save failed');
-          window.location = '/api/vATIS/' + vatisIcao + '.json?download=1';
-          closeVatisModal();
-          // Reflect it without a reload, so the row stops asking.
-          if (window._hubFreqs && window._hubFreqs[vatisIcao]) {
-            window._hubFreqs[vatisIcao].push({ callsign: vatisIcao + '_ATIS', freq: mhz.toFixed(3), type: 'ATIS' });
-          }
-        }).catch(function() {
-          hint.textContent = 'Could not save the frequency \u2014 try again.';
-        });
-      });
-
-      document.getElementById('hubVatisFreq').addEventListener('keydown', function(e) {
-        if (e.key === 'Enter') document.getElementById('hubVatisGo').click();
+          body: JSON.stringify({
+            depRwy: dep, arrRwy: arr,
+            approach: document.getElementById('hubCfgApp').value,
+            notams: cfgNotamValues(),
+            freq: f || ''
+          })
+        }).then(function(r) { if (!r.ok) throw new Error(); return r.json(); })
+          .then(function() {
+            var icao = cfgIcao, download = cfgMode === 'download';
+            closeCfgModal();
+            // Saved first: the file is a stub, so the content has to be on the
+            // server before it is any use to fetch.
+            if (download) window.location = '/api/vATIS/' + vatisSlug(icao) + '.json?download=1';
+            load(sel.value);
+          })
+          .catch(function() { hint.textContent = 'Could not save \u2014 try again.'; });
       });
 
       window.showFirCallsigns = function(fir, mapOnly) {
@@ -34218,6 +34471,27 @@ function firForCallsign(callsign) {
   return vatspyPrefixToFir.get(base) || null;
 }
 
+/* Enough for the card to show state without a second round trip: whether we
+   have a frequency at all, and whether anyone has configured the ATIS. */
+function hubVatisSummary(icao, cid) {
+  const configs = vatisReadConfigStore();
+  const saved = vatisPick(vatisReadFreqStore(), icao, cid);
+  const cfg = vatisPick(configs, icao, cid);
+  // Only their own counts for the download gate; an inherited default does not.
+  const own = Boolean(cid && configs[vatisKeyFor(icao, cid)]);
+  const hz = (saved && saved.hz) || vatisAtisFrequencyHz(icao);
+  return {
+    freq: hz ? (hz / 1e6).toFixed(3) : '',
+    fromController: Boolean(saved && saved.hz),
+    configured: Boolean(cfg && (cfg.depRwy || cfg.arrRwy)),
+    depRwy: (cfg && cfg.depRwy) || '',
+    arrRwy: (cfg && cfg.arrRwy) || '',
+    approach: (cfg && cfg.approach) || '',
+    notams: (cfg && Array.isArray(cfg.notams) && cfg.notams.length) || 0,
+    own,
+  };
+}
+
 function hubFrequenciesFor(icao) {
   const prefixes = afvPrefixesFor(icao);
   const seen = new Set();
@@ -34322,23 +34596,6 @@ function vatisAtisFrequencyHz(icao) {
   return 0;
 }
 
-/* Transition altitudes extracted from X-Plane's atc.dat by
-   scripts/extract-transition-alts.js. Without them every profile would carry
-   the UK's 6,000 ft table, which is wrong nearly everywhere -- EHAM is 3,000,
-   VHHH 9,000, MSLP 19,500. */
-let vatisTransitionAlts = null;
-function vatisTransitionAltFor(icao) {
-  if (!vatisTransitionAlts) {
-    try {
-      vatisTransitionAlts = JSON.parse(fs.readFileSync(path.join(__dirname, 'data', 'transition-altitudes.json'), 'utf-8'));
-    } catch (err) {
-      console.warn('[vATIS] transition altitudes unavailable:', err.message);
-      vatisTransitionAlts = {};
-    }
-  }
-  return vatisTransitionAlts[icao] || 0;
-}
-
 /* AFV knows no ATIS frequency for 26 of the 43 route airports, so the Hub asks
    the controller for one rather than serving a profile with frequency 0 that
    will not transmit. */
@@ -34373,6 +34630,54 @@ function vatisWriteFreq(icao, hz) {
   return store[icao];
 }
 
+/* What each airport is running today: runways, approach, anything extra the
+   controller wants read out. Stored rather than baked into a download, because
+   the file controllers import is a stub -- this is what the update URL serves
+   them, and changing it reaches everyone on their next poll. */
+const VATIS_CONFIG_FILE = () => path.join(VATIS_DIR, 'config.json');
+
+/* Every controller gets their own profile per airport, keyed ICAO-CID, so one
+   person setting Kodiak to runway 07 does not rewrite what everyone else is
+   broadcasting. The bare ICAO stays as the shared default: it is what a new
+   controller inherits before they change anything, and what the plain URL
+   serves. */
+function vatisKeyFor(icao, cid) {
+  return cid ? icao + '-' + cid : icao;
+}
+
+/* Own settings first, the shared default behind them. */
+function vatisPick(store, icao, cid) {
+  return (cid && store[vatisKeyFor(icao, cid)]) || store[icao] || null;
+}
+
+function vatisReadConfigStore() {
+  try {
+    if (fs.existsSync(VATIS_CONFIG_FILE())) return JSON.parse(fs.readFileSync(VATIS_CONFIG_FILE(), 'utf-8'));
+  } catch (err) {
+    console.warn('[vATIS] config store unreadable:', err.message);
+  }
+  return {};
+}
+
+function vatisWriteConfig(icao, cfg) {
+  const store = vatisReadConfigStore();
+  const previous = store[icao] && store[icao].serial;
+  store[icao] = {
+    depRwy: String(cfg.depRwy || '').toUpperCase().slice(0, 4),
+    arrRwy: String(cfg.arrRwy || '').toUpperCase().slice(0, 4),
+    approach: String(cfg.approach || '').toUpperCase().slice(0, 32),
+    // Capped so one airport cannot be given an unreadable broadcast.
+    notams: (Array.isArray(cfg.notams) ? cfg.notams : [])
+      .map(n => String(n || '').replace(/[\r\n\t]+/g, ' ').trim().slice(0, 200))
+      .filter(Boolean)
+      .slice(0, 10),
+    serial: vatisNextSerial(previous),
+  };
+  fs.mkdirSync(VATIS_DIR, { recursive: true });
+  fs.writeFileSync(VATIS_CONFIG_FILE(), JSON.stringify(store, null, 2), 'utf-8');
+  return store[icao];
+}
+
 function vatisSerialFromMtime(when) {
   const d = new Date(when);
   const stamp = String(d.getUTCFullYear())
@@ -34381,15 +34686,31 @@ function vatisSerialFromMtime(when) {
   return Number(stamp + '01');
 }
 
+/* The profile has to point back at whichever site handed it out. Hard-coding
+   the production URL meant a file downloaded from dev told vATIS to fetch
+   production, which knows nothing about what was just configured locally. */
+function vatisBaseUrl(req) {
+  const host = req.get('host');
+  if (!host) return WF_SITE_URL;
+  // Behind Railway's proxy req.protocol is http; the forwarded header carries
+  // what the client actually used.
+  const proto = String(req.get('x-forwarded-proto') || req.protocol || 'https').split(',')[0].trim();
+  return proto + '://' + host;
+}
+
 app.get('/api/vATIS/:file', async (req, res) => {
-  const m = /^([A-Za-z]{4})\.json$/.exec(String(req.params.file || ''));
-  if (!m) return res.status(404).json({ error: 'Expected <ICAO>.json' });
+  const m = /^([A-Za-z]{4})(?:-(\d{4,9}))?\.json$/.exec(String(req.params.file || ''));
+  if (!m) return res.status(404).json({ error: 'Expected <ICAO>.json or <ICAO>-<CID>.json' });
   const icao = m[1].toUpperCase();
-  const updateUrl = WF_SITE_URL + '/api/vATIS/' + icao + '.json';
+  const cid = m[2] || '';
+  // The suffix has to survive into the update URL, or every controller's copy
+  // would quietly start following the shared default instead of their own.
+  const slug = cid ? icao + '-' + cid : icao;
+  const updateUrl = vatisBaseUrl(req) + '/api/vATIS/' + slug + '.json';
 
   try {
     let profile;
-    const override = path.join(VATIS_DIR, icao + '.json');
+    const override = path.join(VATIS_DIR, slug + '.json');
     if (fs.existsSync(override)) {
       profile = JSON.parse(fs.readFileSync(override, 'utf-8'));
       // Point it back at us even if the file was copied from elsewhere,
@@ -34401,20 +34722,35 @@ app.get('/api/vATIS/:file', async (req, res) => {
       if (!ap) return res.status(404).json({ error: 'Unknown airport ' + icao });
       const stored = vatisReadTemplate();
       // What a controller told us beats an April data export.
-      const saved = vatisReadFreqStore()[icao];
+      const saved = vatisPick(vatisReadFreqStore(), icao, cid);
+      const cfg = vatisPick(vatisReadConfigStore(), icao, cid);
       profile = buildVatisProfile({
         icao,
         name: ap.name || icao,
         runways: ap.runways || [],
         frequency: (saved && saved.hz) || vatisAtisFrequencyHz(icao),
-        transitionAltitude: vatisTransitionAltFor(icao),
+        config: cfg,
         updateUrl,
+        // Any of the three can be the most recent edit, and the highest has to
+        // win or that edit never reaches anyone.
         serial: Math.max(
           (stored && stored.updateSerial) || VATIS_TEMPLATE_SERIAL,
-          (saved && saved.serial) || 0
+          (saved && saved.serial) || 0,
+          (cfg && cfg.serial) || 0
         ),
       }, stored);
     }
+    /* Configure before downloading. A profile handed out on the shared default
+       would be broadcasting someone else's runways under this controller's
+       name, and the update URL means they would keep following it. Enforced
+       here rather than only in the UI, since the URL is guessable. */
+    if (req.query.download && !vatisReadConfigStore()[slug]) {
+      return res.status(409).json({
+        error: 'Configure this airport first',
+        detail: 'No ATIS configuration saved for ' + slug + '. Set it up on the WF ATC Hub before downloading.',
+      });
+    }
+
     if (req.query.download) {
       /* Hand over a stub rather than the profile itself. It carries nothing but
          a name and where to fetch from, on a serial low enough that vATIS
@@ -34450,6 +34786,60 @@ app.post('/api/wf-atc/vatis-frequency/:icao', requireWfAtcOrAdmin, express.json(
     res.json({ ok: true, freq: (hz / 1e6).toFixed(3), serial: saved.serial });
   } catch (err) {
     console.error('[vATIS] frequency save failed:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/* The ATIS configurator reads and writes here. Runways come back with it so
+   the dropdowns can only offer what the airport actually has. */
+app.get('/api/wf-atc/vatis-config/:icao', requireWfAtcOrAdmin, async (req, res) => {
+  const icao = String(req.params.icao || '').toUpperCase();
+  if (!/^[A-Z]{4}$/.test(icao)) return res.status(400).json({ error: 'Invalid ICAO' });
+  const cid = String(req.session.user?.data?.cid || '');
+  try {
+    const ap = await prisma.airport.findUnique({ where: { icao }, include: { runways: true } });
+    const idents = [];
+    for (const r of (ap?.runways || [])) {
+      for (const id of [r.ident1, r.ident2]) {
+        const clean = String(id || '').trim().toUpperCase();
+        if (clean && idents.indexOf(clean) === -1) idents.push(clean);
+      }
+    }
+    idents.sort((a, b) => (parseInt(a, 10) || 0) - (parseInt(b, 10) || 0) || a.localeCompare(b));
+    const saved = vatisPick(vatisReadFreqStore(), icao, cid);
+    const own = vatisReadConfigStore()[vatisKeyFor(icao, cid)];
+    res.json({
+      icao,
+      cid,
+      runways: idents,
+      approaches: VATIS_APPROACH_TYPES,
+      // Inherit the shared default until this controller saves their own.
+      config: own || vatisReadConfigStore()[icao] || null,
+      isOwn: Boolean(own),
+      frequency: saved ? (saved.hz / 1e6).toFixed(3) : (vatisAtisFrequencyHz(icao) ? (vatisAtisFrequencyHz(icao) / 1e6).toFixed(3) : ''),
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/wf-atc/vatis-config/:icao', requireWfAtcOrAdmin, express.json(), (req, res) => {
+  const icao = String(req.params.icao || '').toUpperCase();
+  if (!/^[A-Z]{4}$/.test(icao)) return res.status(400).json({ error: 'Invalid ICAO' });
+  const body = req.body || {};
+  if (!body.depRwy && !body.arrRwy) return res.status(400).json({ error: 'Pick at least one runway' });
+  const cid = String(req.session.user?.data?.cid || '');
+  if (!cid) return res.status(400).json({ error: 'No CID on this session' });
+  const key = vatisKeyFor(icao, cid);
+  try {
+    // A frequency can be set from the same modal, so take it if it came along.
+    const hz = vatisFreqHz(body.freq);
+    if (hz) vatisWriteFreq(key, hz);
+    const saved = vatisWriteConfig(key, body);
+    console.log('[vATIS] ' + key + ' configured ' + (saved.depRwy || '-') + '/' + (saved.arrRwy || '-'));
+    res.json({ ok: true, config: saved, key });
+  } catch (err) {
+    console.error('[vATIS] config save failed:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
@@ -34718,6 +35108,7 @@ app.get('/api/wf-atc/hub/:wf', requireWfAtcOrAdmin, async (req, res) => {
       };
     } catch {}
 
+    const hubViewerCid = String(req.session.user?.data?.cid || '');
     res.json({
       wf,
       from, to,
@@ -34737,6 +35128,9 @@ app.get('/api/wf-atc/hub/:wf', requireWfAtcOrAdmin, async (req, res) => {
         type: sharedFlowTypes[sectorKey] || 'NONE'
       },
       frequencies: { [from]: hubFrequenciesFor(from), [to]: hubFrequenciesFor(to) },
+      // Per-viewer: the card shows this controller's own profile state.
+      viewerCid: hubViewerCid,
+      vatis: { [from]: hubVatisSummary(from, hubViewerCid), [to]: hubVatisSummary(to, hubViewerCid) },
       bookings,
       sectorFiles,
       pack,
