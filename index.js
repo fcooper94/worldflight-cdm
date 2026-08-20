@@ -4,7 +4,8 @@ import fs from 'fs';
 import express from 'express';
 import { PrismaClient } from '@prisma/client';
 import multer from 'multer';
-import { PACK_DIR, PACK_WF_DIR, GROUND_CACHE_DIR, ensurePackDirs } from './lib/paths.mjs';
+import { PACK_DIR, PACK_WF_DIR, GROUND_CACHE_DIR, VATIS_DIR, ensurePackDirs } from './lib/paths.mjs';
+import { buildVatisProfile, defaultTemplate as vatisDefaultTemplate, TEMPLATE_SERIAL as VATIS_TEMPLATE_SERIAL } from './lib/vatis-profile.mjs';
 import path from 'path';
 import crypto from 'crypto';
 import { spawn } from 'child_process';
@@ -33230,6 +33231,17 @@ app.get('/wf-atc/hub', requirePageEnabled('wf-atc-hub'), requireWfAtcOrAdmin, as
       .hub-fir-win { margin-left:auto; font-family:monospace; color:#7dd3fc; white-space:nowrap; }
       .hub-fir-cs { font-size:10px; color:var(--accent); cursor:pointer; text-decoration:underline; background:none; border:0; padding:0; font-family:inherit; }
       .hub-fir-cs:hover { color:#7dd3fc; }
+      .hub-lvl { display:flex; flex-direction:column; gap:6px; margin-bottom:8px; }
+      .hub-lvl-chips { display:flex; flex-wrap:wrap; gap:4px; }
+      .hub-lvl-chip { font-size:10px; padding:3px 8px; border-radius:99px; cursor:pointer; font-family:inherit;
+                      background:var(--panel2); color:var(--muted); border:1px solid var(--border); }
+      .hub-lvl-chip:hover { color:var(--text); }
+      .hub-lvl-chip.is-on { background:color-mix(in srgb, var(--accent) 22%, transparent); color:var(--accent); border-color:var(--accent); }
+      .hub-lvl-slider { display:flex; align-items:center; gap:8px; }
+      .hub-lvl-slider input { flex:1; accent-color:var(--accent); }
+      .hub-lvl-label { font-size:10.5px; color:var(--muted); min-width:96px; text-align:right; font-variant-numeric:tabular-nums; }
+      .hub-fl { font-size:9.5px; color:var(--muted); white-space:nowrap; font-variant-numeric:tabular-nums; }
+      tr.is-off { opacity:0.3; }
       .hub-showmap { font-size:9.5px; color:var(--accent); cursor:pointer; text-decoration:underline; background:none; border:0; padding:0 0 0 6px; font-family:inherit; white-space:nowrap; }
       .hub-showmap:hover { color:#7dd3fc; }
       .hub-vatcan { font-family:monospace; font-size:18px; font-weight:700; color:#4ade80; letter-spacing:0.04em; }
@@ -33312,6 +33324,10 @@ app.get('/wf-atc/hub', requirePageEnabled('wf-atc-hub'), requireWfAtcOrAdmin, as
             <div id="hubVatcan"></div>
           </div>
           <div class="hub-card">
+            <h3>vATIS Files</h3>
+            <div id="hubVatis"></div>
+          </div>
+          <div class="hub-card">
             <h3>Flow Restrictions</h3>
             <div id="hubFlow" class="hub-flow"></div>
           </div>
@@ -33332,6 +33348,27 @@ app.get('/wf-atc/hub', requirePageEnabled('wf-atc-hub'), requireWfAtcOrAdmin, as
 
     </div>
 
+    <div id="hubVatisModal" class="modal hidden">
+      <div class="modal-backdrop"></div>
+      <div class="modal-dialog" style="width:420px;max-width:94vw;padding:20px;">
+        <h3 style="margin:0 0 2px;" id="hubVatisTitle"></h3>
+        <p style="color:var(--muted);font-size:11px;margin:0 0 12px;line-height:1.5;">
+          We have no published ATIS frequency for this airport, and a profile without one will not transmit.
+          Enter the frequency you will use, or take a free one.
+        </p>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <input type="text" id="hubVatisFreq" placeholder="127.180" autocomplete="off"
+                 style="flex:1;padding:8px 12px;font-size:14px;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;font-variant-numeric:tabular-nums;" />
+          <button type="button" class="modal-btn" id="hubVatisRandom">Pick one for me</button>
+        </div>
+        <div id="hubVatisHint" style="font-size:11px;color:var(--muted);margin-top:8px;min-height:16px;"></div>
+        <div class="modal-actions" style="margin-top:14px;">
+          <button type="button" class="modal-btn modal-btn-cancel" id="hubVatisCancel">Cancel</button>
+          <button type="button" class="modal-btn modal-btn-submit" id="hubVatisGo">Download</button>
+        </div>
+      </div>
+    </div>
+
     <div id="hubFirModal" class="modal hidden">
       <div class="modal-backdrop"></div>
       <!-- Wider than the other modals and capped to the viewport: the map is
@@ -33340,6 +33377,13 @@ app.get('/wf-atc/hub', requirePageEnabled('wf-atc-hub'), requireWfAtcOrAdmin, as
       <div class="modal-dialog" style="width:640px;max-width:94vw;max-height:92vh;overflow-y:auto;padding:20px;">
         <h3 style="margin:0 0 2px;" id="hubFirModalTitle"></h3>
         <p id="hubFirModalSub" style="color:var(--muted);font-size:11px;margin:0 0 10px;"></p>
+        <div id="hubFirLevels" class="hub-lvl" style="display:none;">
+          <div class="hub-lvl-chips" id="hubFirLvlChips"></div>
+          <div class="hub-lvl-slider">
+            <input type="range" id="hubFirFl" min="0" max="660" step="5" value="0" aria-label="Flight level">
+            <span class="hub-lvl-label" id="hubFirFlLabel">All levels</span>
+          </div>
+        </div>
         <div id="hubFirMapWrap" style="height:min(340px, 38vh);border-radius:8px;overflow:hidden;border:1px solid var(--border);background:#0b1220;margin-bottom:12px;">
           <div id="hubFirMap" style="width:100%;height:100%;"></div>
         </div>
@@ -33661,6 +33705,52 @@ app.get('/wf-atc/hub', requirePageEnabled('wf-atc-hub'), requireWfAtcOrAdmin, as
             vc.innerHTML = '<span class="hub-empty">Not seeded to VATCAN yet.</span>';
           }
 
+          /* vATIS profiles for the two airports of this sector. The link is the
+             same URL vATIS polls for updates, so a controller imports once and
+             any correction we make afterwards reaches them on its own. */
+          var va = document.getElementById('hubVatis');
+          va.innerHTML = '';
+          var vApp = document.createElement('a');
+          vApp.className = 'hub-file';
+          vApp.href = 'https://vatis.app/';
+          vApp.target = '_blank'; vApp.rel = 'noopener';
+          vApp.textContent = '\u2197 Download vATIS';
+          va.appendChild(vApp);
+          // Kept for the modal's "pick one for me", which needs to know what is
+          // already in use at the field.
+          window._hubFreqs = d.frequencies || {};
+          [['Departure', d.from], ['Arrival', d.to]].forEach(function(pair) {
+            var icao = pair[1];
+            if (!icao) return;
+            var lab = document.createElement('div');
+            lab.style.cssText = 'font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted);margin:8px 0 2px;';
+            lab.textContent = pair[0] + ' \u2014 ' + icao;
+            va.appendChild(lab);
+            var atis = (d.frequencies && d.frequencies[icao] || []).filter(function(f) { return f.type === 'ATIS'; })[0];
+            if (atis) {
+              var a = document.createElement('a');
+              a.className = 'hub-file';
+              a.href = '/api/vATIS/' + icao + '.json?download=1';
+              a.textContent = '\u2b07 ' + icao + '.json  (' + atis.freq + ')';
+              va.appendChild(a);
+            } else {
+              // No published frequency: ask for one rather than hand out a
+              // profile that cannot transmit.
+              var b = document.createElement('button');
+              b.type = 'button';
+              b.className = 'hub-file';
+              b.style.cssText = 'background:none;border:0;padding:0;font-family:inherit;cursor:pointer;text-align:left;width:100%;';
+              b.textContent = '\u2b07 ' + icao + '.json  (set frequency\u2026)';
+              b.addEventListener('click', function() { openVatisModal(icao); });
+              va.appendChild(b);
+            }
+          });
+          var vNote = document.createElement('div');
+          vNote.style.cssText = 'font-size:11px;color:var(--muted);margin-top:8px;line-height:1.5;';
+          vNote.textContent = 'Import into vATIS once. Each profile carries an update URL back to this site, '
+            + 'so corrections to frequencies, runways or the closing statement arrive without re-importing.';
+          va.appendChild(vNote);
+
           var files = document.getElementById('hubFiles');
           files.innerHTML = '';
           (d.sectorFiles || []).forEach(function(f) {
@@ -33720,6 +33810,98 @@ app.get('/wf-atc/hub', requirePageEnabled('wf-atc-hub'), requireWfAtcOrAdmin, as
         return parts.length < 2 ? '' : parts.slice(0, -1).join('_');
       }
 
+      /* Sub-sectors stack vertically as much as they divide horizontally --
+         WAAF-MS is FL0-245 and WAAF-BN FL245-999 over overlapping ground -- so
+         a flat map cannot answer "who owns this at FL350". Picking a level
+         drops every sector that does not contain it, on the map and in the
+         list together. */
+      var firSectors = [];
+      var firLevelFl = null;   // null = show every level
+
+      function sectorActiveAt(sec, fl) {
+        if (fl == null) return true;
+        // VATSpy publishes no vertical limits; those sectors always show.
+        if (sec.minFL == null || sec.maxFL == null) return true;
+        return fl >= sec.minFL && fl < sec.maxFL;
+      }
+
+      // Ground level is SFC to a controller, never FL000. Every label goes
+      // through here -- chips, slider readout and the band on each row.
+      function flLabel(fl) { return fl <= 0 ? 'SFC' : 'FL' + String(fl).padStart(3, '0'); }
+
+      function applyLevelFilter() {
+        var shown = 0;
+        document.querySelectorAll('#hubFirLvlChips .hub-lvl-chip').forEach(function(c) {
+          var v = c.dataset.fl === 'all' ? null : Number(c.dataset.fl);
+          c.classList.toggle('is-on', v === firLevelFl);
+        });
+        var live = {};
+        firSectors.forEach(function(sec) {
+          var lyr = firSectorLayer[sec.suffix];
+          if (!lyr) return;
+          var on = sectorActiveAt(sec, firLevelFl);
+          live[sec.suffix] = on;
+          // Removed rather than dimmed: a transparent polygon still swallows
+          // hover and hands you the wrong sector's tooltip.
+          if (on) shown++;
+          if (on && !firMap.hasLayer(lyr)) lyr.addTo(firMap);
+          else if (!on && firMap.hasLayer(lyr)) firMap.removeLayer(lyr);
+        });
+        /* An empty map reads as broken rather than as an answer, and it is a
+           real one: EGTT's lowest sector starts at FL55, so FL50 genuinely has
+           nobody. Say so. */
+        document.getElementById('hubFirFlLabel').textContent = firLevelFl == null
+          ? 'All levels'
+          : flLabel(firLevelFl) + (shown ? '' : ' \u2014 none');
+        // The list follows the map, so the two halves can never disagree.
+        document.querySelectorAll('#hubFirModalBody tr[data-suffix]').forEach(function(tr) {
+          tr.classList.toggle('is-off', live[tr.dataset.suffix] === false);
+        });
+      }
+
+      function buildLevelControls(sectors) {
+        var bar = document.getElementById('hubFirLevels');
+        var chips = document.getElementById('hubFirLvlChips');
+        var slider = document.getElementById('hubFirFl');
+        var banded = sectors.filter(function(x) { return x.minFL != null && x.maxFL != null; });
+        // Nothing to filter by if the FIR is a single block of airspace.
+        if (banded.length < 2) { bar.style.display = 'none'; return; }
+        bar.style.display = '';
+
+        /* 999 is the "no upper limit" sentinel in the boundary file. Sliding to
+           it would waste most of the travel above any traffic, so an open-topped
+           FIR stops at FL660 -- above that only the finite ceilings matter. */
+        var unlimited = false, finiteTop = 0;
+        banded.forEach(function(x) {
+          if (x.maxFL >= 900) unlimited = true;
+          else if (x.maxFL > finiteTop) finiteTop = x.maxFL;
+        });
+        slider.max = unlimited ? 660 : Math.max(finiteTop, 200);
+
+        var edges = [];
+        banded.forEach(function(x) { if (edges.indexOf(x.minFL) === -1) edges.push(x.minFL); });
+        edges.sort(function(a, b) { return a - b; });
+
+        chips.innerHTML = '';
+        var mk = function(label, val) {
+          var b = document.createElement('button');
+          b.type = 'button';
+          b.className = 'hub-lvl-chip';
+          b.dataset.fl = val == null ? 'all' : String(val);
+          b.textContent = label;
+          b.addEventListener('click', function() {
+            firLevelFl = val;
+            if (val != null) slider.value = val;
+            applyLevelFilter();
+          });
+          chips.appendChild(b);
+        };
+        mk('All levels', null);
+        edges.slice(0, 6).forEach(function(fl) { mk(flLabel(fl), fl); });
+
+        slider.oninput = function() { firLevelFl = Number(slider.value); applyLevelFilter(); };
+      }
+
       function drawFirCoverage(fir, sectors) {
         var wrap = document.getElementById('hubFirMapWrap');
         if (!sectors || !sectors.length) { wrap.style.display = 'none'; return; }
@@ -33733,6 +33915,9 @@ app.get('/wf-atc/hub', requirePageEnabled('wf-atc-hub'), requireWfAtcOrAdmin, as
         firMapLayers.forEach(function(l) { try { firMap.removeLayer(l); } catch (e) {} });
         firMapLayers = [];
         firSectorLayer = {};
+        firSectors = sectors;
+        firLevelFl = null;        // every FIR opens unfiltered
+        buildLevelControls(sectors);
 
         // Largest first so the small sub-sectors stay clickable on top.
         var ordered = sectors.slice().sort(function(a, b) { return (a.suffix ? 1 : 0) - (b.suffix ? 1 : 0); });
@@ -33750,6 +33935,7 @@ app.get('/wf-atc/hub', requirePageEnabled('wf-atc-hub'), requireWfAtcOrAdmin, as
           firMapLayers.push(lyr);
           all.push(lyr);
         });
+        applyLevelFilter();
         setTimeout(function() {
           firMap.invalidateSize();
           try { firMap.fitBounds(L.featureGroup(all).getBounds(), { padding: [14, 14], maxZoom: 7 }); } catch (e) {}
@@ -33768,6 +33954,88 @@ app.get('/wf-atc/hub', requirePageEnabled('wf-atc-hub'), requireWfAtcOrAdmin, as
       /* mapOnly is used by the "Show on map" links beside a centre callsign —
          you already have the frequency in front of you there, so repeating the
          whole list under the map is noise. */
+      /* Frequencies already in use at the field, so a suggested one does not
+         land on top of the tower. 121.500 is guard and 123.450 is the air-to-air
+         chat frequency; neither is ours to take. */
+      var VATIS_RESERVED = [121.5, 123.45, 122.8, 121.6];
+      var vatisIcao = null;
+
+      function vatisUsedAt(icao) {
+        return (window._hubFreqs && window._hubFreqs[icao] || [])
+          .map(function(f) { return parseFloat(f.freq); })
+          .filter(function(n) { return !isNaN(n); });
+      }
+
+      function vatisRandomFreq(icao) {
+        var taken = vatisUsedAt(icao).concat(VATIS_RESERVED);
+        // ATIS sits high in the band in most of the world, so draw from there
+        // rather than the whole 118-137 range.
+        var options = [];
+        for (var f = 126.000; f <= 136.975; f += 0.025) {
+          var v = Math.round(f * 1000) / 1000;
+          if (taken.some(function(t) { return Math.abs(t - v) < 0.0125; })) continue;
+          options.push(v);
+        }
+        if (!options.length) return null;
+        return options[Math.floor(Math.random() * options.length)].toFixed(3);
+      }
+
+      window.openVatisModal = function(icao) {
+        vatisIcao = icao;
+        document.getElementById('hubVatisTitle').textContent = 'ATIS frequency for ' + icao;
+        document.getElementById('hubVatisFreq').value = '';
+        document.getElementById('hubVatisHint').textContent = '';
+        document.getElementById('hubVatisModal').classList.remove('hidden');
+        setTimeout(function() { document.getElementById('hubVatisFreq').focus(); }, 30);
+      };
+
+      function closeVatisModal() { document.getElementById('hubVatisModal').classList.add('hidden'); }
+
+      document.getElementById('hubVatisCancel').addEventListener('click', closeVatisModal);
+      document.getElementById('hubVatisModal').querySelector('.modal-backdrop').addEventListener('click', closeVatisModal);
+
+      document.getElementById('hubVatisRandom').addEventListener('click', function() {
+        var f = vatisRandomFreq(vatisIcao);
+        var hint = document.getElementById('hubVatisHint');
+        if (!f) { hint.textContent = 'No free frequency to suggest \u2014 enter one manually.'; return; }
+        document.getElementById('hubVatisFreq').value = f;
+        hint.textContent = 'Free at ' + vatisIcao + ' as far as we know. Check it against your vACC before using it.';
+      });
+
+      document.getElementById('hubVatisGo').addEventListener('click', function() {
+        var raw = document.getElementById('hubVatisFreq').value.trim();
+        var mhz = parseFloat(raw);
+        var hint = document.getElementById('hubVatisHint');
+        if (!isFinite(mhz) || mhz < 118 || mhz > 137) {
+          hint.textContent = 'Enter a VHF frequency between 118.000 and 137.000.';
+          return;
+        }
+        /* Saved before downloading, not baked into the file: what comes down is
+           a stub, so a frequency that only lived in it would vanish the moment
+           vATIS pulled the real profile. */
+        hint.textContent = 'Saving\u2026';
+        fetch('/api/wf-atc/vatis-frequency/' + vatisIcao, {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ freq: mhz.toFixed(3) })
+        }).then(function(r) {
+          if (!r.ok) throw new Error('save failed');
+          window.location = '/api/vATIS/' + vatisIcao + '.json?download=1';
+          closeVatisModal();
+          // Reflect it without a reload, so the row stops asking.
+          if (window._hubFreqs && window._hubFreqs[vatisIcao]) {
+            window._hubFreqs[vatisIcao].push({ callsign: vatisIcao + '_ATIS', freq: mhz.toFixed(3), type: 'ATIS' });
+          }
+        }).catch(function() {
+          hint.textContent = 'Could not save the frequency \u2014 try again.';
+        });
+      });
+
+      document.getElementById('hubVatisFreq').addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') document.getElementById('hubVatisGo').click();
+      });
+
       window.showFirCallsigns = function(fir, mapOnly) {
         document.getElementById('hubFirModalTitle').textContent = fir;
         document.getElementById('hubFirModalSub').textContent = mapOnly
@@ -33799,6 +34067,7 @@ app.get('/wf-atc/hub', requirePageEnabled('wf-atc-hub'), requireWfAtcOrAdmin, as
               var suffix = sectorSuffixOf(pos.callsign, fir);
               var hasSector = suffix !== null && firSectorLayer[suffix];
               if (hasSector) {
+                tr.dataset.suffix = suffix;
                 tr.style.cursor = 'pointer';
                 tr.addEventListener('mouseenter', function() { highlightSector(suffix, true); });
                 tr.addEventListener('mouseleave', function() { highlightSector(suffix, false); });
@@ -33816,14 +34085,26 @@ app.get('/wf-atc/hub', requirePageEnabled('wf-atc-hub'), requireWfAtcOrAdmin, as
                 b.prepend(dot);
               }
               if (pos.name) b.title = pos.name;
+              // The vertical extent is half of what identifies a sector, so it
+              // belongs on the row and not only in the map tooltip.
+              var lv = document.createElement('td');
+              lv.className = 'hub-fl';
+              var sec = hasSector && firSectors.filter(function(x) { return x.suffix === suffix; })[0];
+              if (sec && sec.minFL != null && sec.maxFL != null) {
+                lv.textContent = sec.maxFL >= 900
+                  ? flLabel(sec.minFL) + '+'
+                  : flLabel(sec.minFL) + '\u2013' + flLabel(sec.maxFL);
+              }
               var c = document.createElement('td');
               c.className = 'hub-hz';
               c.textContent = pos.freq || '\u2014';
-              tr.appendChild(a); tr.appendChild(b); tr.appendChild(c);
+              tr.appendChild(a); tr.appendChild(b); tr.appendChild(lv); tr.appendChild(c);
               tb.appendChild(tr);
             });
             t.appendChild(tb);
             box.appendChild(t);
+            // Rows are built after the map, so dim any the filter already hides.
+            applyLevelFilter();
           })
           .catch(function() { box.innerHTML = '<span class="hub-empty">Could not load positions.</span>'; });
       };
@@ -33993,6 +34274,270 @@ function loadVatspyFirs() {
   } catch (e) { console.warn('[WF-ATC-HUB] VATSpy.dat unreadable:', e.message); }
   return vatspyFirs;
 }
+
+/* vATIS profiles.
+
+   Deliberately unauthenticated: vATIS itself fetches this URL on a timer with
+   no session, and it answers for any airport in the database rather than only
+   WorldFlight ones, so it cannot be probed to work out the route.
+
+   Drop a hand-tuned file at data/vatis/<ICAO>.json to override the generated
+   profile for one airport — its serial then follows the file's own timestamp,
+   so editing it is enough to push the change to everyone who imported it. */
+/* Both live on the volume: they are edited at runtime through the admin API,
+   so writing them into the repo directory would lose every change on the next
+   deploy. */
+const VATIS_TEMPLATE_FILE = path.join(VATIS_DIR, '_template.json');
+
+function vatisReadTemplate() {
+  try {
+    if (fs.existsSync(VATIS_TEMPLATE_FILE)) return JSON.parse(fs.readFileSync(VATIS_TEMPLATE_FILE, 'utf-8'));
+  } catch (err) {
+    console.warn('[vATIS] stored template unreadable, falling back to built-in:', err.message);
+  }
+  return null;
+}
+
+/* vATIS only re-downloads when the serial it sees is higher than its own, so an
+   edit that does not raise it reaches nobody. Date-stamped, with a counter for
+   more than one edit in a day. */
+function vatisNextSerial(previous) {
+  const now = new Date();
+  const today = Number(String(now.getUTCFullYear())
+    + String(now.getUTCMonth() + 1).padStart(2, '0')
+    + String(now.getUTCDate()).padStart(2, '0') + '01');
+  const prev = Number(previous) || 0;
+  return prev >= today ? prev + 1 : today;
+}
+
+function vatisAtisFrequencyHz(icao) {
+  const stations = loadAfvStations();
+  for (const prefix of afvPrefixesFor(icao)) {
+    const hit = stations.find(st => st.callsign === prefix + '_ATIS');
+    if (hit) {
+      const mhz = parseFloat(hit.freq);
+      if (!isNaN(mhz)) return Math.round(mhz * 1e6);
+    }
+  }
+  return 0;
+}
+
+/* Transition altitudes extracted from X-Plane's atc.dat by
+   scripts/extract-transition-alts.js. Without them every profile would carry
+   the UK's 6,000 ft table, which is wrong nearly everywhere -- EHAM is 3,000,
+   VHHH 9,000, MSLP 19,500. */
+let vatisTransitionAlts = null;
+function vatisTransitionAltFor(icao) {
+  if (!vatisTransitionAlts) {
+    try {
+      vatisTransitionAlts = JSON.parse(fs.readFileSync(path.join(__dirname, 'data', 'transition-altitudes.json'), 'utf-8'));
+    } catch (err) {
+      console.warn('[vATIS] transition altitudes unavailable:', err.message);
+      vatisTransitionAlts = {};
+    }
+  }
+  return vatisTransitionAlts[icao] || 0;
+}
+
+/* AFV knows no ATIS frequency for 26 of the 43 route airports, so the Hub asks
+   the controller for one rather than serving a profile with frequency 0 that
+   will not transmit. */
+function vatisFreqHz(raw) {
+  const mhz = parseFloat(raw);
+  if (!isFinite(mhz) || mhz < 118 || mhz > 137) return 0;
+  return Math.round(mhz * 1000) * 1000;   // to the nearest kHz, no float dust
+}
+
+/* Frequencies controllers give us at download time. AFV has no ATIS entry for
+   26 of the 43 route airports, and the file they download carries no stations
+   at all, so this is the only place the number can survive. Each airport keeps
+   its own serial: changing a frequency has to out-rank whatever that
+   controller's vATIS already holds, or it will never pull the correction. */
+const VATIS_FREQ_FILE = () => path.join(VATIS_DIR, 'frequencies.json');
+
+function vatisReadFreqStore() {
+  try {
+    if (fs.existsSync(VATIS_FREQ_FILE())) return JSON.parse(fs.readFileSync(VATIS_FREQ_FILE(), 'utf-8'));
+  } catch (err) {
+    console.warn('[vATIS] frequency store unreadable:', err.message);
+  }
+  return {};
+}
+
+function vatisWriteFreq(icao, hz) {
+  const store = vatisReadFreqStore();
+  const previous = store[icao] && store[icao].serial;
+  store[icao] = { hz, serial: vatisNextSerial(previous) };
+  fs.mkdirSync(VATIS_DIR, { recursive: true });
+  fs.writeFileSync(VATIS_FREQ_FILE(), JSON.stringify(store, null, 2), 'utf-8');
+  return store[icao];
+}
+
+function vatisSerialFromMtime(when) {
+  const d = new Date(when);
+  const stamp = String(d.getUTCFullYear())
+    + String(d.getUTCMonth() + 1).padStart(2, '0')
+    + String(d.getUTCDate()).padStart(2, '0');
+  return Number(stamp + '01');
+}
+
+app.get('/api/vATIS/:file', async (req, res) => {
+  const m = /^([A-Za-z]{4})\.json$/.exec(String(req.params.file || ''));
+  if (!m) return res.status(404).json({ error: 'Expected <ICAO>.json' });
+  const icao = m[1].toUpperCase();
+  const updateUrl = WF_SITE_URL + '/api/vATIS/' + icao + '.json';
+
+  try {
+    let profile;
+    const override = path.join(VATIS_DIR, icao + '.json');
+    if (fs.existsSync(override)) {
+      profile = JSON.parse(fs.readFileSync(override, 'utf-8'));
+      // Point it back at us even if the file was copied from elsewhere,
+      // otherwise it would keep updating from whoever wrote it.
+      profile.updateUrl = updateUrl;
+      if (!profile.updateSerial) profile.updateSerial = vatisSerialFromMtime(fs.statSync(override).mtime);
+    } else {
+      const ap = await prisma.airport.findUnique({ where: { icao }, include: { runways: true } });
+      if (!ap) return res.status(404).json({ error: 'Unknown airport ' + icao });
+      const stored = vatisReadTemplate();
+      // What a controller told us beats an April data export.
+      const saved = vatisReadFreqStore()[icao];
+      profile = buildVatisProfile({
+        icao,
+        name: ap.name || icao,
+        runways: ap.runways || [],
+        frequency: (saved && saved.hz) || vatisAtisFrequencyHz(icao),
+        transitionAltitude: vatisTransitionAltFor(icao),
+        updateUrl,
+        serial: Math.max(
+          (stored && stored.updateSerial) || VATIS_TEMPLATE_SERIAL,
+          (saved && saved.serial) || 0
+        ),
+      }, stored);
+    }
+    if (req.query.download) {
+      /* Hand over a stub rather than the profile itself. It carries nothing but
+         a name and where to fetch from, on a serial low enough that vATIS
+         treats anything we serve as newer and pulls the real content on its
+         first poll. The upshot is that the content lives here permanently:
+         nobody is ever holding a stale copy they downloaded once. */
+      const stub = {
+        Name: 'WF ' + icao,
+        updateUrl,
+        updateSerial: 1970010100,
+        stations: [],
+      };
+      res.setHeader('Content-Disposition', 'attachment; filename="WF ' + icao + '.json"');
+      return res.type('application/json').send(JSON.stringify(stub, null, 2));
+    }
+    res.type('application/json').send(JSON.stringify(profile, null, 2));
+  } catch (err) {
+    console.error('[vATIS] ' + icao + ':', err.message);
+    res.status(500).json({ error: 'Could not build profile' });
+  }
+});
+
+/* Set the ATIS frequency for an airport we have none published for. Gated to
+   WF ATC because it changes what everyone else's vATIS will pull. */
+app.post('/api/wf-atc/vatis-frequency/:icao', requireWfAtcOrAdmin, express.json(), (req, res) => {
+  const icao = String(req.params.icao || '').toUpperCase();
+  if (!/^[A-Z]{4}$/.test(icao)) return res.status(400).json({ error: 'Invalid ICAO' });
+  const hz = vatisFreqHz(req.body && req.body.freq);
+  if (!hz) return res.status(400).json({ error: 'Expected a VHF frequency between 118.000 and 137.000' });
+  try {
+    const saved = vatisWriteFreq(icao, hz);
+    console.log('[vATIS] ' + icao + ' frequency set to ' + (hz / 1e6).toFixed(3) + ' by ' + (req.session.user?.data?.cid || '?'));
+    res.json({ ok: true, freq: (hz / 1e6).toFixed(3), serial: saved.serial });
+  } catch (err) {
+    console.error('[vATIS] frequency save failed:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/* Template management. The served profile is generated from this, so editing
+   it here changes what every controller's vATIS pulls on its next poll --
+   no deploy, and no re-import on their side. */
+app.get('/admin/api/vatis/template', requireAdmin, (req, res) => {
+  const stored = vatisReadTemplate();
+  res.json({
+    stored: Boolean(stored),
+    serial: stored ? stored.updateSerial : VATIS_TEMPLATE_SERIAL,
+    template: stored || vatisDefaultTemplate(),
+  });
+});
+
+app.put('/admin/api/vatis/template', requireAdmin, express.json({ limit: '2mb' }), (req, res) => {
+  const t = req.body && req.body.template;
+  if (!t || typeof t !== 'object') return res.status(400).json({ error: 'Expected { template: {...} }' });
+  if (!Array.isArray(t.stations) || !t.stations.length) return res.status(400).json({ error: 'Template needs a stations array' });
+  if (!t.stations[0].atisFormat) return res.status(400).json({ error: 'Station is missing atisFormat' });
+  try {
+    const previous = vatisReadTemplate();
+    t.updateSerial = vatisNextSerial(previous && previous.updateSerial);
+    t.version = t.version || 4;
+    fs.mkdirSync(VATIS_DIR, { recursive: true });
+    fs.writeFileSync(VATIS_TEMPLATE_FILE, JSON.stringify(t, null, 2), 'utf-8');
+    console.log('[vATIS] template saved, serial ' + t.updateSerial);
+    res.json({ ok: true, serial: t.updateSerial });
+  } catch (err) {
+    console.error('[vATIS] template save failed:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/admin/api/vatis/template', requireAdmin, (req, res) => {
+  try {
+    if (fs.existsSync(VATIS_TEMPLATE_FILE)) fs.rmSync(VATIS_TEMPLATE_FILE);
+    res.json({ ok: true, revertedTo: 'built-in' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/* Per-airport overrides, for the one airport whose ATIS does not fit the
+   template. Served verbatim, so they bypass generation entirely. */
+app.get('/admin/api/vatis/airport/:icao', requireAdmin, (req, res) => {
+  const icao = String(req.params.icao || '').toUpperCase();
+  if (!/^[A-Z]{4}$/.test(icao)) return res.status(400).json({ error: 'Invalid ICAO' });
+  const f = path.join(VATIS_DIR, icao + '.json');
+  if (!fs.existsSync(f)) return res.json({ stored: false, profile: null });
+  try {
+    res.json({ stored: true, profile: JSON.parse(fs.readFileSync(f, 'utf-8')) });
+  } catch (err) {
+    res.status(500).json({ error: 'Stored override is not valid JSON: ' + err.message });
+  }
+});
+
+app.put('/admin/api/vatis/airport/:icao', requireAdmin, express.json({ limit: '2mb' }), (req, res) => {
+  const icao = String(req.params.icao || '').toUpperCase();
+  if (!/^[A-Z]{4}$/.test(icao)) return res.status(400).json({ error: 'Invalid ICAO' });
+  const p = req.body && req.body.profile;
+  if (!p || !Array.isArray(p.stations) || !p.stations.length) return res.status(400).json({ error: 'Expected { profile: {...} } with a stations array' });
+  try {
+    const f = path.join(VATIS_DIR, icao + '.json');
+    let previous = null;
+    if (fs.existsSync(f)) { try { previous = JSON.parse(fs.readFileSync(f, 'utf-8')); } catch {} }
+    p.updateSerial = vatisNextSerial(previous && previous.updateSerial);
+    fs.mkdirSync(VATIS_DIR, { recursive: true });
+    fs.writeFileSync(f, JSON.stringify(p, null, 2), 'utf-8');
+    console.log('[vATIS] ' + icao + ' override saved, serial ' + p.updateSerial);
+    res.json({ ok: true, serial: p.updateSerial });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/admin/api/vatis/airport/:icao', requireAdmin, (req, res) => {
+  const icao = String(req.params.icao || '').toUpperCase();
+  if (!/^[A-Z]{4}$/.test(icao)) return res.status(400).json({ error: 'Invalid ICAO' });
+  try {
+    const f = path.join(VATIS_DIR, icao + '.json');
+    if (fs.existsSync(f)) fs.rmSync(f);
+    res.json({ ok: true, revertedTo: 'generated' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 app.get('/api/wf-atc/fir-callsigns/:fir', requireWfAtcOrAdmin, (req, res) => {
   const fir = String(req.params.fir || '').toUpperCase();
