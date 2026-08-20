@@ -2,6 +2,7 @@ import { PrismaClient } from '@prisma/client';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { PACK_WF_DIR } from '../lib/paths.mjs';
 import { decimalToDMS, coordPair, bearing, projectPoint } from './lib/geo.js';
 import { parseFixes, parseNavaids, parseAirways, parseCIFP } from './lib/parsers.js';
 
@@ -12,7 +13,7 @@ const ICAO = process.argv[2] || 'EGLL';
 const RADIUS = 50; // 50nm radius for a single airport
 const NAVDATA_DIR = path.join(__dirname, '..', 'data', 'navdata');
 const CIFP_DIR = path.join(__dirname, '..', 'data', 'XP12', 'CIFP');
-const OUTPUT_DIR = path.join(__dirname, '..', 'Euroscope_Files', 'WorldFlight');
+const OUTPUT_DIR = PACK_WF_DIR;
 
 async function main() {
   console.log(`=== Generating ${ICAO} sector file ===\n`);

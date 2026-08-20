@@ -2,6 +2,7 @@ import { PrismaClient } from '@prisma/client';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { PACK_WF_DIR } from '../lib/paths.mjs';
 import { coordPair, bearing, runwayLengthFt, projectPoint } from './lib/geo.js';
 import { parseFixes, parseNavaids, parseAirways } from './lib/parsers.js';
 
@@ -17,7 +18,7 @@ const WF_AIRPORTS = [
 ];
 
 const NAVDATA_DIR = path.join(__dirname, '..', 'data', 'navdata');
-const OUTPUT_DIR = path.join(__dirname, '..', 'Euroscope_Files', 'WorldFlight');
+const OUTPUT_DIR = PACK_WF_DIR;
 
 async function main() {
   console.log('=== WorldFlight EuroScope Pack Generator ===\n');

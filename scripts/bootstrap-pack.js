@@ -14,9 +14,10 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { PACK_WF_DIR } from '../lib/paths.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const OUTPUT_DIR = path.join(__dirname, '..', 'Euroscope_Files', 'WorldFlight');
+const OUTPUT_DIR = PACK_WF_DIR;
 const TEMPLATES_DIR = path.join(__dirname, '..', 'templates');
 const UK_DIR = process.env.UK_PACK_DIR || 'D:\\Documents\\Euroscope\\UK';
 

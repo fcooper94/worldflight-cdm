@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { PACK_WF_DIR, PACK_OSM_CACHE_DIR } from '../lib/paths.mjs';
 import { decimalToDMS, coordPair } from './lib/geo.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -195,7 +196,7 @@ async function main() {
   console.log(`=== Fetching ground layout for ${ICAO} ===\n`);
 
   // Check for cached OSM data
-  const cacheDir = path.join(__dirname, '..', 'Euroscope_Files', 'WorldFlight', 'cache');
+  const cacheDir = PACK_OSM_CACHE_DIR;
   const cachePath = path.join(cacheDir, `${ICAO}_osm.json`);
   fs.mkdirSync(cacheDir, { recursive: true });
 
@@ -563,7 +564,7 @@ out body geom;
   }
 
   // Write output
-  const outPath = path.join(__dirname, '..', 'Euroscope_Files', 'WorldFlight', `${ICAO}_ground.txt`);
+  const outPath = path.join(PACK_WF_DIR, `${ICAO}_ground.txt`);
   fs.writeFileSync(outPath, lines.join('\r\n'), 'utf-8');
   console.log(`\n  Written ${lines.length} lines to ${outPath}`);
   console.log('  Copy the sections into your .sct file [REGIONS], [GEO], and [LABELS] sections');

@@ -303,6 +303,37 @@ edits apply to **every row of the group** so all its cards stay consistent.
   CID is no longer any affiliate's main CID nor an active member — called on
   affiliate delete, main-CID transfer and member removal.
 
+## Controller pack storage (Railway volume)
+
+Railway's filesystem is ephemeral, so a controller pack built on the server is
+gone at the next deploy — which is why the WF ATC Hub showed "No sector files
+supplied yet" while a 31 MB pack sat happily on the dev PC.
+
+`lib/paths.mjs` is the single source of truth for where the pack and its caches
+live. Set **`WF_VOLUME_DIR`** to a mounted Railway volume (e.g. `/data`) and
+everything moves onto persistent storage:
+
+| Export | Volume mode | Local (env unset) |
+|---|---|---|
+| `PACK_DIR` | `<vol>/Euroscope_Files` | `Euroscope_Files/` |
+| `PACK_WF_DIR` | `<vol>/Euroscope_Files/WorldFlight` | `Euroscope_Files/WorldFlight/` |
+| `GROUND_CACHE_DIR` | `<vol>/ground` | `data/ground/` |
+| `PACK_OSM_CACHE_DIR` | `<vol>/pack-osm-cache` | `data/pack-osm-cache/` |
+
+Never hard-code these paths again — `index.js` and every `scripts/generate-*`
+imports them, and the spawned generators inherit the env from the parent.
+
+- **The Overpass cache must live outside `PACK_WF_DIR`.** That tree is deleted
+  after every zip, so a cache kept inside it (its old home,
+  `Euroscope_Files/WorldFlight/cache/`) never survived to a second build and
+  every run re-fetched all 43 airports. Warm, a leg builds in ~4 s; cold it is
+  30–60 s and at the mercy of the Overpass mirrors.
+- **The zip must include `Data/Plugin/VATCAN`.** Every `.prf` registers
+  `VATCANBookings.dll` as Plugin2, so a pack shipped without it loads with a
+  broken plugin entry.
+- Nightly full rebuild runs at **04:00 UTC**; "Rebuild Full Pack Now" on
+  `/admin/controller-pack` fires the same job by hand.
+
 ## Navdata survives deploys
 
 Railway's filesystem is ephemeral, so files uploaded via `/admin/airac` used to

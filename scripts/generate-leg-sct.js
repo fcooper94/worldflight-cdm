@@ -3,6 +3,7 @@ import { execFileSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { PACK_WF_DIR } from '../lib/paths.mjs';
 import { decimalToDMS, coordPair, bearing, projectPoint, haversineNm, midpoint, interpolateGC } from './lib/geo.js';
 import { parseFixes, parseNavaids, parseAirways, parseCIFP, parseRouteFIRs, parseVATSpyForFIRs, parseXP12Frequencies, parseAFVStations } from './lib/parsers.js';
 
@@ -27,7 +28,7 @@ const FIR_BOUNDS = path.join(__dirname, '..', 'data', 'VATSPY', 'FIRBoundaries.d
 const XP12_ATC = path.join(__dirname, '..', 'data', 'XP12', '1200 atc data', 'Earth nav data', 'atc.dat');
 const AFV_STATIONS = path.join(__dirname, '..', 'data', 'afv_stations.csv');
 const MSA_FILE = path.join(NAVDATA_DIR, 'earth_msa.dat');
-const OUTPUT_DIR = path.join(__dirname, '..', 'Euroscope_Files', 'WorldFlight');
+const OUTPUT_DIR = PACK_WF_DIR;
 
 // US TRACON facilities mapped to the airports they serve
 const US_TRACON_MAP = {

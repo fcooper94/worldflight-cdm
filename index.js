@@ -4,6 +4,7 @@ import fs from 'fs';
 import express from 'express';
 import { PrismaClient } from '@prisma/client';
 import multer from 'multer';
+import { PACK_DIR, PACK_WF_DIR, GROUND_CACHE_DIR, ensurePackDirs } from './lib/paths.mjs';
 import path from 'path';
 import crypto from 'crypto';
 import { spawn } from 'child_process';
@@ -3399,7 +3400,7 @@ async function prefetchGroundForActiveSchedule() {
     for (const icao of [String(row.from).toUpperCase(), String(row.to).toUpperCase()]) {
       if (!/^[A-Z]{4}$/.test(icao) || seen.has(icao)) continue;
       seen.add(icao);
-      const cacheFile = path.join(__dirname, 'data', 'ground', `${icao}.json`);
+      const cacheFile = path.join(GROUND_CACHE_DIR, `${icao}.json`);
       const wasCached = fs.existsSync(cacheFile);
       try {
         await groundForIcao(icao);
@@ -3414,6 +3415,9 @@ async function prefetchGroundForActiveSchedule() {
 }
 
 async function bootstrap() {
+  // A mounted volume starts empty, so create the pack and cache dirs before
+  // anything tries to read or write them.
+  ensurePackDirs();
   setBootstrapStatus(1, 'Loading navigation data');
   await restoreNavdataFromDb();
   loadNavFixes();
@@ -34147,7 +34151,7 @@ app.get('/api/wf-atc/hub/:wf', requireWfAtcOrAdmin, async (req, res) => {
 
     let pack = null;
     try {
-      const dir = path.join(__dirname, 'Euroscope_Files');
+      const dir = PACK_DIR;
       const zips = fs.existsSync(dir)
         ? fs.readdirSync(dir).filter(f => f.endsWith('.zip'))
             .map(f => ({ f, t: fs.statSync(path.join(dir, f)).mtimeMs, size: fs.statSync(path.join(dir, f)).size }))
@@ -34257,11 +34261,40 @@ app.get('/admin/controller-pack', requireAdmin, async (req, res) => {
         `).join('')}
       </div>
 
-      <button id="generateBtn" onclick="startGenerate()" class="action-btn primary" style="padding:10px 32px;font-size:14px;">
-        Generate Controller Pack
-      </button>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+        <button id="generateBtn" onclick="startGenerate()" class="action-btn primary" style="padding:10px 32px;font-size:14px;">
+          Generate Controller Pack
+        </button>
+        <button id="rebuildFullBtn" onclick="startFullRebuild()" class="action-btn" style="padding:10px 20px;font-size:13px;">
+          Rebuild Full Pack Now
+        </button>
+        <span id="rebuildFullMsg" style="font-size:12px;color:var(--muted);"></span>
+      </div>
 
       <script>
+        /* Same job the 04:00z cron runs — every leg, zipped as _Full_, which is
+           what the WF ATC Hub links to. It outlives this page, so there is no
+           progress to poll here; the server log carries it. */
+        async function startFullRebuild() {
+          const btn = document.getElementById('rebuildFullBtn');
+          const msg = document.getElementById('rebuildFullMsg');
+          if (!confirm('Rebuild the full pack for every leg? This takes several minutes and replaces the pack the WF ATC Hub links to.')) return;
+          btn.disabled = true;
+          btn.textContent = 'Rebuilding...';
+          try {
+            const r = await fetch('/admin/api/controller-pack/rebuild-full', { method: 'POST' });
+            const d = await r.json();
+            msg.textContent = r.ok
+              ? 'Started — runs in the background, check back in a few minutes.'
+              : (d.error || 'Could not start');
+            if (!r.ok) { btn.disabled = false; btn.textContent = 'Rebuild Full Pack Now'; }
+          } catch (e) {
+            msg.textContent = 'Failed: ' + e.message;
+            btn.disabled = false;
+            btn.textContent = 'Rebuild Full Pack Now';
+          }
+        }
+
         function toggleAll(state) {
           document.querySelectorAll('.cp-toggle').forEach(cb => cb.checked = state);
         }
@@ -34499,11 +34532,11 @@ async function runControllerPackJob(legs, job, { full = false } = {}) {
       const zipName = full
         ? `WorldFlight_Controller_Pack_Full_${dateStr}.zip`
         : `WorldFlight_Controller_Pack_${dateStr}.zip`;
-      const zipPath = path.resolve('Euroscope_Files', zipName);
+      const zipPath = path.join(PACK_DIR, zipName);
       const output = fs.createWriteStream(zipPath);
       const archive = archiver('zip', { zlib: { level: 5 } });
       archive.pipe(output);
-      const wfDir = path.resolve('Euroscope_Files', 'WorldFlight');
+      const wfDir = PACK_WF_DIR;
       const dataDir = path.join(wfDir, 'Data');
 
       // Shared folders (no UKCP)
@@ -34512,7 +34545,9 @@ async function runControllerPackJob(legs, job, { full = false } = {}) {
         if (fs.existsSync(p)) archive.directory(p, `WorldFlight/Data/${sub}`);
       }
       // Plugins — exclude UKControllerPlugin
-      for (const sub of ['vSMR', 'TopSky']) {
+      /* VATCAN belongs here too: every .prf registers VATCANBookings.dll as
+         Plugin2, so a pack shipped without it loads with a broken plugin entry. */
+      for (const sub of ['vSMR', 'TopSky', 'VATCAN']) {
         const p = path.join(dataDir, 'Plugin', sub);
         if (fs.existsSync(p)) archive.directory(p, `WorldFlight/Data/Plugin/${sub}`);
       }
@@ -34631,7 +34666,7 @@ app.get('/admin/api/controller-pack/progress/:jobId', requireAdmin, (req, res) =
 // WF ATC need the pack too — the Hub links straight to it.
 app.get('/admin/api/controller-pack/download/:filename', requireWfAtcOrAdmin, (req, res) => {
   const filename = req.params.filename.replace(/[^a-zA-Z0-9_.\-]/g, '');
-  const zipPath = path.resolve('Euroscope_Files', filename);
+  const zipPath = path.join(PACK_DIR, filename);
   if (!fs.existsSync(zipPath)) return res.status(404).send('File not found');
   res.download(zipPath, filename);
 });
@@ -34690,7 +34725,7 @@ app.post('/admin/api/vatcan/push/:wf', requireAdmin, async (req, res) => {
 });
 
 app.post('/admin/api/controller-pack/cleanup', requireAdmin, express.json(), (req, res) => {
-  const esDir = path.resolve('Euroscope_Files');
+  const esDir = PACK_DIR;
   try {
     // Remove all zip files and the WorldFlight directory
     if (fs.existsSync(esDir)) {
