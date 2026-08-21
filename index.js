@@ -46940,16 +46940,27 @@ app.get('/airspace/by-area', requirePageEnabled('airspace'), requireStaffingAcce
           // Per-leg colour matching the route map legend at the top of the
           // page so the WF cell ties visually to its route line.
           var SINGLE_ROUTE_COLORS = ['#f59e0b','#ef4444','#22c55e','#3b82f6','#a855f7','#ec4899','#14b8a6','#f97316','#06b6d4','#eab308','#8b5cf6','#10b981','#e11d48','#0ea5e9'];
+          var firHasSplit = data.legs.some(function(l) { return (l.routes || []).indexOf('B') !== -1; });
           tbody.innerHTML = data.legs.map(function(l, idx) {
             var flowClass = l.flowType === 'SLOTTED' ? 'slotted' : (l.flowType === 'BOOKING_ONLY' ? 'booking' : 'none');
             var flowLabel = l.flowType === 'BOOKING_ONLY' ? 'Booking' : (l.flowType === 'SLOTTED' ? 'Slotted' : 'None');
             var wfColor = SINGLE_ROUTE_COLORS[idx % SINGLE_ROUTE_COLORS.length];
-            return '<tr>'
+            var rts = l.routes || ['A'];
+            var routeTag = '';
+            if (firHasSplit) {
+              routeTag = rts.length > 1
+                ? ' <span class="fir-route fir-route-ab">A+B</span>'
+                : (rts[0] === 'B'
+                    ? ' <span class="fir-route fir-route-b">B</span>'
+                    : ' <span class="fir-route fir-route-a">A</span>');
+            }
+            var rowClass = (firHasSplit && rts.length === 1 && rts[0] === 'B') ? ' class="is-route-b"' : '';
+            return '<tr' + rowClass + '>'
               + '<td style="font-weight:700;color:' + wfColor + ';border-left:3px solid ' + wfColor + ';padding-left:10px;">' + l.wf + (l.route_state === 'proposed' ? ' <span style="font-size:9px;font-weight:700;color:#f59e0b;background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.4);border-radius:3px;padding:1px 4px;vertical-align:middle;" title="Proposed route by ' + (l.proposed_by || 'one side') + ' — not yet finalised">PROPOSED</span>' : '') + '</td>'
               + '<td>' + l.from + '</td>'
               + '<td>' + l.to + '</td>'
               + '<td>' + (l.date || '-') + '</td>'
-              + '<td><span class="fir-badge">' + displayFir(data.fir) + '</span></td>'
+              + '<td><span class="fir-badge">' + displayFir(data.fir) + '</span>' + routeTag + '</td>'
               + '<td class="staff-window">' + (l.staffStart && l.staffEnd ? l.staffStart + ' – ' + l.staffEnd : '-') + (l.windAdjusted && l.windDeltaMin ? ' <span style="font-size:9px;padding:1px 4px;border-radius:3px;background:' + (l.windDeltaMin > 0 ? 'rgba(251,146,60,0.12)' : 'rgba(74,222,128,0.12)') + ';color:' + (l.windDeltaMin > 0 ? '#fb923c' : '#4ade80') + ';border:1px solid ' + (l.windDeltaMin > 0 ? 'rgba(251,146,60,0.3)' : 'rgba(74,222,128,0.3)') + ';" title="Wind adjusted (FL340)">' + (l.windDeltaMin > 0 ? '+' : '') + l.windDeltaMin + 'm</span>' : '') + combinedIcon(l.combinedWith) + '</td>'
               + '<td class="staff-window" style="color:var(--muted);">' + (l.staffStartLocal && l.staffEndLocal ? l.staffStartLocal + ' – ' + l.staffEndLocal : '-') + '</td>'
               + '<td class="">' + (l.staffMins ? l.staffMins + ' min' : '-') + '</td>'
@@ -47064,7 +47075,7 @@ app.get('/airspace/by-area', requirePageEnabled('airspace'), requireStaffingAcce
             sectorMap[key] = { leg: l, firLegs: [], idx: idx };
             sectorOrder.push(key);
           }
-          sectorMap[key].firLegs.push({ fir: l._fir, staffStart: l.staffStart, staffEnd: l.staffEnd, staffStartLocal: l.staffStartLocal, staffEndLocal: l.staffEndLocal, staffMins: l.staffMins, flowType: l.flowType, depFlow: l.depFlow, combinedWith: l.combinedWith, idx: idx });
+          sectorMap[key].firLegs.push({ fir: l._fir, staffStart: l.staffStart, staffEnd: l.staffEnd, staffStartLocal: l.staffStartLocal, staffEndLocal: l.staffEndLocal, staffMins: l.staffMins, flowType: l.flowType, depFlow: l.depFlow, combinedWith: l.combinedWith, routes: l.routes || ['A'], idx: idx });
         });
 
         // Per-sector colour, matching the map legend at the top so the WF
@@ -47088,20 +47099,32 @@ app.get('/airspace/by-area', requirePageEnabled('airspace'), requireStaffingAcce
           // Sector-level cells (WF / From / To / Date / ATC Route) render once on
           // the first FIR row with rowspan; later rows carry only FIR-specific
           // cells. The coloured WF stripe runs down the rowspan'd WF cell.
+          // Check if this sector has a route split
+          var sectorHasSplit = s.firLegs.some(function(fl) { return (fl.routes || []).indexOf('B') !== -1; });
           s.firLegs.forEach(function(fl, idx) {
             var flowClass = fl.flowType === 'SLOTTED' ? 'slotted' : (fl.flowType === 'BOOKING_ONLY' ? 'booking' : 'none');
             var flowLabel = fl.flowType === 'BOOKING_ONLY' ? 'Booking' : (fl.flowType === 'SLOTTED' ? 'Slotted' : 'None');
             var isFirst = idx === 0;
             var isLast = idx === firCount - 1;
+            var rts = fl.routes || ['A'];
+            var routeTag = '';
+            if (sectorHasSplit) {
+              routeTag = rts.length > 1
+                ? ' <span class="fir-route fir-route-ab">A+B</span>'
+                : (rts[0] === 'B'
+                    ? ' <span class="fir-route fir-route-b">B</span>'
+                    : ' <span class="fir-route fir-route-a">A</span>');
+            }
             var rowStyle = isLast ? '' : ' style="border-bottom:1px dashed var(--border);"';
-            html += '<tr' + rowStyle + '>';
+            var rowClass = (sectorHasSplit && rts.length === 1 && rts[0] === 'B') ? ' class="is-route-b"' : '';
+            html += '<tr' + rowStyle + rowClass + '>';
             if (isFirst) {
               html += '<td rowspan="' + firCount + '" style="font-weight:700;color:' + wfColor + ';border-left:3px solid ' + wfColor + ';padding-left:10px;vertical-align:top;">' + l.wf + '</td>'
                 + '<td rowspan="' + firCount + '" style="vertical-align:top;">' + l.from + '</td>'
                 + '<td rowspan="' + firCount + '" style="vertical-align:top;">' + l.to + '</td>'
                 + '<td rowspan="' + firCount + '" style="vertical-align:top;">' + (l.date || '-') + '</td>';
             }
-            html += '<td><span class="fir-badge fir-badge-link" data-view-fir="' + fl.fir + '" style="cursor:pointer;">' + displayFir(fl.fir) + '</span></td>'
+            html += '<td><span class="fir-badge fir-badge-link" data-view-fir="' + fl.fir + '" style="cursor:pointer;">' + displayFir(fl.fir) + '</span>' + routeTag + '</td>'
               + '<td class="staff-window">' + (fl.staffStart && fl.staffEnd ? fl.staffStart + ' \u2013 ' + fl.staffEnd : '-') + (fl.windAdjusted && fl.windDeltaMin ? ' <span style="font-size:9px;padding:1px 4px;border-radius:3px;background:' + (fl.windDeltaMin > 0 ? 'rgba(251,146,60,0.12)' : 'rgba(74,222,128,0.12)') + ';color:' + (fl.windDeltaMin > 0 ? '#fb923c' : '#4ade80') + ';border:1px solid ' + (fl.windDeltaMin > 0 ? 'rgba(251,146,60,0.3)' : 'rgba(74,222,128,0.3)') + ';" title="Wind adjusted (FL340)">' + (fl.windDeltaMin > 0 ? '+' : '') + fl.windDeltaMin + 'm</span>' : '') + combinedIcon(fl.combinedWith) + '</td>'
               + '<td class="staff-window" style="color:var(--muted);">' + (fl.staffStartLocal && fl.staffEndLocal ? fl.staffStartLocal + ' \u2013 ' + fl.staffEndLocal : '-') + '</td>'
               + '<td>' + (fl.staffMins ? fl.staffMins + ' min' : '-') + '</td>'
@@ -47519,6 +47542,28 @@ app.get('/airspace/by-area', requirePageEnabled('airspace'), requireStaffingAcce
                     document.getElementById('divisionRouteInfo').style.display = 'none';
                   });
                   }
+                }
+
+                // Route B — pink dashed, matching the by-sector view
+                var routeB = (leg.atcRoute2 && leg.atcRoute2 !== '-') ? String(leg.atcRoute2).trim() : '';
+                if (routeB) {
+                  fetch('/api/resolve-route?from=' + leg.from + '&to=' + leg.to + '&route=' + encodeURIComponent(routeB) + '&depTime=&blockTime=')
+                    .then(function(r) { return r.json(); })
+                    .then(function(bData) {
+                      if (!bData.points || bData.points.length < 2) return;
+                      var B_LINE = '#e879f9';
+                      var bCoords = bData.points.map(function(p) { return [p.lat, p.lon]; });
+                      var bLine = L.polyline(bCoords, { color: B_LINE, weight: 2.5, opacity: 0.7, dashArray: '8, 6' }).addTo(divisionMap);
+                      addChevrons(bLine, B_LINE, divisionMap);
+                      // Waypoints on Route B
+                      bData.points.forEach(function(p, i) {
+                        if (!p.name || i === 0 || i === bData.points.length - 1) return;
+                        if (/^(DCT|N\d)/.test(p.name)) return;
+                        L.circleMarker([p.lat, p.lon], { radius: 2, color: B_LINE, fillColor: B_LINE, fillOpacity: 0.9, weight: 1 })
+                          .bindTooltip(p.name, { permanent: false, direction: 'top', className: 'wpt-label', offset: [0, -4] })
+                          .addTo(divisionMap);
+                      });
+                    }).catch(function() {});
                 }
 
                 checkDone();
