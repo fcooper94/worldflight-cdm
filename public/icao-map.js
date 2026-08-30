@@ -5,13 +5,22 @@
 // keepBuffer keeps off-screen tiles in the cache so panning and zoom-out
 // expose pre-loaded tiles instead of white squares.
 const TILE_OPTS = { maxZoom: 19, keepBuffer: 8 };
+
+// CARTO's raster basemaps need an API key. layout.js publishes it as
+// window.WF_CARTO_KEY; build the URL through a function so a page that loads
+// this file before the layout script still picks the key up at call time.
+function cartoTileUrl(style) {
+  const key = window.WF_CARTO_KEY ? '?key=' + encodeURIComponent(window.WF_CARTO_KEY) : '';
+  return 'https://{s}.basemaps.cartocdn.com/' + style + '/{z}/{x}/{y}{r}.png' + key;
+}
+
 const TILE_LAYERS = {
   dark: {
-    url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+    get url() { return cartoTileUrl('dark_all'); },
     options: TILE_OPTS
   },
   light: {
-    url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+    get url() { return cartoTileUrl('light_all'); },
     options: TILE_OPTS
   }
 };

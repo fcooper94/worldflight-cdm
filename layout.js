@@ -1387,12 +1387,18 @@ ${!isAdmin && user?.cid ? `
   const saved = localStorage.getItem('wf-theme') || 'dark';
   document.documentElement.setAttribute('data-theme', saved);
 
+  // CARTO requires an API key on its raster basemaps. This is a public,
+  // domain-restricted client credential — it has to reach the browser to sign
+  // tile requests — so it belongs in the page source. Restrict it to the
+  // site's domains in the CARTO dashboard rather than trying to hide it.
+  window.WF_CARTO_KEY = ${JSON.stringify(process.env.CARTO_API_KEY || '')};
+
   // Global tile URL helper for Leaflet maps
   window.wfTileUrl = function() {
     var t = document.documentElement.getAttribute('data-theme') || 'dark';
-    return t === 'light'
-      ? 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'
-      : 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
+    var style = t === 'light' ? 'light_all' : 'dark_all';
+    var key = window.WF_CARTO_KEY ? '?key=' + encodeURIComponent(window.WF_CARTO_KEY) : '';
+    return 'https://{s}.basemaps.cartocdn.com/' + style + '/{z}/{x}/{y}{r}.png' + key;
   };
 
   // Track all tile layers so we can swap them on theme change

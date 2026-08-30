@@ -728,7 +728,7 @@ document.addEventListener('DOMContentLoaded', () => {
     setTimeout(() => {
       if (!modalMap) {
         modalMap = L.map('wfMapModalMap', { zoomControl: true, worldCopyJump: false });
-        modalMap._wfBaseTileLayer = L.tileLayer(tileUrl, { maxZoom: 19, noWrap: false }).addTo(modalMap);
+        modalMap._wfBaseTileLayer = L.tileLayer(window.wfTileUrl(), { maxZoom: 19, noWrap: false, subdomains: 'abcd' }).addTo(modalMap);
       }
 
       clearLeafletLayers(modalMap);
